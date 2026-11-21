@@ -14,6 +14,7 @@
 3. **不要在被 `tools/` 切片的方法里新增私有辅助方法**，切片只带走方法体，套件会编译失败。
 4. **新增生产类若被某个套件编译到，必须逐个套件显式加入其 javac 源文件列表**，不要写批量替换脚本。
 5. **`policy/` 不得 import `android.*`**，反射集中在 `platform/`。
+6. **CI 与本地跑同一套检查。** `.github/workflows/build.yml` 的 `apk` 作业执行 `:app:stageRelease`（含 `verifyApk`），`tests` 作业执行 `test.ps1`。改动构建脚本时两边都要能跑通；`tools/assert_module_apk.py` 是唯一的包校验实现，不要再加 PowerShell 版本。
 
 ## 任务进度通知（Beacon 推送）
 

@@ -5,6 +5,7 @@ param(
     [string]$BuildToolsVersion = '37.0.0',
     [string]$KeyStore = $env:ONESTEPLITE_KEYSTORE,
     [string]$KeyAlias = $env:ONESTEPLITE_KEY_ALIAS,
+    [string]$Python = 'python',
     [switch]$Unsigned
 )
 $ErrorActionPreference = 'Stop'
@@ -72,12 +73,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Native selftest source compilation failed.' }
 & (Join-Path $bt 'aapt2.exe') compile --dir 'app\src\main\res' -o 'build\resources.zip'
 if ($LASTEXITCODE -ne 0) { throw 'Resource compilation failed.' }
 $base = Join-Path $out 'base.apk'
-$assetStage = Join-Path $out 'assets'
-$legalStage = Join-Path $assetStage 'onesteplite\licenses'
-New-Item -ItemType Directory -Force -Path $assetStage,$legalStage | Out-Null
-Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $legalStage -Force
-Copy-Item -Path (Join-Path $src 'assets\onesteplite\licenses\*') -Destination $legalStage -Force
-"OneStepLite $($version.name)`nPackage: io.github.zerohomers0.onesteplite`nSource: https://github.com/ZeroHomers0/OneStepLite`nLicense: LicenseRef-OneStepLite-NC-SA-1.0`nChinese LICENSE text controls. Third-party licenses remain unchanged.`n" | Set-Content -LiteralPath (Join-Path $legalStage 'SOURCE.txt') -Encoding utf8
+# The licence bundle ships inside app/src/main/assets and reaches the APK through
+# aapt2 -A, so nothing is staged here; staging a second copy would put duplicate
+# entries in the archive.
 & (Join-Path $bt 'aapt2.exe') link -o 'build\base.apk' -I $android --manifest 'app\src\main\AndroidManifest.xml' -A 'app\src\main\assets' --min-sdk-version 34 --target-sdk-version 37 'build\resources.zip'
 if ($LASTEXITCODE -ne 0) { throw 'Resource linking failed.' }
 $jar = Join-Path $out 'classes.jar'
@@ -91,7 +89,7 @@ Copy-Item -LiteralPath (Join-Path $out 'dex\classes.dex') -Destination $stage -F
 Copy-Item -LiteralPath $native -Destination (Join-Path $stage 'lib\arm64-v8a\libonesteplite_raw.so') -Force
 $packed = Join-Path $out 'packed.apk'
 Copy-Item -LiteralPath $base -Destination $packed -Force
-& (Join-Path $javaBin 'jar.exe') --update --file $packed --no-compress -C $stage classes.dex -C $stage lib\arm64-v8a\libonesteplite_raw.so -C $out assets/onesteplite/licenses
+& (Join-Path $javaBin 'jar.exe') --update --file $packed --no-compress -C $stage classes.dex -C $stage lib\arm64-v8a\libonesteplite_raw.so
 if ($LASTEXITCODE -ne 0) { throw 'APK packaging failed.' }
 if ($Unsigned) { $apk = Join-Path $dist "OneStepLite-$($version.name)-unsigned.apk" }
 & (Join-Path $bt 'zipalign.exe') -f -P 16 4 $packed $apk
@@ -104,7 +102,10 @@ if (-not $Unsigned) {
 }
 & (Join-Path $bt 'zipalign.exe') -c -P 16 4 $apk
 if ($LASTEXITCODE -ne 0) { throw 'Final APK alignment failed.' }
-$packaging = & (Join-Path $root 'tools\assert_module_apk.ps1') -Apk $apk -RequireNative
+$packagingLines = & $Python -X utf8 (Join-Path $root 'tools\assert_module_apk.py') $apk --require-native
+if ($LASTEXITCODE -ne 0) { throw 'APK packaging verification failed.' }
+$packaging = @{}
+foreach ($line in $packagingLines) { $pair = $line -split ': ', 2; if ($pair.Count -eq 2) { $packaging[$pair[0]] = $pair[1] } }
 $identity = [ordered]@{applicationId='io.github.zerohomers0.onesteplite';version=$version.name; versionCode=$version.code;runtimeMarker=$version.runtimeMarker;sha256=(Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant();bytes=(Get-Item -LiteralPath $apk).Length;nativeSha256=(Get-FileHash -LiteralPath $native -Algorithm SHA256).Hash.ToLowerInvariant();javaSourceCount=$sources.Count;build='Full Java and native source build; no development class cache';startupPackaging=$packaging.startupPackaging;nativePackaging=$packaging.nativePackaging;deviceValidation='This rebuilt package has not been installed; behavior baseline and its prior device evidence are recorded separately in the release notes.'}
 $identity | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $dist 'build-info.json') -Encoding utf8
 "$($identity.sha256)  $([IO.Path]::GetFileName($apk))" | Set-Content -LiteralPath (Join-Path $dist 'SHA256SUMS.txt') -Encoding ascii

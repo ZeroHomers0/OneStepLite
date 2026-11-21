@@ -221,6 +221,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./test.ps1
 
 `build.ps1` 是保留的等价参考实现（aapt2 + d8 + zipalign + apksigner 手工链路），用于交叉核对 Gradle 产物；日常开发请使用 Gradle。
 
+### 持续集成
+
+`.github/workflows/build.yml` 在推送到 `main`、提交拉取请求和手动触发时运行两个作业：
+
+| 作业 | 运行环境 | 内容 |
+| --- | --- | --- |
+| `apk` | `ubuntu-latest` | 安装 `platforms;android-37.0`、`build-tools;36.0.0`、`ndk;28.2.13676358`，执行 `:app:stageRelease`，上传 APK 与 `SHA256SUMS.txt` |
+| `tests` | `windows-latest` | 执行 `test.ps1`，跑完 55 个策略单测与 102 个生产方法回放套件 |
+
+推送 `v*` 标签时额外运行 `release` 作业，把构建产物发布到 GitHub Release。发行签名通过仓库 Secrets 提供，未配置时普通构建产出未签名包，而标签构建会直接失败：
+
+| Secret | 用途 |
+| --- | --- |
+| `ONESTEPLITE_KEYSTORE_BASE64` | 密钥库文件的 Base64 内容 |
+| `ONESTEPLITE_KEY_ALIAS` | 密钥别名 |
+| `ONESTEPLITE_STORE_PASSWORD` | 密钥库口令 |
+| `ONESTEPLITE_KEY_PASSWORD` | 密钥口令 |
+
+`apk` 作业用 `tools/assert_module_apk.py` 校验产物，与本地 `verifyApk` 是同一份检查逻辑。
+
 ## 项目结构
 
 ```

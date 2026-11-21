@@ -8,6 +8,11 @@ android {
     namespace = "io.github.zerohomers0.onesteplite"
     compileSdk = 37
 
+    // Pinned so a clean machine and CI resolve the same toolchain the release
+    // notes name; the NDK version also drives the packaged ARM64 library.
+    buildToolsVersion = "36.0.0"
+    ndkVersion = "28.2.13676358"
+
     defaultConfig {
         applicationId = "io.github.zerohomers0.onesteplite"
         minSdk = 34
@@ -68,26 +73,30 @@ dependencies {
 
 // Checks the packaged APK the way the module loader will read it: entry class,
 // Xposed assets, licence bundle and the uncompressed ARM64 native library.
+// The verifier is plain Python so the same check runs on Windows and on CI.
 val verifyApk by tasks.registering(Exec::class) {
     dependsOn("assembleRelease")
-    val apk = layout.buildDirectory.file("outputs/apk/release/app-release-unsigned.apk")
+    val python = if (System.getProperty("os.name").lowercase().contains("windows")) "python" else "python3"
+    val output = layout.buildDirectory.dir("outputs/apk/release")
     commandLine(
-        "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
-        "-File", rootProject.file("tools/assert_module_apk.ps1").absolutePath,
-        "-Apk", apk.get().asFile.absolutePath,
-        "-RequireNative",
+        python,
+        rootProject.file("tools/assert_module_apk.py").absolutePath,
+        output.get().asFile.absolutePath,
+        "--require-native",
     )
 }
 
 // Copies the verified APK to dist/ with the checksum manifest used by releases.
 val stageRelease by tasks.registering {
     dependsOn(verifyApk)
-    val apk = layout.buildDirectory.file("outputs/apk/release/app-release-unsigned.apk")
+    val output = layout.buildDirectory.dir("outputs/apk/release")
     val dist = rootProject.layout.projectDirectory.dir("dist")
     val versionName = android.defaultConfig.versionName
+    val signed = System.getenv("ONESTEPLITE_KEYSTORE") != null
     doLast {
-        val source = apk.get().asFile
-        val target = dist.file("OneStepLite-$versionName-unsigned.apk").asFile
+        val source = output.get().asFile.resolve(if (signed) "app-release.apk" else "app-release-unsigned.apk")
+        val name = "OneStepLite-$versionName" + if (signed) ".apk" else "-unsigned.apk"
+        val target = dist.file(name).asFile
         target.parentFile.mkdirs()
         source.copyTo(target, overwrite = true)
         val digest = MessageDigest.getInstance("SHA-256")
