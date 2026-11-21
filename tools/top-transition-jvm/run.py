@@ -23,11 +23,12 @@ files={
  public void drawBitmap(Bitmap b,Object from,Rect r,Paint p){bitmapDraws++;image=r;}}''',
 'android/view/SurfaceControl.java':'''package android.view;import android.graphics.Rect;public class SurfaceControl {
  public static class Transaction {
-  public static Transaction last;public Object surface;public float sx,sy,x,y;public Rect crop;public int applies,closes;
+  public static Transaction last;public Object surface;public float sx,sy,x,y,alpha=1;public Rect crop;public int applies,closes;
   public Transaction(){last=this;}
   public Transaction setPosition(Object s,float px,float py){x=px;y=py;return this;}
   public Transaction setMatrix(Object s,float dsdx,float dtdx,float dsdy,float dtdy){surface=s;sx=dsdx;sy=dtdy;return this;}
   public Transaction setWindowCrop(Object s,Rect r){crop=r;return this;}
+  public Transaction setAlpha(Object s,float a){alpha=a;return this;}
   public void apply(){applies++;}public void close(){closes++;}
  }}''',
 'android/view/View.java':'''package android.view;import java.util.*;import android.content.Context;import android.graphics.Canvas;
@@ -37,12 +38,13 @@ public class View {
  public interface OnAttachStateChangeListener {void onViewAttachedToWindow(View v);void onViewDetachedFromWindow(View v);}
  public interface Touch {boolean onTouch(View v,Object event);}
  private final Context ctx;public OnAttachStateChangeListener attachment;public int visibility;
- public float pivotX,pivotY,scaleX=1,scaleY=1;
+ public float pivotX,pivotY,scaleX=1,scaleY=1,alpha=1;
  public int getWidth(){return 1080;}public int getHeight(){return 622;}
  public float getPivotX(){return pivotX;}public float getPivotY(){return pivotY;}
  public float getScaleX(){return scaleX;}public float getScaleY(){return scaleY;}
  public void setPivotX(float f){pivotX=f;}public void setPivotY(float f){pivotY=f;}
  public void setScaleX(float f){scaleX=f;}public void setScaleY(float f){scaleY=f;}
+ public float getAlpha(){return alpha;}public void setAlpha(float f){alpha=f;}
  public void setTranslationY(float f){}public void setClipBounds(android.graphics.Rect r){}
  public Object animate(){return null;}
  public View(Context c){ctx=c;}public Context getContext(){return ctx;}
@@ -230,7 +232,7 @@ public class WorkspaceHost {
  android.content.Context ctx=new android.content.Context();FrameLayout root=new FrameLayout(ctx);
  View topBar=new View(ctx),topTaskPane=new View(ctx);Roll topRoll=new Roll();Layout layout=new Layout();
  static class Roll {boolean rolling(){return false;}boolean showingTask(){return true;}}
- static class Layout {int topStrip=622;boolean tabletLandscape;int mainHeight=1838;int mainDispHeight=1838;}
+ static class Layout {int topStrip=622;boolean tabletLandscape;int mainHeight=1838;int mainDispHeight=1838;int mainOffsetX=0,mainOffsetY=622;}
  static class TopRollMotion {static class Frame {float frontScale=0,taskScale=1,frontTop,taskTop;}}
  void updateCellSurfaceVisibility(Slot upper){}void updateTopTaskGeometry(){}float mainScale(){return .5f;}
  TopTaskTransition topTransition;TopTaskState topTaskState=new TopTaskState();int opacityWrites,homeRequests;boolean translucent,failOpacity,failHome;
@@ -286,13 +288,13 @@ host_body+='''public static void main(String[]args){
  check(h.translucent&&h.opacityWrites==1,"background is revealed only by the completed native preparation");
  check(android.animation.ValueAnimator.all.size()==1&&h.claimed==0,"production admission waits for source collapse");
  android.animation.ValueAnimator.all.get(0).end();check(h.claimed==1,"production admission claims exactly once after collapse");
- check(h.slots[4].view.scaleX==0&&h.slots[4].view.scaleY==0,"production handoff keeps target zero size while native admission waits");
+ check(h.slots[4].view.alpha==0,"production handoff keeps target invisible while native admission waits");
  h.renderTopRollFrame(new TopRollMotion.Frame());
- check(h.slots[4].view.scaleX==0&&h.slots[4].view.scaleY==0,"production geometry refresh cannot expose the waiting miniature");
+ check(h.slots[4].view.alpha==0,"production geometry refresh cannot expose the waiting miniature");
  h.entry().info.mode=6;h.topTransition.reveal();
  check(android.animation.ValueAnimator.all.size()==2,"native admission restores the real destination expansion");
  android.animation.ValueAnimator.all.get(1).step(.5f);h.renderTopRollFrame(new TopRollMotion.Frame());
- check(h.slots[4].view.scaleX==.5f&&h.slots[4].view.scaleY==.5f,"production geometry refresh preserves the moving destination frame");
+ check(h.slots[4].view.alpha==.5f,"production geometry refresh preserves the moving destination frame");
  android.animation.ValueAnimator.all.get(1).end();
  check(h.topTransition==null&&h.finished==1,"production completion releases its own transition");
  check(h.opacityWrites==1&&h.translucent,"new native TOP ownership keeps its own translucent policy");

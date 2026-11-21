@@ -31,19 +31,17 @@ final class TopTaskTransition {
     private BooleanSupplier collectionSourceCurrent;
     private float collectionPivotX, collectionPivotY;
     private float collectionScaleX, collectionScaleY;
+    private float collectionAlpha=1f;
     private float collectionFrameScale=-1f;
-    private boolean drawer;
-    private float drawerScale=1f;
-    private float drawerTravel;
+    private boolean fade;
+    private float fadeScale=1f;
+    private float fadeOffsetX, fadeOffsetY;
+    private boolean fadeRevealed;
     private Runnable nativeRestore;
     private boolean liveSurfaceAtEnd;
     private ValueAnimator animator;
     private boolean attached, closed, firstDraw, collapsed, revealing;
     private boolean collectionPrepared, collectionStarted;
-    /** Fraction of the collapse at which the destination starts growing. */
-    private static final float DRAWER_HANDOFF = .35f;
-    private boolean handoffEarly;
-    private ValueAnimator collapseAnimator;
     private final Runnable timeout=this::close;
     private final View.OnAttachStateChangeListener attachment=new View.OnAttachStateChangeListener() {
         @Override public void onViewAttachedToWindow(View view) {}
@@ -92,26 +90,29 @@ final class TopTaskTransition {
         collectionView=destination;
         collectionPivotX=destination.getPivotX();collectionPivotY=destination.getPivotY();
         collectionScaleX=destination.getScaleX();collectionScaleY=destination.getScaleY();
+        collectionAlpha=destination.getAlpha();
     }
 
     /**
-     * Turn the collection into a drawer: the main surface slides up into the strip
-     * and is cropped at the boundary while the destination grows out of that edge.
+     * Cross-fade instead of moving surfaces: the main window fades out over the
+     * strip's own clock and rail, and the admitted task fades in on top of them.
+     * Nothing changes size or position, so the window never jumps orientation.
      */
-    void drawer(float scale,float travel) {
-        drawer=true;
-        drawerScale=scale>0f?scale:1f;
-        drawerTravel=Math.max(0f,travel);
+    void fade(float scale,float offsetX,float offsetY) {
+        fade=true;
+        fadeScale=scale>0f?scale:1f;
+        fadeOffsetX=offsetX;
+        fadeOffsetY=offsetY;
     }
 
-    /** True while the transition runs as a drawer instead of a centre zoom. */
-    boolean drawerMode() {return drawer;}
+    /** True while the transition cross-fades instead of zooming. */
+    boolean fadeMode() {return fade;}
 
-    /** The scale the drawer starts from, so the native handoff can match it. */
-    float drawerStartScale() {return drawerScale*.92f;}
+    /** The alpha the returning task starts from, so the native handoff can match it. */
+    float fadeStartAlpha() {return 0f;}
 
-    /** How far above its resting place the drawer starts, in surface pixels. */
-    float drawerStartOffsetY() {return drawerTravel;}
+    /** True once the admitted task finished fading in over the strip. */
+    boolean fadeRevealed() {return fadeRevealed;}
 
     void setNativeRestore(Runnable restore) {
         if(closed)restore.run();
@@ -133,12 +134,12 @@ final class TopTaskTransition {
         face.postOnAnimation(()->{
             if(closed)return;
             if(!current.getAsBoolean() || !validLiveSurface()) {close();return;}
-            if(drawer) {
-                // The drawer runs forward: 0 is the resting main window, 1 is fully
-                // tucked under the strip. The destination grows back out afterwards.
-                animate(0f,1f,260L,()->{
-                    applyDrawerCollapse(1f);
-                    log.accept("upper live main tucked under the strip; collection handoff");
+            if(fade) {
+                // The main window fades out in place; the strip's clock and rail stay
+                // visible underneath, so no empty placeholder is ever shown.
+                animate(0f,1f,200L,()->{
+                    applyFadeOut(1f);
+                    log.accept("upper live main faded out; collection handoff");
                     handoff();
                 });
                 return;
@@ -172,11 +173,12 @@ final class TopTaskTransition {
         revealing=true;
         if(collectionView!=null) {
             // Shell now owns the task matrix; animate only its original SurfaceView parent.
-            animate(0f,1f,drawer?200L:180L,()->{
+            animate(0f,1f,fade?200L:180L,()->{
                 // The task now belongs to the strip; the old main surface must not
                 // be moved again by close().
                 liveSurfaceAtEnd=true;
-                log.accept(drawer?"upper live drawer expanded":"upper live collection expanded");
+                fadeRevealed=fade;
+                log.accept(fade?"upper live task faded in":"upper live collection expanded");
                 close();
             });
             return;
@@ -185,18 +187,10 @@ final class TopTaskTransition {
             log.accept("upper live main surface unavailable; skip center animation");
             close();return;
         }
-        if(drawer) {
-            // The returning task slides back down out of the strip seam.
-            animate(0f,1f,220L,()->{
-                applyDrawerReveal(1f);
-                log.accept("upper live drawer returned to the workspace");
-                close();
-            });
-            return;
-        }
-        animate(0f,1f,180L,()->{
-            applyLiveScale(1f);
-            log.accept("upper live main surface expanded");
+        animate(0f,1f,fade?200L:180L,()->{
+            applyFadeIn(1f);
+            fadeRevealed=fade;
+            log.accept(fade?"upper live main faded in":"upper live main surface expanded");
             close();
         });
     }
@@ -205,25 +199,17 @@ final class TopTaskTransition {
         if(closed)return;
         ValueAnimator next=ValueAnimator.ofFloat(from,to);
         animator=next;
-        if(drawer && !revealing)collapseAnimator=next;
         next.setDuration(duration);
         next.setInterpolator(new AccelerateDecelerateInterpolator());
         next.addUpdateListener(value->{
             if(!current.getAsBoolean()) {close();return;}
             float fraction=(Float)value.getAnimatedValue();
-            if(drawer && !revealing && !handoffEarly && fraction>=DRAWER_HANDOFF
-                    && validLiveSurface()) {
-                // Start the destination while the main window is still sliding, so
-                // the two halves overlap instead of running back to back.
-                handoffEarly=true;
-                handoff();
-            }
-            if(drawer) {
-                // Collapse drives the real main surface; reveal grows the destination
-                // (or slides the returning task back down) out of the same seam.
-                boolean ok=revealing?applyDrawerReveal(fraction):applyDrawerCollapse(fraction);
+            if(fade) {
+                // Fade drives the real main surface out; the reveal fades the
+                // admitted task, or the returning window, back in.
+                boolean ok=revealing?applyFadeIn(fraction):applyFadeOut(fraction);
                 if(!ok) {
-                    log.accept("upper drawer surface lost; restoring full frame");
+                    log.accept("upper fade surface lost; restoring full frame");
                     close();return;
                 }
             } else if(collectionView!=null && revealing) {
@@ -249,20 +235,19 @@ final class TopTaskTransition {
         if(closed)return;
         closed=true;
         if(!liveSurfaceAtEnd) {
-            if(drawer)applyDrawerCollapse(0f);
+            if(fade)applyFadeOut(0f);
             else applyLiveScale(1f);
         }
         if(collectionView!=null) {
             collectionView.setPivotX(collectionPivotX);collectionView.setPivotY(collectionPivotY);
             collectionView.setScaleX(collectionScaleX);collectionView.setScaleY(collectionScaleY);
+            collectionView.setAlpha(collectionAlpha);
         }
         Runnable restore=nativeRestore;nativeRestore=null;
         if(restore!=null)try {restore.run();}
         catch(Throwable error) {log.accept("upper live main state restore: "+error);}
         ValueAnimator old=animator;animator=null;
         if(old!=null)old.cancel();
-        ValueAnimator collapse=collapseAnimator;collapseAnimator=null;
-        if(collapse!=null && collapse!=old)collapse.cancel();
         host.removeCallbacks(timeout);host.removeOnAttachStateChangeListener(attachment);
         if(attached) {
             face.setVisibility(View.GONE);
@@ -282,10 +267,9 @@ final class TopTaskTransition {
 
     private void applyCollectionScale(float scale) {
         collectionFrameScale=scale;
-        if(drawer) {
-            // Collapse moves the real main surface; reveal grows the destination.
-            if(revealing)applyDrawerReveal(scale);
-            else applyDrawerCollapse(scale);
+        if(fade) {
+            // The admitted task fades in over the strip's own content.
+            collectionView.setAlpha(scale);
             return;
         }
         collectionView.setPivotX(collectionView.getWidth()*.5f);
@@ -294,39 +278,35 @@ final class TopTaskTransition {
     }
 
     /**
-     * The main surface slides up out of the workspace. The strip backing and the
-     * task view's own clip hide it at the seam, so no extra crop is needed; the
-     * slight shrink keeps the motion reading as "flowing into" the strip.
+     * The main surface fades out where it stands. Its resting transform is kept
+     * exactly as the workspace set it, so the window never shifts or resizes and
+     * the strip's own clock and rail stay visible underneath.
      */
-    private boolean applyDrawerCollapse(float fraction) {
+    private boolean applyFadeOut(float fraction) {
         float f=Math.max(0f,Math.min(1f,fraction));
         // The destination must stay invisible until native admission confirms it;
-        // a miniature task peeking out of the strip reads as a glitch.
+        // a half-faded task peeking out of the strip reads as a glitch.
         if(collectionView!=null && !revealing) {
-            // Keep the recorded frame at zero so a geometry refresh cannot reveal it.
-            // Once the reveal owns the destination this must stop writing to it.
             collectionFrameScale=0f;
-            collectionView.setPivotX(collectionView.getWidth()*.5f);
-            collectionView.setPivotY(collectionView.getHeight());
-            collectionView.setScaleX(0f);
-            collectionView.setScaleY(0f);
+            collectionView.setAlpha(0f);
         }
         if(!validLiveSurface())return false;
         Object transaction=null;
         try {
             transaction=Class.forName("android.view.SurfaceControl$Transaction")
                     .getDeclaredConstructor().newInstance();
-            // Pure translation: shrinking while rising read as the window
-            // suddenly getting narrower, so the width stays exactly as it was.
-            XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,drawerScale,0f,0f,drawerScale);
-            XposedHelpers.callMethod(transaction,"setPosition",liveSurface,0f,-f*drawerTravel);
+            XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,
+                    fadeScale,0f,0f,fadeScale);
+            XposedHelpers.callMethod(transaction,"setPosition",liveSurface,
+                    fadeOffsetX,fadeOffsetY);
             XposedHelpers.callMethod(transaction,"setWindowCrop",liveSurface,
                     new Rect(0,0,width,height));
+            XposedHelpers.callMethod(transaction,"setAlpha",liveSurface,1f-f);
             XposedHelpers.callMethod(transaction,"apply");
             liveSurfaceAtEnd=f>=1f;
             return true;
         } catch(Throwable error) {
-            log.accept("upper drawer collapse: "+error);
+            log.accept("upper fade out: "+error);
             return false;
         } finally {
             if(transaction!=null)try {XposedHelpers.callMethod(transaction,"close");}
@@ -335,10 +315,10 @@ final class TopTaskTransition {
     }
 
     /**
-     * The destination grows downward out of the strip's lower edge; on the way back
-     * the returning task slides down from that same seam instead.
+     * The admitted task, or the returning window, fades in over the strip content.
+     * Only alpha moves, so a landscape task never jumps orientation on the way in.
      */
-    private boolean applyDrawerReveal(float fraction) {
+    private boolean applyFadeIn(float fraction) {
         float f=Math.max(0f,Math.min(1f,fraction));
         if(collectionView==null) {
             if(!validLiveSurface())return false;
@@ -346,28 +326,26 @@ final class TopTaskTransition {
             try {
                 transaction=Class.forName("android.view.SurfaceControl$Transaction")
                         .getDeclaredConstructor().newInstance();
-                XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,drawerScale,0f,0f,drawerScale);
-                XposedHelpers.callMethod(transaction,"setPosition",liveSurface,0f,-(1f-f)*drawerTravel);
+                XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,
+                        fadeScale,0f,0f,fadeScale);
+                XposedHelpers.callMethod(transaction,"setPosition",liveSurface,
+                        fadeOffsetX,fadeOffsetY);
                 XposedHelpers.callMethod(transaction,"setWindowCrop",liveSurface,
                         new Rect(0,0,width,height));
+                XposedHelpers.callMethod(transaction,"setAlpha",liveSurface,f);
                 XposedHelpers.callMethod(transaction,"apply");
                 liveSurfaceAtEnd=f>=1f;
                 return true;
             } catch(Throwable error) {
-                log.accept("upper drawer reveal: "+error);
+                log.accept("upper fade in: "+error);
                 return false;
             } finally {
                 if(transaction!=null)try {XposedHelpers.callMethod(transaction,"close");}
                 catch(Throwable ignored) {}
             }
         }
-        // Anchored on the bottom edge it shares with the main window, so the task
-        // grows downward out of the seam instead of from the screen centre.
         collectionFrameScale=f;
-        collectionView.setPivotX(collectionView.getWidth()*.5f);
-        collectionView.setPivotY(collectionView.getHeight());
-        collectionView.setScaleX(f);
-        collectionView.setScaleY(f);
+        collectionView.setAlpha(f);
         return true;
     }
 

@@ -67,7 +67,10 @@ public class NativeHandoffRegression {
  static class Slot {Object controller;String pkg="com.android.settings";}
  static class Promotion {boolean handoffAttempted,cancelled,candidateRecovery,background,handoffComplete,liveMainReveal,restoreMainOpacityAfterHandoff;
   Slot slot=new Slot();int taskId=88;Object token,liveRevealSurface;}
- static class TopTransition {Object surface;void setLiveSurface(Object s){surface=s;}boolean drawerMode(){return false;}float drawerStartScale(){return .92f;}float drawerStartOffsetY(){return 0f;}}
+ static class TopTransition {Object surface;void setLiveSurface(Object s){surface=s;}boolean fadeMode(){return false;}float fadeStartAlpha(){return 0f;}}
+ static class Layout {int mainOffsetX=0,mainOffsetY=622;}
+ Layout layout=new Layout();
+ float mainScale(){return .5f;}
  static class XposedHelpers {
   static Object getObjectField(Object o,String n){try{var f=o.getClass().getDeclaredField(n);f.setAccessible(true);return f.get(o);}catch(Exception e){throw new RuntimeException(e);}}
   static int getIntField(Object o,String n){return (Integer)getObjectField(o,n);}static boolean getBooleanField(Object o,String n){return (Boolean)getObjectField(o,n);}

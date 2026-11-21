@@ -65,7 +65,7 @@ public class CellVisibilityRegression {
   s.index=1;h.taskCellsCovered=true;h.updateCellSurfaceVisibility(s);
   check(s.view.alpha==0&&!surface.shown&&s.occupied,"expanded controls hide real cell presentation without releasing its task");
   h.taskCellsCovered=false;h.updateCellSurfaceVisibility(s);
-  check(s.view.alpha==1&&surface.shown,"drawer close restores the same live task");
+  check(s.view.alpha==1&&surface.shown,"fade close restores the same live task");
   s.index=SLOT_TOP;h.topFace=true;h.taskCellsCovered=true;h.updateCellSurfaceVisibility(s);
   check(s.view.alpha==1&&surface.shown,"independent interactive pane is not hidden by top-row controls");
   h.taskCellsCovered=false;s.index=8;s.sideRow=5;h.updateCellSurfaceVisibility(s);

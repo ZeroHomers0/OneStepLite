@@ -4107,25 +4107,34 @@ public final class WorkspaceHost {
         }
         if(topFace) {captureMainIntoTop(); return;}
         Clipboard.get(ctx).close();
-        // No face flip: the drawer is the transition, so the task face is already
-        // in place underneath while the main window slides up into it.
-        enterTopFaceForDrawer();
+        // No face flip: the cross-fade is the transition, so the strip keeps its
+        // clock and rail while the landscape task fades in on top of them.
+        enterTopFaceForFade();
         captureMainIntoTop();
     }
 
     /**
-     * Puts the task face up without the roll. The drawer animation carries the
-     * change instead, and the task surface covers the clock and the app rail.
+     * Puts the task face up without the roll. The cross-fade carries the change
+     * instead: the strip keeps its clock and app rail, and the landscape task
+     * fades in on top of them, so no empty placeholder is ever shown.
      */
-    private void enterTopFaceForDrawer() {
+    private void enterTopFaceForFade() {
         topFace=true;
         topFaceGeneration++;
         // The roll never settles here, so clear the pending flag it would have cleared;
         // leaving it set would block task retention for the rest of the session.
         topSelectionPending=false;
         topRoll.reset(true);
-        topTaskPane.occupied(slots[SLOT_TOP].occupied && !slots[SLOT_TOP].parked);
         updateTopTaskGeometry();
+        // updateTopTaskGeometry renders the settled task face, which hides the bar;
+        // the fade needs it visible underneath the incoming task.
+        if(topBar!=null) {
+            topBar.setPivotY(0f);
+            topBar.setScaleY(1f);
+            topBar.setTranslationY(0f);
+            topBar.setVisibility(View.VISIBLE);
+        }
+        if(topTaskPane!=null) topTaskPane.setVisibility(View.INVISIBLE);
         root.requestLayout();
     }
 
@@ -4156,10 +4165,9 @@ public final class WorkspaceHost {
                     ()->topCollectionSourceCurrent(organizer,selected,source),upper.view);
             if(started) {
                 TopTaskTransition prepared=topTransition;
-                // The drawer slides the real main surface up under the strip. Both
-                // values come from the live layout, so a swapped main side travels
-                // the same distance; the view's own height hides it exactly at the seam.
-                prepared.drawer(mainScale(),Math.max(1,layout.mainDispHeight));
+                // The fade keeps the main surface exactly where the workspace put it,
+                // so a swapped main side needs no special case and nothing shifts.
+                prepared.fade(mainScale(),layout.mainOffsetX,layout.mainOffsetY);
                 prepared.setNativeRestore(()->setTopCollectionTranslucent(selected,false));
                 if(!executeOnShell(()->{
                     try {
@@ -4245,7 +4253,7 @@ public final class WorkspaceHost {
                         finishPendingSuspend();
                     },WorkspaceHost::log);
             if(intoTop)topTransition.collect(source,sourceCurrent,destination);
-            else topTransition.drawer(mainScale(),Math.max(1,layout.mainDispHeight));
+            else topTransition.fade(mainScale(),layout.mainOffsetX,layout.mainOffsetY);
             topTransition.start();
             return true;
         } catch(Throwable error) {
@@ -4540,7 +4548,7 @@ public final class WorkspaceHost {
         if(root==null || scene!=ACTIVE || !screenOn || keyguardLocked)return;
         if(layout.tabletLandscape) {
             topFace=true;topSelectionPending=false;
-            // The drawer owns its visibility until its current animation settles.
+            // The cross-fade owns its visibility until its current animation settles.
             updateTopTaskGeometry();updateHint(slots[SLOT_TOP]);root.requestLayout();return;
         }
         topFace=taskFace; topFaceGeneration++;
@@ -4750,8 +4758,9 @@ public final class WorkspaceHost {
                         releaseTopTaskNow(front, dismissed, after, true);
                     };
                     if (topFace && !layout.tabletLandscape) {
-                        prepareLiveTopRoll();
-                        topRoll.show(false, handBack);
+                        // Fade the task out over the strip's own clock and rail so the
+                        // exit mirrors the entry instead of flipping the face.
+                        fadeTopTaskOut(handBack);
                     } else handBack.run();
                 }))return;
         releaseTopTaskNow(front,dismissed,after,liveMainReveal);
@@ -4759,6 +4768,57 @@ public final class WorkspaceHost {
 
     private void releaseTopTaskNow(boolean front, boolean dismissed, Runnable after) {
         releaseTopTaskNow(front,dismissed,after,false);
+    }
+
+    /**
+     * Fades the upper task out over the strip's own clock and rail, then hands back.
+     * The bar is raised first so the fade uncovers the real content instead of an
+     * empty plate, which is what made the old exit look like a jump cut.
+     */
+    private void fadeTopTaskOut(Runnable after) {
+        final Slot upper=slots[SLOT_TOP];
+        final Object surface=getSurfaceField(upper.controller,"mSurfaceControl");
+        final Object leash=getSurfaceField(upper.controller,"mTaskLeash");
+        if(topBar!=null) {
+            topBar.setPivotY(0f);
+            topBar.setScaleY(1f);
+            topBar.setTranslationY(0f);
+            topBar.setVisibility(View.VISIBLE);
+            topBar.bringToFront();
+        }
+        if(topTaskPane!=null) topTaskPane.setVisibility(View.INVISIBLE);
+        if(surface==null || !Boolean.TRUE.equals(XposedHelpers.callMethod(surface,"isValid"))) {
+            after.run();
+            return;
+        }
+        android.animation.ValueAnimator animator=android.animation.ValueAnimator.ofFloat(1f,0f);
+        animator.setDuration(200L);
+        animator.addUpdateListener(value->writeTopTaskAlpha(surface,leash,(Float)value.getAnimatedValue()));
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator value) {
+                writeTopTaskAlpha(surface,leash,0f);
+                after.run();
+            }
+        });
+        animator.start();
+    }
+
+    /** Writes one alpha step to the upper task surface and its animation leash. */
+    private void writeTopTaskAlpha(Object surface,Object leash,float alpha) {
+        Object tx=null;
+        try {
+            tx=Class.forName("android.view.SurfaceControl$Transaction")
+                    .getDeclaredConstructor().newInstance();
+            XposedHelpers.callMethod(tx,"setAlpha",surface,alpha);
+            if(leash!=null && leash!=surface
+                    && Boolean.TRUE.equals(XposedHelpers.callMethod(leash,"isValid")))
+                XposedHelpers.callMethod(tx,"setAlpha",leash,alpha);
+            XposedHelpers.callMethod(tx,"apply");
+        } catch(Throwable error) {
+            log("upper fade out: "+error);
+        } finally {
+            closeSurfaceObject(tx,"close");
+        }
     }
 
     private void releaseTopTaskNow(boolean front, boolean dismissed, Runnable after,
@@ -8710,16 +8770,17 @@ public final class WorkspaceHost {
             try {
                 boolean liveCenterReveal=ticket.liveMainReveal && topTransition!=null;
                 ticket.liveMainReveal=liveCenterReveal;
-                // A drawer hands the task back at the strip seam, not at the screen
-                // centre, so the returning window continues the same motion.
-                boolean drawerReveal=liveCenterReveal && topTransition.drawerMode();
-                float initialScale=drawerReveal
-                        ?topTransition.drawerStartScale()
+                // A cross-fade hands the task back at its resting workspace frame and
+                // only its alpha moves, so the window never jumps orientation.
+                boolean fadeReveal=liveCenterReveal && topTransition.fadeMode();
+                float initialScale=fadeReveal
+                        ?mainScale()
                         :liveCenterReveal?TopTaskReturnPolicy.CENTER_START_SCALE:1f;
-                float initialX=liveCenterReveal && !drawerReveal
-                        ?TopTaskReturnPolicy.centeredOffset(screenW,initialScale):0f;
-                float initialY=drawerReveal
-                        ?-topTransition.drawerStartOffsetY()
+                float initialX=fadeReveal
+                        ?layout.mainOffsetX
+                        :liveCenterReveal?TopTaskReturnPolicy.centeredOffset(screenW,initialScale):0f;
+                float initialY=fadeReveal
+                        ?layout.mainOffsetY
                         :liveCenterReveal?TopTaskReturnPolicy.centeredOffset(screenH,initialScale):0f;
                 // Prepare every surface operation before changing listener ownership.
                 XposedHelpers.callMethod(area, "reparentToDisplayArea", 0, canonical, tx);
@@ -8728,7 +8789,8 @@ public final class WorkspaceHost {
                 XposedHelpers.callMethod(tx, "setPosition", canonical, initialX, initialY);
                 XposedHelpers.callMethod(tx, "setWindowCrop", canonical,
                         new Rect(0, 0, screenW, screenH));
-                XposedHelpers.callMethod(tx, "setAlpha", canonical, 1f);
+                XposedHelpers.callMethod(tx, "setAlpha", canonical,
+                        fadeReveal ? topTransition.fadeStartAlpha() : 1f);
                 XposedHelpers.callMethod(tx, ticket.background ? "hide" : "show", canonical);
                 ticket.handoffAttempted = true;
                 if (owner == HandoffOwner.OUR_CONTROLLER) {
@@ -10258,7 +10320,7 @@ public final class WorkspaceHost {
         if (holdsLiveFlipZoom() || !canRender(slot) || slot.promoting || !slot.occupied || !mayWriteSideSurface(slot)) {
             return;
         }
-        // The drawer owns the main surface transform until it hands off; a delayed
+        // The cross-fade owns the main surface alpha until it hands off; a delayed
         // reapply would snap the window back to its resting frame mid-animation.
         if (topTransition != null && slot.index == SLOT_MAIN) return;
         if (!controllerOwns(slot, slot.taskId, slot.taskToken)) return;

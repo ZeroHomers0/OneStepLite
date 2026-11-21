@@ -148,7 +148,7 @@ public final class TopLayerRegression {
   h=new TopLayerRegression();h.layout.tabletLandscape=true;h.tabletToolsOpen=true;h.resetTopForSuspend();
   check(!h.tabletToolsOpen&&h.topBar.visibility==4&&h.topBar.raises==0,"tablet suspend collapses instead of exposing the old control face");
   h.topBar.visibility=0;h.topRollSettled(false);
-  check(h.topBar.visibility==0,"late tablet roll completion cannot interrupt a closing drawer");
+  check(h.topBar.visibility==0,"late tablet roll completion cannot interrupt a closing fade");
   System.out.println("Production top face/layer/suspend checks="+checks+" passed");
  }
 }'''
@@ -199,7 +199,7 @@ public class TopReturnBridgeRegression {
  }
  final Roll topRoll=new Roll();
  TopTaskTransition topTransition;
- int nativeCalls,animations,cancels;boolean nativeFront,nativeLive,prepared;Runnable pending,settled;
+ int nativeCalls,animations,cancels,fades;boolean nativeFront,nativeLive,prepared;Runnable pending,settled;
  boolean topReady(){return ready;}
  void prepareLiveTopRoll(){prepared=true;}
  boolean startLiveMainRevealTransition(Runnable r){
@@ -208,6 +208,7 @@ public class TopReturnBridgeRegression {
   return accept;
  }
  void releaseTopTaskNow(boolean front,boolean dismissed,Runnable after,boolean live){nativeCalls++;nativeFront=front;nativeLive=live;}
+ void fadeTopTaskOut(Runnable after){fades++;settled=after;}
  void cancelTopTaskTransition(){cancels++;topTransition=null;}
 '''+member('    private void releaseTopTask(',0)+member('    private void releaseTopTask(',1)+'''
  public static void main(String[]args){
@@ -229,7 +230,7 @@ public class TopReturnBridgeRegression {
   h=new TopReturnBridgeRegression();h.releaseTopTask(true,true,null);h.pending.run();h.cancelTopTaskTransition();h.settled.run();
   check(h.nativeCalls==0,"a roll completion cannot revive a cancelled bridge");
   h=new TopReturnBridgeRegression();h.layout.tabletLandscape=true;h.releaseTopTask(true,true,null);h.pending.run();
-  check(h.nativeCalls==1&&h.settled==null,"the tablet drawer still transfers without a phone roll");
+  check(h.nativeCalls==1&&h.settled==null,"the tablet fade still transfers without a phone roll");
   h=new TopReturnBridgeRegression();h.topFace=false;h.releaseTopTask(true,true,null);h.pending.run();
   check(h.nativeCalls==1&&h.settled==null,"the hidden phone face is already past the roll");
   h=new TopReturnBridgeRegression();h.suspendRequested=true;h.releaseTopTask(true,true,null);
