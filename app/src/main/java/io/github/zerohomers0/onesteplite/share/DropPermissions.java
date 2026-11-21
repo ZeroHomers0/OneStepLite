@@ -104,7 +104,7 @@ final class DropPermissions {
                             Class<?> container = XposedHelpers.findClass("com.android.server.wm.WindowContainer", loader);
                             Object task = XposedHelpers.callStaticMethod(container, "fromBinder", taskToken);
                             if (task == null || XposedHelpers.callMethod(task, "getDisplayContent") != display
-                                    || DesktopLaunchBridge.recentsLease(task) == null)
+                                    || DesktopLaunchBridge.dropLease(task) == null)
                                 throw new SecurityException("Target left OneStepLite");
                             Object info = XposedHelpers.callMethod(task, "getTaskInfo");
                             ComponentName base = (ComponentName) XposedHelpers.getObjectField(info, "baseActivity");

@@ -40,6 +40,10 @@ final class TopTaskTransition {
     private ValueAnimator animator;
     private boolean attached, closed, firstDraw, collapsed, revealing;
     private boolean collectionPrepared, collectionStarted;
+    /** Fraction of the collapse at which the destination starts growing. */
+    private static final float DRAWER_HANDOFF = .35f;
+    private boolean handoffEarly;
+    private ValueAnimator collapseAnimator;
     private final Runnable timeout=this::close;
     private final View.OnAttachStateChangeListener attachment=new View.OnAttachStateChangeListener() {
         @Override public void onViewAttachedToWindow(View view) {}
@@ -168,7 +172,10 @@ final class TopTaskTransition {
         revealing=true;
         if(collectionView!=null) {
             // Shell now owns the task matrix; animate only its original SurfaceView parent.
-            animate(0f,1f,drawer?220L:180L,()->{
+            animate(0f,1f,drawer?200L:180L,()->{
+                // The task now belongs to the strip; the old main surface must not
+                // be moved again by close().
+                liveSurfaceAtEnd=true;
                 log.accept(drawer?"upper live drawer expanded":"upper live collection expanded");
                 close();
             });
@@ -198,11 +205,19 @@ final class TopTaskTransition {
         if(closed)return;
         ValueAnimator next=ValueAnimator.ofFloat(from,to);
         animator=next;
+        if(drawer && !revealing)collapseAnimator=next;
         next.setDuration(duration);
         next.setInterpolator(new AccelerateDecelerateInterpolator());
         next.addUpdateListener(value->{
             if(!current.getAsBoolean()) {close();return;}
             float fraction=(Float)value.getAnimatedValue();
+            if(drawer && !revealing && !handoffEarly && fraction>=DRAWER_HANDOFF
+                    && validLiveSurface()) {
+                // Start the destination while the main window is still sliding, so
+                // the two halves overlap instead of running back to back.
+                handoffEarly=true;
+                handoff();
+            }
             if(drawer) {
                 // Collapse drives the real main surface; reveal grows the destination
                 // (or slides the returning task back down) out of the same seam.
@@ -246,6 +261,8 @@ final class TopTaskTransition {
         catch(Throwable error) {log.accept("upper live main state restore: "+error);}
         ValueAnimator old=animator;animator=null;
         if(old!=null)old.cancel();
+        ValueAnimator collapse=collapseAnimator;collapseAnimator=null;
+        if(collapse!=null && collapse!=old)collapse.cancel();
         host.removeCallbacks(timeout);host.removeOnAttachStateChangeListener(attachment);
         if(attached) {
             face.setVisibility(View.GONE);
@@ -285,8 +302,9 @@ final class TopTaskTransition {
         float f=Math.max(0f,Math.min(1f,fraction));
         // The destination must stay invisible until native admission confirms it;
         // a miniature task peeking out of the strip reads as a glitch.
-        if(collectionView!=null) {
+        if(collectionView!=null && !revealing) {
             // Keep the recorded frame at zero so a geometry refresh cannot reveal it.
+            // Once the reveal owns the destination this must stop writing to it.
             collectionFrameScale=0f;
             collectionView.setPivotX(collectionView.getWidth()*.5f);
             collectionView.setPivotY(collectionView.getHeight());
@@ -298,8 +316,9 @@ final class TopTaskTransition {
         try {
             transaction=Class.forName("android.view.SurfaceControl$Transaction")
                     .getDeclaredConstructor().newInstance();
-            float k=drawerScale*(1f-.08f*f);
-            XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,k,0f,0f,k);
+            // Pure translation: shrinking while rising read as the window
+            // suddenly getting narrower, so the width stays exactly as it was.
+            XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,drawerScale,0f,0f,drawerScale);
             XposedHelpers.callMethod(transaction,"setPosition",liveSurface,0f,-f*drawerTravel);
             XposedHelpers.callMethod(transaction,"setWindowCrop",liveSurface,
                     new Rect(0,0,width,height));
@@ -327,8 +346,7 @@ final class TopTaskTransition {
             try {
                 transaction=Class.forName("android.view.SurfaceControl$Transaction")
                         .getDeclaredConstructor().newInstance();
-                float k=drawerScale*(.92f+.08f*f);
-                XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,k,0f,0f,k);
+                XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,drawerScale,0f,0f,drawerScale);
                 XposedHelpers.callMethod(transaction,"setPosition",liveSurface,0f,-(1f-f)*drawerTravel);
                 XposedHelpers.callMethod(transaction,"setWindowCrop",liveSurface,
                         new Rect(0,0,width,height));

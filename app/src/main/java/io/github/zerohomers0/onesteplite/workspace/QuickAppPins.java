@@ -27,7 +27,16 @@ final class QuickAppPins {
     }
 
     static List<QuickApp> arrange(Context context, List<QuickApp> apps) {
-        try { return QuickAppOrder.arrange(apps, read(context, user()), app -> app.component.flattenToString()); }
-        catch (Throwable unavailable) { return apps; }
+        try {
+            int user = user();
+            List<String> saved = read(context, user);
+            List<String> installed = new java.util.ArrayList<>(apps.size());
+            for (QuickApp app : apps) installed.add(app.component.flattenToString());
+            List<String> pins = QuickAppReconcilePolicy.prune(saved, installed);
+            // An uninstalled app must not keep its pin: it would inflate the picker's
+            // selected count and shift every later pin's displayed position.
+            if (QuickAppReconcilePolicy.hasStaleKeys(saved, installed)) save(context, user, pins);
+            return QuickAppOrder.arrange(apps, pins, app -> app.component.flattenToString());
+        } catch (Throwable unavailable) { return apps; }
     }
 }

@@ -120,6 +120,7 @@ public final class TopLayerRegression {
  void claimTopTask(TopCandidate c,boolean manual){claimed++;}
  TopCandidate currentTopCandidate(){return current;}
  void showTopCandidates(){selected++;}void updateHint(Slot slot){hints++;}
+ void updateTopExitWindow(){}void releaseTopExitWindow(){}
 '''+member('    private void prepareLiveTopRoll(')+member('    private void topRollSettled(')+member('    private void resetTopForSuspend(')+'''
  public static void main(String[]args){
   var moving=new TopLayerRegression();moving.slots[4].occupied=true;moving.prepareLiveTopRoll();

@@ -304,8 +304,8 @@ host_body+='''public static void main(String[]args){
   h.captureMainIntoTop();check(h.topTransition==null&&android.animation.ValueAnimator.all.isEmpty(),"invalid source cannot acquire an animation surface "+mutation);
  }
  ValueAnimatorReset();h=new WorkspaceHost();h.captureMainIntoTop();h.commitPreparation();h.ctx.windows.view.draw(new android.graphics.Canvas());View.drain();
- android.animation.ValueAnimator.all.get(0).step(.4f);h.entry().leash=new Object();
- var tx=android.view.SurfaceControl.Transaction.last;android.animation.ValueAnimator.all.get(0).step(.6f);
+ android.animation.ValueAnimator.all.get(0).step(.2f);h.entry().leash=new Object();
+ var tx=android.view.SurfaceControl.Transaction.last;android.animation.ValueAnimator.all.get(0).step(.8f);
  check(h.claimed==0&&h.topTransition==null&&android.view.SurfaceControl.Transaction.last==tx,
   "canonical replacement interrupts before handoff and never resets the replacement");
  check(!h.translucent&&h.opacityWrites==2,"cancelled fullscreen source regains its native opacity even after canonical replacement");

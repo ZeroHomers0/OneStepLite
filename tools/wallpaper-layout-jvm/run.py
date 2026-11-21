@@ -84,6 +84,7 @@ public class WallpaperLayoutRegression {
  void updateWorkspaceBackdropVisibility(){}
  Object workspaceMainHole(){return null;}
  void updateCellSurfaceVisibility(Slot slot){}void ensureCellBackground(Slot slot){}
+ void updateTopExitWindow(){}void releaseTopExitWindow(){}
  Geometry topGeometry(){return new Geometry(layout.interactiveBounds());}
  int sideSegmentTop(int i){return layout.tabletLandscape?layout.cellBounds(i-1)[1]:i<=1?layout.topStrip:layout.cellBounds(i-2)[3];}
  __METHOD__

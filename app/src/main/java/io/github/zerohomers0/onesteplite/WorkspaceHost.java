@@ -153,6 +153,10 @@ public final class WorkspaceHost {
     private final WideVideoPolicy wideVideoPolicy = new WideVideoPolicy();
     /** Scratch main hole: every consumer copies it before the next frame. */
     private final android.graphics.RectF workspaceHole = new android.graphics.RectF();
+    /** Top strip exclusion: leads the main edge so the bar is opaque when uncovered. */
+    private final android.graphics.RectF workspaceTopHole = new android.graphics.RectF();
+    /** Side rail exclusion: trails the main edge so cells slide in behind it. */
+    private final android.graphics.RectF workspaceSideHole = new android.graphics.RectF();
     private long wideVideoSequence, wideVideoEpoch=-1;
     private Slot topOriginalSlot;
     private TopCandidate tabletCoveredMain;
@@ -217,6 +221,7 @@ public final class WorkspaceHost {
     private volatile boolean liveSwapInputBlocked;
     private TransitionInput transitionInput;
     private View transitionInputWindow;
+    private View topExitWindow;
     private final android.os.IBinder desktopSceneOwner = new android.os.Binder();
     private volatile long desktopRegistrationSequence;
     private final FinishTransactions<RenderBinding> finishTransactions = new FinishTransactions<>(16);
@@ -3454,11 +3459,16 @@ public final class WorkspaceHost {
     /** Fade Host controls; reveal opaque live task buffers by their uncovered geometry. */
     private void setWorkspaceAlpha(float value) {
         workspaceAlpha = Math.max(0f, Math.min(1f, value));
-        if (topBar != null) topBar.setAlpha(workspaceAlpha);
+        // The top strip is revealed by geometry, not by opacity: the main task
+        // covers it until its edge recedes, so a constant opaque bar reads as
+        // being pushed out instead of fading in as a ghost over the app.
+        if (topBar != null) topBar.setAlpha(layout == null ? workspaceAlpha : 1f);
         if (tabletTools != null) tabletTools.setAlpha(workspaceAlpha);
         if (topTaskPane != null) topTaskPane.setAlpha(workspaceAlpha);
         boolean movingBackdrop = layout != null;
         android.graphics.RectF hole = movingBackdrop ? workspaceMainHole() : null;
+        android.graphics.RectF sideHole = movingBackdrop ? workspaceSideHole() : null;
+        android.graphics.RectF topHole = movingBackdrop ? workspaceTopHole() : null;
         updateWorkspaceBacking(topStripBacking, hole);
         updateWorkspaceBacking(mainGapBacking, hole);
         Object tx = null;
@@ -3467,10 +3477,14 @@ public final class WorkspaceHost {
                 if (i < SLOT_COUNT) updateWorkspaceBacking(sideBackingViews[i], hole);
                 Slot slot = slots[i];
                 if (slot == null) continue;
+                // Placeholders are clipped by the same geometry as their cells, so
+                // they can stay opaque and be uncovered instead of fading in.
                 LiveSwapVisualLease.writeAlpha(slot.hint,
-                        taskCellsCovered && slot.index != SLOT_TOP ? 0f : workspaceAlpha);
+                        taskCellsCovered && slot.index != SLOT_TOP ? 0f
+                                : movingBackdrop ? 1f : workspaceAlpha);
                 if (slot.hint != null && slot.hint.getBackground() instanceof WallpaperCropDrawable)
-                    ((WallpaperCropDrawable) slot.hint.getBackground()).setMainHole(hole);
+                    ((WallpaperCropDrawable) slot.hint.getBackground())
+                            .setMainHole(slot.index == SLOT_TOP ? topHole : sideHole);
                 if (slot.hint != null && slot.hint.getBackground()!=null)
                     slot.hint.getBackground().setAlpha(255);
                 if (!ownsCellPresentation(slot)) continue;
@@ -3492,10 +3506,13 @@ public final class WorkspaceHost {
      */
     private void updateChromeClip() {
         if (layout == null || screenW <= 0 || screenH <= 0) return;
-        // Every form factor shares the moving main exclusion.
-        android.graphics.RectF main = workspaceAlpha < 1f || mainSideAnimator != null
-                ? workspaceMainHole() : null;
-        if (topBar != null) topBar.setWorkspaceMainHole(layout.tabletLandscape ? null : main);
+        // Every form factor shares the moving main exclusion. The top strip and the
+        // side rail read different progress curves, so each gets its own hole: the
+        // bar is uncovered first, the cells follow the receding edge.
+        boolean moving = workspaceAlpha < 1f || mainSideAnimator != null;
+        android.graphics.RectF top = moving ? workspaceTopHole() : null;
+        android.graphics.RectF side = moving ? workspaceSideHole() : null;
+        if (topBar != null) topBar.setWorkspaceMainHole(layout.tabletLandscape ? null : top);
         if (topLiveClip != null) {
             // The moving main is cut out in dispatchDraw. Keep the left/right
             // exposed corner instead of cutting this entire strip horizontally.
@@ -3505,12 +3522,12 @@ public final class WorkspaceHost {
         }
         for (int i = 1; i < SLOT_COUNT; i++) {
             int[] bounds = sideBackingBounds(i);
-            if (bounds != null) clipChromeBesideMain(sideBackingViews[i], bounds, main);
+            if (bounds != null) clipChromeBesideMain(sideBackingViews[i], bounds, side);
             Slot slot = slots[i];
             if (slot != null && slot.index != SLOT_TOP && slot.hint != null && slot.rect != null)
                 clipChromeBesideMain(slot.hint,
                         new int[]{slot.rect[0], slot.rect[1],
-                                slot.rect[2] - slot.rect[0], slot.rect[3] - slot.rect[1]}, main);
+                                slot.rect[2] - slot.rect[0], slot.rect[3] - slot.rect[1]}, side);
         }
     }
 
@@ -3539,11 +3556,30 @@ public final class WorkspaceHost {
     }
 
     private android.graphics.RectF workspaceMainHole() {
-        float scale = 1f + (layout.mainScale - 1f) * workspaceAlpha;
-        float x = Float.isNaN(mainSideFrameX) ? layout.mainOffsetX * workspaceAlpha : mainSideFrameX;
-        float y = layout.mainOffsetY * workspaceAlpha;
-        workspaceHole.set(x, y, x + screenW * scale, y + screenH * scale);
-        return workspaceHole;
+        return workspaceMainHoleAt(workspaceAlpha, workspaceHole);
+    }
+
+    /**
+     * Main exclusion at an arbitrary reveal progress. The caller owns the scratch
+     * rect so the top strip and the side rail can advance at different rates
+     * without fighting over one shared field.
+     */
+    private android.graphics.RectF workspaceMainHoleAt(float progress, android.graphics.RectF out) {
+        float scale = 1f + (layout.mainScale - 1f) * progress;
+        float x = Float.isNaN(mainSideFrameX) ? layout.mainOffsetX * progress : mainSideFrameX;
+        float y = layout.mainOffsetY * progress;
+        out.set(x, y, x + screenW * scale, y + screenH * scale);
+        return out;
+    }
+
+    /** Top strip exclusion: leads the real main edge so the bar is opaque when uncovered. */
+    private android.graphics.RectF workspaceTopHole() {
+        return workspaceMainHoleAt(WorkspaceRevealCurve.top(workspaceAlpha), workspaceTopHole);
+    }
+
+    /** Side rail exclusion: trails the real main edge so cell content slides in behind it. */
+    private android.graphics.RectF workspaceSideHole() {
+        return workspaceMainHoleAt(WorkspaceRevealCurve.side(workspaceAlpha), workspaceSideHole);
     }
 
     /** Keep wallpaper opaque outside the moving main task; never fade to the empty display. */
@@ -3922,8 +3958,10 @@ public final class WorkspaceHost {
         topLiveClip=new FrameLayout(ctx) {
             @Override protected void dispatchDraw(android.graphics.Canvas canvas) {
                 int saved = canvas.save();
+                // The strip leads the main edge: it is already opaque when the
+                // receding edge uncovers it, so the bar reads as pushed out.
                 if (layout != null && !layout.tabletLandscape && workspaceAlpha < 1f)
-                    canvas.clipOutRect(workspaceMainHole());
+                    canvas.clipOutRect(workspaceTopHole());
                 super.dispatchDraw(canvas);
                 canvas.restoreToCount(saved);
             }
@@ -4003,7 +4041,6 @@ public final class WorkspaceHost {
         Slot upper=slots[SLOT_TOP];upper.hint=makeEmptyHint();
         upper.hint.setOnClickListener(v->captureMainIntoTop());
         topTaskPane=new TopTaskPane(ctx,upper.hint);
-        topTaskPane.exitAction(()->releaseTopTask(true,true,null));
         topTaskPane.setAlpha(workspaceAlpha);
         FrameLayout taskParent=layout.tabletLandscape?root:topLiveClip;
         taskParent.addView(topTaskPane,new FrameLayout.LayoutParams(-1,layout.topStrip));
@@ -4072,6 +4109,12 @@ public final class WorkspaceHost {
     /** Header action: open the landscape face and pull the current main app into it. */
     private void sendMainToTop() {
         if(!topReady() || topRoll.rolling() || topTransition!=null)return;
+        if(!mainCanFillTop()) {
+            // Portrait apps cannot fill the strip; say so instead of doing nothing.
+            android.widget.Toast.makeText(ctx,"当前应用是竖屏，无法放到顶栏",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
         if(topFace) {captureMainIntoTop(); return;}
         Clipboard.get(ctx).close();
         // No face flip: the drawer is the transition, so the task face is already
@@ -4298,6 +4341,7 @@ public final class WorkspaceHost {
         topFace=false;
         if(topRoll!=null)topRoll.reset(false);
         if(topTaskPane!=null)topTaskPane.setVisibility(View.INVISIBLE);
+        releaseTopExitWindow();
         tabletToolsOpen=false;
         if(topBar!=null) {
             if(layout.tabletLandscape) topBar.setTabletToolsExpanded(false,false);
@@ -4515,6 +4559,7 @@ public final class WorkspaceHost {
         // Paint the restored controls after it, including the now full-width adaptive hole.
         if(!taskFace)topBar.bringToFront();
         topTaskPane.setVisibility(taskFace?View.VISIBLE:View.INVISIBLE);
+        updateTopExitWindow();
         if(!taskFace) {
 
             Slot upper=slots[SLOT_TOP];
@@ -4734,24 +4779,18 @@ public final class WorkspaceHost {
         final LiveTask task=new LiveTask(upper);
         final TopTaskState.Key key=topTaskState.owner();
         final Slot origin=topOriginalSlot;
-        boolean mainOccupied=false;
-        if(front && topFace && topRoll!=null) {
-            try {
-                LiveTask mainTask=findMainTask();
-                mainOccupied=mainTask!=null && mainTask.id!=task.id;
-            } catch(Throwable unavailable) { log("upper return main task unavailable: "+unavailable); }
-        }
-        final boolean animateBackToMain=TopRollMotion.shouldAnimateBackToMain(mainOccupied);
         boolean returnFront=front;
         try { if(topFromMain && origin==null && findMainTask()==null)returnFront=true; } catch(Throwable ignored){}
         final boolean bringingFront=returnFront;
         returnToSystem(upper,bringingFront,liveMainReveal,()->{
             topTaskState.release(key,dismissed);clearSlot(upper);topOriginalSlot=null;
             Runnable finish=()->{
-                if(front && topFace && topRoll!=null) {
-                    if(topTransition!=null) {topRoll.reset(false);topRollSettled(false);}
-                    else if(animateBackToMain) {prepareLiveTopRoll();topRoll.show(false);}
-                    else {topRoll.reset(false);topRollSettled(false);}
+                if(front && topRoll!=null) {
+                    // The strip is empty again, so the title face (clock and app rail)
+                    // must come back; leaving the task face up showed a blank strip.
+                    topFace=false;
+                    topRoll.reset(false);
+                    topRollSettled(false);
                 }
                 revealTopTaskTransition();
                 if(after!=null)after.run();finishPendingSuspend();
@@ -4978,6 +5017,7 @@ public final class WorkspaceHost {
         if(slot.index==SLOT_TOP) {
             ensureCellBackground(slot); updateCellSurfaceVisibility(slot);
             if(topTaskPane!=null)topTaskPane.occupied(slot.occupied && !slot.parked);
+            updateTopExitWindow();
             return;
         }
         ensureCellBackground(slot);
@@ -5026,7 +5066,8 @@ public final class WorkspaceHost {
     }
 
     private Rect workspaceCellCrop(int[] rect, boolean aboveMain) {
-        android.graphics.RectF main = workspaceMainHole();
+        // Cells trail the receding main edge, so their crop follows the side curve.
+        android.graphics.RectF main = workspaceSideHole();
         int[] crop = WorkspaceCellReveal.crop(rect[0], rect[1], rect[2], rect[3],
                 aboveMain ? 0 : layout.topStrip, screenH, aboveMain, layout.mainOnRight,
                 workspaceAlpha < 1f, main.left, main.top, main.right, main.bottom);
@@ -5369,7 +5410,27 @@ public final class WorkspaceHost {
         if (workspaceAnimator != null || workspaceAlpha < 1f) return;
         boolean available = scene == ACTIVE && screenOn && !keyguardLocked
                 && promotion == null && !transferBusy;
-        if (topBar != null) topBar.setAlpha(available ? 1f : 0.92f);
+        if (topBar != null) {
+            topBar.setAlpha(available ? 1f : 0.92f);
+            topBar.setSendMainToTopEnabled(available && mainCanFillTop());
+        }
+        updateTopExitWindow();
+    }
+
+    /**
+     * Only a landscape main app can fill the strip; a portrait app would be
+     * letterboxed into a sliver, so the header action stays greyed out.
+     */
+    private boolean mainCanFillTop() {
+        if (layout == null || layout.tabletLandscape || !topReady()) return false;
+        if (slots[SLOT_TOP].occupied) return false;
+        try {
+            TopCandidate candidate = currentTopCandidate();
+            return candidate != null && candidate.landscape;
+        } catch (Throwable unavailable) {
+            log("upper action state unavailable: " + unavailable);
+            return false;
+        }
     }
 
     /** Hide the overlay window without detaching TaskViews or handing their tasks back. */
@@ -6207,10 +6268,12 @@ public final class WorkspaceHost {
     }
 
     private boolean canShareContent() {
-        return root!=null && scene==ACTIVE && screenOn && !keyguardLocked && !suspendRequested
-                && !workspaceEntering && !liveSwapInputBlocked && !taskCellsCovered && promotion==null
-                && !transferBusy && cellMotion==null && sideDismiss==null && !isSideMotionRunning()
-                && mainSideAnimator==null && !sideCaptured && !holdsLiveFlipZoom();
+        // A drop that is already in flight waits out a transient animation instead of being refused.
+        return ContentShareAdmissionPolicy.admits(ContentShareAdmissionPolicy.evaluate(
+                root!=null, scene==ACTIVE, screenOn, keyguardLocked, suspendRequested,
+                workspaceEntering, liveSwapInputBlocked, taskCellsCovered, promotion!=null,
+                transferBusy, cellMotion!=null, sideDismiss!=null, isSideMotionRunning(),
+                mainSideAnimator!=null, sideCaptured, holdsLiveFlipZoom()));
     }
 
     private ContentShare.Target shareSideTarget(int index) {
@@ -7759,6 +7822,54 @@ public final class WorkspaceHost {
                             ? -1L : now - transitionInputReleaseRequestedAt));
             transitionInputStartedAt = transitionInputReleaseRequestedAt = 0L;
         }
+    }
+
+    /**
+     * The upper task view is a SurfaceView with setZOrderOnTop, so it covers every
+     * sibling in Host's window and swallows their touches. The exit plate therefore
+     * lives in its own overlay window, which the task surface cannot cover.
+     */
+    private void updateTopExitWindow() {
+        boolean wanted = topFace && scene == ACTIVE && screenOn && !keyguardLocked
+                && slots[SLOT_TOP].occupied && !slots[SLOT_TOP].parked
+                && !slots[SLOT_TOP].promoting && layout != null && !layout.tabletLandscape;
+        if (!wanted) { releaseTopExitWindow(); return; }
+        if (topExitWindow != null) return;
+        try {
+            int size = HyperOsStyle.dp(ctx, 40f), margin = HyperOsStyle.dp(ctx, 12f);
+            FrameLayout plate = new FrameLayout(ctx);
+            IconButton exit = new IconButton(ctx, IconButton.CLOSE, "退出顶栏，应用回到主窗");
+            exit.setTooltipText("退出顶栏，应用回到主窗");
+            exit.setBackground(HyperOsStyle.controlButton(ctx, false, 20f));
+            exit.setOnClickListener(v -> releaseTopTask(true, true, null));
+            plate.addView(exit, new FrameLayout.LayoutParams(size, size));
+            WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                    size, size, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    PixelFormat.TRANSLUCENT);
+            params.gravity = Gravity.TOP | Gravity.START;
+            params.x = Math.max(0, screenW - size - margin);
+            params.y = Math.max(0, layout.topStrip - size - margin);
+            params.setTitle("OneStepLiteTopExit");
+            HostWindowPolicy.configure(params);
+            params.setFitInsetsTypes(0);
+            params.layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+            wm.addView(plate, params);
+            topExitWindow = plate;
+        } catch (Throwable error) {
+            log("upper exit plate unavailable: " + error);
+        }
+    }
+
+    private void releaseTopExitWindow() {
+        View plate = topExitWindow;
+        topExitWindow = null;
+        if (plate == null) return;
+        plate.setVisibility(View.GONE);
+        try { wm.removeViewImmediate(plate); }
+        catch (Throwable error) { log("upper exit plate release: " + error); }
     }
 
     private Object liveHostRootSurface() {

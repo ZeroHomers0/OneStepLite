@@ -11,7 +11,7 @@ final class WorkspaceSettingsStore {
     static final String READ = "read", LUNAR = "show_lunar", SWAP = "swap_mode",
             ENTRY_GESTURE = "entry_gesture", KEEP_ON_LOCK = "keep_on_lock",
             SCROLL_SIDE_TASKS = "scroll_side_tasks", LANDSCAPE_VIDEO = "landscape_video",
-            HIDE_RECENTS = "hide_side_recents";
+            HIDE_RECENTS = "hide_side_recents", SECURE_CAPTURE = "allow_secure_capture";
     private WorkspaceSettingsStore() {}
 
     private static SharedPreferences preferences(Context context) {
@@ -26,7 +26,8 @@ final class WorkspaceSettingsStore {
                 preferences.getBoolean(KEEP_ON_LOCK, false),
                 preferences.getBoolean(SCROLL_SIDE_TASKS, false), preferences.getBoolean(LUNAR, true),
                 preferences.getInt(LANDSCAPE_VIDEO, WorkspaceOptions.VIDEO_TURNED),
-                preferences.getBoolean(HIDE_RECENTS, false));
+                preferences.getBoolean(HIDE_RECENTS, false),
+                preferences.getBoolean(SECURE_CAPTURE, false));
     }
 
     static boolean write(Context context, WorkspaceOptions options) {
@@ -38,7 +39,8 @@ final class WorkspaceSettingsStore {
                 .putBoolean(KEEP_ON_LOCK, options.keepOnLock)
                 .putBoolean(SCROLL_SIDE_TASKS, options.scrollSideTasks)
                 .putInt(LANDSCAPE_VIDEO, options.landscapeVideo)
-                .putBoolean(HIDE_RECENTS, options.hideSideRecents).remove("rounded_windows").commit();
+                .putBoolean(HIDE_RECENTS, options.hideSideRecents)
+                .putBoolean(SECURE_CAPTURE, options.allowSecureCapture).remove("rounded_windows").commit();
         if (saved) context.getContentResolver().notifyChange(URI, null);
         return saved;
     }
@@ -51,6 +53,7 @@ final class WorkspaceSettingsStore {
         result.putBoolean(SCROLL_SIDE_TASKS, options.scrollSideTasks);
         result.putInt(LANDSCAPE_VIDEO, options.landscapeVideo);
         result.putBoolean(HIDE_RECENTS, options.hideSideRecents);
+        result.putBoolean(SECURE_CAPTURE, options.allowSecureCapture);
         return result;
     }
 
@@ -60,6 +63,7 @@ final class WorkspaceSettingsStore {
                 bundle.getInt(ENTRY_GESTURE, WorkspaceOptions.STATUS_BAR_INWARD),
                 bundle.getBoolean(KEEP_ON_LOCK, false), bundle.getBoolean(SCROLL_SIDE_TASKS, false), bundle.getBoolean(LUNAR, true),
                 bundle.getInt(LANDSCAPE_VIDEO, WorkspaceOptions.VIDEO_TURNED),
-                bundle.getBoolean(HIDE_RECENTS, false));
+                bundle.getBoolean(HIDE_RECENTS, false),
+                bundle.getBoolean(SECURE_CAPTURE, false));
     }
 }

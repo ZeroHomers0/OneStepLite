@@ -95,14 +95,10 @@ final class ContentShare {
     }
     private static boolean accepts(ClipDescription description) {
         if (description==null) return false;
-        boolean content=false;
-        for(int i=0;i<description.getMimeTypeCount();i++) {
-            String mime=description.getMimeType(i);
-            // One activity/task type rejects the entire clip, even if it also advertises text.
-            if (mime.equals("text/vnd.android.intent") || mime.startsWith("application/vnd.android.")) return false;
-            content |= ContentSharePolicy.accepts(mime);
-        }
-        return content;
+        // A clip may advertise an activity/task type next to real content; keep the content.
+        for(int i=0;i<description.getMimeTypeCount();i++)
+            if (ContentSharePolicy.accepts(description.getMimeType(i))) return true;
+        return false;
     }
     static ClipData copy(ClipData data) {
         if(data==null || data.getItemCount()<1 || data.getItemCount()>DropPermissions.MAX_ITEMS)
@@ -110,8 +106,9 @@ final class ContentShare {
         ClipData result=null; int length=0;
         for(int i=0;i<data.getItemCount();i++) {
             ClipData.Item item=data.getItemAt(i);
+            // Skip items we cannot forward instead of dropping the whole clip.
             if(item.getIntent()!=null || item.getUri()!=null && !ContentSharePolicy.uriScheme(item.getUri().getScheme()))
-                throw new IllegalArgumentException("Unsupported content");
+                continue;
             String text=item.getText()==null?null:item.getText().toString();
             String html=item.getHtmlText();
             length+=(text==null?0:text.length())+(html==null?0:html.length());
@@ -119,6 +116,7 @@ final class ContentShare {
             ClipData.Item safe=new ClipData.Item(text,html,null,item.getUri());
             if(result==null)result=new ClipData(new ClipDescription(data.getDescription()),safe);else result.addItem(safe);
         }
+        if(result==null)throw new IllegalArgumentException("Unsupported content");
         return result;
     }
     private void prepare(Target from,Target to,ClipData clip,IBinder permissions) {

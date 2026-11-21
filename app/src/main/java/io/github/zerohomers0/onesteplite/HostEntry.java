@@ -297,10 +297,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             return sZoomed && target != null && target.display == sDisplayContent
                     ? target.display : null;
         });
-        DropPermissions.install(cl, () -> {
-            ZoomTarget target=sZoomTarget;
-            return sZoomed && target!=null && target.display==sDisplayContent?target.display:null;
-        });
+        DropPermissions.install(cl, () -> sDisplayContent);
         installMagnificationSurfaceTracking(cl);
         try {
             KeyguardZoom.Reset resetForLock=() -> {

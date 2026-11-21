@@ -198,12 +198,26 @@ final class DesktopLaunchBridge {
 
     /** The existing protected registry also identifies recents exceptions by exact token. */
     static Object recentsLease(Object task) {
+        return lease(task, false);
+    }
+
+    /**
+     * A drop target may be a cell that is still reporting fullscreen for a frame while the
+     * transaction that moves it into the cell is in flight. Recents hiding stays strict.
+     */
+    static Object dropLease(Object task) {
+        return lease(task, true);
+    }
+
+    private static Object lease(Object task, boolean allowFullscreen) {
         if (task == null) return null;
         Registry state;
         synchronized (DesktopLaunchBridge.class) { state = current; }
         if (state == null || !state.owner.isBinderAlive()) return null;
         try {
-            if (!Integer.valueOf(6).equals(XposedHelpers.callMethod(task, "getWindowingMode"))) return null;
+            // The row match below is the real identity check.
+            int mode = (Integer) XposedHelpers.callMethod(task, "getWindowingMode");
+            if (mode != 6 && !(allowFullscreen && mode == 1)) return null;
             Object info = XposedHelpers.callMethod(task, "getTaskInfo");
             int id = XposedHelpers.getIntField(info, "taskId");
             int user = XposedHelpers.getIntField(info, "userId");

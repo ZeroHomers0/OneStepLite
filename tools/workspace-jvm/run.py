@@ -14,7 +14,7 @@ def member(signature):
   elif host[i]=='}':d-=1
   i+=1
  return host[a:i]
-methods='\n'.join(member(s) for s in ['    private void beginWorkspaceEntry(', '    private void awaitWorkspaceFrame(', '    private void setWorkspaceAlpha(', '    private void stageCellPresentation(', '    private Rect workspaceCellCrop(Slot slot)', '    private Rect workspaceCellCrop(int[] rect,', '    private android.graphics.RectF workspaceMainHole(', '    private void updateWorkspaceBacking(', '    private void updateWorkspaceBackdropVisibility(', '    private void updateChromeClip(', '    private void clipChromeBesideMain(', '    private int[] sideBackingBounds(', '    private int sideSegmentTop(', '    private int sideSegmentHeight(', '    private void playWorkspaceFade(', '    private void suspendSession(', '    private void finishPendingSuspend(', '    private boolean ownsCellPresentation(', '    private boolean cellPresentationVisible(', '    private void updateCellSurfaceVisibility('])
+methods='\n'.join(member(s) for s in ['    private void beginWorkspaceEntry(', '    private void awaitWorkspaceFrame(', '    private void setWorkspaceAlpha(', '    private void stageCellPresentation(', '    private Rect workspaceCellCrop(Slot slot)', '    private Rect workspaceCellCrop(int[] rect,', '    private android.graphics.RectF workspaceMainHole(', '    private android.graphics.RectF workspaceMainHoleAt(', '    private android.graphics.RectF workspaceTopHole(', '    private android.graphics.RectF workspaceSideHole(', '    private void updateWorkspaceBacking(', '    private void updateWorkspaceBackdropVisibility(', '    private void updateChromeClip(', '    private void clipChromeBesideMain(', '    private int[] sideBackingBounds(', '    private int sideSegmentTop(', '    private int sideSegmentHeight(', '    private void playWorkspaceFade(', '    private void suspendSession(', '    private void finishPendingSuspend(', '    private boolean ownsCellPresentation(', '    private boolean cellPresentationVisible(', '    private void updateCellSurfaceVisibility('])
 files={
 'android/os/SystemClock.java':'package android.os;public class SystemClock {public static long uptimeMillis(){return 10000;}}',
 'android/animation/Animator.java':'package android.animation;public class Animator {}',
@@ -46,7 +46,7 @@ public class WorkspaceRegression {
  static int checks;static void check(boolean b,String m){checks++;if(!b)throw new AssertionError(m);}
  static class Drawable {int alpha=255;void setAlpha(int a){alpha=a;}}
  static class WallpaperCropDrawable extends Drawable {android.graphics.RectF hole;void setMainHole(android.graphics.RectF r){hole=r==null?null:new android.graphics.RectF(r.left,r.top,r.right,r.bottom);}}
- static class View {static final int VISIBLE=0,GONE=8;float alpha=1;int pickerCloses;Drawable background=new WallpaperCropDrawable();android.graphics.Rect clip;Drawable getBackground(){return background;}void setAlpha(float v){alpha=v;}void setClipBounds(android.graphics.Rect r){clip=r;}void invalidate(){}void setWorkspaceMainHole(android.graphics.RectF r){}void closeQuickAppPicker(){pickerCloses++;}}
+ static class View {static final int VISIBLE=0,GONE=8;float alpha=1;int pickerCloses;Drawable background=new WallpaperCropDrawable();android.graphics.Rect clip;Drawable getBackground(){return background;}void setAlpha(float v){alpha=v;}void setClipBounds(android.graphics.Rect r){clip=r;}void invalidate(){}void setWorkspaceMainHole(android.graphics.RectF r){if(background instanceof WallpaperCropDrawable)((WallpaperCropDrawable)background).setMainHole(r);}void closeQuickAppPicker(){pickerCloses++;}}
  static class Observer {Runnable frame;void registerFrameCommitCallback(Runnable r){frame=r;}}
  static class FrameLayout extends View {Observer observer=new Observer();boolean attached=true,hardware=true;int invalidates;
   boolean isAttachedToWindow(){return attached;}boolean isHardwareAccelerated(){return hardware;}Observer getViewTreeObserver(){return observer;}void invalidate(){invalidates++;}void draw(){Runnable r=observer.frame;observer.frame=null;if(r!=null)r.run();}}
@@ -78,6 +78,8 @@ public class WorkspaceRegression {
   int[] cellBounds(int i){return new int[]{0,topStrip+i*400,762,topStrip+(i+1)*400};}}
  Layout layout=new Layout();int screenW=3048,screenH=2032;long workspaceZoomStart=10032;
  final android.graphics.RectF workspaceHole=new android.graphics.RectF();
+ final android.graphics.RectF workspaceTopHole=new android.graphics.RectF();
+ final android.graphics.RectF workspaceSideHole=new android.graphics.RectF();
  Object workspaceBackdrop;int backdropAcquires;void prepareWorkspaceBackdrop(long g,int attempt,Runnable ready){backdropAcquires++;ready.run();}
  android.animation.ValueAnimator workspaceAnimator;float workspaceAlpha=1f;float mainSideFrameX=Float.NaN;Object mainSideAnimator;
  void writeZoomAnimated(boolean on){zoomWrites++;}void writeZoom(boolean on){zoomWrites++;}void setZoomState(boolean on){zoomed=on;}void scheduleMainCropClear(long d){}void publishDesktopSideTasks(){}
@@ -105,7 +107,7 @@ public class WorkspaceRegression {
   check(kept.retainedHides==1&&kept.returns==0,"settled collection exits into retained live bindings");
   var h=new WorkspaceRegression();h.beginWorkspaceEntry(()->h.ready++);
   check(h.backdropAcquires==0,"native backdrop acquisition must wait for the first committed Host frame");
-  check(h.workspaceAlpha==0&&h.topBar.alpha==0&&h.mainGapBacking.alpha==1&&((WallpaperCropDrawable)h.mainGapBacking.background).hole!=null&&h.slots[1].controller.surface.alpha==0,"entry hides controls and actual task parents while wallpaper excludes the full main");
+  check(h.workspaceAlpha==0&&h.topBar.alpha==1&&h.mainGapBacking.alpha==1&&((WallpaperCropDrawable)h.mainGapBacking.background).hole!=null&&h.slots[1].controller.surface.alpha==0,"entry keeps the top bar opaque and hides it by geometry while wallpaper excludes the full main");
   check(h.tabletTools.alpha==0,"permanent tablet title is hidden before the first workspace frame");
   check(h.zoomWrites==0&&h.root.observer.frame!=null,"main zoom waits for committed Host buffer");h.root.draw();h.main.flush();
   check(h.backdropAcquires==1,"one native backdrop acquisition follows committed visibility");
@@ -154,6 +156,12 @@ public class WorkspaceRegression {
     check(Math.abs(hole.left-h.layout.mainOffsetX*p)<.01&&Math.abs(hole.top-606*p)<.01,"hole follows actual main offset");
     check(Math.abs(hole.right-hole.left-3048*(1+(.7017717f-1)*p))<.01,"hole uses the same main scale");
     check((h.slots[1].controller.surface.alpha==0f||h.slots[1].controller.surface.alpha==1f)&&h.slots[1].view.alpha==h.slots[1].controller.surface.alpha&&((WallpaperCropDrawable)h.slots[1].hint.background).hole!=null,"real task remains opaque or hidden while wallpaper exclusion follows geometry");
+    var topHole=h.workspaceTopHole();
+    var sideHole=h.workspaceSideHole();
+    check(topHole!=null&&sideHole!=null,"top bar and side cells each read their own reveal hole");
+    check(topHole.top>=hole.top-.01&&sideHole.top<=hole.top+.01,"top bar leads the main edge while side cells trail it");
+    check(Math.abs(topHole.top-606*(1-(1-p)*(1-p)))<.01,"top bar follows the ease-out reveal curve");
+    check(Math.abs(sideHole.top-606*(p*Math.sqrt(p)))<.01,"side cells follow the ease-in reveal curve");
    }
    h.workspaceBackdrop=new Object();h.setWorkspaceAlpha(.5f);
    check(h.topStripBacking.alpha==1&&h.mainGapBacking.alpha==1,"cutout wallpaper remains opaque while the native buffer reaches its first composition");
@@ -217,6 +225,6 @@ files['io/github/zerohomers0/onesteplite/WorkspaceRegression.java']=files['io/gi
 for name,text in files.items():
  p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8')
 jdk=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out)]+[str(out/n)for n in files]+[str(package_dir(root)/'WorkspaceCellReveal.java'),str(package_dir(root)/'WorkspaceMotionSpec.java')],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out)]+[str(out/n)for n in files]+[str(package_dir(root)/'WorkspaceCellReveal.java'),str(package_dir(root)/'WorkspaceMotionSpec.java'),str(package_dir(root)/'WorkspaceRevealCurve.java')],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.WorkspaceRegression'],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.TopControlsCreationRegression'],check=True)

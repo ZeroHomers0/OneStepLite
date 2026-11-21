@@ -70,6 +70,11 @@ final class TopBar extends FrameLayout {
         header.updateSelected();
         if (tabletHeader != null) tabletHeader.updateSelected();
     }
+    /** Grey the send-to-top action out while the main app cannot fill the strip. */
+    void setSendMainToTopEnabled(boolean enabled) {
+        header.setSendMainToTopEnabled(enabled);
+        if (tabletHeader != null) tabletHeader.setSendMainToTopEnabled(enabled);
+    }
     void setWorkspaceMainHole(RectF hole) {
         workspaceMain = hole == null ? null : new RectF(hole);
         quickRail.setWorkspaceMainHole(hole);
@@ -168,6 +173,11 @@ final class TopBar extends FrameLayout {
             updateSelected();
         }
         void updateSelected() {left.setSelected(mainOnRight);right.setSelected(!mainOnRight);}
+        void setSendMainToTopEnabled(boolean enabled) {
+            if (topApp.isEnabled() == enabled) return;
+            topApp.setEnabled(enabled);
+            topApp.setAlpha(enabled ? 1f : .32f);
+        }
         void updateColors() {
             int color=HyperOsStyle.textPrimary(getContext());
             for(IconButton icon:icons)icon.setIconColor(color);
