@@ -3492,6 +3492,22 @@ public final class WorkspaceHost {
             if (tx != null) XposedHelpers.callMethod(tx, "apply");
         } catch (Throwable error) { log("workspace surface fade: " + error); }
         finally { closeSurfaceObject(tx, "close"); }
+        // The bar and the rail ride the main edge: their inner edges keep a fixed
+        // distance to the shrinking window, so the chrome reads as being pushed out
+        // of the way instead of fading in at a fixed position. Both offsets are
+        // zero at rest, which leaves the settled layout untouched.
+        if (layout != null && !layout.tabletLandscape && mainSideAnimator == null) {
+            if (topLiveClip != null) topLiveClip.setTranslationY(hole.top - layout.mainOffsetY);
+            float sideOffset = layout.mainOnRight
+                    ? hole.left - layout.mainOffsetX
+                    : hole.right - (layout.mainOffsetX + layout.mainDispWidth);
+            for (Slot slot : slots) {
+                if (slot == null || slot.index <= SLOT_MAIN || slot.index == SLOT_TOP) continue;
+                if (slot.rect == null || slot.sideRow >= 0) continue;
+                if (slot.view != null) slot.view.setX(slot.rect[0] + sideOffset);
+                if (slot.hint != null) slot.hint.setX(slot.rect[0] + sideOffset);
+            }
+        }
         updateChromeClip();
     }
 
@@ -3508,8 +3524,12 @@ public final class WorkspaceHost {
         // side rail read different progress curves, so each gets its own hole: the
         // bar is uncovered first, the cells follow the receding edge.
         boolean moving = workspaceAlpha < 1f || mainSideAnimator != null;
-        android.graphics.RectF top = moving ? workspaceTopHole() : null;
-        android.graphics.RectF side = moving ? workspaceSideHole() : null;
+        // While the chrome rides the main edge it is already translated clear of
+        // the window, so a horizontal cut would fight the offset and clip the
+        // cells to nothing. Only the swap animation still needs the cut.
+        boolean riding = moving && mainSideAnimator == null && !layout.tabletLandscape;
+        android.graphics.RectF top = moving && !riding ? workspaceTopHole() : null;
+        android.graphics.RectF side = moving && !riding ? workspaceSideHole() : null;
         if (topBar != null) topBar.setWorkspaceMainHole(layout.tabletLandscape ? null : top);
         if (topLiveClip != null) {
             // The moving main is cut out in dispatchDraw. Keep the left/right
@@ -3793,6 +3813,8 @@ public final class WorkspaceHost {
     root = new FrameLayout(ctx) {
         private final android.graphics.Paint divider = new android.graphics.Paint(
                 android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Paint rimPaint = new android.graphics.Paint(
+                android.graphics.Paint.ANTI_ALIAS_FLAG);
         @Override protected void dispatchDraw(android.graphics.Canvas canvas) {
             // A stationary substrate covers both edges while native main geometry
             // moves. Cell content can leave without taking its wallpaper with it.
@@ -3806,6 +3828,23 @@ public final class WorkspaceHost {
                 canvas.restoreToCount(backdropSave);
             }
             super.dispatchDraw(canvas);
+            // A dark rim hugs the main window while it is in flight: widest at the
+            // start of the shrink and at the end of the grow, gone once the window
+            // settles. It reads as the card lifting off the page instead of the app
+            // simply changing size, and the settled workspace keeps its clean edge.
+            // The main task is a separate window above this one, so only the part
+            // outside the window stays visible: draw a filled band and let the task
+            // cover its interior.
+            if (layout != null && workspaceAlpha < 1f && mainSideAnimator == null) {
+                float rim = HyperOsStyle.dp(ctx, 10f) * (1f - workspaceAlpha);
+                if (rim > 0.5f) {
+                    android.graphics.RectF main = workspaceMainHole();
+                    rimPaint.setStyle(android.graphics.Paint.Style.FILL);
+                    rimPaint.setColor(0xFF000000);
+                    canvas.drawRect(main.left - rim, main.top - rim,
+                            main.right + rim, main.bottom + rim, rimPaint);
+                }
+            }
             if (contentShareHover != null) {
                 contentSharePaint.setStyle(android.graphics.Paint.Style.STROKE);
                 contentSharePaint.setStrokeWidth(HyperOsStyle.dp(ctx, 2f));
@@ -3961,9 +4000,11 @@ public final class WorkspaceHost {
         topLiveClip=new FrameLayout(ctx) {
             @Override protected void dispatchDraw(android.graphics.Canvas canvas) {
                 int saved = canvas.save();
-                // The strip leads the main edge: it is already opaque when the
-                // receding edge uncovers it, so the bar reads as pushed out.
-                if (layout != null && !layout.tabletLandscape && workspaceAlpha < 1f)
+                // The strip rides the main edge during the workspace fade, so it is
+                // already clear of the window and must not be cut a second time.
+                // Only the swap animation still needs the geometric exclusion.
+                if (layout != null && !layout.tabletLandscape && workspaceAlpha < 1f
+                        && mainSideAnimator != null)
                     canvas.clipOutRect(workspaceTopHole());
                 super.dispatchDraw(canvas);
                 canvas.restoreToCount(saved);
@@ -5112,6 +5153,12 @@ public final class WorkspaceHost {
     }
 
     private Rect workspaceCellCrop(int[] rect, boolean aboveMain) {
+        // While the chrome rides the main edge it is translated clear of the
+        // window, so a second geometric cut would fight the offset and clip the
+        // cell to nothing. Keep the full cell and let the offset define the edge.
+        if (layout != null && !layout.tabletLandscape && workspaceAlpha < 1f
+                && mainSideAnimator == null)
+            return new Rect(0, 0, rect[2] - rect[0], rect[3] - rect[1]);
         // Cells trail the receding main edge, so their crop follows the side curve.
         android.graphics.RectF main = workspaceSideHole();
         int[] crop = WorkspaceCellReveal.crop(rect[0], rect[1], rect[2], rect[3],

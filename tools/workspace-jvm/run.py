@@ -46,7 +46,7 @@ public class WorkspaceRegression {
  static int checks;static void check(boolean b,String m){checks++;if(!b)throw new AssertionError(m);}
  static class Drawable {int alpha=255;void setAlpha(int a){alpha=a;}}
  static class WallpaperCropDrawable extends Drawable {android.graphics.RectF hole;void setMainHole(android.graphics.RectF r){hole=r==null?null:new android.graphics.RectF(r.left,r.top,r.right,r.bottom);}}
- static class View {static final int VISIBLE=0,GONE=8;float alpha=1;int pickerCloses;Drawable background=new WallpaperCropDrawable();android.graphics.Rect clip;Drawable getBackground(){return background;}void setAlpha(float v){alpha=v;}void setClipBounds(android.graphics.Rect r){clip=r;}void invalidate(){}void setWorkspaceMainHole(android.graphics.RectF r){if(background instanceof WallpaperCropDrawable)((WallpaperCropDrawable)background).setMainHole(r);}void closeQuickAppPicker(){pickerCloses++;}}
+ static class View {static final int VISIBLE=0,GONE=8;float alpha=1,x,y,translationY;int pickerCloses;Drawable background=new WallpaperCropDrawable();android.graphics.Rect clip;Drawable getBackground(){return background;}void setAlpha(float v){alpha=v;}void setX(float v){x=v;}void setY(float v){y=v;}void setTranslationY(float v){translationY=v;}void setClipBounds(android.graphics.Rect r){clip=r;}void invalidate(){}void setWorkspaceMainHole(android.graphics.RectF r){if(background instanceof WallpaperCropDrawable)((WallpaperCropDrawable)background).setMainHole(r);}void closeQuickAppPicker(){pickerCloses++;}}
  static class Observer {Runnable frame;void registerFrameCommitCallback(Runnable r){frame=r;}}
  static class FrameLayout extends View {Observer observer=new Observer();boolean attached=true,hardware=true;int invalidates;
   boolean isAttachedToWindow(){return attached;}boolean isHardwareAccelerated(){return hardware;}Observer getViewTreeObserver(){return observer;}void invalidate(){invalidates++;}void draw(){Runnable r=observer.frame;observer.frame=null;if(r!=null)r.run();}}
@@ -74,7 +74,7 @@ public class WorkspaceRegression {
  static class CellMotion{void finish(){}}
  Queue main=new Queue();Object ctx=new Object();CellMotion cellMotion;StatusBar statusBar=new StatusBar();Promotion promotion;Bitmap mainBackdrop,wallpaperBackdrop=new Bitmap();
   boolean screenOn=true,zoomed=true,suspendRequested,landscapeSuspended,transferBusy,workspaceEntering,workspaceExiting,keyguardLocked;int scene=ACTIVE,zoomWrites,parks,returns,ready;long sceneEpoch=1,workspaceGeneration,zoomAnimUntil;String pendingSuspendReason;
- static class Layout {boolean tabletLandscape,mainOnRight;float mainScale=.7017717f;int mainOffsetX,mainOffsetY=606;int mainWidth=2286,sideWidth=762,topStrip=508;
+ static class Layout {boolean tabletLandscape,mainOnRight;float mainScale=.7017717f;int mainOffsetX,mainOffsetY=606;int mainWidth=2286,sideWidth=762,topStrip=508,mainDispWidth=2139;
   int[] cellBounds(int i){return new int[]{0,topStrip+i*400,762,topStrip+(i+1)*400};}}
  Layout layout=new Layout();int screenW=3048,screenH=2032;long workspaceZoomStart=10032;
  final android.graphics.RectF workspaceHole=new android.graphics.RectF();
@@ -183,6 +183,21 @@ public class WorkspaceRegression {
    check(h.slots[1].hint.background.alpha==255,"failed or released native wallpaper restores original hint background");
    h.layout.tabletLandscape=false;h.setWorkspaceAlpha(.5f);
    check(((WallpaperCropDrawable)h.topStripBacking.background).hole!=null&&h.topStripBacking.alpha==1f,"portrait background excludes moving main without a translucent color band");
+  }
+  // Portrait chrome rides the main edge: the bar and the rail keep their inner
+  // edges glued to the shrinking window instead of being cut by it.
+  for(boolean mainRight:new boolean[]{false,true}) {
+   h=new WorkspaceRegression();h.layout.mainOnRight=mainRight;h.layout.mainOffsetX=mainRight?835:0;
+   for(float p:new float[]{0f,.25f,.5f,.75f,1f}) {
+    h.setWorkspaceAlpha(p);
+    check(Math.abs(h.topLiveClip.translationY-(606*p-606))<.01,"top strip rides the main edge");
+    float expected=mainRight?(835*p-835):(3048*(1+(.7017717f-1)*p)-2139);
+    check(Math.abs(h.slots[1].view.x-expected)<.01,"side cells ride the main edge");
+    check(h.slots[1].view.clip!=null&&h.slots[1].view.clip.left==0&&h.slots[1].view.clip.right==762,"riding cells keep their full crop");
+    check(h.slots[1].hint.x==expected,"side placeholders ride with their cells");
+   }
+   h.setWorkspaceAlpha(1f);
+   check(h.topLiveClip.translationY==0&&h.slots[1].view.x==0,"settled chrome returns to its layout position");
   }
   h=new WorkspaceRegression();h.layout.tabletLandscape=true;h.wallpaperBackdrop=null;
   h.topStripBacking.background=new Drawable();h.mainGapBacking.background=new Drawable();
