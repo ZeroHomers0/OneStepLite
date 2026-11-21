@@ -5010,8 +5010,14 @@ public final class WorkspaceHost {
                 && controllerOwns(slot, slot.taskId, slot.taskToken)) {
             Object leash = getSurfaceField(slot.controller, "mTaskLeash");
             if (leash != null && leash != surface
-                    && Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid")))
+                    && Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
+                // The leash is the surface the native exit animation moves. Crop it to the
+                // same cell so a task thrown off screen is clipped at the cell edge instead
+                // of flying across the workspace.
+                if (crop != null && !crop.isEmpty())
+                    XposedHelpers.callMethod(tx, "setWindowCrop", leash, crop);
                 XposedHelpers.callMethod(tx, "setAlpha", leash, alpha);
+            }
         }
     }
 
