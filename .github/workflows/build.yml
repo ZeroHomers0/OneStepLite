@@ -73,7 +73,7 @@ jobs:
           cat dist/apk/SHA256SUMS.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: onesteplite-apk-${{ github.sha }}
+          name: OneStepLite-apk
           path: dist/apk/
           if-no-files-found: error
           retention-days: 30
@@ -106,6 +106,32 @@ jobs:
           ./test.ps1 -SdkPath $env:ANDROID_HOME -JavaHome $env:JAVA_HOME
           if ($LASTEXITCODE -ne 0) { throw 'Offline tests failed.' }
 
+  # GitHub artifacts always need a signed-in account and always arrive as a zip,
+  # so every main build also refreshes a rolling prerelease. Its assets are plain
+  # files with a stable public URL, which is what a phone can download directly.
+  latest:
+    if: github.ref == 'refs/heads/main'
+    needs: [apk, tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Refresh the rolling latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --pattern 'OneStepLite-apk' --dir dist
+          shopt -s dotglob
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest dist/*/* --clobber
+          else
+            gh release create latest dist/*/* --prerelease \
+              --title "Latest build" \
+              --notes "Rolling build of the newest commit on main. Tagged releases are the stable ones."
+          fi
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [apk, tests]
@@ -119,7 +145,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh run download "$GITHUB_RUN_ID" --pattern 'onesteplite-apk-*' --dir dist
+          gh run download "$GITHUB_RUN_ID" --pattern 'OneStepLite-apk' --dir dist
           shopt -s dotglob
           gh release create "$GITHUB_REF_NAME" dist/*/* --verify-tag \
             --title "OneStepLite $GITHUB_REF_NAME" \

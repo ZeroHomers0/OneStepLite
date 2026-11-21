@@ -223,14 +223,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./test.ps1
 
 ### 持续集成
 
-`.github/workflows/build.yml` 只在合并进 `main`（或推送 `v*` 标签）时运行两个作业，分支上的提交与拉取请求不触发构建：
+`.github/workflows/build.yml` 只在合并进 `main`（或推送 `v*` 标签）时运行，分支上的提交与拉取请求不触发构建：
 
 | 作业 | 运行环境 | 内容 |
 | --- | --- | --- |
 | `apk` | `ubuntu-latest` | 安装 `platforms;android-37.0`、`build-tools;36.0.0`、`ndk;28.2.13676358`，执行 `:app:stageRelease`，上传 APK 与 `SHA256SUMS.txt` |
 | `tests` | `windows-latest` | 执行 `test.ps1`，跑完 55 个策略单测与 102 个生产方法回放套件 |
 
-推送 `v*` 标签时额外运行 `release` 作业，把构建产物发布到 GitHub Release。发行签名通过仓库 Secrets 提供，未配置时普通构建产出未签名包，而标签构建会直接失败：
+每次 `main` 构建成功后，`latest` 作业会把产物刷新到 [`latest` 预发布](https://github.com/ZeroHomers0/OneStepLite/releases/tag/latest)，那里是普通文件、有固定直链，手机可以直接下载；推送 `v*` 标签时 `release` 作业另外发布正式版本。
+
+> Actions 页面上的 Artifact 也能下载，但 GitHub 规定它必须登录账号、而且永远是 zip 包，所以日常取包用 `latest` 更省事。
+
+发行签名通过仓库 Secrets 提供，未配置时普通构建产出未签名包，而标签构建会直接失败：
 
 | Secret | 用途 |
 | --- | --- |
