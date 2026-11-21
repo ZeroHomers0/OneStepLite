@@ -386,7 +386,7 @@ final class SwapPreview {
             // Release the caller's drawing lease on a failed removal too; do not
             // claim this fallback proves that the compositor has removed the window.
             removalFailed = true;
-            android.util.Log.w("OneStepLiteProbe", "bridge window removal failed", error);
+            android.util.Log.w(Tags.PROBE, "bridge window removal failed", error);
             if (completion != null) completion.run();
         }
         // RenderThread may still own the last display list: let Bitmap references retire

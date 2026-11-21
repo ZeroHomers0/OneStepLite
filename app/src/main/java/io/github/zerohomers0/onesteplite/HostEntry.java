@@ -3,26 +3,19 @@ package io.github.zerohomers0.onesteplite;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
-import android.app.ActivityOptions;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.graphics.Color;
-import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.animation.PathInterpolator;
-import android.widget.LinearLayout;
-import android.widget.TextView;
-import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.Map;
@@ -57,15 +50,9 @@ public class HostEntry implements IXposedHookLoadPackage {
     private static final String SYSTEMUI = Packages.SYSTEM_UI;
     private static final String DESKTOP_ICON_LAUNCH_ACTION = Actions.DESKTOP_ICON_LAUNCH;
     private static final long LAUNCH_DELAY_MS = 12_000L;   // 等开机稳定
-    private static final long AFTER_ADD_MS = 2_500L;       // 等 TaskView 表面就绪再启动
 
     /** 试验方框的位置与尺寸（后面要换成自适应布局）。 */
-    private static final int BOX_W = 600;
-    private static final int BOX_H = 900;
-    private static final int BOX_X = 40;
-    private static final int BOX_Y = 520;
 
-    private static final String TARGET_PKG = Packages.SETTINGS;
 
     private static volatile Context sContext;
     private static volatile Object sTaskViewFactory;
@@ -73,8 +60,6 @@ public class HostEntry implements IXposedHookLoadPackage {
     private static volatile Executor sShellExecutor;
     private static volatile boolean sStarted;
 
-    private static View sWindowRoot;
-    private static Object sTaskView;
     private final TopFocusNotification topFocusNotification = new TopFocusNotification();
 
     @Override
@@ -4394,199 +4379,6 @@ public class HostEntry implements IXposedHookLoadPackage {
                 }
             }
         }, 1500L);
-    }
-
-    /** 通过工厂创建一个 TaskView；回调在 Dagger/Shell 线程上，转交主线程做视图操作。 */
-    private void createTaskView() throws Exception {
-        Consumer<Object> onCreated = new Consumer<Object>() {
-            @Override
-            public void accept(Object view) {
-                log("TaskView created -> " + view);
-                sTaskView = view;
-                new Handler(Looper.getMainLooper()).post(new Runnable() {
-                    @Override
-                    public void run() {
-                        attachAndLaunch();
-                    }
-                });
-            }
-        };
-        XposedHelpers.callMethod(sTaskViewFactory, "create", sContext, sShellExecutor, onCreated);
-        log("factory.create invoked");
-    }
-
-    /** 把 TaskView 放进我们自己的窗口，然后启动目标应用。 */
-    private void attachAndLaunch() {
-        try {
-            if (sContext == null || sTaskView == null) {
-                log("attachAndLaunch: missing context/taskview");
-                return;
-            }
-            final View taskView = (View) sTaskView;
-
-            // 监听 TaskView 生命周期：这些回调决定后续「格子绑定/交换」的状态机
-            Object listener = makeListener(sShellExecutor, "com.android.wm.shell.taskview.TaskView$Listener");
-            if (listener != null) {
-                XposedHelpers.callMethod(taskView, "setListener", sShellExecutor, listener);
-                log("setListener OK");
-            }
-
-            LinearLayout root = new LinearLayout(sContext);
-            root.setOrientation(LinearLayout.VERTICAL);
-            root.setBackgroundColor(0xE6000000);
-            root.setPadding(16, 16, 16, 16);
-
-            TextView label = new TextView(sContext);
-            label.setText("OneStepLite宿主 v0.3 — 真实应用承载测试");
-            label.setTextColor(Color.WHITE);
-            label.setTextSize(15f);
-            root.addView(label, new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT));
-
-            if (taskView.getParent() instanceof android.view.ViewGroup) {
-                ((android.view.ViewGroup) taskView.getParent()).removeView(taskView);
-            }
-            root.addView(taskView, new LinearLayout.LayoutParams(BOX_W, BOX_H));
-
-            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.WRAP_CONTENT,
-                    WindowManager.LayoutParams.WRAP_CONTENT,
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                    PixelFormat.TRANSLUCENT);
-            lp.gravity = Gravity.TOP | Gravity.START;
-            lp.x = BOX_X;
-            lp.y = BOX_Y;
-            lp.setTitle("WorkspaceHostBox");
-
-            WindowManager wm = (WindowManager) sContext.getSystemService(Context.WINDOW_SERVICE);
-            wm.addView(root, lp);
-            sWindowRoot = root;
-            log("window with TaskView added: " + root + " box=" + BOX_W + "x" + BOX_H + "@" + BOX_X + "," + BOX_Y);
-
-            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    launchTargetApp(taskView);
-                }
-            }, AFTER_ADD_MS);
-        } catch (Throwable t) {
-            log("attachAndLaunch FAILED: " + t);
-            XposedBridge.log(t);
-        }
-    }
-
-    /** 用公开的 TaskView#startActivity 启动目标应用；ActivityOptions 的隐藏 setter 走反射。 */
-    /** 一次性自锁文件：写在 SystemUI 自己的数据目录，重启进程后仍存在。 */
-    private java.io.File latchFile() {
-        return new java.io.File(sContext.getFilesDir(), "onesteplite-launched");
-    }
-
-    private void armLatch() {
-        try {
-            java.io.File f = latchFile();
-            if (!f.exists() && f.createNewFile()) {
-                log("latch armed at " + f);
-            }
-        } catch (Throwable t) {
-            log("could not arm latch: " + t);
-        }
-    }
-
-    /** 为目标 Intent 造 PendingIntent 并调用 TaskView#startActivity。 */
-    private void launchTargetApp(View taskView) {
-        try {
-            Intent launch = sContext.getPackageManager().getLaunchIntentForPackage(TARGET_PKG);
-            if (launch == null) {
-                log("no launch intent for " + TARGET_PKG);
-                return;
-            }
-            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
-            Rect bounds = new Rect(0, 0, BOX_W, BOX_H);
-            ActivityOptions options = ActivityOptions.makeBasic();
-            callHidden(options, "setLaunchBounds", bounds);
-            callHidden(options, "setLaunchCookie", new Binder());
-            callHidden(options, "setLaunchWindowingMode", 6);          // WINDOWING_MODE_MULTI_WINDOW
-            callHidden(options, "setRemoveWithTaskOrganizer", Boolean.TRUE);
-
-            // pendingIntent 必须非空：TaskViewTransitions.startActivity 第一行就
-            // pendingIntent.getIntent()，且真正的启动走
-            // WindowContainerTransaction.sendPendingIntent(pendingIntent, intent, options)。
-            // 传 null 会让 SystemUI 在 wmshell.main 上 NPE 崩溃（已实测）。
-            PendingIntent pi = PendingIntent.getActivity(sContext, 0, launch,
-                    PendingIntent.FLAG_IMMUTABLE);
-
-            // 同理不能用 XposedHelpers.callMethod：它靠实参类型匹配，遇到 null 实参会抛
-            // "Attempt to get length of null array"。改用显式 Method.invoke。
-            Method start = null;
-            for (Class<?> c = taskView.getClass(); c != null && start == null; c = c.getSuperclass()) {
-                try {
-                    start = c.getDeclaredMethod("startActivity",
-                            PendingIntent.class, Intent.class, ActivityOptions.class, Rect.class);
-                } catch (NoSuchMethodException ignored) {
-                    // 继续往父类找
-                }
-            }
-            if (start == null) {
-                log("startActivity(PendingIntent, Intent, ActivityOptions, Rect) not found");
-                return;
-            }
-            // 先上锁再调用：万一这次调用崩掉 SystemUI，重启后的新实例会因锁存在而不再重试
-            armLatch();
-            start.setAccessible(true);
-            start.invoke(taskView, pi, launch, options, bounds);
-            log("startActivity invoked for " + TARGET_PKG + " pi=" + pi + " bounds=" + bounds);
-        } catch (Throwable t) {
-            log("launchTargetApp FAILED: " + t);
-            XposedBridge.log(t);
-        }
-    }
-
-    /** 隐藏 API 的调用一律走反射，失败要能看见具体是哪一个。 */
-    private static void callHidden(Object target, String name, Object... args) {
-        try {
-            Object r = XposedHelpers.callMethod(target, name, args);
-            log("   hidden OK " + name + " -> " + r);
-        } catch (Throwable t) {
-            log("   hidden FAILED " + name + ": " + t);
-        }
-    }
-
-    /** 用动态代理实现隐藏接口 TaskView.Listener，记录每个回调。 */
-    private Object makeListener(Executor executor, String ifaceName) {
-        try {
-            Class<?> iface = XposedHelpers.findClass(ifaceName, sContext.getClassLoader());
-            return Proxy.newProxyInstance(iface.getClassLoader(), new Class<?>[]{iface},
-                    new InvocationHandler() {
-                        @Override
-                        public Object invoke(Object proxy, Method method, Object[] args) {
-                            StringBuilder sb = new StringBuilder("listener#").append(method.getName()).append('(');
-                            if (args != null) {
-                                for (int i = 0; i < args.length; i++) {
-                                    sb.append(i > 0 ? ", " : "").append(args[i]);
-                                }
-                            }
-                            log(sb.append(')').toString());
-                            Class<?> rt = method.getReturnType();
-                            if (rt == boolean.class) {
-                                return Boolean.FALSE;
-                            }
-                            if (rt == int.class) {
-                                return 0;
-                            }
-                            if (rt == long.class) {
-                                return 0L;
-                            }
-                            return null;
-                        }
-                    });
-        } catch (Throwable t) {
-            log("makeListener failed: " + t);
-            return null;
-        }
     }
 
     private static void log(String msg) {

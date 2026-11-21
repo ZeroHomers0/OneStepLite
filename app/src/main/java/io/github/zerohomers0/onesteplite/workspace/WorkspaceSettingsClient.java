@@ -46,7 +46,7 @@ final class WorkspaceSettingsClient {
             main.post(() -> changed.accept(options));
             reportedFailure = false;
         } catch (Exception error) {
-            if (!reportedFailure) android.util.Log.w("OneStepLiteProbe", "workspace settings unavailable; keep last choices", error);
+            if (!reportedFailure) android.util.Log.w(Tags.PROBE, "workspace settings unavailable; keep last choices", error);
             reportedFailure = true;
         }
     }

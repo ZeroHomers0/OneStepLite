@@ -258,7 +258,7 @@ Lint 也在 CI 里跑。`app/lint.xml` 关掉了对 LSPosed 模块不适用的�
 ## 项目结构
 
 ```
-app/src/main/java/io/github/zerohomers0/onesteplite/   185 个源文件，按功能分 19 个子目录
+app/src/main/java/io/github/zerohomers0/onesteplite/   186 个源文件，按功能分 19 个子目录
 app/src/main/cpp/                                      原生输入映射（ARM64）
 app/src/main/res/                                      图标与主题
 app/src/main/assets/                                   模块入口与许可文件

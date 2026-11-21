@@ -32,7 +32,7 @@ def method(text, signature):
 preview = (src / "SwapPreview.java").read_text(encoding="utf-8-sig")
 close = "\n".join(method(preview, s) for s in ("    void close() {", "    void close(Runnable onDetached) {"))
 # Runtime-independent logger; method control flow is otherwise unmodified.
-close = close.replace('android.util.Log.w("OneStepLiteProbe", "bridge window removal failed", error);', "removalErrors++;")
+close = close.replace('android.util.Log.w(Tags.PROBE, "bridge window removal failed", error);', "removalErrors++;")
 bridge_test = r'''
 import java.util.*;
 public class BridgeCloseCompletionTest {

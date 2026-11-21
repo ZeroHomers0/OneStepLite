@@ -43,7 +43,7 @@ final class LiveLiftPreview {
             XposedHelpers.callMethod(transaction, "setPosition", surface, x, y);
             XposedHelpers.callMethod(transaction, "apply");
         } catch (Throwable error) {
-            android.util.Log.i("OneStepLiteProbe", "live lift surface transform failed: " + error);
+            android.util.Log.i(Tags.PROBE, "live lift surface transform failed: " + error);
         } finally {
             if (transaction != null) {
                 try { XposedHelpers.callMethod(transaction, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
