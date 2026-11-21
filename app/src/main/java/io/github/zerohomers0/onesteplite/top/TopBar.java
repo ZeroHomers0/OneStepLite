@@ -18,7 +18,6 @@ final class TopBar extends FrameLayout {
         void onExit();
         void onLaunch(QuickApp app);
         boolean canCustomizeApps();
-        void onOpenLandscape();
         /** Send the current main-window app up into the landscape task face. */
         default void onSendMainToTop() {}
         default void onTaskCellsCovered(boolean covered) {}
@@ -161,7 +160,6 @@ final class TopBar extends FrameLayout {
             title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));title.setTextSize(19);
             title.setContentDescription("One Step");
             if(tools!=null)title.setOnClickListener(v->tools.run());
-            title.setOnLongClickListener(v->{listener.onOpenLandscape();return true;});
             addView(title);
             left=button(IconButton.SIDE_LEFT,"小窗放在左侧",()->listener.onSetMainSide(true));
             right=button(IconButton.SIDE_RIGHT,"小窗放在右侧",()->listener.onSetMainSide(false));

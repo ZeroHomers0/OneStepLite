@@ -23,7 +23,7 @@ public final class TopAdmissionRegression {
  static class TopCandidate {Task task=new Task();TopTaskState.Key key=new TopTaskState.Key(42,0,"token");Slot source;boolean landscape=true;}
  static class Pane {boolean occupied;void occupied(boolean v){occupied=v;}void message(String s){}}
  static class Root {void requestLayout(){}}
- Root root=new Root();Pane topTaskPane=new Pane();Object promotion,cellMotion,topRoll=new Object();
+ Root root=new Root();Pane topTaskPane=new Pane();Object promotion,cellMotion;
  boolean screenOn=true,keyguardLocked,transferBusy,workspaceEntering,suspendRequested,topFromMain,topPortrait;
  boolean fail=true,defer;int adopted,restored,finished,released;Runnable pending;
  Slot[]slots={new Slot(0),new Slot(1),new Slot(2),new Slot(3),new Slot(4)};Slot topOriginalSlot;
@@ -102,11 +102,10 @@ public final class TopLayerRegression {
  static class Pane extends View {boolean occupied;void occupied(boolean v){occupied=v;}}
  static class Root {int layouts;void requestLayout(){layouts++;}}
  static class Slot {boolean occupied,parked;int taskId=42;long taskEpoch=1;Object taskToken="token";}
- static class Roll {int resets;void reset(boolean task){resets++;}}
  static class TopCandidate {boolean landscape;}
  static class Layout {boolean tabletLandscape;}
  Layout layout=new Layout();boolean tabletToolsOpen;void updateTopTaskGeometry(){}
- Root root=new Root();Bar topBar=new Bar();Pane topTaskPane=new Pane();Roll topRoll=new Roll();
+ Root root=new Root();Bar topBar=new Bar();Pane topTaskPane=new Pane();
  Slot[]slots={new Slot(),new Slot(),new Slot(),new Slot(),new Slot()};
  TopTaskState topTaskState=new TopTaskState();TopCandidate current;
  boolean topFromMain=true;Object topOriginalSlot,tabletCoveredMain,tabletReturnedTop;Boolean mainOccupied=true;int retained,liveTransitions;boolean returnedLive;Runnable liveTransfer;
@@ -121,33 +120,33 @@ public final class TopLayerRegression {
  TopCandidate currentTopCandidate(){return current;}
  void showTopCandidates(){selected++;}void updateHint(Slot slot){hints++;}
  void updateTopExitWindow(){}void releaseTopExitWindow(){}
-'''+member('    private void prepareLiveTopRoll(')+member('    private void topRollSettled(')+member('    private void resetTopForSuspend(')+'''
+'''+member('    private void prepareTopFace(')+member('    private void settleTopFace(')+member('    private void resetTopForSuspend(')+'''
  public static void main(String[]args){
-  var moving=new TopLayerRegression();moving.slots[4].occupied=true;moving.prepareLiveTopRoll();
+  var moving=new TopLayerRegression();moving.slots[4].occupied=true;moving.prepareTopFace();
   check(moving.topBar.raises==1&&moving.topTaskPane.occupied&&moving.topFace,"controls paint after the live SurfaceView hole before a return begins");
   check(moving.returned==0&&moving.slots[4].occupied,"preparing the other live face preserves the bound task");
   order="";
-  var h=new TopLayerRegression();h.slots[4].occupied=true;h.topRollSettled(false);
+  var h=new TopLayerRegression();h.slots[4].occupied=true;h.settleTopFace(false);
   check(h.topBar.visibility==0&&h.topTaskPane.visibility==4&&!h.topFace,"control face visibility");
   check(h.topBar.raises==1&&order.equals("raise;"),"controls paint above hole without returning the occupied upper app");
   check(h.returned==0&&h.retained==0&&h.liveTransitions==0,"occupied main keeps the landscape upper task bound in its TaskView");
   check(h.hints==1&&h.root.layouts==1,"retained upper task still updates its geometry");
-  h=new TopLayerRegression();h.slots[4].occupied=true;h.mainOccupied=null;h.topRollSettled(false);
+  h=new TopLayerRegression();h.slots[4].occupied=true;h.mainOccupied=null;h.settleTopFace(false);
   check(h.returned==0&&h.retained==0&&h.liveTransitions==0,"unknown main occupancy conservatively retains the upper task");
-  h=new TopLayerRegression();h.slots[4].occupied=true;h.mainOccupied=false;h.topRollSettled(false);
+  h=new TopLayerRegression();h.slots[4].occupied=true;h.mainOccupied=false;h.settleTopFace(false);
   check(h.liveTransitions==1&&h.returned==0,"empty main starts the live task return bridge");h.liveTransfer.run();
   check(h.returned==1&&h.returnedLive,"live bridge requests native return with the real-surface reveal flag");
-  h=new TopLayerRegression();h.slots[4].occupied=true;h.mainOccupied=false;h.topFromMain=false;h.topOriginalSlot=new Object();h.topRollSettled(false);
+  h=new TopLayerRegression();h.slots[4].occupied=true;h.mainOccupied=false;h.topFromMain=false;h.topOriginalSlot=new Object();h.settleTopFace(false);
   check(h.returned==1&&h.liveTransitions==0&&!h.returnedLive,"side-origin upper task returns without a main-center animation");
-  h=new TopLayerRegression();h.topFace=false;h.topSelectionPending=true;h.current=new TopCandidate();h.current.landscape=true;h.topRollSettled(true);
+  h=new TopLayerRegression();h.topFace=false;h.topSelectionPending=true;h.current=new TopCandidate();h.current.landscape=true;h.settleTopFace(true);
   check(h.topFace&&h.selected==1&&h.claimed==0&&h.topBar.raises==0&&h.topBar.visibility==4,"manual flip shows empty plus and waits for explicit add");
-  h=new TopLayerRegression();h.topRollSettled(true);check(h.selected==1,"empty face chooser");
-  h=new TopLayerRegression();h.keyguardLocked=true;h.topRollSettled(false);check(h.topFace&&h.topBar.raises==0&&h.returned==0,"stale locked completion ignored");
+  h=new TopLayerRegression();h.settleTopFace(true);check(h.selected==1,"empty face chooser");
+  h=new TopLayerRegression();h.keyguardLocked=true;h.settleTopFace(false);check(h.topFace&&h.topBar.raises==0&&h.returned==0,"stale locked completion ignored");
   h=new TopLayerRegression();h.topSelectionPending=true;h.resetTopForSuspend();
-  check(!h.topFace&&!h.topSelectionPending&&h.topBar.raises==1&&h.topRoll.resets==1,"suspend restores control paint order");
+  check(!h.topFace&&!h.topSelectionPending&&h.topBar.raises==1,"suspend restores control paint order");
   h=new TopLayerRegression();h.layout.tabletLandscape=true;h.tabletToolsOpen=true;h.resetTopForSuspend();
   check(!h.tabletToolsOpen&&h.topBar.visibility==4&&h.topBar.raises==0,"tablet suspend collapses instead of exposing the old control face");
-  h.topBar.visibility=0;h.topRollSettled(false);
+  h.topBar.visibility=0;h.settleTopFace(false);
   check(h.topBar.visibility==0,"late tablet roll completion cannot interrupt a closing fade");
   System.out.println("Production top face/layer/suspend checks="+checks+" passed");
  }
@@ -161,11 +160,10 @@ import java.util.*;
 public class TopDirectionRegression {
  Object root=new Object();Map<TopTaskState.Key,Boolean> topDirections=new HashMap<>();
  TopTaskState topTaskState=new TopTaskState();boolean topAuto=true,topFace=true;
- static class Roll {boolean rolling(){return false;}}Roll topRoll=new Roll();
  static class TopCandidate {TopTaskState.Key key;}TopCandidate current;int opened,claimed;
  boolean supportsTaskUser(int user){return user==0||user==999;}boolean topReady(){return true;}
  TopCandidate currentTopCandidate(){return current;}
- void claimTopTask(TopCandidate c,boolean manual){claimed++;}void openTopFace(boolean manual){opened++;}
+ void claimTopTask(TopCandidate c,boolean manual){claimed++;}
 '''+member('    private void topTaskDirection(')+'''
  public static void main(String[]args){
   var h=new TopDirectionRegression();var a=new TopTaskState.Key(7,0,"a");h.current=new TopCandidate();h.current.key=a;
@@ -193,15 +191,10 @@ public class TopReturnBridgeRegression {
  static class TopTaskTransition {}
  static class Layout {boolean tabletLandscape;}
  final Layout layout=new Layout();
- class Roll {
-  void show(boolean task,Runnable done){check(!task&&prepared,"the existing live roll brings the real controls forward");settled=done;}
-  void reset(boolean task){if(!task)throw new AssertionError("cancelled return restores the TOP face");}
- }
- final Roll topRoll=new Roll();
  TopTaskTransition topTransition;
  int nativeCalls,animations,cancels,fades;boolean nativeFront,nativeLive,prepared;Runnable pending,settled;
  boolean topReady(){return ready;}
- void prepareLiveTopRoll(){prepared=true;}
+ void prepareTopFace(){prepared=true;}
  boolean startLiveMainRevealTransition(Runnable r){
   animations++;pending=r;
   if(accept)topTransition=new TopTaskTransition();

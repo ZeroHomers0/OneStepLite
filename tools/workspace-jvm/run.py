@@ -59,7 +59,7 @@ public class WorkspaceRegression {
  static class SystemClock {static long uptimeMillis(){return 10000;}}
  static class Promotion {boolean nativeSwap,cancelled;}
  static final int ACTIVE=1,RESUMING=2,SUSPENDING=3,SUSPENDED=4,SLOT_COUNT=4,CELL_SLOT_COUNT=4,SLOT_MAIN=0,SLOT_TOP=4;static final long ZOOM_ANIM_MS=300;
- FrameLayout root=new FrameLayout();FrameLayout topLiveClip=new FrameLayout();View topBar=new View(),tabletTools=new View(),topStripBacking=new View(),mainGapBacking=new View(),topTaskPane=new View();boolean topFace,taskCellsCovered;Roll topRoll;View[]sideBackingViews={null,new View(),new View(),new View()};Slot[]slots={new Slot(),new Slot(),new Slot(),new Slot()};
+ FrameLayout root=new FrameLayout();FrameLayout topLiveClip=new FrameLayout();View topBar=new View(),tabletTools=new View(),topStripBacking=new View(),mainGapBacking=new View(),topTaskPane=new View();boolean topFace,taskCellsCovered;View[]sideBackingViews={null,new View(),new View(),new View()};Slot[]slots={new Slot(),new Slot(),new Slot(),new Slot()};
  boolean sideArmed,sideCaptured,sideScrolling;Object sideScrollAnimator;
  boolean isSideMotionRunning(){return sideScrollAnimator!=null;}
  void finishSideScroll(){sideCaptured=false;sideScrollAnimator=null;}
@@ -70,7 +70,6 @@ public class WorkspaceRegression {
   sideLayouts++;
  }
  boolean mayWriteSideSurface(Slot s){return true;}boolean presentsSlot(Slot s){return true;}
- static class Roll{boolean rolling(){return false;}boolean showingTask(){return false;}}
  static class CellMotion{void finish(){}}
  Queue main=new Queue();Object ctx=new Object();CellMotion cellMotion;StatusBar statusBar=new StatusBar();Promotion promotion;Bitmap mainBackdrop,wallpaperBackdrop=new Bitmap();
   boolean screenOn=true,zoomed=true,suspendRequested,landscapeSuspended,transferBusy,workspaceEntering,workspaceExiting,keyguardLocked;int scene=ACTIVE,zoomWrites,parks,returns,ready;long sceneEpoch=1,workspaceGeneration,zoomAnimUntil;String pendingSuspendReason;
@@ -227,13 +226,12 @@ public class TopControlsCreationRegression {
  static class View {float alpha=1f;boolean visible;void setAlpha(float a){alpha=a;}void setOnClickListener(Consumer<View> c){}void bringToFront(){}}
  static class FrameLayout extends View {float attachedAlpha=-1;View child;static class LayoutParams{LayoutParams(int w,int h){}}void addView(View v,LayoutParams p){child=v;attachedAlpha=v.alpha;}}
  static class TopTaskPane extends View {View hint;TopTaskPane(Object c,View h){hint=h;}void exitAction(Runnable r){}}
- static class TopRoll extends View {TopRoll(Object c,Runnable settled,Consumer<Float> render){}}
  static class Slot {View hint,view=new View();Object controller=new Object(),taskToken=new Object();}
  static class Layout {boolean tabletLandscape;int topStrip=450;}
  static final int SLOT_TOP=5;Slot[] slots={new Slot(),new Slot(),new Slot(),new Slot(),new Slot(),new Slot()};
  Object ctx=new Object();float workspaceAlpha;FrameLayout root=new FrameLayout(),topLiveClip=new FrameLayout();View topBar=new View();
- TopTaskPane topTaskPane;TopRoll topRoll;Layout layout=new Layout();boolean topFace;
- View makeEmptyHint(){return new View();}void captureMainIntoTop(){}void topRollSettled(){}void renderTopRollFrame(float p){}
+ TopTaskPane topTaskPane;Layout layout=new Layout();boolean topFace;
+ View makeEmptyHint(){return new View();}void captureMainIntoTop(){}void settleTopFace(boolean taskFace){}
  void releaseTopTask(boolean front,boolean dismissed,Runnable after){}
  void updateTopTaskGeometry(){topTaskPane.visible=true;}
  __CREATE__

@@ -20,8 +20,7 @@ body=r"""
 package io.github.zerohomers0.onesteplite;
 import java.util.*;
 public class HomeAndSideSurfaceRegression {
- static final int SLOT_TOP=4;boolean topFace;Roll topRoll;
- static class Roll{boolean rolling(){return false;}}
+ static final int SLOT_TOP=4;boolean topFace;
  static int checks;
  static void check(boolean v,String why){checks++;if(!v)throw new AssertionError(why);}
  static class ComponentName{final String pkg;ComponentName(String p){pkg=p;}String getPackageName(){return pkg;}}

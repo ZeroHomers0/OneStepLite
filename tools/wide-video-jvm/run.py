@@ -29,15 +29,12 @@ public class WideVideoRegression {
  static class EntryGuard {static boolean allowed=true;static boolean canOpen(Object c){return allowed;}}
  static class Clipboard {static Clipboard get(Object c){return new Clipboard();}void close(){}}
  static class Slot {boolean occupied;Object view=new Object(),controller=new Object();}
- class Roll {boolean moving,task;int resets;boolean rolling(){return moving;}
-  void show(boolean t,Runnable r){throw new AssertionError("automatic pin must not roll header");}
-  void reset(boolean t){moving=false;task=t;resets++;}}
  class Handler {List<Runnable> queue=new ArrayList<>();void postDelayed(Runnable r,long ms){queue.add(r);}void drain(){var list=new ArrayList<>(queue);queue.clear();for(var r:list)r.run();}}
  static class TopCandidate {TopTaskState.Key key;Object task=new Info();TopCandidate(TopTaskState.Key k){key=k;}}
  public static class Info {public boolean isFocused=true;}
  Object root=new Object(),ctx=new Object(),topTransition;int scene=ACTIVE;long sceneEpoch=1,wideVideoSequence,wideVideoEpoch=-1;
  boolean screenOn=true,keyguardLocked,retainedForLock,suspendRequested,ready=true,topFace;
- final Handler main=new Handler();final Roll topRoll=new Roll();
+ final Handler main=new Handler();
  final Slot[] slots={new Slot(),new Slot(),new Slot(),new Slot(),new Slot()};
  WorkspaceOptions workspaceOptions=WorkspaceOptions.DEFAULT;final WideVideoPolicy wideVideoPolicy=new WideVideoPolicy();
  final TopTaskState topTaskState=new TopTaskState();
@@ -47,7 +44,7 @@ public class WideVideoRegression {
  boolean supportsTaskUser(int user){return user==0||user==999;}
  boolean topReady(){return ready&&scene==ACTIVE&&screenOn&&!keyguardLocked&&!retainedForLock;}
  TopCandidate currentTopCandidate(){return current;}Object rootInfo(Object task){return task;}
- void log(String s){}void prepareLiveTopRoll(){}void topRollSettled(boolean t){topFace=t;}
+ void log(String s){}void settleTopFace(boolean t){topFace=t;}
  void suspendSession(String s){check(s.equals("video-fullscreen"),"explicit fullscreen exit reason");suspended++;scene=3;sceneEpoch++;}
  void claimTopTask(TopCandidate c,boolean manual){check(manual&&c.key.equals(key),"claims exact original task");claimed++;
   ticket=topTaskState.request(c.key,sceneEpoch,true,true,true,true);}
@@ -58,7 +55,7 @@ public class WideVideoRegression {
  public static void main(String[]args){
   for(int mode=1;mode<3;mode++){
    var h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(mode);h.signal(true,true,true,1);
-   if(mode==1){check(h.claimed==0&&h.suspended==0&&h.topRoll.resets==0,"turned remains native main");
+   if(mode==1){check(h.claimed==0&&h.suspended==0,"turned remains native main");
     for(int i=0;i<20;i++){h.signal(false,false,false,6);h.signal(true,true,false,6);}
     check(h.released==0,"native state changes cannot release a main APP task");}
    if(mode==2)check(h.suspended==1&&h.claimed==0,"fullscreen exits workspace");
@@ -68,7 +65,7 @@ public class WideVideoRegression {
    switch(mutation){case 0:h.keyguardLocked=true;break;case 1:h.screenOn=false;break;case 2:h.retainedForLock=true;break;
     case 3:h.root=null;break;case 4:h.suspendRequested=true;break;case 5:h.scene=3;break;case 6:((Info)h.current.task).isFocused=false;break;
     case 7:h.current=new TopCandidate(new TopTaskState.Key(7,0,"replacement-token"));break;case 8:EntryGuard.allowed=false;break;}
-   h.signal(true,true,true,1);check(h.topRoll.resets==0&&h.claimed==0&&h.suspended==0,"privacy/ownership rejection "+mutation);EntryGuard.allowed=true;
+   h.signal(true,true,true,1);check(h.claimed==0&&h.suspended==0,"privacy/ownership rejection "+mutation);EntryGuard.allowed=true;
   }
   for(int mutation=0;mutation<4;mutation++){
    var h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);
@@ -79,7 +76,7 @@ public class WideVideoRegression {
   h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.ready=false;h.signal(true,true,true,1);h.sceneEpoch++;h.ready=true;h.main.drain();check(h.claimed==0,"stale request cannot collect into new scene");
   h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.ready=false;h.signal(true,true,true,1);h.keyguardLocked=true;h.ready=true;h.main.drain();check(h.claimed==0,"relock cancels deferred collection");
   h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.ready=false;h.signal(true,true,true,1);h.current=null;h.ready=true;h.main.drain();check(h.claimed==0&&!h.topFace,"switched task cannot replace header");
-  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.slots[4].occupied=true;h.signal(true,true,true,1);check(h.topRoll.resets==0&&h.claimed==0,"existing TOP never replaced");
+  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.slots[4].occupied=true;h.signal(true,true,true,1);check(h.claimed==0,"existing TOP never replaced");
   h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.signal(true,true,true,1);h.signal(false,false,false,6);
   check(h.claimed==0&&h.released==0&&h.main.queue.isEmpty(),"turned request never creates an APP admission or handback");
   h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.slots[4].view=null;h.signal(true,true,true,1);check(h.main.queue.size()==1&&h.claimed==0,"wait for native TaskView before auto admission");h.slots[4].view=new Object();h.main.drain();check(h.claimed==0&&h.suspended==0,"ready strip does not collect a task");

@@ -66,16 +66,16 @@ files = {
 final class WorkspaceSettingsClient {static WorkspaceOptions initial=WorkspaceOptions.DEFAULT;static Consumer<WorkspaceOptions> changed;
  WorkspaceSettingsClient(Object context,Object handler,Consumer<WorkspaceOptions> callback){changed=callback;callback.accept(initial);}}''',
 'io/github/zerohomers0/onesteplite/WorkspaceHost.java': '''package io.github.zerohomers0.onesteplite;final class WorkspaceHost {
- static boolean active,ready=true;static Object token;static int dismissed,dismissMoves,dismissEnds,dismissCancels;static int began,moved,ended,cancelled;static float displacement;
+ static boolean active,ready=true;static Object token;static int dismissed,dismissMoves,dismissEnds,dismissCancels;static float displacement;
  static Object topDismissToken(){return ready?token:null;}static boolean beginTopDismiss(float dx,Object t){dismissed++;return ready&&t==token;}
  static int backs;static void requestTopBack(Object token){backs++;}
  static void moveTopDismiss(float d){dismissMoves++;displacement=d;}static void endTopDismiss(boolean c){dismissEnds++;if(c)dismissCancels++;}
  static Boolean pendingRight;static boolean hostSceneActive(){return active;}static void setPendingMainSide(boolean r){pendingRight=r;}
- static int topGestureHeight(){return ready?622:0;}static boolean beginTopGesture(){began++;return ready;}
+ static int topGestureHeight(){return ready?622:0;}
  static int[] bounds;static int direction;
  static int[] topGestureBounds(){return !ready?null:bounds!=null?bounds:new int[]{0,0,1080,622};}
  static int topGestureDirection(){return direction;}
- static void moveTopGesture(float d,long t){moved++;displacement=d;}static void endTopGesture(boolean c){ended++;if(c)cancelled++;}}''',
+ }''',
 'io/github/zerohomers0/onesteplite/EntryGestureRegression.java': r'''package io.github.zerohomers0.onesteplite;
 import android.content.Context;import android.os.*;import android.view.*;import com.android.systemui.shared.system.InputMonitorCompat;
 import de.robv.android.xposed.*;
@@ -186,12 +186,10 @@ public class EntryGestureRegression {
   reset(0,1080,2460);event(0,20,30);event(1,20,30);Handler.drain();untouched("ordinary tap");
   reset(0,1080,2460);EntryGuard.open=false;swipe(false);untouched("locked device");
   reset(0,1080,2460);WorkspaceHost.active=true;event(0,300,500);event(2,300,100);event(1,300,100);untouched("active single finger");
+  // A vertical two-finger drag is no longer a TOP gesture; only the horizontal
+  // dismissal is claimed, and it is covered by the horizontal cases below.
   event(0,300,500);two(5,500);two(2,490);check(InputMonitorCompat.latest.mInputMonitor.claims==0,"two-finger jitter claimed");
-  two(2,420);check(InputMonitorCompat.latest.mInputMonitor.claims==1 && WorkspaceHost.began==1,"two-finger drag not claimed once");
-  two(2,100);check(WorkspaceHost.displacement==-400 && InputMonitorCompat.latest.mInputMonitor.claims==1,"drag lost tracking/reclaimed");
-  two(6,100);check(WorkspaceHost.ended==1 && WorkspaceHost.cancelled==0,"pointer release not settled");
-  reset(0,1080,2460);WorkspaceHost.active=true;event(0,300,500);two(5,500);two(2,420);WorkspaceHost.ready=false;two(2,100);
-  check(WorkspaceHost.cancelled==1,"readiness lost without cancelling");WorkspaceHost.ready=true;
+  two(2,420);check(InputMonitorCompat.latest.mInputMonitor.claims==0,"vertical two-finger drag must stay with the app");
   reset(0,1080,2460);event(0,300,500);two(5,500);two(2,100);untouched("inactive top drag");
   reset(0,1080,2460);WorkspaceHost.active=true;WorkspaceHost.token=new Object();
   event(0,300,300);horizontal(5,300,600);horizontal(2,380,680);

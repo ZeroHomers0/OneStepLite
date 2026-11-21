@@ -146,7 +146,6 @@ public final class WorkspaceHost {
     private WorkspaceSettingsClient workspaceSettings;
     private FrameLayout topLiveClip;
     private TopTaskPane topTaskPane;
-    private TopRoll topRoll;
     private final TopTaskState topTaskState = new TopTaskState();
     private final java.util.Map<TopTaskState.Key, Boolean> topDirections = new java.util.HashMap<>();
     private final WideVideoPolicy wideVideoPolicy = new WideVideoPolicy();
@@ -1661,7 +1660,7 @@ public final class WorkspaceHost {
         if (root == null || (root.getVisibility() != View.VISIBLE&&!lockExitPending) || !screenOn || retainedForLock
                 || promotion != null || transferBusy || workspaceEntering || workspaceAnimator != null
                 || topTransition != null || topSelectionPending
-                || (topRoll != null && topRoll.rolling()) || cellMotion != null
+                || cellMotion != null
                 || (sideDismiss != null && sideDismiss.isTracking())) return false;
         int bound = 0;
         for (Slot slot : slots) {
@@ -1807,7 +1806,6 @@ public final class WorkspaceHost {
         returnToSystem(slot, false, () -> {
             if(index==SLOT_TOP) {
                 topTaskState.sceneChanged();clearSlot(slot);topFace=false;
-                if(topRoll!=null)topRoll.reset(false);
                 if(topBar!=null && !layout.tabletLandscape) {topBar.setVisibility(View.VISIBLE);topBar.bringToFront();}
                 if(topTaskPane!=null)topTaskPane.setVisibility(View.INVISIBLE);
             }
@@ -3989,7 +3987,6 @@ public final class WorkspaceHost {
                         && (!topFace || layout.tabletLandscape && tabletToolsOpen);
             }
 
-            @Override public void onOpenLandscape() { openTopFace(true); }
             @Override public void onSendMainToTop() { sendMainToTop(); }
             @Override public void onTaskCellsCovered(boolean covered) { setTaskCellsCovered(covered); }
         });
@@ -4088,8 +4085,6 @@ public final class WorkspaceHost {
         topTaskPane.setAlpha(workspaceAlpha);
         FrameLayout taskParent=layout.tabletLandscape?root:topLiveClip;
         taskParent.addView(topTaskPane,new FrameLayout.LayoutParams(-1,layout.topStrip));
-        topRoll=new TopRoll(ctx,this::topRollSettled,this::renderTopRollFrame);
-        topLiveClip.addView(topRoll,new FrameLayout.LayoutParams(-1,layout.topStrip));
         updateTopTaskGeometry();
         // The upper TaskView was added after the controls; its empty surface hole would
         // otherwise blank them until the first roll settles and reorders the views.
@@ -4139,7 +4134,7 @@ public final class WorkspaceHost {
 
     /** Header action: open the landscape face and pull the current main app into it. */
     private void sendMainToTop() {
-        if(!topReady() || topRoll.rolling() || topTransition!=null)return;
+        if(!topReady() || topTransition!=null)return;
         if(!mainCanFillTop()) {
             // Portrait apps cannot fill the strip; say so instead of doing nothing.
             android.widget.Toast.makeText(ctx,"当前应用是竖屏，无法放到顶栏",
@@ -4165,7 +4160,6 @@ public final class WorkspaceHost {
         // The roll never settles here, so clear the pending flag it would have cleared;
         // leaving it set would block task retention for the rest of the session.
         topSelectionPending=false;
-        topRoll.reset(true);
         updateTopTaskGeometry();
         // updateTopTaskGeometry renders the settled task face, which hides the bar;
         // the fade needs it visible underneath the incoming task.
@@ -4313,7 +4307,7 @@ public final class WorkspaceHost {
     }
 
     private void updateTopTaskGeometry() {
-        if(layout==null || topTaskPane==null || topRoll==null)return;
+        if(layout==null || topTaskPane==null)return;
         Slot upper=slots[SLOT_TOP];
         FrameLayout taskParent=layout.tabletLandscape?root:topLiveClip;
         reparentTopView(upper.view,taskParent);
@@ -4329,20 +4323,16 @@ public final class WorkspaceHost {
             topTaskPane.setLayoutParams(p);topTaskPane.setVisibility(View.VISIBLE);
             topTaskPane.setTranslationX(0);topTaskPane.setTranslationY(0);
             topTaskPane.setScaleX(1);topTaskPane.setScaleY(1);
-            topRoll.setVisibility(View.GONE);
             upper.view.setScaleX(1);upper.view.setScaleY(1);
             upper.view.setClipBounds(new Rect(0,0,p.width,p.height));
             if(topTransition!=null)topTransition.applyCollectionFrame(upper.view);
             updateCellSurfaceVisibility(upper);
             return;
         }
-        topRoll.setVisibility(View.VISIBLE);
         topLiveClip.setLayoutParams(new FrameLayout.LayoutParams(-1,layout.topStrip));
         topLiveClip.setClipBounds(new Rect(0,0,screenW,layout.topStrip));
         topTaskPane.setLayoutParams(new FrameLayout.LayoutParams(-1,layout.topStrip));
         topTaskPane.setTranslationX(0);topTaskPane.setTranslationY(0);
-        topRoll.setLayoutParams(new FrameLayout.LayoutParams(-1,layout.topStrip));
-        topRoll.renderFrame();
     }
 
     private void reparentTopView(View view,FrameLayout parent) {
@@ -4354,7 +4344,7 @@ public final class WorkspaceHost {
 
     private boolean topReady() {
         return root!=null && scene==ACTIVE && screenOn && !keyguardLocked && !transferBusy
-                && promotion==null && cellMotion==null && !workspaceEntering && topRoll!=null;
+                && promotion==null && cellMotion==null && !workspaceEntering;
     }
 
     /** Match the current TOP binding, not a package, focused task or ordinary native window. */
@@ -4378,7 +4368,6 @@ public final class WorkspaceHost {
         topTaskState.sceneChanged();
         topSelectionPending=false;
         topFace=false;
-        if(topRoll!=null)topRoll.reset(false);
         if(topTaskPane!=null)topTaskPane.setVisibility(View.INVISIBLE);
         releaseTopExitWindow();
         tabletToolsOpen=false;
@@ -4388,42 +4377,12 @@ public final class WorkspaceHost {
         }
     }
 
-    private void prepareLiveTopRoll() {
+    private void prepareTopFace() {
         ++topFaceGeneration;
         topTaskPane.occupied(slots[SLOT_TOP].occupied && !slots[SLOT_TOP].parked);
         // Paint the other live face after SurfaceView clears its transparent hole.
         // The projected faces meet at an edge, so this does not cover the live task.
         topBar.bringToFront();
-    }
-
-    /** SurfaceView's frame transaction carries this transform to the original task surface. */
-    private void renderTopRollFrame(TopRollMotion.Frame frame) {
-        if(root==null || topBar==null || topTaskPane==null)return;
-        if(layout.tabletLandscape) {updateTopTaskGeometry();return;}
-        topBar.setPivotY(0f);
-        topBar.setScaleY(Math.max(.0001f,frame.frontScale));
-        topBar.setTranslationY(frame.frontTop);
-        topTaskPane.setPivotY(0f);
-        topTaskPane.setScaleY(Math.max(.0001f,frame.taskScale));
-        topTaskPane.setTranslationY(frame.taskTop);
-        Slot upper=slots[SLOT_TOP];
-        if(upper.view!=null) {
-            upper.view.setPivotY(0f);
-            upper.view.setScaleY(Math.max(.0001f,frame.taskScale));
-            upper.view.setTranslationY(frame.taskTop);
-            float scale=Math.max(.0001f,frame.taskScale);
-            int height=layout.topStrip;
-            int clipTop=Math.max(0,Math.min(height,(int)Math.floor(-frame.taskTop/scale)));
-            int clipBottom=Math.max(clipTop,Math.min(height,
-                    (int)Math.ceil((height-frame.taskTop)/scale)));
-            upper.view.setClipBounds(new Rect(0,clipTop,screenW,clipBottom));
-            if(topTransition!=null)topTransition.applyCollectionFrame(upper.view);
-        }
-        if(scene!=ACTIVE || !screenOn || keyguardLocked)return;
-        boolean rolling=topRoll!=null && topRoll.rolling();
-        topBar.setVisibility(rolling || !topRoll.showingTask()?View.VISIBLE:View.INVISIBLE);
-        topTaskPane.setVisibility(rolling || topRoll.showingTask()?View.VISIBLE:View.INVISIBLE);
-        updateCellSurfaceVisibility(upper);
     }
 
     static int topGestureHeight() {
@@ -4467,7 +4426,7 @@ public final class WorkspaceHost {
     static Object topDismissToken() {
         WorkspaceHost h=sInstance;
         if(h==null || !h.topReady() || h.suspendRequested || h.topTransition!=null
-                || !h.topFace || (!h.layout.tabletLandscape && h.topRoll.rolling()) || h.sideDismiss!=null)return null;
+                || !h.topFace || h.sideDismiss!=null)return null;
         Slot upper=h.slots[SLOT_TOP];
         TopTaskState.Key owner=h.topTaskState.owner();
         if(!upper.occupied || upper.parked || upper.frozen || upper.promoting || upper.launching
@@ -4558,34 +4517,7 @@ public final class WorkspaceHost {
         h.sideDismiss.settle(commit);
     }
 
-    static boolean beginTopGesture() {
-        WorkspaceHost h=sInstance;
-        if(h==null || h.layout.tabletLandscape || topGestureHeight()==0)return false;
-        if(!h.topRoll.rolling())h.prepareLiveTopRoll();
-        h.topSelectionPending=!h.topFace;
-        Clipboard.get(h.ctx).close();
-        h.topRoll.beginGesture();
-        return true;
-    }
-
-    static void moveTopGesture(float displacement, long time) {
-        WorkspaceHost h=sInstance;
-        if(h!=null && h.topRoll!=null)h.topRoll.moveGesture(displacement,time);
-    }
-
-    static void endTopGesture(boolean cancelled) {
-        WorkspaceHost h=sInstance;
-        if(h!=null && h.topRoll!=null)h.topRoll.finishGesture(cancelled);
-    }
-
-    private void openTopFace(boolean manual) {
-        if(!topReady() || topRoll.rolling() || topTransition!=null)return;
-        if(topFace) {if(!slots[SLOT_TOP].occupied)showTopCandidates(); return;}
-        Clipboard.get(ctx).close();
-        topSelectionPending=manual; prepareLiveTopRoll(); topRoll.show(true);
-    }
-
-    private void topRollSettled(boolean taskFace) {
+    private void settleTopFace(boolean taskFace) {
         if(root==null || scene!=ACTIVE || !screenOn || keyguardLocked)return;
         if(layout.tabletLandscape) {
             topFace=true;topSelectionPending=false;
@@ -4786,14 +4718,9 @@ public final class WorkspaceHost {
                     }
                     final TopTaskTransition bridge = topTransition;
                     Runnable handBack = () -> {
-                        if (topTransition != bridge) {
-                            if (topTransition == null && topReady() && topFace)
-                                topRoll.reset(true);
-                            return;
-                        }
+                        if (topTransition != bridge) return;
                         if (!stillBound.getAsBoolean()) {
                             cancelTopTaskTransition();
-                            if (topReady() && topFace) topRoll.reset(true);
                             return;
                         }
                         releaseTopTaskNow(front, dismissed, after, true);
@@ -4876,12 +4803,11 @@ public final class WorkspaceHost {
         returnToSystem(upper,bringingFront,liveMainReveal,()->{
             topTaskState.release(key,dismissed);clearSlot(upper);topOriginalSlot=null;
             Runnable finish=()->{
-                if(front && topRoll!=null) {
+                if(front) {
                     // The strip is empty again, so the title face (clock and app rail)
                     // must come back; leaving the task face up showed a blank strip.
                     topFace=false;
-                    topRoll.reset(false);
-                    topRollSettled(false);
+                    settleTopFace(false);
                 }
                 revealTopTaskTransition();
                 if(after!=null)after.run();finishPendingSuspend();
@@ -4892,8 +4818,6 @@ public final class WorkspaceHost {
             log("upper task returned alive="+task.id+" front="+bringingFront+" dismissed="+dismissed);
         },error->{
             cancelTopTaskTransition();
-            if (front && liveMainReveal && topFace && topRoll != null && !layout.tabletLandscape)
-                topRoll.reset(true);
             topTaskPane.message("收回未确认，保留原任务："+error);
             if(!topFace) {topFace=true;topBar.setVisibility(View.INVISIBLE);topTaskPane.setVisibility(View.VISIBLE);}
             updateHint(upper);root.requestLayout();log("upper return stopped: "+error);finishPendingSuspend();
@@ -4939,7 +4863,7 @@ public final class WorkspaceHost {
                 || retainedForLock || suspendRequested || (scene!=ACTIVE && scene!=RESUMING)
                 || !EntryGuard.canOpen(ctx))return;
         if(!topReady() || slots[SLOT_TOP].view==null || slots[SLOT_TOP].controller==null
-                || topTaskState.busy() || topTransition!=null || topRoll.rolling()) {
+                || topTaskState.busy() || topTransition!=null) {
             main.postDelayed(()->attemptWideVideo(key,epoch,sequence,issued,mode),80L);
             return;
         }
@@ -5140,15 +5064,11 @@ public final class WorkspaceHost {
         return inViewport && !(taskCellsCovered && slot.index != SLOT_TOP)
                 && slot.occupied && !slot.parked && slot.taskToken != null
                 && controllerOwns(slot, slot.taskId, slot.taskToken)
-                && (slot.index!=SLOT_TOP || topFace
-                        || (topRoll!=null && (topRoll.rolling() || topRoll.showingTask())));
+                && (slot.index!=SLOT_TOP || topFace);
     }
 
     private Rect workspaceCellCrop(Slot slot) {
         if (slot == null || slot.rect == null || layout == null) return null;
-        // A live TOP roll supplies its own projected crop; restore the full cell at rest.
-        if (slot.index == SLOT_TOP && workspaceAlpha >= 1f
-                && topRoll != null && topRoll.rolling()) return null;
         return workspaceCellCrop(slot.rect, slot.index == SLOT_TOP || layout.tabletLandscape);
     }
 
@@ -7305,7 +7225,7 @@ public final class WorkspaceHost {
                                         layout.cellX + layout.cellWidth, screenH), Region.Op.UNION);
                         Slot upper=slots[SLOT_TOP];
                         if(topFace && topTaskPane!=null && !topTaskPane.choosing()
-                                && topRoll!=null && !topRoll.rolling() && upper.occupied && !upper.parked
+                                && upper.occupied && !upper.parked
                                 && !upper.promoting && upper.rect!=null)
                             touchable.op(new Rect(upper.rect[0],upper.rect[1],upper.rect[2],upper.rect[3]),Region.Op.DIFFERENCE);
                     }
@@ -9391,10 +9311,7 @@ public final class WorkspaceHost {
         if (scene != ACTIVE || promotion != null || transferBusy || upper.promoting) return;
         returnToSystem(upper, true, false, true, () -> {
             clearSlot(upper);
-            if (topFace && topRoll != null) {
-                topRoll.reset(false);
-                topRollSettled(false);
-            }
+            if (topFace) settleTopFace(false);
             finishPendingSuspend();
         }, error -> {
             log("native TOP launch handback failed: " + error);
@@ -10464,8 +10381,7 @@ public final class WorkspaceHost {
 
     /** A late mode6 finish must never pull a task selected by Launcher back into a cell. */
     private boolean mayWriteSideSurface(Slot slot) {
-        if(slot!=null && slot.index==SLOT_TOP && !topFace
-                && (topRoll==null || !topRoll.rolling()))return false;
+        if(slot!=null && slot.index==SLOT_TOP && !topFace)return false;
         if (slot == null || slot.windowMode != 6 || slot.controller == null) return false;
         PendingSidePromotion pending = slot.pendingSidePromotion;
         if (pending != null && pending.desktopLaunch) return false;

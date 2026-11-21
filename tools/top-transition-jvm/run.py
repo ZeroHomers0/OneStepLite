@@ -230,10 +230,8 @@ public class WorkspaceHost {
  static final int SLOT_TOP=4,ACTIVE=1;static int checks;int scene=ACTIVE,screenW=1080,screenH=2460;
  boolean screenOn=true,keyguardLocked,suspendRequested,topFace=true;long sceneEpoch=1;int claimed,finished;
  android.content.Context ctx=new android.content.Context();FrameLayout root=new FrameLayout(ctx);
- View topBar=new View(ctx),topTaskPane=new View(ctx);Roll topRoll=new Roll();Layout layout=new Layout();
- static class Roll {boolean rolling(){return false;}boolean showingTask(){return true;}}
+ View topBar=new View(ctx),topTaskPane=new View(ctx);Layout layout=new Layout();
  static class Layout {int topStrip=622;boolean tabletLandscape;int mainHeight=1838;int mainDispHeight=1838;int mainOffsetX=0,mainOffsetY=622;}
- static class TopRollMotion {static class Frame {float frontScale=0,taskScale=1,frontTop,taskTop;}}
  void updateCellSurfaceVisibility(Slot upper){}void updateTopTaskGeometry(){}float mainScale(){return .5f;}
  TopTaskTransition topTransition;TopTaskState topTaskState=new TopTaskState();int opacityWrites,homeRequests;boolean translucent,failOpacity,failHome;
  java.util.List<Object> appliedOrder=java.util.List.of();
@@ -275,7 +273,6 @@ for signature in ('    private boolean startTopTaskTransition(boolean intoTop, R
     host_body+=member(signature)
 signature='    private boolean startTopTaskTransition(boolean intoTop, boolean liveMainReveal, Runnable transfer,'
 if signature in host:host_body+=member(signature)
-host_body+=member('    private void renderTopRollFrame(')
 host_body+='''public static void main(String[]args){
  ValueAnimatorReset();WorkspaceHost h=new WorkspaceHost();h.captureMainIntoTop();
  check(h.topTransition!=null&&h.claimed==0,"actual main capture starts the live bridge before claiming");
@@ -289,12 +286,10 @@ host_body+='''public static void main(String[]args){
  check(android.animation.ValueAnimator.all.size()==1&&h.claimed==0,"production admission waits for source collapse");
  android.animation.ValueAnimator.all.get(0).end();check(h.claimed==1,"production admission claims exactly once after collapse");
  check(h.slots[4].view.alpha==0,"production handoff keeps target invisible while native admission waits");
- h.renderTopRollFrame(new TopRollMotion.Frame());
- check(h.slots[4].view.alpha==0,"production geometry refresh cannot expose the waiting miniature");
  h.entry().info.mode=6;h.topTransition.reveal();
  check(android.animation.ValueAnimator.all.size()==2,"native admission restores the real destination expansion");
- android.animation.ValueAnimator.all.get(1).step(.5f);h.renderTopRollFrame(new TopRollMotion.Frame());
- check(h.slots[4].view.alpha==.5f,"production geometry refresh preserves the moving destination frame");
+ android.animation.ValueAnimator.all.get(1).step(.5f);
+ check(h.slots[4].view.alpha==.5f,"production reveal keeps the destination in step with the fade");
  android.animation.ValueAnimator.all.get(1).end();
  check(h.topTransition==null&&h.finished==1,"production completion releases its own transition");
  check(h.opacityWrites==1&&h.translucent,"new native TOP ownership keeps its own translucent policy");

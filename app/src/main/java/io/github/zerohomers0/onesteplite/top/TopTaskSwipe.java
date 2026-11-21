@@ -1,15 +1,14 @@
 package io.github.zerohomers0.onesteplite;
 
-/** Passive parallel two-finger recognition; the first accepted axis stays locked. */
+/** Passive parallel two-finger recognition for the horizontal TOP dismissal only. */
 final class TopTaskSwipe {
     static final int NONE=0, ACCEPT=1, DRAG=2, FINISH=3, CANCEL=4;
-    static final int VERTICAL=1, HORIZONTAL=2;
+    static final int HORIZONTAL=2;
     private int first=-1, second=-1;
     private float firstX,firstY,x0,y0,x1,y1,threshold;
     private long downTime,pairTime;
     private boolean eligible,paired,accepted,blocked,allowHorizontal;
     private int axis;
-    private int outwardDirection;
     float displacement;
 
     void reset() { first=second=-1; eligible=paired=accepted=blocked=allowHorizontal=false; displacement=0;axis=0; }
@@ -30,7 +29,6 @@ final class TopTaskSwipe {
               long time,int width,int height,float density,boolean horizontalEligible,int outward) {
         if(action==0) {
             reset(); first=id0;firstX=a;firstY=b;downTime=time;
-            outwardDirection=outward;
             allowHorizontal=horizontalEligible;
             threshold=Math.max(1,18*Math.max(.1f,density));
             eligible=count==1 && inside(a,b,width,height); return NONE;
@@ -64,10 +62,6 @@ final class TopTaskSwipe {
         if(accepted)return DRAG;
         if(time-pairTime>650 || Math.hypot(dx0-dx1,dy0-dy1)>threshold*1.5f) {
             eligible=false;return NONE;
-        }
-        if(outwardDirection==0 && dy0*dy1>0 && Math.min(Math.abs(dy0),Math.abs(dy1))>=threshold
-                && Math.abs(displacement)>Math.max(Math.abs(dx0),Math.abs(dx1))*1.5f) {
-            axis=VERTICAL;accepted=true;return ACCEPT;
         }
         float dx=(dx0+dx1)/2;
         if(allowHorizontal && dx0*dx1>0 && Math.min(Math.abs(dx0),Math.abs(dx1))>=threshold

@@ -18,7 +18,6 @@ public class TopDismissRegression {
  static int checks;static void check(boolean b,String m){checks++;if(!b)throw new AssertionError(m);}
  static class View {void invalidate(){}}
  static class Layout {int topStrip=622;boolean tabletLandscape,mainOnRight;}
- static class Roll {boolean rolling;boolean rolling(){return rolling;}}
  static class Info {int id,user;Object token;boolean ordinary=true,side;}
  static class LiveTask {int id;Object token;LiveTask(TopTaskState.Key k){id=k.taskId;token=k.token;}
   boolean matches(Object i){return i instanceof Info f&&f.id==id&&token.equals(f.token);}}
@@ -41,7 +40,7 @@ public class TopDismissRegression {
  boolean controller=true,front,liveMainReveal,transitionAvailable=true;float topDismissDx,topDismissDirection;
  Runnable pendingHandback;int reveals,cancelled;
  Object ctx=new Object(),promotion,cellMotion,topTransition,topOriginalSlot=new Object();
- View root=new View();Layout layout=new Layout();Roll topRoll=new Roll();
+ View root=new View();Layout layout=new Layout();
  Slot[] slots={new Slot(),new Slot(),new Slot(),new Slot(),new Slot()};
  SideDismiss sideDismiss;Slot sideDismissSlot;TopTaskState topTaskState=new TopTaskState();
  Runnable success;Consumer<String> failure;
@@ -91,11 +90,11 @@ public class TopDismissRegression {
   check(h.returns==0&&h.clears==0&&h.sideDismiss==null,"replacement epoch blocks stale completion");
   h=fresh();begin(h,80);h.suspendRequested=true;endTopDismiss(false);
   check(h.returns==0&&!h.transferBusy&&h.sideDismiss==null,"exit cancels tracking and releases busy state");
-  for(int state=0;state<13;state++){
+  for(int state=0;state<12;state++){
    h=fresh();Object token=h.slots[4].taskToken;
    switch(state){case 0:h.scene=2;break;case 1:h.root=null;break;case 2:h.screenOn=false;break;case 3:h.keyguardLocked=true;break;
-    case 4:h.suspendRequested=true;break;case 5:h.topFace=false;break;case 6:h.topRoll.rolling=true;break;case 7:h.topTransition=new Object();break;
-    case 8:h.controller=false;break;case 9:h.slots[4].parked=true;break;case 10:h.slots[4].frozen=true;break;case 11:h.slots[1].launching=true;break;case 12:h.transferBusy=true;break;}
+    case 4:h.suspendRequested=true;break;case 5:h.topFace=false;break;case 6:h.topTransition=new Object();break;
+    case 7:h.controller=false;break;case 8:h.slots[4].parked=true;break;case 9:h.slots[4].frozen=true;break;case 10:h.slots[1].launching=true;break;case 11:h.transferBusy=true;break;}
    check(topDismissToken()==null&&!beginTopDismiss(100,token)&&h.returns==0,"reject unsafe state "+state);
   }
   for(boolean right:new boolean[]{false,true}) {

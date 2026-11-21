@@ -23,7 +23,6 @@ public final class HotZoneGesture {
     private final BottomCenterSwipe bottomSwipe = new BottomCenterSwipe();
     private final TopTaskSwipe topSwipe = new TopTaskSwipe();
     private final TopEdgeBackSwipe topBack = new TopEdgeBackSwipe();
-    private boolean topHorizontal;
     private Object topTaskAtDown;
     private Object monitor, receiver;
     private WorkspaceSettingsClient entrySettings;
@@ -292,19 +291,17 @@ public final class HotZoneGesture {
                 e.getRawX()-bounds[0],e.getRawY()-bounds[1],
                 count>1?e.getRawX(1)-bounds[0]:0,count>1?e.getRawY(1)-bounds[1]:0,
                 e.getEventTime(),bounds[2]-bounds[0],bounds[3]-bounds[1],
-                context.getResources().getDisplayMetrics().density,topTaskAtDown!=null,
+                context.getResources().getDisplayMetrics().density,true,
                 WorkspaceHost.topGestureDirection());
         if(result==TopTaskSwipe.ACCEPT) {
-            topHorizontal=topSwipe.horizontal();
-            if(topHorizontal && !java.util.Objects.equals(topTaskAtDown,WorkspaceHost.topDismissToken())) {
+            if(!java.util.Objects.equals(topTaskAtDown,WorkspaceHost.topDismissToken())) {
                 topSwipe.reset();return;
             }
-            if(!pilferPointers() || !(topHorizontal
-                    ?WorkspaceHost.beginTopDismiss(topSwipe.displacement,topTaskAtDown):WorkspaceHost.beginTopGesture())) {
+            if(!pilferPointers() || !WorkspaceHost.beginTopDismiss(topSwipe.displacement,topTaskAtDown)) {
                 topSwipe.reset();return;
             }
             moveTopMotion(topSwipe.displacement,e.getEventTime());
-            log(topHorizontal?"upper two-finger horizontal handoff accepted":"upper two-finger drag accepted");
+            log("upper two-finger horizontal handoff accepted");
         } else if(result==TopTaskSwipe.DRAG) {
             moveTopMotion(topSwipe.displacement,e.getEventTime());
         } else if(result==TopTaskSwipe.FINISH || result==TopTaskSwipe.CANCEL) {
@@ -313,14 +310,12 @@ public final class HotZoneGesture {
     }
 
     private void moveTopMotion(float displacement,long time) {
-        if(topHorizontal)WorkspaceHost.moveTopDismiss(displacement);
-        else WorkspaceHost.moveTopGesture(displacement,time);
+        WorkspaceHost.moveTopDismiss(displacement);
     }
 
     private void endTopMotion(boolean cancelled) {
-        if(topHorizontal)WorkspaceHost.endTopDismiss(cancelled);
-        else WorkspaceHost.endTopGesture(cancelled);
-        topHorizontal=false;topTaskAtDown=null;
+        WorkspaceHost.endTopDismiss(cancelled);
+        topTaskAtDown=null;
     }
 
     private boolean pilferPointers() {

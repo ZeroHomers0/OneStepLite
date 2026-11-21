@@ -57,7 +57,6 @@ public final class WorkspaceRetentionTest {
         int getVisibility(){return visibility;}
         void setVisibility(int value){visibility=value;}
     }
-    static final class TopRoll {boolean rolling;boolean rolling(){return rolling;}}
     static final class SideDismiss {boolean tracking;boolean isTracking(){return tracking;}}
     static final class OwnedTask {boolean recoveryCandidate;}
     static final class TaskWindowState {int slotIndex;boolean active;}
@@ -74,7 +73,6 @@ public final class WorkspaceRetentionTest {
     final Slot[] slots={new Slot(),new Slot(),new Slot(),new Slot()};
     final Map<Object,OwnedTask> ownedTasks=new HashMap<>();
     View root=new View();
-    TopRoll topRoll;
     SideDismiss sideDismiss;
     Object topTransition, cellMotion;
     Object promotion;
