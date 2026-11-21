@@ -950,83 +950,104 @@ public final class WorkspaceHost {
     private void startMirrorPoc(int requestedTask, Rect dest, int holdMs, int hideMode) {
         try {
             stopMirrorPoc();
-            if (requestedTask < 0) {
-                LiveTask main = findMainTask();
-                if (main == null) {
-                    log("mirror POC: no main task");
-                    android.widget.Toast.makeText(ctx, "mirror: 主区无应用",
-                            android.widget.Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                requestedTask = main.id;
-            }
-            Object organizer = null;
-            for (Slot slot : slots) {
-                if (slot.controller != null) {
-                    organizer = XposedHelpers.getObjectField(slot.controller, "mTaskOrganizer");
-                    break;
-                }
-            }
-            if (organizer == null) {
-                log("mirror POC: no ShellTaskOrganizer on controllers");
-                return;
-            }
-            Object leash = ShellCompat.taskLeash(organizer, requestedTask);
-            if (leash == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
-                log("mirror POC: leash unavailable task=" + requestedTask + " leash=" + leash);
-                return;
-            }
+            requestedTask = resolveMirrorTask(requestedTask);
+            if (requestedTask < 0) return;
+            Object leash = mirrorLeash(requestedTask);
+            if (leash == null) return;
             if (hideMode == 5) {
-                // 免 mirror 承载：把原任务 leash 直接变换进格子（原任务窗口仍是满屏，
-                // 只是显示变换成格子大小/位置），验证画面与触摸能否同时成立。
-                if (!applyDirectCarrier(leash, dest, true)) return;
-                mirrorPocLeash = leash;
-                mirrorPocHideMode = 5;
-                log("direct carrier shown task=" + requestedTask + " dest=" + dest);
-                main.postDelayed(this::stopMirrorPoc, holdMs);
+                showDirectCarrier(requestedTask, leash, dest, holdMs);
                 return;
             }
-            Object parent = mirrorLayerSurface();
-            if (parent == null) {
-                Object viewRoot = XposedHelpers.callMethod(root, "getViewRootImpl");
-                parent = viewRoot == null ? null
-                        : XposedHelpers.callMethod(viewRoot, "getSurfaceControl");
-            }
-            if (parent == null) {
-                log("mirror POC: host window SurfaceControl unavailable");
-                return;
-            }
-            Class<?> scClass = Class.forName("android.view.SurfaceControl");
-            Object mirror = XposedHelpers.callStaticMethod(scClass, "mirrorSurface", leash);
-            float sx = dest.width() / (float) screenW;
-            float sy = dest.height() / (float) screenH;
-            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
-            try {
-                hideMirrorSource(tx, leash, hideMode);
-                XposedHelpers.callMethod(tx, "reparent", mirror, parent);
-                XposedHelpers.callMethod(tx, "setLayer", mirror, 1000000);
-                XposedHelpers.callMethod(tx, "setPosition", mirror,
-                        (float) dest.left, (float) dest.top);
-                XposedHelpers.callMethod(tx, "setMatrix", mirror, sx, 0f, 0f, sy);
-                XposedHelpers.callMethod(tx, "setAlpha", mirror, 1f);
-                XposedHelpers.callMethod(tx, "show", mirror);
-                XposedHelpers.callMethod(tx, "apply");
-            } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-            }
-            mirrorPocSurface = mirror;
-            mirrorPocLeash = leash;
-            mirrorPocHideMode = hideMode;
-            log("mirror POC shown task=" + requestedTask + " dest=" + dest
-                    + " scale=" + sx + "x" + sy + " hideMode=" + hideMode
-                    + " leash=" + leash + " parent=" + parent);
+            if (!showMirrorSurface(requestedTask, leash, dest, hideMode)) return;
             main.postDelayed(this::stopMirrorPoc, holdMs);
         } catch (Throwable error) {
             log("mirror POC failed: " + error);
             XposedBridge.log(error);
             stopMirrorPoc();
         }
+    }
+
+    /** The task to mirror: the requested one, or whatever currently owns the main cell. */
+    private int resolveMirrorTask(int requestedTask) throws Throwable {
+        if (requestedTask >= 0) return requestedTask;
+        LiveTask main = findMainTask();
+        if (main == null) {
+            log("mirror POC: no main task");
+            android.widget.Toast.makeText(ctx, "mirror: 主区无应用",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            return -1;
+        }
+        return main.id;
+    }
+
+    /** The leash of a task, or null when no controller exposes a ShellTaskOrganizer. */
+    private Object mirrorLeash(int task) throws Throwable {
+        Object organizer = null;
+        for (Slot slot : slots) {
+            if (slot.controller != null) {
+                organizer = XposedHelpers.getObjectField(slot.controller, "mTaskOrganizer");
+                break;
+            }
+        }
+        if (organizer == null) {
+            log("mirror POC: no ShellTaskOrganizer on controllers");
+            return null;
+        }
+        Object leash = ShellCompat.taskLeash(organizer, task);
+        if (leash == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
+            log("mirror POC: leash unavailable task=" + task + " leash=" + leash);
+            return null;
+        }
+        return leash;
+    }
+
+    /** 免 mirror 承载：把原任务 leash 直接变换进格子（原任务窗口仍是满屏，只是显示变换成格子大小/位置）。 */
+    private void showDirectCarrier(int task, Object leash, Rect dest, int holdMs) throws Throwable {
+        if (!applyDirectCarrier(leash, dest, true)) return;
+        mirrorPocLeash = leash;
+        mirrorPocHideMode = 5;
+        log("direct carrier shown task=" + task + " dest=" + dest);
+        main.postDelayed(this::stopMirrorPoc, holdMs);
+    }
+
+    /** Mirror the leash into the host window and hide the source according to {@code hideMode}. */
+    private boolean showMirrorSurface(int task, Object leash, Rect dest, int hideMode) throws Throwable {
+        Object parent = mirrorLayerSurface();
+        if (parent == null) {
+            Object viewRoot = XposedHelpers.callMethod(root, "getViewRootImpl");
+            parent = viewRoot == null ? null
+                    : XposedHelpers.callMethod(viewRoot, "getSurfaceControl");
+        }
+        if (parent == null) {
+            log("mirror POC: host window SurfaceControl unavailable");
+            return false;
+        }
+        Class<?> scClass = Class.forName("android.view.SurfaceControl");
+        Object mirror = XposedHelpers.callStaticMethod(scClass, "mirrorSurface", leash);
+        float sx = dest.width() / (float) screenW;
+        float sy = dest.height() / (float) screenH;
+        Object tx = Class.forName("android.view.SurfaceControl$Transaction")
+                .getDeclaredConstructor().newInstance();
+        try {
+            hideMirrorSource(tx, leash, hideMode);
+            XposedHelpers.callMethod(tx, "reparent", mirror, parent);
+            XposedHelpers.callMethod(tx, "setLayer", mirror, 1000000);
+            XposedHelpers.callMethod(tx, "setPosition", mirror,
+                    (float) dest.left, (float) dest.top);
+            XposedHelpers.callMethod(tx, "setMatrix", mirror, sx, 0f, 0f, sy);
+            XposedHelpers.callMethod(tx, "setAlpha", mirror, 1f);
+            XposedHelpers.callMethod(tx, "show", mirror);
+            XposedHelpers.callMethod(tx, "apply");
+        } finally {
+            try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
+        }
+        mirrorPocSurface = mirror;
+        mirrorPocLeash = leash;
+        mirrorPocHideMode = hideMode;
+        log("mirror POC shown task=" + task + " dest=" + dest
+                + " scale=" + sx + "x" + sy + " hideMode=" + hideMode
+                + " leash=" + leash + " parent=" + parent);
+        return true;
     }
 
     /**
@@ -2118,217 +2139,9 @@ public final class WorkspaceHost {
             Class<?> trans = XposedHelpers.findClass("com.android.wm.shell.taskview.TaskViewTransitions", cl);
             Class<?> control = XposedHelpers.findClass("com.android.wm.shell.taskview.TaskViewTaskController", cl);
             Class<?> listener = XposedHelpers.findClass("com.android.wm.shell.taskview.TaskView$Listener", cl);
-            installed.addAll(KeyguardTransition.install(trans, owner -> {
-                WorkspaceHost h = sInstance;
-                return h != null && h.transitions == owner && h.retainedForLock && h.keyguardLocked
-                        && (h.scene == ACTIVE || h.scene == RESUMING);
-            }));
-            final boolean bridgeTaskInfo = !ShellCompat.hasMethod(listener, "onTaskInfoChanged", 1);
-            if (bridgeTaskInfo) {
-                java.util.Set<XC_MethodHook.Unhook> callbacks = XposedBridge.hookAllMethods(control,
-                        "onTaskInfoChanged", new XC_MethodHook() {
-                    @Override protected void afterHookedMethod(MethodHookParam p) {
-                        WorkspaceHost h = sInstance;
-                        if (p.hasThrowable() || p.args.length != 1 || h == null) return;
-                        Slot slot = h.slotForObject(p.thisObject);
-                        if (slot == null) return;
-                        final Object info = p.args[0];
-                        h.postForSlot(slot, owner -> h.onTaskInfo(owner.index, info));
-                    }
-                });
-                if (callbacks.isEmpty()) throw new IllegalStateException("no legacy task-info callback");
-                installed.addAll(callbacks);
-            }
-            installed.addAll(XposedBridge.hookAllMethods(trans, "startAnimation", new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) throws Throwable {
-                    WorkspaceHost h = sInstance;
-                    if ((p.args.length != 5 && p.args.length != 6) || h == null || h.transitions != p.thisObject) return;
-                    if (!ShellCompat.hasMethod(trans, "isValidTaskView", 2)
-                            && XposedHelpers.callMethod(p.thisObject, "findPending", p.args[0]) == null) {
-                        externalChanges.set((java.util.List<?>) XposedHelpers.callMethod(p.args[1], "getChanges"));
-                        p.setObjectExtra("onesteplite.external", true);
-                    }
-                    int callbackIndex = p.args.length - 1;
-                    java.util.List<SideClose> closes = h.closingTasks(p.args[1]);
-                    if (closes.isEmpty()) return;
-                    p.setObjectExtra("onesteplite.closes", closes);
-                    nativeCloses.set(closes);
-                    closeStartTransaction.set(p.args[callbackIndex - 2]);
-                    closeFinishTransaction.set(p.args[callbackIndex - 1]);
-                    Object original = p.args[callbackIndex];
-                    Class<?> callback = Class.forName("com.android.wm.shell.transition.Transitions$TransitionFinishCallback", false, cl);
-                    java.util.concurrent.atomic.AtomicBoolean finished = new java.util.concurrent.atomic.AtomicBoolean();
-                    p.args[callbackIndex] = java.lang.reflect.Proxy.newProxyInstance(cl, new Class<?>[]{callback}, (proxy, method, args) -> {
-                        if (!"onTransitionFinished".equals(method.getName())) return method.invoke(original, args);
-                        if (!finished.compareAndSet(false, true)) return null;
-                        java.util.concurrent.atomic.AtomicInteger remaining = new java.util.concurrent.atomic.AtomicInteger(closes.size());
-                        Runnable finish = () -> {
-                            if (remaining.decrementAndGet() == 0)
-                                XposedHelpers.callMethod(original, "onTransitionFinished", args[0]);
-                        };
-                        for (SideClose close : closes) close.animate(finish);
-                        return null;
-                    });
-                }
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    @SuppressWarnings("unchecked") java.util.List<SideClose> closes =
-                            (java.util.List<SideClose>) p.getObjectExtra("onesteplite.closes");
-                    if (p.getObjectExtra("onesteplite.external") != null) externalChanges.remove();
-                    if (closes == null) return;
-                    nativeCloses.remove();
-                    closeStartTransaction.remove();
-                    closeFinishTransaction.remove();
-                    if (p.hasThrowable() || !Boolean.TRUE.equals(p.getResult()))
-                        for (SideClose close : closes) close.abandon();
-                }
-            }));
-            installed.addAll(XposedBridge.hookAllMethods(control, "prepareCloseAnimation", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    java.util.List<SideClose> closes = nativeCloses.get();
-                    if (closes == null || p.hasThrowable() || p.args.length != 2) return;
-                    for (SideClose close : closes)
-                        if (close.controller == p.thisObject && close.surface == p.args[1]) {
-                            try { close.prepare(p.args[0], closeFinishTransaction.get()); }
-                            catch (Throwable error) { log("side close prepare: " + error); }
-                        }
-                }
-            }));
-            if (!ShellCompat.hasMethod(control, "prepareCloseAnimation", 2)) {
-                installed.addAll(XposedBridge.hookAllMethods(control, "resetTaskInfo", new XC_MethodHook() {
-                    @Override protected void afterHookedMethod(MethodHookParam p) {
-                        java.util.List<SideClose> closes = nativeCloses.get();
-                        if (closes == null || p.hasThrowable()) return;
-                        for (SideClose close : closes) if (close.controller == p.thisObject) {
-                            try { close.prepare(closeStartTransaction.get(), closeFinishTransaction.get()); }
-                            catch (Throwable error) { log("side close OS3 prepare: " + error); }
-                        }
-                    }
-                }));
-            }
-            installed.add(XposedHelpers.findAndHookMethod(view, "onComputeInternalInsets",
-                    XposedHelpers.findClass("android.view.ViewTreeObserver$InternalInsetsInfo", cl),
-                    new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    WorkspaceHost h = sInstance;
-                    // TaskView normally punches its app hole out of the Host. OneStepLite
-                    // owns the entire side strip for tap-to-promote. A moved/retired
-                    // TaskView must not subtract another cell after our Host listener.
-                    if (h != null && h.ownsViewOrController(p.thisObject)) p.setResult(null);
-                }
-            }));
-            installed.add(XposedHelpers.findAndHookMethod(view, "getCurrentBoundsOnScreen", new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    WorkspaceHost h = sInstance;
-                    if (h != null && h.ownsViewOrController(p.thisObject)) p.setResult(h.logicalBounds(h.slotForObject(p.thisObject)));
-                }
-            }));
-            // The new container must already clip a returning task when Shell receives it.
-            installed.addAll(XposedBridge.hookAllMethods(control, "surfaceCreated", new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    WorkspaceHost h = sInstance;
-                    if (h == null || h.sideViewport == null || p.args.length != 1) return;
-                    Slot slot = h.slotForObject(p.thisObject);
-                    if (slot != null && slot.sideRow >= 0) h.attachSideViewport(slot, p.args[0]);
-                }
-            }));
-            XC_MethodHook rectGuard = new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    WorkspaceHost h = sInstance;
-                    if (h != null && h.transitions == p.thisObject && h.ownsViewOrController(p.args[0]))
-                        p.args[1] = h.logicalBounds(h.slotForObject(p.args[0]));
-                }
-            };
-            boolean directBounds = ShellCompat.hasMethod(trans, "setTaskBounds", control, Rect.class);
-            if (directBounds) {
-                installed.add(XposedHelpers.findAndHookMethod(trans, "setTaskBounds", control, Rect.class, rectGuard));
-            } else if (ShellCompat.hasMethod(control, "setWindowBounds", Rect.class)) {
-                // AOSP14/OS2 routes TaskView bounds through the controller itself.
-                installed.add(XposedHelpers.findAndHookMethod(control, "setWindowBounds", Rect.class,
-                        new XC_MethodHook() {
-                            @Override protected void beforeHookedMethod(MethodHookParam p) {
-                                WorkspaceHost h = sInstance;
-                                if (h != null && p.args.length == 1 && p.args[0] instanceof Rect
-                                        && h.ownsViewOrController(p.thisObject))
-                                    p.args[0] = h.logicalBounds(h.slotForObject(p.thisObject));
-                            }
-                        }));
-            } else throw new IllegalStateException("no native TaskView bounds owner");
-            if (directBounds && ShellCompat.hasMethod(trans, "lambda$setTaskBounds$6", 2)) {
-                installed.add(XposedHelpers.findAndHookMethod(trans, "lambda$setTaskBounds$6", control, Rect.class, rectGuard));
-            } else if (directBounds) {
-                Class<?> consumer = XposedHelpers.findClass("com.android.wm.shell.taskview.TaskViewTransitions$$ExternalSyntheticLambda0", cl);
-                installed.add(XposedHelpers.findAndHookMethod(consumer, "run", new XC_MethodHook() {
-                    @Override protected void beforeHookedMethod(MethodHookParam p) {
-                        WorkspaceHost h = sInstance;
-                        if (h == null || XposedHelpers.getIntField(p.thisObject, "$r8$classId") != 0
-                                || XposedHelpers.getObjectField(p.thisObject, "f$0") != h.transitions) return;
-                        Object controller = XposedHelpers.getObjectField(p.thisObject, "f$1");
-                        if (h.ownsViewOrController(controller))
-                            XposedHelpers.setObjectField(p.thisObject, "f$2", h.logicalBounds(h.slotForObject(controller)));
-                    }
-                }));
-            }
-            java.util.Set<XC_MethodHook.Unhook> external = XposedBridge.hookAllMethods(trans,
-                    "isValidTaskView", new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    WorkspaceHost h = sInstance;
-                    if (h != null && h.transitions == p.thisObject && p.args.length == 2
-                            && p.args[1] == null && h.leaveExternalChangeToNative(p.args[0]))
-                        p.setResult(false);
-                }
-            });
-            if (external.isEmpty()) {
-                external = XposedBridge.hookAllMethods(trans, "findTaskView", new XC_MethodHook() {
-                    @Override protected void afterHookedMethod(MethodHookParam p) {
-                        WorkspaceHost h = sInstance;
-                        java.util.List<?> changes = externalChanges.get();
-                        if (changes == null || h == null || h.transitions != p.thisObject
-                                || p.args.length != 1 || !h.ownsViewOrController(p.getResult())) return;
-                        for (Object change : changes)
-                            if (XposedHelpers.callMethod(change, "getTaskInfo") == p.args[0]
-                                    && h.leaveExternalChangeToNative(change)) { p.setResult(null); return; }
-                    }
-                });
-                if (external.isEmpty()) throw new IllegalStateException("no native task lookup guard");
-            }
-            installed.addAll(external);
-            java.util.Set<XC_MethodHook.Unhook> unfold = XposedBridge.hookAllMethods(trans, "updateBoundsForUnfold", new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    WorkspaceHost h = sInstance;
-                    if (h == null || h.transitions != p.thisObject || p.args.length < 2
-                            || !(p.args[0] instanceof Rect)) return;
-                    for (Object arg : p.args) {
-                        if (arg == null || !arg.getClass().getName().contains("RunningTaskInfo")) continue;
-                        Object controller = XposedHelpers.callMethod(p.thisObject, "findTaskView", arg);
-                        if (h.ownsViewOrController(controller)) {
-                            for (Slot slot : h.slots) {
-                                if (slot.controller == controller && !slot.parked
-                                        && h.controllerOwns(slot, XposedHelpers.getIntField(arg, "taskId"),
-                                        XposedHelpers.getObjectField(arg, "token"))) p.args[0] = h.logicalBounds(slot);
-                            }
-                        }
-                    }
-                }
-            });
-            installed.addAll(unfold);
-            java.util.Set<XC_MethodHook.Unhook> opening = XposedBridge.hookAllMethods(trans, "prepareOpenAnimation", new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    WorkspaceHost h = sInstance;
-                    if (h != null && h.transitions == p.thisObject && p.args.length == 7
-                            && h.ownsViewOrController(p.args[0])) {
-                        Object info = p.args[4];
-                        Object token = XposedHelpers.getObjectField(info, "token");
-                        Object wct = p.args[6];
-                        XposedHelpers.callMethod(wct, "setForceTranslucent", token, true);
-                        XposedHelpers.callMethod(wct, "setAlwaysOnTop", token, true);
-                        XposedHelpers.callMethod(wct, "setFocusable", token, true);
-                        Slot slot = h.slotForObject(p.args[0]);
-                        XposedHelpers.callMethod(wct, "setBounds", token, h.logicalBounds(slot));
-                        h.applyTopConfiguration(wct, token, slot);
-                    }
-                }
-            });
-            installed.addAll(opening);
+            boolean bridgeTaskInfo = installTaskViewHooks(cl, trans, control, listener, installed);
+            installBoundsGuards(cl, view, trans, control, installed);
+            installExternalChangeGuards(cl, trans, control, installed);
             legacyTaskInfoCallbacks = bridgeTaskInfo;
             boundsHooksReady = true;
             log("logical bounds guards installed: getter/queue/consumer/unfold");
@@ -2336,6 +2149,234 @@ public final class WorkspaceHost {
             for (XC_MethodHook.Unhook hook : installed) hook.unhook();
             log("logical bounds guards unavailable; no task admission: " + error);
         }
+    }
+
+    /** Keyguard handoff, the legacy task-info bridge, and the side-close animation hooks. */
+    private static boolean installTaskViewHooks(ClassLoader cl, Class<?> trans, Class<?> control,
+            Class<?> listener,
+            java.util.List<XC_MethodHook.Unhook> installed) {
+        installed.addAll(KeyguardTransition.install(trans, owner -> {
+            WorkspaceHost h = sInstance;
+            return h != null && h.transitions == owner && h.retainedForLock && h.keyguardLocked
+                    && (h.scene == ACTIVE || h.scene == RESUMING);
+        }));
+        final boolean bridgeTaskInfo = !ShellCompat.hasMethod(listener, "onTaskInfoChanged", 1);
+        if (bridgeTaskInfo) {
+            java.util.Set<XC_MethodHook.Unhook> callbacks = XposedBridge.hookAllMethods(control,
+                    "onTaskInfoChanged", new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    WorkspaceHost h = sInstance;
+                    if (p.hasThrowable() || p.args.length != 1 || h == null) return;
+                    Slot slot = h.slotForObject(p.thisObject);
+                    if (slot == null) return;
+                    final Object info = p.args[0];
+                    h.postForSlot(slot, owner -> h.onTaskInfo(owner.index, info));
+                }
+            });
+            if (callbacks.isEmpty()) throw new IllegalStateException("no legacy task-info callback");
+            installed.addAll(callbacks);
+        }
+        installed.addAll(XposedBridge.hookAllMethods(trans, "startAnimation", new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) throws Throwable {
+                WorkspaceHost h = sInstance;
+                if ((p.args.length != 5 && p.args.length != 6) || h == null || h.transitions != p.thisObject) return;
+                if (!ShellCompat.hasMethod(trans, "isValidTaskView", 2)
+                        && XposedHelpers.callMethod(p.thisObject, "findPending", p.args[0]) == null) {
+                    externalChanges.set((java.util.List<?>) XposedHelpers.callMethod(p.args[1], "getChanges"));
+                    p.setObjectExtra("onesteplite.external", true);
+                }
+                int callbackIndex = p.args.length - 1;
+                java.util.List<SideClose> closes = h.closingTasks(p.args[1]);
+                if (closes.isEmpty()) return;
+                p.setObjectExtra("onesteplite.closes", closes);
+                nativeCloses.set(closes);
+                closeStartTransaction.set(p.args[callbackIndex - 2]);
+                closeFinishTransaction.set(p.args[callbackIndex - 1]);
+                Object original = p.args[callbackIndex];
+                Class<?> callback = Class.forName("com.android.wm.shell.transition.Transitions$TransitionFinishCallback", false, cl);
+                java.util.concurrent.atomic.AtomicBoolean finished = new java.util.concurrent.atomic.AtomicBoolean();
+                p.args[callbackIndex] = java.lang.reflect.Proxy.newProxyInstance(cl, new Class<?>[]{callback}, (proxy, method, args) -> {
+                    if (!"onTransitionFinished".equals(method.getName())) return method.invoke(original, args);
+                    if (!finished.compareAndSet(false, true)) return null;
+                    java.util.concurrent.atomic.AtomicInteger remaining = new java.util.concurrent.atomic.AtomicInteger(closes.size());
+                    Runnable finish = () -> {
+                        if (remaining.decrementAndGet() == 0)
+                            XposedHelpers.callMethod(original, "onTransitionFinished", args[0]);
+                    };
+                    for (SideClose close : closes) close.animate(finish);
+                    return null;
+                });
+            }
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                @SuppressWarnings("unchecked") java.util.List<SideClose> closes =
+                        (java.util.List<SideClose>) p.getObjectExtra("onesteplite.closes");
+                if (p.getObjectExtra("onesteplite.external") != null) externalChanges.remove();
+                if (closes == null) return;
+                nativeCloses.remove();
+                closeStartTransaction.remove();
+                closeFinishTransaction.remove();
+                if (p.hasThrowable() || !Boolean.TRUE.equals(p.getResult()))
+                    for (SideClose close : closes) close.abandon();
+            }
+        }));
+        installed.addAll(XposedBridge.hookAllMethods(control, "prepareCloseAnimation", new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                java.util.List<SideClose> closes = nativeCloses.get();
+                if (closes == null || p.hasThrowable() || p.args.length != 2) return;
+                for (SideClose close : closes)
+                    if (close.controller == p.thisObject && close.surface == p.args[1]) {
+                        try { close.prepare(p.args[0], closeFinishTransaction.get()); }
+                        catch (Throwable error) { log("side close prepare: " + error); }
+                    }
+            }
+        }));
+        if (!ShellCompat.hasMethod(control, "prepareCloseAnimation", 2)) {
+            installed.addAll(XposedBridge.hookAllMethods(control, "resetTaskInfo", new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    java.util.List<SideClose> closes = nativeCloses.get();
+                    if (closes == null || p.hasThrowable()) return;
+                    for (SideClose close : closes) if (close.controller == p.thisObject) {
+                        try { close.prepare(closeStartTransaction.get(), closeFinishTransaction.get()); }
+                        catch (Throwable error) { log("side close OS3 prepare: " + error); }
+                    }
+                }
+            }));
+        }
+        return bridgeTaskInfo;
+    }
+
+    /** Keep every bounds read and write in the logical workspace coordinates. */
+    private static void installBoundsGuards(ClassLoader cl, Class<?> view, Class<?> trans,
+            Class<?> control, java.util.List<XC_MethodHook.Unhook> installed) {
+        installed.add(XposedHelpers.findAndHookMethod(view, "onComputeInternalInsets",
+                XposedHelpers.findClass("android.view.ViewTreeObserver$InternalInsetsInfo", cl),
+                new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                WorkspaceHost h = sInstance;
+                // TaskView normally punches its app hole out of the Host. OneStepLite
+                // owns the entire side strip for tap-to-promote. A moved/retired
+                // TaskView must not subtract another cell after our Host listener.
+                if (h != null && h.ownsViewOrController(p.thisObject)) p.setResult(null);
+            }
+        }));
+        installed.add(XposedHelpers.findAndHookMethod(view, "getCurrentBoundsOnScreen", new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                WorkspaceHost h = sInstance;
+                if (h != null && h.ownsViewOrController(p.thisObject)) p.setResult(h.logicalBounds(h.slotForObject(p.thisObject)));
+            }
+        }));
+        // The new container must already clip a returning task when Shell receives it.
+        installed.addAll(XposedBridge.hookAllMethods(control, "surfaceCreated", new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                WorkspaceHost h = sInstance;
+                if (h == null || h.sideViewport == null || p.args.length != 1) return;
+                Slot slot = h.slotForObject(p.thisObject);
+                if (slot != null && slot.sideRow >= 0) h.attachSideViewport(slot, p.args[0]);
+            }
+        }));
+        XC_MethodHook rectGuard = new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                WorkspaceHost h = sInstance;
+                if (h != null && h.transitions == p.thisObject && h.ownsViewOrController(p.args[0]))
+                    p.args[1] = h.logicalBounds(h.slotForObject(p.args[0]));
+            }
+        };
+        boolean directBounds = ShellCompat.hasMethod(trans, "setTaskBounds", control, Rect.class);
+        if (directBounds) {
+            installed.add(XposedHelpers.findAndHookMethod(trans, "setTaskBounds", control, Rect.class, rectGuard));
+        } else if (ShellCompat.hasMethod(control, "setWindowBounds", Rect.class)) {
+            // AOSP14/OS2 routes TaskView bounds through the controller itself.
+            installed.add(XposedHelpers.findAndHookMethod(control, "setWindowBounds", Rect.class,
+                    new XC_MethodHook() {
+                        @Override protected void beforeHookedMethod(MethodHookParam p) {
+                            WorkspaceHost h = sInstance;
+                            if (h != null && p.args.length == 1 && p.args[0] instanceof Rect
+                                    && h.ownsViewOrController(p.thisObject))
+                                p.args[0] = h.logicalBounds(h.slotForObject(p.thisObject));
+                        }
+                    }));
+        } else throw new IllegalStateException("no native TaskView bounds owner");
+        if (directBounds && ShellCompat.hasMethod(trans, "lambda$setTaskBounds$6", 2)) {
+            installed.add(XposedHelpers.findAndHookMethod(trans, "lambda$setTaskBounds$6", control, Rect.class, rectGuard));
+        } else if (directBounds) {
+            Class<?> consumer = XposedHelpers.findClass("com.android.wm.shell.taskview.TaskViewTransitions$$ExternalSyntheticLambda0", cl);
+            installed.add(XposedHelpers.findAndHookMethod(consumer, "run", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    WorkspaceHost h = sInstance;
+                    if (h == null || XposedHelpers.getIntField(p.thisObject, "$r8$classId") != 0
+                            || XposedHelpers.getObjectField(p.thisObject, "f$0") != h.transitions) return;
+                    Object controller = XposedHelpers.getObjectField(p.thisObject, "f$1");
+                    if (h.ownsViewOrController(controller))
+                        XposedHelpers.setObjectField(p.thisObject, "f$2", h.logicalBounds(h.slotForObject(controller)));
+                }
+            }));
+        }
+    }
+
+    /** Leave external task changes to the platform, and open our own tasks translucent. */
+    private static void installExternalChangeGuards(ClassLoader cl, Class<?> trans, Class<?> control,
+            java.util.List<XC_MethodHook.Unhook> installed) {
+        java.util.Set<XC_MethodHook.Unhook> external = XposedBridge.hookAllMethods(trans,
+                "isValidTaskView", new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                WorkspaceHost h = sInstance;
+                if (h != null && h.transitions == p.thisObject && p.args.length == 2
+                        && p.args[1] == null && h.leaveExternalChangeToNative(p.args[0]))
+                    p.setResult(false);
+            }
+        });
+        if (external.isEmpty()) {
+            external = XposedBridge.hookAllMethods(trans, "findTaskView", new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    WorkspaceHost h = sInstance;
+                    java.util.List<?> changes = externalChanges.get();
+                    if (changes == null || h == null || h.transitions != p.thisObject
+                            || p.args.length != 1 || !h.ownsViewOrController(p.getResult())) return;
+                    for (Object change : changes)
+                        if (XposedHelpers.callMethod(change, "getTaskInfo") == p.args[0]
+                                && h.leaveExternalChangeToNative(change)) { p.setResult(null); return; }
+                }
+            });
+            if (external.isEmpty()) throw new IllegalStateException("no native task lookup guard");
+        }
+        installed.addAll(external);
+        java.util.Set<XC_MethodHook.Unhook> unfold = XposedBridge.hookAllMethods(trans, "updateBoundsForUnfold", new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                WorkspaceHost h = sInstance;
+                if (h == null || h.transitions != p.thisObject || p.args.length < 2
+                        || !(p.args[0] instanceof Rect)) return;
+                for (Object arg : p.args) {
+                    if (arg == null || !arg.getClass().getName().contains("RunningTaskInfo")) continue;
+                    Object controller = XposedHelpers.callMethod(p.thisObject, "findTaskView", arg);
+                    if (h.ownsViewOrController(controller)) {
+                        for (Slot slot : h.slots) {
+                            if (slot.controller == controller && !slot.parked
+                                    && h.controllerOwns(slot, XposedHelpers.getIntField(arg, "taskId"),
+                                    XposedHelpers.getObjectField(arg, "token"))) p.args[0] = h.logicalBounds(slot);
+                        }
+                    }
+                }
+            }
+        });
+        installed.addAll(unfold);
+        java.util.Set<XC_MethodHook.Unhook> opening = XposedBridge.hookAllMethods(trans, "prepareOpenAnimation", new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                WorkspaceHost h = sInstance;
+                if (h != null && h.transitions == p.thisObject && p.args.length == 7
+                        && h.ownsViewOrController(p.args[0])) {
+                    Object info = p.args[4];
+                    Object token = XposedHelpers.getObjectField(info, "token");
+                    Object wct = p.args[6];
+                    XposedHelpers.callMethod(wct, "setForceTranslucent", token, true);
+                    XposedHelpers.callMethod(wct, "setAlwaysOnTop", token, true);
+                    XposedHelpers.callMethod(wct, "setFocusable", token, true);
+                    Slot slot = h.slotForObject(p.args[0]);
+                    XposedHelpers.callMethod(wct, "setBounds", token, h.logicalBounds(slot));
+                    h.applyTopConfiguration(wct, token, slot);
+                }
+            }
+        });
+        installed.addAll(opening);
     }
 
     private Rect logicalBounds() { return new Rect(0, 0, screenW, screenH); }
@@ -3038,48 +3079,7 @@ public final class WorkspaceHost {
             java.util.List<XC_MethodHook.Unhook> installed = new java.util.ArrayList<>();
             try {
                 Class<?> tx = Class.forName("android.view.SurfaceControl$Transaction");
-                installed.addAll(XposedBridge.hookAllMethods(tx, "merge", new XC_MethodHook() {
-                    @Override protected void afterHookedMethod(MethodHookParam p) {
-                        WorkspaceHost h = sInstance;
-                        if (h != null && !p.hasThrowable() && p.args.length == 1) {
-                            h.finishTransactions.merge(p.thisObject, p.args[0]);
-                            h.workspaceFinishes.merge(p.thisObject, p.args[0]);
-                            h.nativeObservations.merge(p.thisObject, p.args[0]);
-                            h.keyguardTransactions.merge(p.thisObject, p.args[0]);
-                        }
-                    }
-                }));
-                installed.addAll(XposedBridge.hookAllMethods(tx, "apply", new XC_MethodHook() {
-                    @Override protected void beforeHookedMethod(MethodHookParam p) {
-                        WorkspaceHost h = sInstance;
-                        if (h == null) return;
-                        h.appendHiddenKeyguardSurfaces(p.thisObject, h.keyguardTransactions.take(p.thisObject));
-                        java.util.List<RenderBinding> frames = h.finishTransactions.take(p.thisObject);
-                        if (!frames.isEmpty()) h.appendRetainedSurfaces(p.thisObject, frames);
-                        h.appendWorkspaceSurfaces(p.thisObject, h.workspaceFinishes.take(p.thisObject));
-                        java.util.List<NativeObservation> checks = h.nativeObservations.take(p.thisObject);
-                        if (!checks.isEmpty()) {
-                            try {
-                                Executor uiExecutor = action -> h.main.post(action);
-                                XposedHelpers.callMethod(p.thisObject, "addTransactionCommittedListener",
-                                        uiExecutor, (Runnable) () -> { for (NativeObservation check : checks) check.run(); });
-                            } catch (Throwable unavailable) {
-                                log("commit signal unavailable; retain bounded observation watchdog");
-                            }
-                        }
-                    }
-                }));
-                installed.addAll(XposedBridge.hookAllMethods(tx, "close", new XC_MethodHook() {
-                    @Override protected void afterHookedMethod(MethodHookParam p) {
-                        WorkspaceHost h = sInstance;
-                        if (h != null) {
-                            h.finishTransactions.forget(p.thisObject);
-                            h.workspaceFinishes.forget(p.thisObject);
-                            h.nativeObservations.forget(p.thisObject);
-                            h.keyguardTransactions.forget(p.thisObject);
-                        }
-                    }
-                }));
+                installTransactionHooks(tx, installed);
                 if (installed.size() < 3) throw new IllegalStateException("missing finish transaction hooks");
                 KeyguardTransition.installNativeStart(cl, (info, start) -> {
                     WorkspaceHost h = sInstance;
@@ -3093,37 +3093,86 @@ public final class WorkspaceHost {
                 return;
             }
         }
-        executeOnShell(() -> {
-            try {
-                Class<?> iface = XposedHelpers.findClass(
-                        "com.android.wm.shell.transition.Transitions$TransitionObserver", cl);
-                surfaceObserver = Proxy.newProxyInstance(iface.getClassLoader(), new Class<?>[]{iface},
-                        (self, method, args) -> {
-                            try {
-                                String name = method.getName();
-                                if ("onTransitionReady".equals(name) && args != null && args.length == 4) {
-                                    if (retainedForLock && keyguardWindowHidden
-                                            && (((Integer) XposedHelpers.callMethod(args[1], "getFlags")) & 0x100) != 0)
-                                        keyguardTransactions.mark(args[3], java.util.Collections.singletonList(sceneEpoch));
-                                    SwapTrace trace = swapTrace;
-                                    if (trace != null) trace.transition(args[1], args[2], args[3]);
-                                    trackRetainedSurfaces(args[1], args[2], args[3]);
-                                    scheduleOverlayRefresh();
-                                }
-                                else if ("onTransitionMerged".equals(name)
-                                        || "onTransitionFinished".equals(name)) traceSwapEvent(name);
-                                else if ("hashCode".equals(name)) return System.identityHashCode(self);
-                                else if ("equals".equals(name)) return self == args[0];
-                                else if ("toString".equals(name)) return "OneStepLiteRetainedSurfaceObserver";
-                                // Target onTransitionFinished precedes finishT.apply: never restore here.
-                            } catch (Throwable error) { log("surface observer stopped: " + error); }
-                            return null;
-                        });
-                Object shellTransitions = XposedHelpers.getObjectField(transitions, "mTransitions");
-                XposedHelpers.callMethod(shellTransitions, "registerObserver", surfaceObserver);
-                log("retained surface observer registered; restore only in marked final apply");
-            } catch (Throwable error) { log("surface observer unavailable: " + error); }
-        });
+        executeOnShell(() -> registerSurfaceObserver(cl));
+    }
+
+    /** Carry the retained frames across merge, apply, and close of every transaction. */
+    private static void installTransactionHooks(Class<?> tx, java.util.List<XC_MethodHook.Unhook> installed) {
+        installed.addAll(XposedBridge.hookAllMethods(tx, "merge", new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                WorkspaceHost h = sInstance;
+                if (h != null && !p.hasThrowable() && p.args.length == 1) {
+                    h.finishTransactions.merge(p.thisObject, p.args[0]);
+                    h.workspaceFinishes.merge(p.thisObject, p.args[0]);
+                    h.nativeObservations.merge(p.thisObject, p.args[0]);
+                    h.keyguardTransactions.merge(p.thisObject, p.args[0]);
+                }
+            }
+        }));
+        installed.addAll(XposedBridge.hookAllMethods(tx, "apply", new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                WorkspaceHost h = sInstance;
+                if (h == null) return;
+                h.appendHiddenKeyguardSurfaces(p.thisObject, h.keyguardTransactions.take(p.thisObject));
+                java.util.List<RenderBinding> frames = h.finishTransactions.take(p.thisObject);
+                if (!frames.isEmpty()) h.appendRetainedSurfaces(p.thisObject, frames);
+                h.appendWorkspaceSurfaces(p.thisObject, h.workspaceFinishes.take(p.thisObject));
+                java.util.List<NativeObservation> checks = h.nativeObservations.take(p.thisObject);
+                if (!checks.isEmpty()) {
+                    try {
+                        Executor uiExecutor = action -> h.main.post(action);
+                        XposedHelpers.callMethod(p.thisObject, "addTransactionCommittedListener",
+                                uiExecutor, (Runnable) () -> { for (NativeObservation check : checks) check.run(); });
+                    } catch (Throwable unavailable) {
+                        log("commit signal unavailable; retain bounded observation watchdog");
+                    }
+                }
+            }
+        }));
+        installed.addAll(XposedBridge.hookAllMethods(tx, "close", new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                WorkspaceHost h = sInstance;
+                if (h != null) {
+                    h.finishTransactions.forget(p.thisObject);
+                    h.workspaceFinishes.forget(p.thisObject);
+                    h.nativeObservations.forget(p.thisObject);
+                    h.keyguardTransactions.forget(p.thisObject);
+                }
+            }
+        }));
+    }
+
+    /** Watch the shell transitions so the retained surfaces are restored at the right moment. */
+    private void registerSurfaceObserver(ClassLoader cl) {
+        try {
+            Class<?> iface = XposedHelpers.findClass(
+                    "com.android.wm.shell.transition.Transitions$TransitionObserver", cl);
+            surfaceObserver = Proxy.newProxyInstance(iface.getClassLoader(), new Class<?>[]{iface},
+                    (self, method, args) -> {
+                        try {
+                            String name = method.getName();
+                            if ("onTransitionReady".equals(name) && args != null && args.length == 4) {
+                                if (retainedForLock && keyguardWindowHidden
+                                        && (((Integer) XposedHelpers.callMethod(args[1], "getFlags")) & 0x100) != 0)
+                                    keyguardTransactions.mark(args[3], java.util.Collections.singletonList(sceneEpoch));
+                                SwapTrace trace = swapTrace;
+                                if (trace != null) trace.transition(args[1], args[2], args[3]);
+                                trackRetainedSurfaces(args[1], args[2], args[3]);
+                                scheduleOverlayRefresh();
+                            }
+                            else if ("onTransitionMerged".equals(name)
+                                    || "onTransitionFinished".equals(name)) traceSwapEvent(name);
+                            else if ("hashCode".equals(name)) return System.identityHashCode(self);
+                            else if ("equals".equals(name)) return self == args[0];
+                            else if ("toString".equals(name)) return "OneStepLiteRetainedSurfaceObserver";
+                            // Target onTransitionFinished precedes finishT.apply: never restore here.
+                        } catch (Throwable error) { log("surface observer stopped: " + error); }
+                        return null;
+                    });
+            Object shellTransitions = XposedHelpers.getObjectField(transitions, "mTransitions");
+            XposedHelpers.callMethod(shellTransitions, "registerObserver", surfaceObserver);
+            log("retained surface observer registered; restore only in marked final apply");
+        } catch (Throwable error) { log("surface observer unavailable: " + error); }
     }
 
     private void trackRetainedSurfaces(Object info, Object start, Object finish) {
@@ -3659,17 +3708,9 @@ public final class WorkspaceHost {
     private void buildLayout() {
         workspaceSettings.refresh();
         readDisplayGeometry();
+        resolveMainSide();
         int w = screenW;
         int h = screenH;
-        android.content.SharedPreferences position=ctx.createDeviceProtectedStorageContext().getSharedPreferences("workspace_position",0);
-        if(position.contains("main_right"))mainOnRight=position.getBoolean("main_right",false);
-        int pendingSide = position.contains("main_right")?-1:pendingMainSide;
-        pendingMainSide=-1;
-        if (pendingSide >= 0) {
-            pendingMainSide = -1;
-            mainOnRight = pendingSide == 1;
-            log("layout mainOnRight from gesture edge=" + mainOnRight);
-        }
         log("device: " + DeviceProfile.describe(ctx));
         float layoutDensity = ctx.getResources().getDisplayMetrics().density;
         layout = WorkspaceLayout.of(w, h, mainOnRight, layoutDensity, DeviceProfile.isTablet(ctx));
@@ -3677,238 +3718,274 @@ public final class WorkspaceHost {
         mainOnRight = layout.mainOnRight;
         log("layout: " + layout.describe()
                 + " mainScale=" + mainScale() + " cellScale=" + cellScale());
-
-        root = new FrameLayout(ctx) {
-            private final android.graphics.Paint divider = new android.graphics.Paint(
-                    android.graphics.Paint.ANTI_ALIAS_FLAG);
-            @Override protected void dispatchDraw(android.graphics.Canvas canvas) {
-                // A stationary substrate covers both edges while native main geometry
-                // moves. Cell content can leave without taking its wallpaper with it.
-                if (mainSideAnimator != null) {
-                    int backdropSave = canvas.save();
-                    canvas.clipOutRect(workspaceMainHole());
-                    if (mainSideBackdrop != null) {
-                        mainSideBackdrop.setBounds(0, 0, screenW, screenH);
-                        mainSideBackdrop.draw(canvas);
-                    } else canvas.drawColor(HyperOsStyle.page(ctx));
-                    canvas.restoreToCount(backdropSave);
-                }
-                super.dispatchDraw(canvas);
-                if (contentShareHover != null) {
-                    contentSharePaint.setStyle(android.graphics.Paint.Style.STROKE);
-                    contentSharePaint.setStrokeWidth(HyperOsStyle.dp(ctx, 2f));
-                    contentSharePaint.setColor(HyperOsStyle.CONTROL_ACCENT);
-                    float inset=HyperOsStyle.dp(ctx, 3f);
-                    canvas.drawRect(contentShareHover.left+inset,contentShareHover.top+inset,
-                            contentShareHover.right-inset,contentShareHover.bottom-inset,contentSharePaint);
-                }
-                if (layout == null || workspaceAlpha <= 0f || mainSideAnimator != null) return;
-                int saved = canvas.save();
-                android.graphics.RectF main = workspaceMainHole();
-                canvas.clipOutRect(main);
-                WorkspaceDividers.draw(canvas, layout, HyperOsStyle.dp(ctx, 1f), workspaceAlpha, divider);
-                canvas.restoreToCount(saved);
-
-            }
-            @Override public boolean dispatchTouchEvent(MotionEvent event) {
-                if (contentShare != null && contentShare.busy()) return true;
-                if (transitionInput != null && transitionInput.consume(event.getActionMasked())) return true;
-                boolean wasCaptured = sideCaptured;
-                if (trackSideScroll(event)) {
-                    if (!wasCaptured && event.getActionMasked() == MotionEvent.ACTION_MOVE) {
-                        MotionEvent cancel = MotionEvent.obtain(event);
-                        cancel.setAction(MotionEvent.ACTION_CANCEL);
-                        try { super.dispatchTouchEvent(cancel); } finally { cancel.recycle(); }
-                    }
-                    return true;
-                }
-                return super.dispatchTouchEvent(event) || sideArmed;
-            }
-        };
-        transitionInput = new TransitionInput(root, this::acquireTransitionInputWindow, this::releaseTransitionInputWindow, blocked -> {
-            liveSwapInputBlocked = blocked;
-            for (Slot slot : slots) if (slot != null && slot.index > 0) updateTouchRegion(slot);
-            if (root != null) { root.requestLayout(); root.invalidate(); }
-        }, WorkspaceHost::log);
-        root.setClipChildren(false);
-        root.setBackgroundColor(0x00000000);
-        contentShare = new ContentShare(ctx, new ContentShare.Host() {
-            public boolean available() { return canShareContent(); }
-            public ContentShare.Target main() { return shareMainTarget(); }
-            public ContentShare.Target slot(int index) { return shareSideTarget(index); }
-            public ContentShare.Target findSide(ContentShare.Target original) { return findShareSide(original); }
-            public ContentShare.Target at(float x,float y) {
-                if (layout==null || x<layout.cellX || x>=layout.cellX+layout.cellWidth || y<layout.topStrip) return null;
-                for (Slot slot:slots) if(slot!=null && slot.index>SLOT_MAIN && slot.index!=SLOT_TOP
-                        && presentsSlot(slot) && slot.rect!=null && x>=slot.rect[0] && x<slot.rect[2]
-                        && y>=slot.rect[1] && y<slot.rect[3])
-                    return shareSideTarget(slot.index);
-                return null;
-            }
-            public void highlight(ContentShare.Target target) {
-                Slot slot=target==null?null:slots[target.slot];
-                contentShareHover=slot==null||slot.rect==null?null:new Rect(slot.rect[0],slot.rect[1],slot.rect[2],slot.rect[3]);
-                if(root!=null)root.invalidate();
-            }
-            public void exchange(ContentShare.Target source,ContentShare.Target target,Consumer<Boolean> complete) {
-                if(!canShareContent() || !source.same(shareMainTarget()) || !target.same(shareSideTarget(target.slot))) {
-                    complete.accept(false);return;
-                }
-                final long epoch=sceneEpoch;
-                swapWithMain(target.slot);
-                awaitContentShareExchange(source,target,epoch,SystemClock.uptimeMillis()+6500L,complete);
-            }
-        });
-        root.setOnDragListener((view,event)->contentShare!=null && contentShare.onDrag(event));
-        root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-            @Override public void onViewAttachedToWindow(View view) { observeSideViewportRoot(view); }
-            @Override public void onViewDetachedFromWindow(View view) { if(contentShare!=null)contentShare.cancel(); }
-        });
-        installHostTouchRegion();
-
-        wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
-        lp = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                PixelFormat.TRANSLUCENT);
-        lp.gravity = Gravity.TOP | Gravity.START;
-        lp.setTitle("WorkspaceHost");
-        HostWindowPolicy.configure(lp);
-        // APPLICATION_OVERLAY 默认被状态栏/cutout 顶下去（真机 122px）。两者都关掉后
-        // 窗口坐标系才等于屏幕坐标系（[0,0]-[1080,2460]）。
-        try {
-            lp.setFitInsetsTypes(0);
-            log("fitInsetsTypes=0 applied");
-        } catch (Throwable t) {
-            log("setFitInsetsTypes failed: " + t);
-        }
-        try {
-            lp.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-            log("cutoutMode=ALWAYS applied");
-        } catch (Throwable t) {
-            log("cutout mode failed: " + t);
-        }
-        wm.addView(root, lp);
-        registerDefaultDisplayListener();
-        createMirrorLayer();
-        log("host 2.9.41 HyperOS glass added " + w + "x" + h
-                + " privateFlags=0x" + Integer.toHexString(
-                        XposedHelpers.getIntField(lp, "privateFlags")));
-        // v1.3.3：呼出OneStepLite = 整块屏缩进主区（写缩放触发文件，system_server 轮询执行）。
-        main.postDelayed(this::collapseStatusBarPanels, 220L);
-        // Host-owned toolbar and app strip, matching the OneStepLite 3.0 interaction surface.
-        try {
-            java.util.List<QuickApp> quickApps;
-            try {
-                quickApps = Warmup.quickApps(ctx);
-            } catch (Throwable error) {
-                quickApps = java.util.Collections.emptyList();
-                log("top app strip unavailable: " + error);
-            }
-            topBar = new TopBar(ctx, layout, quickApps, new TopBar.Listener() {
-                @Override public void onOpenSettings() { openSettingsInMain(); }
-                @Override public void onSetMainSide(boolean right) {
-                    if (scene != ACTIVE || workspaceEntering || promotion != null || transferBusy
-                            || cellMotion != null || isSideMotionRunning() || holdsLiveFlipZoom()) return;
-                    switchMainSideAnimated(right);
-                }
-                @Override public void onExit() {
-                    log("top bar exit tapped");
-                    toggleVisibility();
-                }
-                @Override public void onLaunch(QuickApp entry) { launchQuick(entry); }
-                @Override public boolean canCustomizeApps() {
-                    return scene == ACTIVE && screenOn && !keyguardLocked
-                            && promotion == null && !transferBusy
-                            && (!topFace || layout.tabletLandscape && tabletToolsOpen);
-                }
-
-                @Override public void onOpenLandscape() { openTopFace(true); }
-                @Override public void onTaskCellsCovered(boolean covered) { setTaskCellsCovered(covered); }
-            });
-            refreshQuickApps();
-            topStripBacking = new View(ctx);
-            topStripBacking.setBackgroundColor(0xFF1E2420);
-            root.addView(topStripBacking, new FrameLayout.LayoutParams(-1, layout.topStrip));
-            topLiveClip=new FrameLayout(ctx) {
-                @Override protected void dispatchDraw(android.graphics.Canvas canvas) {
-                    int saved = canvas.save();
-                    if (layout != null && !layout.tabletLandscape && workspaceAlpha < 1f)
-                        canvas.clipOutRect(workspaceMainHole());
-                    super.dispatchDraw(canvas);
-                    canvas.restoreToCount(saved);
-                }
-            };
-            topLiveClip.setClipChildren(true);
-            topLiveClip.setClipToPadding(true);
-            topLiveClip.setClipBounds(new Rect(0,0,screenW,layout.tabletLandscape?screenH:layout.topStrip));
-            root.addView(topLiveClip,new FrameLayout.LayoutParams(-1,layout.tabletLandscape?-1:layout.topStrip));
-            topLiveClip.addView(topBar, new FrameLayout.LayoutParams(-1, layout.topStrip));
-            topBar.setStatusBarInset(DeviceProfile.statusBarHeightPx(ctx));
-            main.post(this::applyWallpaperBackdrops);
-            for (int i = 1; i < CELL_SLOT_COUNT; i++) {
-                View backing = new View(ctx);
-                backing.setBackgroundColor(HyperOsStyle.page(ctx));
-                int[] cell=layout.cellBounds(i-1);
-                FrameLayout.LayoutParams rlp =
-                        new FrameLayout.LayoutParams(layout.tabletLandscape?cell[2]-cell[0]:layout.sideWidth, sideSegmentHeight(i));
-                rlp.leftMargin = layout.tabletLandscape?cell[0]:layout.mainOnRight ? 0 : layout.mainWidth;
-                rlp.topMargin = sideSegmentTop(i);
-                backing.setLayoutParams(rlp);
-                root.addView(backing);
-                sideBackingViews[i] = backing;
-            }
-            log("OneStepLite top bar ready shortcuts=" + quickApps.size());
-        } catch (Throwable t) {
-            log("top bar add failed: " + t);
-        }
+        createRootView();
+        createContentShare();
+        createHostWindow(w, h);
+        createTopBar();
         root.post(this::updateTopBarState);
         loadWallpaperBackdrop();
         beginWorkspaceEntry(null);
         // Keep corner activation disabled while active; HyperOS GestureStub owns back gestures.
         HotZoneGesture.raiseAll(ctx);
-        // v0.9.9：心跳保证热区始终在位上（面板关闭路径异常时也能自动恢复，否则会卡在"撤下"）。
-        main.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (root == null || sInstance != WorkspaceHost.this) {
-                    return;
-                }
-                if (scene != ACTIVE || !screenOn || keyguardLocked || root.getVisibility() != View.VISIBLE) {
-                    main.postDelayed(this, 4000L);
-                    return;
-                }
-                if (layout != null && !holdsLiveFlipZoom()
-                        && android.os.SystemClock.uptimeMillis() >= zoomAnimUntil) {
-                    writeZoom(true);
-                }
-                if (carrierSlotIndex >= 0) {
-                    reassertCarrier();
-                }
-                if (!zoomed && !HotZoneGesture.isAttached()) {
-                    log("hotzone heartbeat: re-raise");
-                    HotZoneGesture.raiseAll(ctx);
-                }
-                // v1.1.3：转场可能覆盖 leash 的位置/矩阵（"只显示一部分"），心跳里周期性重发。
-                for (Slot s : slots) {
-                    if (holdsLiveFlipZoom()) continue;
-                    if (s.carrier || s.index == leashPocSlot) {
-                        continue;
-                    }
-                    ensureCellBackground(s);
-                    if (!s.occupied || s.promoting) {
-                        continue;
-                    }
-                    reapplyScale(s);
-                    if (!s.taskVisible) scheduleSideVisibilityRepair(s);
-                }
-                main.postDelayed(this, 4000L);
+        startWorkspaceHeartbeat();
+    }
+
+    /** Restore the remembered main side, or the side the entry gesture asked for. */
+    private void resolveMainSide() {
+    android.content.SharedPreferences position=ctx.createDeviceProtectedStorageContext().getSharedPreferences("workspace_position",0);
+    if(position.contains("main_right"))mainOnRight=position.getBoolean("main_right",false);
+    int pendingSide = position.contains("main_right")?-1:pendingMainSide;
+    pendingMainSide=-1;
+    if (pendingSide >= 0) {
+        pendingMainSide = -1;
+        mainOnRight = pendingSide == 1;
+        log("layout mainOnRight from gesture edge=" + mainOnRight);
+    }
+    }
+
+    /** The transparent host view: backdrop, dividers, and the touch gate in front of everything. */
+    private void createRootView() {
+    root = new FrameLayout(ctx) {
+        private final android.graphics.Paint divider = new android.graphics.Paint(
+                android.graphics.Paint.ANTI_ALIAS_FLAG);
+        @Override protected void dispatchDraw(android.graphics.Canvas canvas) {
+            // A stationary substrate covers both edges while native main geometry
+            // moves. Cell content can leave without taking its wallpaper with it.
+            if (mainSideAnimator != null) {
+                int backdropSave = canvas.save();
+                canvas.clipOutRect(workspaceMainHole());
+                if (mainSideBackdrop != null) {
+                    mainSideBackdrop.setBounds(0, 0, screenW, screenH);
+                    mainSideBackdrop.draw(canvas);
+                } else canvas.drawColor(HyperOsStyle.page(ctx));
+                canvas.restoreToCount(backdropSave);
             }
-        }, 4000L);
+            super.dispatchDraw(canvas);
+            if (contentShareHover != null) {
+                contentSharePaint.setStyle(android.graphics.Paint.Style.STROKE);
+                contentSharePaint.setStrokeWidth(HyperOsStyle.dp(ctx, 2f));
+                contentSharePaint.setColor(HyperOsStyle.CONTROL_ACCENT);
+                float inset=HyperOsStyle.dp(ctx, 3f);
+                canvas.drawRect(contentShareHover.left+inset,contentShareHover.top+inset,
+                        contentShareHover.right-inset,contentShareHover.bottom-inset,contentSharePaint);
+            }
+            if (layout == null || workspaceAlpha <= 0f || mainSideAnimator != null) return;
+            int saved = canvas.save();
+            android.graphics.RectF main = workspaceMainHole();
+            canvas.clipOutRect(main);
+            WorkspaceDividers.draw(canvas, layout, HyperOsStyle.dp(ctx, 1f), workspaceAlpha, divider);
+            canvas.restoreToCount(saved);
+
+        }
+        @Override public boolean dispatchTouchEvent(MotionEvent event) {
+            if (contentShare != null && contentShare.busy()) return true;
+            if (transitionInput != null && transitionInput.consume(event.getActionMasked())) return true;
+            boolean wasCaptured = sideCaptured;
+            if (trackSideScroll(event)) {
+                if (!wasCaptured && event.getActionMasked() == MotionEvent.ACTION_MOVE) {
+                    MotionEvent cancel = MotionEvent.obtain(event);
+                    cancel.setAction(MotionEvent.ACTION_CANCEL);
+                    try { super.dispatchTouchEvent(cancel); } finally { cancel.recycle(); }
+                }
+                return true;
+            }
+            return super.dispatchTouchEvent(event) || sideArmed;
+        }
+    };
+    transitionInput = new TransitionInput(root, this::acquireTransitionInputWindow, this::releaseTransitionInputWindow, blocked -> {
+        liveSwapInputBlocked = blocked;
+        for (Slot slot : slots) if (slot != null && slot.index > 0) updateTouchRegion(slot);
+        if (root != null) { root.requestLayout(); root.invalidate(); }
+    }, WorkspaceHost::log);
+    root.setClipChildren(false);
+    root.setBackgroundColor(0x00000000);
+    }
+
+    /** Cross-window drag and drop, wired to the main and side targets. */
+    private void createContentShare() {
+    contentShare = new ContentShare(ctx, new ContentShare.Host() {
+        public boolean available() { return canShareContent(); }
+        public ContentShare.Target main() { return shareMainTarget(); }
+        public ContentShare.Target slot(int index) { return shareSideTarget(index); }
+        public ContentShare.Target findSide(ContentShare.Target original) { return findShareSide(original); }
+        public ContentShare.Target at(float x,float y) {
+            if (layout==null || x<layout.cellX || x>=layout.cellX+layout.cellWidth || y<layout.topStrip) return null;
+            for (Slot slot:slots) if(slot!=null && slot.index>SLOT_MAIN && slot.index!=SLOT_TOP
+                    && presentsSlot(slot) && slot.rect!=null && x>=slot.rect[0] && x<slot.rect[2]
+                    && y>=slot.rect[1] && y<slot.rect[3])
+                return shareSideTarget(slot.index);
+            return null;
+        }
+        public void highlight(ContentShare.Target target) {
+            Slot slot=target==null?null:slots[target.slot];
+            contentShareHover=slot==null||slot.rect==null?null:new Rect(slot.rect[0],slot.rect[1],slot.rect[2],slot.rect[3]);
+            if(root!=null)root.invalidate();
+        }
+        public void exchange(ContentShare.Target source,ContentShare.Target target,Consumer<Boolean> complete) {
+            if(!canShareContent() || !source.same(shareMainTarget()) || !target.same(shareSideTarget(target.slot))) {
+                complete.accept(false);return;
+            }
+            final long epoch=sceneEpoch;
+            swapWithMain(target.slot);
+            awaitContentShareExchange(source,target,epoch,SystemClock.uptimeMillis()+6500L,complete);
+        }
+    });
+    root.setOnDragListener((view,event)->contentShare!=null && contentShare.onDrag(event));
+    root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+        @Override public void onViewAttachedToWindow(View view) { observeSideViewportRoot(view); }
+        @Override public void onViewDetachedFromWindow(View view) { if(contentShare!=null)contentShare.cancel(); }
+    });
+    installHostTouchRegion();
+    }
+
+    /** Register the overlay window and the layers that live inside it. */
+    private void createHostWindow(int w, int h) {
+    wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+    lp = new WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT);
+    lp.gravity = Gravity.TOP | Gravity.START;
+    lp.setTitle("WorkspaceHost");
+    HostWindowPolicy.configure(lp);
+    // APPLICATION_OVERLAY 默认被状态栏/cutout 顶下去（真机 122px）。两者都关掉后
+    // 窗口坐标系才等于屏幕坐标系（[0,0]-[1080,2460]）。
+    try {
+        lp.setFitInsetsTypes(0);
+        log("fitInsetsTypes=0 applied");
+    } catch (Throwable t) {
+        log("setFitInsetsTypes failed: " + t);
+    }
+    try {
+        lp.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        log("cutoutMode=ALWAYS applied");
+    } catch (Throwable t) {
+        log("cutout mode failed: " + t);
+    }
+    wm.addView(root, lp);
+    registerDefaultDisplayListener();
+    createMirrorLayer();
+    log("host 2.9.41 HyperOS glass added " + w + "x" + h
+            + " privateFlags=0x" + Integer.toHexString(
+                    XposedHelpers.getIntField(lp, "privateFlags")));
+    // v1.3.3：呼出OneStepLite = 整块屏缩进主区（写缩放触发文件，system_server 轮询执行）。
+    main.postDelayed(this::collapseStatusBarPanels, 220L);
+    }
+
+    /** The header, the application rail, and the backing views behind each side cell. */
+    private void createTopBar() {
+    // Host-owned toolbar and app strip, matching the OneStepLite 3.0 interaction surface.
+    try {
+        java.util.List<QuickApp> quickApps;
+        try {
+            quickApps = Warmup.quickApps(ctx);
+        } catch (Throwable error) {
+            quickApps = java.util.Collections.emptyList();
+            log("top app strip unavailable: " + error);
+        }
+        topBar = new TopBar(ctx, layout, quickApps, new TopBar.Listener() {
+            @Override public void onOpenSettings() { openSettingsInMain(); }
+            @Override public void onSetMainSide(boolean right) {
+                if (scene != ACTIVE || workspaceEntering || promotion != null || transferBusy
+                        || cellMotion != null || isSideMotionRunning() || holdsLiveFlipZoom()) return;
+                switchMainSideAnimated(right);
+            }
+            @Override public void onExit() {
+                log("top bar exit tapped");
+                toggleVisibility();
+            }
+            @Override public void onLaunch(QuickApp entry) { launchQuick(entry); }
+            @Override public boolean canCustomizeApps() {
+                return scene == ACTIVE && screenOn && !keyguardLocked
+                        && promotion == null && !transferBusy
+                        && (!topFace || layout.tabletLandscape && tabletToolsOpen);
+            }
+
+            @Override public void onOpenLandscape() { openTopFace(true); }
+            @Override public void onTaskCellsCovered(boolean covered) { setTaskCellsCovered(covered); }
+        });
+        refreshQuickApps();
+        topStripBacking = new View(ctx);
+        topStripBacking.setBackgroundColor(0xFF1E2420);
+        root.addView(topStripBacking, new FrameLayout.LayoutParams(-1, layout.topStrip));
+        topLiveClip=new FrameLayout(ctx) {
+            @Override protected void dispatchDraw(android.graphics.Canvas canvas) {
+                int saved = canvas.save();
+                if (layout != null && !layout.tabletLandscape && workspaceAlpha < 1f)
+                    canvas.clipOutRect(workspaceMainHole());
+                super.dispatchDraw(canvas);
+                canvas.restoreToCount(saved);
+            }
+        };
+        topLiveClip.setClipChildren(true);
+        topLiveClip.setClipToPadding(true);
+        topLiveClip.setClipBounds(new Rect(0,0,screenW,layout.tabletLandscape?screenH:layout.topStrip));
+        root.addView(topLiveClip,new FrameLayout.LayoutParams(-1,layout.tabletLandscape?-1:layout.topStrip));
+        topLiveClip.addView(topBar, new FrameLayout.LayoutParams(-1, layout.topStrip));
+        topBar.setStatusBarInset(DeviceProfile.statusBarHeightPx(ctx));
+        main.post(this::applyWallpaperBackdrops);
+        for (int i = 1; i < CELL_SLOT_COUNT; i++) {
+            View backing = new View(ctx);
+            backing.setBackgroundColor(HyperOsStyle.page(ctx));
+            int[] cell=layout.cellBounds(i-1);
+            FrameLayout.LayoutParams rlp =
+                    new FrameLayout.LayoutParams(layout.tabletLandscape?cell[2]-cell[0]:layout.sideWidth, sideSegmentHeight(i));
+            rlp.leftMargin = layout.tabletLandscape?cell[0]:layout.mainOnRight ? 0 : layout.mainWidth;
+            rlp.topMargin = sideSegmentTop(i);
+            backing.setLayoutParams(rlp);
+            root.addView(backing);
+            sideBackingViews[i] = backing;
+        }
+        log("OneStepLite top bar ready shortcuts=" + quickApps.size());
+    } catch (Throwable t) {
+        log("top bar add failed: " + t);
+    }
+    }
+
+    /** Re-assert the hot zone and the cell transforms every four seconds. */
+    private void startWorkspaceHeartbeat() {
+    // v0.9.9：心跳保证热区始终在位上（面板关闭路径异常时也能自动恢复，否则会卡在"撤下"）。
+    main.postDelayed(new Runnable() {
+        @Override
+        public void run() {
+            if (root == null || sInstance != WorkspaceHost.this) {
+                return;
+            }
+            if (scene != ACTIVE || !screenOn || keyguardLocked || root.getVisibility() != View.VISIBLE) {
+                main.postDelayed(this, 4000L);
+                return;
+            }
+            if (layout != null && !holdsLiveFlipZoom()
+                    && android.os.SystemClock.uptimeMillis() >= zoomAnimUntil) {
+                writeZoom(true);
+            }
+            if (carrierSlotIndex >= 0) {
+                reassertCarrier();
+            }
+            if (!zoomed && !HotZoneGesture.isAttached()) {
+                log("hotzone heartbeat: re-raise");
+                HotZoneGesture.raiseAll(ctx);
+            }
+            // v1.1.3：转场可能覆盖 leash 的位置/矩阵（"只显示一部分"），心跳里周期性重发。
+            for (Slot s : slots) {
+                if (holdsLiveFlipZoom()) continue;
+                if (s.carrier || s.index == leashPocSlot) {
+                    continue;
+                }
+                ensureCellBackground(s);
+                if (!s.occupied || s.promoting) {
+                    continue;
+                }
+                reapplyScale(s);
+                if (!s.taskVisible) scheduleSideVisibilityRepair(s);
+            }
+            main.postDelayed(this, 4000L);
+        }
+    }, 4000L);
     }
 
     private void createSubViews() {

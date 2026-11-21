@@ -12,8 +12,8 @@ def method(signature):
         n+=(host[i]=='{')-(host[i]=='}');i+=1
     return host[a:i]
 methods='\n'.join(method(s) for s in ['    private boolean onSlotTouch(', '    private void recycleBuffered('])
-start=host.index('            installed.add(XposedHelpers.findAndHookMethod(view, "onComputeInternalInsets",')
-end=host.index('            }));',start)+len('            }));')
+start=host.index('        installed.add(XposedHelpers.findAndHookMethod(view, "onComputeInternalInsets",')
+end=host.index('        }));',start)+len('        }));')
 hook=host[start:end].replace('WorkspaceHost h', 'SideTouchRegression h')
 text='''package io.github.zerohomers0.onesteplite;import java.util.*;
 public class SideTouchRegression {
