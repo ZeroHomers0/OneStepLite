@@ -15,7 +15,7 @@ final class SystemUiRotation {
     private boolean updating;
 
     static boolean privacyWindow(int type, String pkg, CharSequence title) {
-        return type == 2017 && Packages.SYSTEM_UI.equals(pkg)
+        return type == WindowTypes.SYSTEM_UI_DIALOG && Packages.SYSTEM_UI.equals(pkg)
                 && title != null && "FlaresView".contentEquals(title);
     }
     private static boolean imeWindow(Object window) {
@@ -28,7 +28,7 @@ final class SystemUiRotation {
             // windows. The root can be surface-less while the child is visible,
             // so relying on the window type alone leaves that child unrotated.
             if (XposedHelpers.getBooleanField(window, "mIsImWindow")) return true;
-        } catch (Throwable ignored) { }
+        } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         try {
             Object parent = XposedHelpers.getObjectField(window, "mParentWindow");
             if (parent == null) return false;
@@ -42,10 +42,12 @@ final class SystemUiRotation {
         int type = XposedHelpers.getIntField(attrs, "type");
         if (type == 2011 || type == 2012 || imeWindow(window)) return true;
         if (!Packages.SYSTEM_UI.equals(XposedHelpers.getObjectField(attrs, "packageName"))) return false;
-        if (type == 2017 && "OneStepLiteQuickAppPicker".contentEquals(
+        if (type == WindowTypes.SYSTEM_UI_DIALOG && "OneStepLiteQuickAppPicker".contentEquals(
                 (CharSequence) XposedHelpers.callMethod(attrs, "getTitle"))) return false;
-        return type == 2000 || type == 2019 || type == 2040 || type == 2008 || type == 2014
-                || type == 2017 || type == 2020 || type == 2024;
+        return type == WindowTypes.STATUS_BAR || type == WindowTypes.GESTURE_NAVIGATION
+                || type == WindowTypes.NOTIFICATION_SHADE || type == WindowTypes.SYSTEM_DIALOG
+                || type == WindowTypes.KEYGUARD_SCRIM || type == WindowTypes.SYSTEM_UI_DIALOG
+                || type == WindowTypes.SYSTEM_UI_PANEL || type == WindowTypes.MAGNIFICATION_OVERLAY;
     }
     private static Object state(Object token) {
         return XposedHelpers.getObjectField(token, "mFixedRotationTransformState");

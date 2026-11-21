@@ -60,7 +60,7 @@ final class LiveSwapZoom {
 
     static void closeReplay(Object replay) {
         if (replay instanceof AutoCloseable) {
-            try { ((AutoCloseable) replay).close(); } catch (Exception ignored) {}
+            try { ((AutoCloseable) replay).close(); } catch (Exception ignored) { /* best effort: the platform may already have released this */ }
         }
     }
 

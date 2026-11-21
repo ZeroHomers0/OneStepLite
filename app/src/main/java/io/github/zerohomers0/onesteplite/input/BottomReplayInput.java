@@ -116,7 +116,7 @@ final class BottomReplayInput {
         Object old = receiver;
         receiver = null;
         swipe.reset();
-        if (old != null) try { XposedHelpers.callMethod(old, "dispose"); } catch (Throwable ignored) { }
+        if (old != null) try { XposedHelpers.callMethod(old, "dispose"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         if (channel != null) channel.close();
         channel = null;
     }

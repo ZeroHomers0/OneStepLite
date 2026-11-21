@@ -212,7 +212,7 @@ final class ShellCompat {
                 try {
                     Object task = XposedHelpers.getObjectField(args[1], "mTaskInfo");
                     if (task != null) XposedHelpers.callMethod(args[1], "notifyTaskRemovalStarted", task);
-                } catch (Throwable ignored) { }
+                } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
                 return null;
             default: throw new IllegalStateException("Unsupported native Shell operation: " + name);
         }

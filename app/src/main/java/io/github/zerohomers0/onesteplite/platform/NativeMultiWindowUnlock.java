@@ -66,7 +66,7 @@ final class NativeMultiWindowUnlock {
                     Object user = XposedHelpers.callStaticMethod(android.os.UserHandle.class, "getCallingUserId");
                     Object info = XposedHelpers.callMethod(pm, "getActivityInfo", p.args[0], 1024L, user);
                     if (info != null) p.setResult(true);
-                } catch (Throwable ignored) { }
+                } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
         });
     }

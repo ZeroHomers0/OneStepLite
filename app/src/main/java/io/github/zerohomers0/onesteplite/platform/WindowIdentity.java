@@ -13,7 +13,7 @@ final class WindowIdentity {
             if (XposedHelpers.callMethod(window, "getDisplayContent") != display) return false;
             WindowManager.LayoutParams attrs = (WindowManager.LayoutParams)
                     XposedHelpers.getObjectField(window, "mAttrs");
-            if (attrs.type != 2038 || !Packages.SYSTEM_UI.equals(attrs.packageName)
+            if (attrs.type != WindowTypes.APPLICATION_OVERLAY || !Packages.SYSTEM_UI.equals(attrs.packageName)
                     || !"WorkspaceHost".contentEquals(attrs.getTitle())
                     || (attrs.flags & WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED) != 0) return false;
             int uid = XposedHelpers.getIntField(window, "mOwnerUid");

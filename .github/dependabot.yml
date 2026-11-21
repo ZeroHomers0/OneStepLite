@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Gradle: the Android Gradle plugin and the Gradle wrapper.
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build"
+    groups:
+      gradle:
+        patterns: ["*"]
+
+  # GitHub Actions: the pinned action SHAs.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]

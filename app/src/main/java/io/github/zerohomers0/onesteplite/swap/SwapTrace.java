@@ -68,7 +68,7 @@ final class SwapTrace implements AutoCloseable {
             Object token = XposedHelpers.getObjectField(info, "token");
             for (int i = 0; i < ids.length; i++)
                 if (ids[i] == id && tokens[i] != null && tokens[i].equals(token)) return true;
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         return false;
     }
 
@@ -76,7 +76,7 @@ final class SwapTrace implements AutoCloseable {
         if (surface == null || closed || surfaces.containsKey(surface)) return;
         String nativeId = "unavailable";
         try { nativeId = String.valueOf(XposedHelpers.callMethod(surface, "getLayerId")); }
-        catch (Throwable ignored) {}
+        catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         surfaces.put(surface, role + "/java@" + Integer.toHexString(System.identityHashCode(surface))
                 + "/layer=" + nativeId);
         note("surface", surfaces.get(surface) + " valid=" + valid(surface));
@@ -216,7 +216,7 @@ final class SwapTrace implements AutoCloseable {
         closed = true;
         main.removeCallbacks(timeout);
         for (XC_MethodHook.Unhook hook : hooks) {
-            try { hook.unhook(); } catch (Throwable ignored) {}
+            try { hook.unhook(); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         }
         hooks.clear(); surfaces.clear(); transactions.clear();
         try {

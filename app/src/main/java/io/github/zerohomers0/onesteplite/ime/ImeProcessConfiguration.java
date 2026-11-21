@@ -78,7 +78,7 @@ final class ImeProcessConfiguration {
         } catch (Throwable error) {
             owned.remove(process);
             // Undo a partially applied native update before propagating the failure.
-            try { dispatchFromParent(process); } catch (Throwable ignored) { }
+            try { dispatchFromParent(process); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             throw error;
         }
     }

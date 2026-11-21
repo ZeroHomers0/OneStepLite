@@ -12,7 +12,7 @@ final class HostWindowPolicy {
 
     static void configure(WindowManager.LayoutParams params) {
         // These windows belong to SystemUI, which holds INTERNAL_SYSTEM_WINDOW.
-        // A transparent hole in a 2038 window's touch region alone does not prevent
+        // A transparent hole in an application-overlay window's touch region alone does not prevent
         // InputDispatcher from rejecting touches to the application underneath.
         XposedHelpers.callMethod(params, "setTrustedOverlay");
         int flags = XposedHelpers.getIntField(params, "privateFlags");

@@ -40,5 +40,5 @@ public class PanelInputRegression {
   System.out.println("actual native panel sample/trace checks="+checks+" passed");
  }
 }''',encoding='utf8')
-subprocess.run([str(JDK/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(OUT),str(test),str(package_dir(ROOT)/'PanelInputCoordinates.java'),str(package_dir(ROOT)/'Packages.java')],check=True)
+subprocess.run([str(JDK/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(OUT),str(test),str(package_dir(ROOT)/'PanelInputCoordinates.java'),str(package_dir(ROOT)/'Packages.java'),str(package_dir(ROOT)/'WindowTypes.java')],check=True)
 subprocess.run([str(JDK/'java.exe'),'-cp',str(OUT),'io.github.zerohomers0.onesteplite.PanelInputRegression'],check=True)

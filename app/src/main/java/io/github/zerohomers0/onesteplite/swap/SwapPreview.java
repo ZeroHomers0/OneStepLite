@@ -187,11 +187,11 @@ final class SwapPreview {
         // translucent/transformed first frames expose the live TaskViews underneath.
         overlayParams.windowAnimations = 0;
         HostWindowPolicy.configure(overlayParams);
-        try { overlayParams.setFitInsetsTypes(0); } catch (Throwable ignored) {}
+        try { overlayParams.setFitInsetsTypes(0); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         try {
             overlayParams.layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         overlayWindowManager.addView(overlayRoot, overlayParams);
         animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(DURATION_MS);

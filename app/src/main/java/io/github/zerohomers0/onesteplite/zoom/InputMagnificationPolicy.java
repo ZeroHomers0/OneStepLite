@@ -7,8 +7,9 @@ final class InputMagnificationPolicy {
     private InputMagnificationPolicy() {}
 
     static boolean shouldForceMagnification(int windowType, int privateFlags) {
-        if (windowType == 2024 || windowType == 2027 || windowType == 2039) return false;
-        if (windowType == 2011 || windowType == 2012 || windowType == 2019) return true;
+        if (windowType == WindowTypes.MAGNIFICATION_OVERLAY || windowType == WindowTypes.BUBBLE_LAYER
+                || windowType == WindowTypes.BRIGHTNESS_LAYER) return false;
+        if (windowType == 2011 || windowType == 2012 || windowType == WindowTypes.GESTURE_NAVIGATION) return true;
         return (privateFlags & PRIVATE_FLAG_EXCLUDE_FROM_MAGNIFICATION) != 0;
     }
 
@@ -17,11 +18,11 @@ final class InputMagnificationPolicy {
         if (shouldExcludeFromMagnification(windowType, packageName, title)) return false;
         // OS4's real permission capsule, dot, RemoteViews and touch area share
         // this window. Admit the whole native window, without changing its state.
-        if (windowType == 2017 && Packages.SYSTEM_UI.equals(packageName)
+        if (windowType == WindowTypes.SYSTEM_UI_DIALOG && Packages.SYSTEM_UI.equals(packageName)
                 && title != null && "FlaresView".contentEquals(title)) return true;
         // The independent pin icon window must share WM's visual and input
-        // transform. Other 2027 gesture windows keep their native policy.
-        if (windowType == 2027 && Packages.SYSTEM_UI.equals(packageName)
+        // transform. Other bubble-layer gesture windows keep their native policy.
+        if (windowType == WindowTypes.BUBBLE_LAYER && Packages.SYSTEM_UI.equals(packageName)
                 && title != null && "MiuiBubbles".contentEquals(title)) return true;
         return shouldForceMagnification(windowType, privateFlags);
     }

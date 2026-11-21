@@ -1,8 +1,16 @@
 import java.security.MessageDigest
+import groovy.json.JsonSlurper
 
 plugins {
     alias(libs.plugins.android.application)
 }
+
+// version.json stays the single source of truth: build.ps1 reads it, and the
+// runtime marker asserted by both build paths lives there too.
+val versionFile = rootProject.file("version.json")
+val versionInfo = JsonSlurper().parse(versionFile) as Map<*, *>
+val appVersionName = versionInfo["name"] as String
+val appVersionCode = (versionInfo["code"] as Number).toInt()
 
 android {
     namespace = "io.github.zerohomers0.onesteplite"
@@ -17,12 +25,20 @@ android {
         applicationId = "io.github.zerohomers0.onesteplite"
         minSdk = 34
         targetSdk = 37
-        versionCode = 1000248
-        versionName = "1.0.4"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         ndk {
             abiFilters += "arm64-v8a"
         }
+    }
+
+    // Lint runs in CI. The baseline records the findings that are inherent to
+    // an LSPosed module; anything new still fails the build.
+    lint {
+        baseline = file("lint-baseline.xml")
+        abortOnError = true
+        checkReleaseBuilds = true
     }
 
     // The release key never lives in the repository. Provide it through the

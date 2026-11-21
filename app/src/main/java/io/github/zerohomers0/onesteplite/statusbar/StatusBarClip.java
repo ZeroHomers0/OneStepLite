@@ -18,7 +18,7 @@ final class StatusBarClip {
         if (window == null || display == null
                 || XposedHelpers.callMethod(window, "getDisplayContent") != display) return;
         Object attrs = XposedHelpers.getObjectField(window, "mAttrs");
-        if (XposedHelpers.getIntField(attrs, "type") != 2000
+        if (XposedHelpers.getIntField(attrs, "type") != WindowTypes.STATUS_BAR
                 || !Packages.SYSTEM_UI.equals(XposedHelpers.getObjectField(attrs, "packageName"))) return;
         Object token = XposedHelpers.getObjectField(window, "mToken");
         if (token == null || XposedHelpers.callMethod(token, "getParent") == null) return;

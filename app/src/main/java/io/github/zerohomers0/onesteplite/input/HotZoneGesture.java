@@ -387,6 +387,6 @@ public final class HotZoneGesture {
     private static void log(String message) {
         android.util.Log.i(Tags.PROBE, message);
         try { de.robv.android.xposed.XposedBridge.log("OneStepLiteProbe: " + message); }
-        catch (Throwable ignored) {}
+        catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
     }
 }

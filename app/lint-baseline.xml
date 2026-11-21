@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 9.3.0" type="baseline" client="gradle" dependencies="false" name="AGP (9.3.0)" variant="all" version="9.3.0">
+
+    <issue
+        id="InternalInsetResource"
+        message="Using internal inset dimension resource `status_bar_height` is not supported"
+        errorLine1="            int id = context.getResources().getIdentifier(&quot;status_bar_height&quot;, &quot;dimen&quot;, &quot;android&quot;);"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/platform/DeviceProfile.java"
+            line="81"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="QueryPermissionsNeeded"
+        message="Consider adding a `&lt;queries>` declaration to your manifest when calling this method; see https://g.co/dev/packagevisibility for details"
+        errorLine1="        List&lt;ResolveInfo> matches=context.getPackageManager().queryIntentActivities(intent,0);"
+        errorLine2="                                                              ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/share/ContentShare.java"
+            line="184"
+            column="63"/>
+    </issue>
+
+    <issue
+        id="QueryPermissionsNeeded"
+        message="Consider adding a `&lt;queries>` declaration to your manifest when calling this method; see https://g.co/dev/packagevisibility for details"
+        errorLine1="        List&lt;ResolveInfo> infos = pm.queryIntentActivities(main, 0);"
+        errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/workspace/QuickApp.java"
+            line="35"
+            column="38"/>
+    </issue>
+
+    <issue
+        id="AndroidGradlePluginVersion"
+        message="A newer version of Gradle than 9.5.0 is available: 9.9.2"
+        errorLine1="distributionUrl=https\://services.gradle.org/distributions/gradle-9.5.0-bin.zip"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="../gradle/wrapper/gradle-wrapper.properties"
+            line="4"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="AndroidGradlePluginVersion"
+        message="A newer version of com.android.application than 9.3.0 is available: 9.5.2. (There is also a newer version of 9.3.𝑥 available, if upgrading to 9.5.2 is difficult: 9.3.3)"
+        errorLine1="agp = &quot;9.3.0&quot;"
+        errorLine2="      ~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="2"
+            column="7"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
+        errorLine1="            int id = context.getResources().getIdentifier(&quot;status_bar_height&quot;, &quot;dimen&quot;, &quot;android&quot;);"
+        errorLine2="                                            ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/platform/DeviceProfile.java"
+            line="81"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
+        errorLine1="        int identifier = context.getResources().getIdentifier(&quot;system_accent1_200&quot;, &quot;color&quot;, &quot;android&quot;);"
+        errorLine2="                                                ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/chrome/HyperOsStyle.java"
+            line="70"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
+        errorLine1="        int id = context.getResources().getIdentifier(name, &quot;anim&quot;, &quot;android&quot;);"
+        errorLine2="                                        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/statusbar/RotationAnimation.java"
+            line="216"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
+        errorLine1="                int id = systemSettingsResources.getIdentifier(name, &quot;color&quot;, Packages.SETTINGS);"
+        errorLine2="                                                 ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/SettingsActivity.java"
+            line="104"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
+        errorLine1="                int id = systemSettingsResources.getIdentifier(name, &quot;dimen&quot;, Packages.SETTINGS);"
+        errorLine2="                                                 ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/SettingsActivity.java"
+            line="114"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
+        errorLine1="                int id = systemSettingsResources.getIdentifier(name, &quot;drawable&quot;, Packages.SETTINGS);"
+        errorLine2="                                                 ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/SettingsActivity.java"
+            line="124"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
+        errorLine1="                        int icon = activity.getResources().getIdentifier("
+        errorLine2="                                                           ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/core/SystemSettingsEntry.java"
+            line="42"
+            column="60"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
+        errorLine1="                        int device = activity.getResources().getIdentifier(&quot;my_device&quot;, &quot;id&quot;, Packages.SETTINGS);"
+        errorLine2="                                                             ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/core/SystemSettingsEntry.java"
+            line="47"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="DiscouragedApi"
+        message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
+        errorLine1="                            int id = resources.getIdentifier(&quot;ic_settings_onesteplite&quot;, &quot;drawable&quot;, &quot;io.github.zerohomers0.onesteplite&quot;);"
+        errorLine2="                                               ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/core/SystemSettingsEntry.java"
+            line="98"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="ChromeOsAbiSupport"
+        message="Missing x86_64 ABI support for ChromeOS"
+        errorLine1="            abiFilters += &quot;arm64-v8a&quot;"
+        errorLine2="                          ~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="32"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="SetWorldReadable"
+        message="Setting file permissions to world-readable can be risky, review carefully"
+        errorLine1="                if (!f.setReadable(true, false)) {"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/WorkspaceHost.java"
+            line="3589"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="ExportedContentProvider"
+        message="Exported content providers can provide access to potentially sensitive data"
+        errorLine1="    &lt;provider android:name=&quot;.WorkspaceSettingsProvider&quot; android:authorities=&quot;io.github.zerohomers0.onesteplite.settings&quot; android:directBootAware=&quot;true&quot; android:exported=&quot;true&quot; />"
+        errorLine2="     ~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="4"
+            column="6"/>
+    </issue>
+
+    <issue
+        id="DrawAllocation"
+        message="Avoid object allocations during draw/layout operations (preallocate and reuse instead)"
+        errorLine1="        geometry=new TopBarGeometry(width,height,statusBarInset,getResources().getDisplayMetrics().density,"
+        errorLine2="                 ^">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/top/TopBar.java"
+            line="133"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `BottomReplayInput` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="    private static BottomReplayInput instance;"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/input/BottomReplayInput.java"
+            line="22"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `Clipboard` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="    private static Clipboard instance;"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/clipboard/Clipboard.java"
+            line="32"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    private static volatile Context sContext;"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/HostEntry.java"
+            line="70"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    private static View sWindowRoot;"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/HostEntry.java"
+            line="76"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `ZoomCommit` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="    private static ZoomCommit sLiveZoomCommit;"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/HostEntry.java"
+            line="189"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    private static volatile android.content.Context sWmsContext;"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/HostEntry.java"
+            line="579"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `HotZoneGesture` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="    private static HotZoneGesture instance;"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/input/HotZoneGesture.java"
+            line="18"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields; this is a memory leak"
+        errorLine1="    private static Context context;"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/input/InputTrace.java"
+            line="39"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `VideoDock` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="    private static VideoDock instance;"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/video/VideoDock.java"
+            line="40"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `WorkspaceHost` which has field `tabletTools` pointing to `FrameLayout`); this is a memory leak"
+        errorLine1="    private static volatile WorkspaceHost sInstance;"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/WorkspaceHost.java"
+            line="69"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_settings_onesteplite` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_settings_onesteplite.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="            label.setText(&quot;OneStepLite宿主 v0.3 — 真实应用承载测试&quot;);"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/HostEntry.java"
+            line="4440"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders."
+        errorLine1="        Runnable count = () -> summary.setText(&quot;已选 &quot; + chosen.size() + &quot; 个&quot;);"
+        errorLine2="                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/workspace/QuickAppPicker.java"
+            line="113"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="            title=new TextView(context);title.setText(&quot;One Step&quot;);title.setGravity(android.view.Gravity.CENTER);"
+        errorLine2="                                                      ~~~~~~~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/top/TopBar.java"
+            line="151"
+            column="55"/>
+    </issue>
+
+    <issue
+        id="RtlHardcoded"
+        message="Use &quot;`Gravity.START`&quot; instead of &quot;`Gravity.LEFT`&quot; to ensure correct behavior in right-to-left locales"
+        errorLine1="        try{controlPopup.showAtLocation(this,Gravity.TOP|Gravity.LEFT,origin[0]+Math.max(dp(8),getWidth()-dp(108)),origin[1]+Math.max(dp(8),getHeight()-dp(56)));"
+        errorLine2="                                                                 ~~~~">
+        <location
+            file="src/main/java/io/github/zerohomers0/onesteplite/video/VideoPane.java"
+            line="91"
+            column="66"/>
+    </issue>
+
+</issues>

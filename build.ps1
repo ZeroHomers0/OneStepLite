@@ -47,7 +47,8 @@ if ($recommendedScope.Count -ne 1 -or
     throw 'Recommended scope must contain system framework, SystemUI and the Settings entry host.'
 }
 $entry = Get-Content -LiteralPath (Join-Path $src 'java\io\github\zerohomers0\onesteplite\HostEntry.java') -Raw
-if ([regex]::Matches($entry,[regex]::Escape($version.runtimeMarker)).Count -ne 3) { throw 'Runtime markers mismatch.' }
+# The marker is declared once as RUNTIME_MARKER and referenced by the three attach logs.
+if ([regex]::Matches($entry,[regex]::Escape($version.runtimeMarker)).Count -ne 1) { throw 'Runtime markers mismatch.' }
 # Deleted source classes must never survive in the next APK.
 $classOutput = [IO.Path]::GetFullPath((Join-Path $out 'classes'))
 $expectedClassOutput = [IO.Path]::GetFullPath((Join-Path $root 'build\classes'))

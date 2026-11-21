@@ -98,7 +98,7 @@ final class InputTrace {
         boolean allowed = false;
         try { allowed = keyguard != null && power != null
                 && !keyguard.isKeyguardLocked() && power.isInteractive(); }
-        catch (Throwable ignored) { }
+        catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         if (!allowed) {
             finish(GATE.generation());
             return false;
@@ -124,7 +124,7 @@ final class InputTrace {
         try (java.io.FileInputStream stream = new java.io.FileInputStream("/proc/sys/kernel/random/boot_id")) {
             String id = new String(stream.readNBytes(64), StandardCharsets.US_ASCII).trim();
             if (id.matches("[a-fA-F0-9-]{36}")) return id;
-        } catch (Throwable ignored) { }
+        } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         return "unavailable";
     }
 
@@ -138,11 +138,11 @@ final class InputTrace {
         windowsRecorded = false;
         lastFrame = 0;
         for (XC_MethodHook.Unhook hook : HOOKS) {
-            try { hook.unhook(); } catch (Throwable ignored) { }
+            try { hook.unhook(); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         }
         HOOKS.clear();
         if (globalReceiver != null) {
-            try { XposedHelpers.callMethod(globalReceiver, "dispose"); } catch (Throwable ignored) { }
+            try { XposedHelpers.callMethod(globalReceiver, "dispose"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             globalReceiver = null;
         }
         if (globalChannel != null) {
@@ -249,7 +249,7 @@ final class InputTrace {
                         if (view == null) return;
                         WindowManager.LayoutParams lp = (WindowManager.LayoutParams)
                                 XposedHelpers.getObjectField(root, "mWindowAttributes");
-                        if (lp.type != 2000 && lp.type != 2040
+                        if (lp.type != WindowTypes.STATUS_BAR && lp.type != WindowTypes.NOTIFICATION_SHADE
                                 && !(lp.type == 2009 && "DynamicIslandWindow".contentEquals(lp.getTitle()))) return;
                         event("window-type=" + lp.type, (MotionEvent) p.args[0]);
                         if (((MotionEvent) p.args[0]).getActionMasked() == MotionEvent.ACTION_DOWN) {
@@ -263,7 +263,7 @@ final class InputTrace {
                     } catch (Throwable error) { unavailable(error); }
                 }
             }));
-        } catch (Throwable ignored) { }
+        } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         try {
             Class<?> container = XposedHelpers.findClass(
                     "com.android.wm.shell.common.transition.animation.MiuiAnimationContainer", cl);
@@ -282,7 +282,7 @@ final class InputTrace {
                     } catch (Throwable error) { unavailable(error); }
                 }
             }));
-        } catch (Throwable ignored) { }
+        } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
     }
 
     private static void hook(ClassLoader cl, String cls, String method, String label) {
@@ -561,7 +561,7 @@ final class InputTrace {
                     }
                 }
             }));
-        } catch (Throwable ignored) { }
+        } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
     }
 
     private static void activeRecents(Object display, String phase) {
@@ -614,13 +614,13 @@ final class InputTrace {
         for (int depth = 0; container != null && depth < 8 && active(); depth++) {
             Object spec = null;
             try { spec = XposedHelpers.getObjectField(container, "mLastMagnificationSpec"); }
-            catch (Throwable ignored) { }
+            catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             String matrix = "none";
             if (spec != null) matrix = XposedHelpers.getFloatField(spec, "scale") + ","
                     + XposedHelpers.getFloatField(spec, "offsetX") + "," + XposedHelpers.getFloatField(spec, "offsetY");
             Object parent = XposedHelpers.callMethod(container, "getParent");
             int taskId = -1;
-            try { taskId = XposedHelpers.getIntField(container, "mTaskId"); } catch (Throwable ignored) { }
+            try { taskId = XposedHelpers.getIntField(container, "mTaskId"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             line("chain depth=" + depth + " class=" + container.getClass().getSimpleName() + " task=" + taskId
                     + " layer=" + layer(XposedHelpers.callMethod(container, "getSurfaceControl"))
                     + " parentLayer=" + (parent == null ? "none" : layer(XposedHelpers.callMethod(parent, "getSurfaceControl")))

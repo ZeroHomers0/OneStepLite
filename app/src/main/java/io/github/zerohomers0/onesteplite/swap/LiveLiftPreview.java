@@ -46,7 +46,7 @@ final class LiveLiftPreview {
             android.util.Log.i("OneStepLiteProbe", "live lift surface transform failed: " + error);
         } finally {
             if (transaction != null) {
-                try { XposedHelpers.callMethod(transaction, "close"); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(transaction, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
         }
     }
@@ -67,7 +67,7 @@ final class LiveLiftPreview {
             android.util.Log.i(Tags.PROBE, "live lift restore failed: " + error);
         } finally {
             if (transaction != null) {
-                try { XposedHelpers.callMethod(transaction, "close"); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(transaction, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
         }
     }

@@ -128,7 +128,7 @@ final class DropPermissions {
                         Lease lease = new Lease(grant, owner, caller);
                         reply.writeNoException(); reply.writeStrongBinder(lease);
                     } catch (Throwable error) {
-                        if (grant != null) try { XposedHelpers.callMethod(grant, "release"); } catch (Throwable ignored) {}
+                        if (grant != null) try { XposedHelpers.callMethod(grant, "release"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
                         reply.writeException(new SecurityException("Cannot forward this drop's read permission"));
                         XposedBridge.log("OneStepLiteProbe: content permission refused: " + error);
                     }
@@ -164,8 +164,8 @@ final class DropPermissions {
         void close() {
             if (!closed.compareAndSet(false, true)) return;
             timer.removeCallbacks(expire);
-            try { owner.unlinkToDeath(this, 0); } catch (Throwable alreadyDead) {}
-            try { XposedHelpers.callMethod(grant, "release"); } catch (Throwable ignored) {}
+            try { owner.unlinkToDeath(this, 0); } catch (Throwable alreadyDead) { /* best effort: the owner may already be gone */ }
+            try { XposedHelpers.callMethod(grant, "release"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         }
     }
     private DropPermissions() {}

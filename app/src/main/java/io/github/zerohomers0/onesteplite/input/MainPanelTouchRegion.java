@@ -10,7 +10,7 @@ final class MainPanelTouchRegion {
     static boolean crop(Object window, Object display, Region region,
             WindowManager.LayoutParams attrs) {
         if (window == null || display == null || region == null || attrs == null
-                || attrs.type != 2040 || !Packages.SYSTEM_UI.equals(attrs.packageName)
+                || attrs.type != WindowTypes.NOTIFICATION_SHADE || !Packages.SYSTEM_UI.equals(attrs.packageName)
                 || !"NotificationShade".contentEquals(attrs.getTitle())
                 || XposedHelpers.callMethod(window, "getDisplayContent") != display
                 || XposedHelpers.getObjectField(window, "mActivityRecord") != null) return false;

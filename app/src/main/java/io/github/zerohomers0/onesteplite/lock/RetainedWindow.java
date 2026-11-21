@@ -125,7 +125,7 @@ final class RetainedWindow {
                     }
                 } catch (Throwable error) {
                     try { releaseMain(XposedHelpers.callMethod(p.thisObject, "getPendingTransaction")); }
-                    catch (Throwable ignored) {}
+                    catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
                     window = null; // Never retry a failed native visibility transaction.
                     XposedBridge.log("OneStepLiteProbe: retained native visibility handoff stopped: " + error);
                 }

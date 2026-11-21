@@ -30,6 +30,7 @@ import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.animation.PathInterpolator;
+import android.util.Log;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import java.lang.reflect.Field;
@@ -905,11 +906,11 @@ public final class WorkspaceHost {
             mirrorLayerParams.gravity = Gravity.TOP | Gravity.START;
             mirrorLayerParams.setTitle("OneStepLiteMirrorLayer");
             HostWindowPolicy.configure(mirrorLayerParams);
-            try { mirrorLayerParams.setFitInsetsTypes(0); } catch (Throwable ignored) {}
+            try { mirrorLayerParams.setFitInsetsTypes(0); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             try {
                 mirrorLayerParams.layoutInDisplayCutoutMode =
                         WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-            } catch (Throwable ignored) {}
+            } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             mirrorLayerWm.addView(mirrorLayerRoot, mirrorLayerParams);
             log("mirror layer window added");
         } catch (Throwable error) {
@@ -924,7 +925,7 @@ public final class WorkspaceHost {
             if (mirrorLayerRoot.getVisibility() != (visible ? View.VISIBLE : View.GONE)) {
                 mirrorLayerRoot.setVisibility(visible ? View.VISIBLE : View.GONE);
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
     }
 
     /** mirror 层窗口的 SurfaceControl；失败时返回 null。 */
@@ -1012,7 +1013,7 @@ public final class WorkspaceHost {
                 XposedHelpers.callMethod(tx, "show", mirror);
                 XposedHelpers.callMethod(tx, "apply");
             } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
             mirrorPocSurface = mirror;
             mirrorPocLeash = leash;
@@ -1098,7 +1099,7 @@ public final class WorkspaceHost {
                 XposedHelpers.callMethod(tx, "setMatrix", leash, sx, 0f, 0f, sy);
                 XposedHelpers.callMethod(tx, "apply");
             } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
             if (logSuccess) {
                 log("direct carrier transform ratio=" + ratio + " scale=" + sx + "x" + sy
@@ -1120,7 +1121,7 @@ public final class WorkspaceHost {
                 XposedHelpers.callMethod(tx, "setMatrix", leash, 1f, 0f, 0f, 1f);
                 XposedHelpers.callMethod(tx, "apply");
             } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
             log("direct carrier restored task to main");
         } catch (Throwable error) {
@@ -1153,7 +1154,7 @@ public final class WorkspaceHost {
                 XposedHelpers.callMethod(tx, "remove", mirror);
                 XposedHelpers.callMethod(tx, "apply");
             } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
             XposedHelpers.callMethod(mirror, "release");
             log("mirror POC removed; restoredHideMode=" + hideMode);
@@ -1177,7 +1178,7 @@ public final class WorkspaceHost {
         View box = carrierBackdrop;
         carrierBackdrop = null;
         if (box != null && root != null) {
-            try { root.removeView(box); } catch (Throwable ignored) {}
+            try { root.removeView(box); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             root.requestLayout();
             root.invalidate();
         }
@@ -1224,7 +1225,7 @@ public final class WorkspaceHost {
             View tap = slot.carrierTapView;
             slot.carrierTapView = null;
             if (tap != null && root != null) {
-                try { root.removeView(tap); } catch (Throwable ignored) {}
+                try { root.removeView(tap); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
             slot.occupied = false;
             slot.taskId = -1;
@@ -1270,7 +1271,7 @@ public final class WorkspaceHost {
                                 android.graphics.Rect.class}, leash, null);
                 XposedHelpers.callMethod(tx, "apply");
             } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
             log("main task leash crop cleared task=" + taskId);
         } catch (Throwable error) {
@@ -1464,7 +1465,7 @@ public final class WorkspaceHost {
                 XposedHelpers.callMethod(tx, "apply");
                 leashAnimFrames++;
             } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
         } catch (Throwable error) {
             log("leash anim frame failed: " + error);
@@ -1524,7 +1525,7 @@ public final class WorkspaceHost {
             try {
                 startRotation = (Integer) XposedHelpers.callMethod(change, "getStartRotation");
                 endRotation = (Integer) XposedHelpers.callMethod(change, "getEndRotation");
-            } catch (Throwable ignored) { }
+            } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             boolean rotating = startRotation >= 0 && endRotation >= 0
                     && startRotation != endRotation;
             return TransitionAnimationPolicy.shouldClampOpenBounds(
@@ -2528,7 +2529,7 @@ public final class WorkspaceHost {
                     Object config = XposedHelpers.getObjectField(info, "configuration");
                     Object wc = XposedHelpers.getObjectField(config, "windowConfiguration");
                     mode = (Integer) XposedHelpers.callMethod(wc, "getWindowingMode");
-                } catch (Throwable ignored) {}
+                } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
                 Object token = XposedHelpers.getObjectField(info, "token");
                 boolean side = isSideToken(token);
                 boolean ordinary = ordinaryRoot(info, 1);
@@ -6069,7 +6070,7 @@ public final class WorkspaceHost {
                                 android.graphics.Rect.class}, leash, null);
                 XposedHelpers.callMethod(tx, "apply");
             } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
             log("main task leash reset task=" + taskId);
         } catch (Throwable error) {
@@ -10229,7 +10230,7 @@ public final class WorkspaceHost {
     }
 
     private static void log(String msg) {
-        android.util.Log.i(TAG, msg);
+        Log.i(TAG, msg);
         try {
             XposedBridge.log(TAG + ": " + msg);
         } catch (Throwable ignored) {

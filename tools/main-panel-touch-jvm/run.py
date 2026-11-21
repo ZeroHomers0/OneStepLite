@@ -40,5 +40,5 @@ public class MainPanelTouchRegression {
 for n,s in files.items():
  f=out/n;f.parent.mkdir(parents=True,exist_ok=True);f.write_text(s,encoding='utf-8')
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(package_dir(root)/'MainPanelTouchRegion.java'),str(package_dir(root)/'Packages.java'),*[str(out/n) for n in files]],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(package_dir(root)/'MainPanelTouchRegion.java'),str(package_dir(root)/'Packages.java'),str(package_dir(root)/'WindowTypes.java'),*[str(out/n) for n in files]],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.MainPanelTouchRegression'],check=True)

@@ -48,7 +48,7 @@ final class PassiveInputChannel {
                 }
                 return new PassiveInputChannel(input, monitor);
             } catch (Throwable error) {
-                try { XposedHelpers.callMethod(monitor, "dispose"); } catch (Throwable ignored) { }
+                try { XposedHelpers.callMethod(monitor, "dispose"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
                 throw error;
             }
         }
@@ -58,6 +58,6 @@ final class PassiveInputChannel {
         if (closed) return;
         closed = true;
         try { XposedHelpers.callMethod(monitor == null ? input : monitor, "dispose"); }
-        catch (Throwable ignored) { }
+        catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
     }
 }

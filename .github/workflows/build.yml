@@ -63,9 +63,7 @@ jobs:
           ONESTEPLITE_KEY_ALIAS: ${{ secrets.ONESTEPLITE_KEY_ALIAS }}
           ONESTEPLITE_STORE_PASSWORD: ${{ secrets.ONESTEPLITE_STORE_PASSWORD }}
           ONESTEPLITE_KEY_PASSWORD: ${{ secrets.ONESTEPLITE_KEY_PASSWORD }}
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon --console=plain :app:stageRelease
+        run: ./gradlew --no-daemon --console=plain :app:lintRelease :app:stageRelease
       - name: Collect the APK and checksums
         run: |
           mkdir -p dist/apk

@@ -84,7 +84,7 @@ final class StatusBar {
                             nativePanelExpanded=expanded;
                             try { nativeShadeContext = new WeakReference<>(
                                     XposedHelpers.getObjectField(p.thisObject, "mContext")); }
-                            catch (Throwable ignored) {}
+                            catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
                         }
                         @Override protected void afterHookedMethod(MethodHookParam p) {
                             nativePanelChanged();

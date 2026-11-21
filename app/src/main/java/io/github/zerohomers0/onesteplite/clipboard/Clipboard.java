@@ -230,7 +230,7 @@ final class Clipboard {
         closing = false;
         ViewGroup parent = owner;
         owner = null;
-        try { if (parent != null) parent.removeView(old); } catch (Throwable ignored) {}
+        try { if (parent != null) parent.removeView(old); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
     }
 
     private void animateOpen(LinearLayout panel) {

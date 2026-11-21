@@ -1,6 +1,5 @@
 package io.github.zerohomers0.onesteplite;
 
-import android.app.WallpaperManager;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
@@ -73,6 +72,7 @@ final class HyperOsStyle {
             try {
                 return context.getResources().getColor(identifier, context.getTheme());
             } catch (Throwable th) {
+                /* best effort: fall back to the bundled accent below */
             }
         }
         return dark(context) ? FALLBACK_ACCENT_DARK : FALLBACK_ACCENT_LIGHT;

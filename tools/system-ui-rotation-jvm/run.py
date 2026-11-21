@@ -180,5 +180,5 @@ source=package_dir(ROOT)/'SystemUiRotation.java'
 rect=ROOT/'tools/test-stubs/android/graphics/Rect.java'
 extra=[package_dir(ROOT)/f"{n}.java" for n in
        ["ZoomChannelState","ZoomCommand","ZoomAnimCommand","Packages"]]
-subprocess.run([str(JDK/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(OUT),str(fake),str(rect),str(test),str(area),str(source),str(package_dir(ROOT)/'ImePolicy.java'),str(package_dir(ROOT)/'SideRoleChange.java'),*map(str,extra)],check=True)
+subprocess.run([str(JDK/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(OUT),str(fake),str(rect),str(test),str(area),str(source),str(package_dir(ROOT)/'ImePolicy.java'),str(package_dir(ROOT)/'SideRoleChange.java'),str(package_dir(ROOT)/'WindowTypes.java'),*map(str,extra)],check=True)
 subprocess.run([str(JDK/'java.exe'),'-cp',str(OUT),'io.github.zerohomers0.onesteplite.SystemUiRotationRegression'],check=True)

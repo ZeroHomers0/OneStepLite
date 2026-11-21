@@ -88,5 +88,5 @@ for rel,text in sources.items():
 j=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
 production=package_dir(root)
 subprocess.run([str(j/"javac.exe"),"-encoding","UTF-8","-d",str(out),*files,
- str(production/"BiometricWindow.java"),str(production/"InputMagnificationPolicy.java"),str(production/"Packages.java")],check=True)
+ str(production/"BiometricWindow.java"),str(production/"InputMagnificationPolicy.java"),str(production/"Packages.java"),str(production/"WindowTypes.java")],check=True)
 subprocess.run([str(j/"java.exe"),"-cp",str(out),"io.github.zerohomers0.onesteplite.BiometricWindowRegression"],check=True)

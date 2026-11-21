@@ -14,7 +14,9 @@
 3. **不要在被 `tools/` 切片的方法里新增私有辅助方法**，切片只带走方法体，套件会编译失败。
 4. **新增生产类若被某个套件编译到，必须逐个套件显式加入其 javac 源文件列表**，不要写批量替换脚本。
 5. **`policy/` 不得 import `android.*`**，反射集中在 `platform/`。
-6. **CI 与本地跑同一套检查。** `.github/workflows/build.yml` 的 `apk` 作业执行 `:app:stageRelease`（含 `verifyApk`），`tests` 作业执行 `test.ps1`。改动构建脚本时两边都要能跑通；`tools/assert_module_apk.py` 是唯一的包校验实现，不要再加 PowerShell 版本。
+6. **CI 与本地跑同一套检查。** `.github/workflows/build.yml` 的 `apk` 作业执行 `:app:lintRelease :app:stageRelease`（含 `verifyApk`），`tests` 作业执行 `test.ps1`。改动构建脚本时两边都要能跑通；`tools/assert_module_apk.py` 是唯一的包校验实现，不要再加 PowerShell 版本。
+7. **Lint 基线只增不改。** `app/lint.xml` 只关掉对 LSPosed 模块不适用的检查；`app/lint-baseline.xml` 记录历史问题。新增代码不得往基线里加条目，确认旧条目失效时用 `./gradlew :app:updateLintBaseline` 重新生成并检查 diff。
+8. **版本号只有 `version.json` 一处。** `app/build.gradle.kts` 与 `build.ps1` 都从它读取 `name`/`code`/`runtimeMarker`；不要在任何脚本里再写死版本号。
 
 ## 任务进度通知（Beacon 推送）
 

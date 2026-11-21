@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Lint runs against an LSPosed module, so a few checks report problems that
+  cannot happen here. Everything else is captured in lint-baseline.xml; new
+  findings still fail the build.
+-->
+<lint>
+    <!-- The module runs inside SystemUI / system_server, so the host process
+         already holds these permissions. -->
+    <issue id="MissingPermission" severity="ignore" />
+    <!-- Every private API here is reached through reflection on purpose; that
+         is the whole point of the module. -->
+    <issue id="PrivateApi" severity="ignore" />
+    <!-- Window types, layer types and typefaces are passed as the platform
+         constants they are; lint cannot see through the named constants. -->
+    <issue id="WrongConstant" severity="ignore" />
+    <!-- The views are created by the host window, not by an Activity. -->
+    <issue id="ViewConstructor" severity="ignore" />
+    <!-- Touch handling is delegated to the window manager. -->
+    <issue id="ClickableViewAccessibility" severity="ignore" />
+    <!-- The launcher icon is drawn by the system settings entry. -->
+    <issue id="IconLauncherShape" severity="ignore" />
+</lint>

@@ -83,8 +83,7 @@ final class DeviceProfile {
                 int px = context.getResources().getDimensionPixelSize(id);
                 if (px > 0) return px;
             }
-        } catch (Throwable ignored) {
-        }
+        } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         return Math.round(24f * context.getResources().getDisplayMetrics().density);
     }
 }

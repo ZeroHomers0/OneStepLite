@@ -11,7 +11,6 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.os.SystemClock;
 import android.os.UserHandle;
 import android.view.DragEvent;
 import android.widget.Toast;

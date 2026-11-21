@@ -13,7 +13,6 @@ import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -52,6 +51,9 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public class HostEntry implements IXposedHookLoadPackage {
 
     private static final String TAG = Tags.PROBE;
+
+    /** Build identity logged by every injected process; build.ps1 asserts it appears once. */
+    private static final String RUNTIME_MARKER = "build=1.0.4 one-step-header-v2 fixed-layout-actions-v1 rounded-workspace-v1 no-media-v1 lock-entry-hold-v2 unlock-commit-gate-v2 opaque-cell-entry-v2 wide-video-modes-v1 workspace-style-recents-v1 square-overlay-video-v2 video-only-dock-v1 theme-clock-v2 side-memory-v1 unlock-single-owner-v3 side-landscape-v3-wct-snapshot side-switch-origin-v2 clock-fit-v3 video-frost-controls-v2 sleep-parent-hold-v4 lock-deferred-exit-v5 ===";
     private static final String SYSTEMUI = Packages.SYSTEM_UI;
     private static final String DESKTOP_ICON_LAUNCH_ACTION = Actions.DESKTOP_ICON_LAUNCH;
     private static final long LAUNCH_DELAY_MS = 12_000L;   // 等开机稳定
@@ -96,7 +98,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             return;
         }
         final ClassLoader cl = lpparam.classLoader;
-        log("=== attached to " + SYSTEMUI + " build=1.0.4 one-step-header-v2 fixed-layout-actions-v1 rounded-workspace-v1 no-media-v1 lock-entry-hold-v2 unlock-commit-gate-v2 opaque-cell-entry-v2 wide-video-modes-v1 workspace-style-recents-v1 square-overlay-video-v2 video-only-dock-v1 theme-clock-v2 side-memory-v1 unlock-single-owner-v3 side-landscape-v3-wct-snapshot side-switch-origin-v2 clock-fit-v3 video-frost-controls-v2 sleep-parent-hold-v4 lock-deferred-exit-v5 ===");
+        log("=== attached to " + SYSTEMUI + " " + RUNTIME_MARKER);
         try {
             NativeMultiWindowUnlock.install(cl, false);
             NativeRecents.install(cl);
@@ -127,7 +129,7 @@ public class HostEntry implements IXposedHookLoadPackage {
      * Manual floating preferences remain owned by the keyboard.
      */
     private static void hookMiTypeAutoFloating(ClassLoader cl) {
-        log("=== attached to com.xiaomi.type build=1.0.4 one-step-header-v2 fixed-layout-actions-v1 rounded-workspace-v1 no-media-v1 lock-entry-hold-v2 unlock-commit-gate-v2 opaque-cell-entry-v2 wide-video-modes-v1 workspace-style-recents-v1 square-overlay-video-v2 video-only-dock-v1 theme-clock-v2 side-memory-v1 unlock-single-owner-v3 side-landscape-v3-wct-snapshot side-switch-origin-v2 clock-fit-v3 video-frost-controls-v2 sleep-parent-hold-v4 lock-deferred-exit-v5 ===");
+        log("=== attached to com.xiaomi.type " + RUNTIME_MARKER);
         try {
             Class<?> service = XposedHelpers.findClass("com.mi.ime.MiInputMethodService", cl);
             XposedHelpers.findAndHookMethod(service, "handleSpacePressureAutoFloating",
@@ -259,7 +261,7 @@ public class HostEntry implements IXposedHookLoadPackage {
      * 与锤子OneStepLite的 MagnificationSpecSmt / applyZoomedMatrixSmt 是同一机制的官方版本。
      */
     private void hookSystemServer(ClassLoader cl) {
-        log("=== attached to system_server (android) build=1.0.4 one-step-header-v2 fixed-layout-actions-v1 rounded-workspace-v1 no-media-v1 lock-entry-hold-v2 unlock-commit-gate-v2 opaque-cell-entry-v2 wide-video-modes-v1 workspace-style-recents-v1 square-overlay-video-v2 video-only-dock-v1 theme-clock-v2 side-memory-v1 unlock-single-owner-v3 side-landscape-v3-wct-snapshot side-switch-origin-v2 clock-fit-v3 video-frost-controls-v2 sleep-parent-hold-v4 lock-deferred-exit-v5 ===");
+        log("=== attached to system_server (android) " + RUNTIME_MARKER);
         Recents.install(cl);
         NativeRawInputBridge.install();
         try {
@@ -388,7 +390,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                                 XposedHelpers.getObjectField(p.thisObject, "mAttrs");
                         if (sUnlockPhysicalShadeGeneration != 0
                                 && android.os.SystemClock.uptimeMillis() < sUnlockPhysicalShadeUntil
-                                && attrs.type == 2040 && SYSTEMUI.equals(attrs.packageName)
+                                && attrs.type == WindowTypes.NOTIFICATION_SHADE && SYSTEMUI.equals(attrs.packageName)
                                 && "NotificationShade".contentEquals(attrs.getTitle())) {
                             p.setResult(Boolean.FALSE);
                             return;
@@ -791,13 +793,10 @@ public class HostEntry implements IXposedHookLoadPackage {
             filter.addAction(DesktopLaunchBridge.PREPARE_TOP);
             filter.addAction(TopBack.ACTION);
             filter.addAction(WorkspaceBackdrop.ACTION);
-            if (Build.VERSION.SDK_INT >= 33) {
-                // SystemUI / shell can send; ordinary apps cannot change display magnification.
-                context.registerReceiver(receiver, filter, android.Manifest.permission.WRITE_SECURE_SETTINGS,
-                        handler, Context.RECEIVER_EXPORTED);
-            } else {
-                context.registerReceiver(receiver, filter, android.Manifest.permission.WRITE_SECURE_SETTINGS, handler);
-            }
+            // SystemUI / shell can send; ordinary apps cannot change display magnification.
+            // minSdk is 34, so the exported-receiver flag is always available.
+            context.registerReceiver(receiver, filter, android.Manifest.permission.WRITE_SECURE_SETTINGS,
+                    handler, Context.RECEIVER_EXPORTED);
             sZoomBridgeArmed = true;
             BottomReplayInput.install(context, service.getClass().getClassLoader(), handler);
             log("zoom broadcast bridge armed");
@@ -1221,7 +1220,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                     try {
                         Object start = XposedHelpers.getObjectField(p.thisObject, "mStartTransaction");
                         sNativeFreeformStart.finish(target.display, start);
-                    } catch (Throwable ignored) { }
+                    } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     ZoomTarget target = sZoomTarget;
@@ -2585,7 +2584,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             int windowingMode = fallbackWindowingMode;
             try {
                 windowingMode = (Integer) XposedHelpers.callMethod(task, "getWindowingMode");
-            } catch (Throwable ignored) { }
+            } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             // Synchronous WCT callbacks can still report source mode1. The
             // pending target role already owns their configuration observations.
             if(SideRoleChange.isPending(task))windowingMode=6;
@@ -2593,7 +2592,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             try {
                 Object config = XposedHelpers.callMethod(activity, "getConfiguration");
                 configurationOrientation = XposedHelpers.getIntField(config, "orientation");
-            } catch (Throwable ignored) { }
+            } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             TaskWindowState state = sTaskWindowStates.get(task);
             if (state == null) {
                 state = new TaskWindowState(taskId);
@@ -3351,7 +3350,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                     && attrs.type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
             // This status bar has been magnified into the main region. Keep it
             // with main chrome, not above an OEM freeform crossing that region.
-            boolean mainStatusBar = sZoomed && attrs.type == 2000 && "StatusBar".equals(title);
+            boolean mainStatusBar = sZoomed && attrs.type == WindowTypes.STATUS_BAR && "StatusBar".equals(title);
             if (SYSTEMUI.equals(attrs.packageName) && (hostOverlay || mainStatusBar)
                     && Boolean.TRUE.equals(XposedHelpers.callMethod(window, "isVisible"))) hosts.add(window);
         };
@@ -3420,7 +3419,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                 rememberNativeHostNormalLayer(host, state);
                 WindowManager.LayoutParams attrs = (WindowManager.LayoutParams)
                         XposedHelpers.getObjectField(host, "mAttrs");
-                int layer = attrs.type == 2000 ? -5
+                int layer = attrs.type == WindowTypes.STATUS_BAR ? -5
                         : "Clipboard".contentEquals(attrs.getTitle()) ? -1
                         : "OneStepLiteTransition".contentEquals(attrs.getTitle()) ? -2
                         : "OneStepLiteMirrorLayer".contentEquals(attrs.getTitle()) ? -3 : -4;
@@ -3605,11 +3604,11 @@ public class HostEntry implements IXposedHookLoadPackage {
                 // including the active HyperOS profile/display policy.
                 return Boolean.TRUE.equals(XposedHelpers.callMethod(
                         displayRotation, "isRotationFrozen"));
-            } catch (Throwable ignored) { }
+            } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             try {
                 return Integer.valueOf(1).equals(XposedHelpers.callMethod(
                         displayRotation, "getUserRotationMode"));
-            } catch (Throwable ignored) { }
+            } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         } catch (Throwable error) {
             log("fixed rotation mode lookup unavailable: " + error);
         }
@@ -3828,7 +3827,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             log("display crop clear unavailable: " + failure);
         } finally {
             if (crop != null) {
-                try { XposedHelpers.callMethod(crop, "close"); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(crop, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
         }
         // supplies the same matrix and inverse input mapping as the main app windows.
@@ -3932,7 +3931,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
         sZoomAnimator = null;
         sZoomFrameApply = false;
-        try { animator.cancel(); } catch (Throwable ignored) {}
+        try { animator.cancel(); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         log("zoom animation cancelled");
     }
 
@@ -3973,7 +3972,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                 }
             }
         } catch (Throwable error) { log("navigation input transform stopped: " + error); }
-        finally { if (tx != null) try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) {} }
+        finally { if (tx != null) try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ } }
     }
 
     private void hookApplication(ClassLoader cl) {
@@ -4068,7 +4067,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                 && action != android.view.MotionEvent.ACTION_CANCEL) return;
         int display = -1;
         try { display = (Integer) XposedHelpers.callMethod(event, "getDisplayId"); }
-        catch (Throwable ignored) {}
+        catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
         log("back event source=" + source + " action=" + action + " display=" + display
                 + " local=" + event.getX() + "," + event.getY()
                 + " raw=" + event.getRawX() + "," + event.getRawY()

@@ -227,7 +227,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./test.ps1
 
 | 作业 | 运行环境 | 内容 |
 | --- | --- | --- |
-| `apk` | `ubuntu-latest` | 安装 `platforms;android-37.0`、`build-tools;36.0.0`、`ndk;28.2.13676358`，执行 `:app:stageRelease`，上传 APK 与 `SHA256SUMS.txt` |
+| `apk` | `ubuntu-latest` | 安装 `platforms;android-37.0`、`build-tools;36.0.0`、`ndk;28.2.13676358`，执行 `:app:lintRelease :app:stageRelease`，上传 APK 与 `SHA256SUMS.txt` |
 | `tests` | `windows-latest` | 执行 `test.ps1`，跑完 55 个策略单测与 102 个生产方法回放套件 |
 
 每次 `main` 构建成功后，`latest` 作业会把产物刷新到 [`latest` 预发布](https://github.com/ZeroHomers0/OneStepLite/releases/tag/latest)，那里是普通文件、有固定直链，手机可以直接下载；推送 `v*` 标签时 `release` 作业另外发布正式版本。
@@ -252,6 +252,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./test.ps1
 > 密钥库不在仓库里，只存在于本机 `.local/keystore/onesteplite-release.jks` 与仓库 Secrets。**丢失后无法覆盖安装**，请自行备份；换签名后已安装的版本必须先卸载。
 
 `apk` 作业用 `tools/assert_module_apk.py` 校验产物，与本地 `verifyApk` 是同一份检查逻辑。
+
+Lint 也在 CI 里跑。`app/lint.xml` 关掉了对 LSPosed 模块不适用的检查（`PrivateApi`、`MissingPermission`、`WrongConstant` 等），其余历史问题记在 `app/lint-baseline.xml`；新增问题会让构建失败。改了代码后如果确认某条基线已失效，用 `./gradlew :app:updateLintBaseline` 重新生成。
 
 ## 项目结构
 

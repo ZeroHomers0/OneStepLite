@@ -6,7 +6,8 @@ final class PanelInputCoordinates {
             CharSequence title, int rotation) {
         return active && display == 0 && rotation >= 0 && rotation < 4
                 && Packages.SYSTEM_UI.equals(pkg)
-                && (type == 2000 || type == 2040 || type == 2017 && title != null
+                && (type == WindowTypes.STATUS_BAR || type == WindowTypes.NOTIFICATION_SHADE
+                        || type == WindowTypes.SYSTEM_UI_DIALOG && title != null
                         && "NotificationModalWindowManager".contentEquals(title));
     }
 

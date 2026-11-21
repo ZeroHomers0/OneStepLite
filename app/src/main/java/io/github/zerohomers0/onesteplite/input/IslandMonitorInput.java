@@ -49,7 +49,7 @@ final class IslandMonitorInput {
                                 if (original != null) p.args[0] = original;
                                 p.setObjectExtra(COPY, null);
                                 copy.recycle();
-                            } catch (Throwable ignored) { }
+                            } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
                         }
                     }
                 }
@@ -60,7 +60,7 @@ final class IslandMonitorInput {
                         Object copy = p.getObjectExtra(COPY);
                         if (original != null) p.args[0] = original;
                         if (copy instanceof MotionEvent) ((MotionEvent) copy).recycle();
-                    } catch (Throwable ignored) { }
+                    } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
                 }
             });
             XposedBridge.log("OneStepLite: Island outside-collapse monitor uses workspace coordinates");

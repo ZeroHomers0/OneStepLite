@@ -301,5 +301,5 @@ final class VideoDock {
     private static int integer(Object object,String name,int fallback){Object value=field(object,name);return value instanceof Number?((Number)value).intValue():fallback;}
     private static Object field(Object o,String n){try{return o==null?null:XposedHelpers.getObjectField(o,n);}catch(Throwable absent){return null;}}
     private static Object call(Object o,String n,Object...args){try{return o==null?null:XposedHelpers.callMethod(o,n,args);}catch(Throwable absent){return null;}}
-    private static void log(String s){XposedBridge.log("OneStepLiteProbe: "+s);}
+    private static void log(String s){XposedBridge.log(Tags.PROBE + ": " + s);}
 }

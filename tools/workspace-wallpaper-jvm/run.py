@@ -72,7 +72,7 @@ public class WallpaperLeaseRegression {
 paths=[]
 for n,t in files.items():
  p=out/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(t,encoding='utf-8');paths.append(str(p))
-paths.extend(str(package_dir(root)/n) for n in ['WorkspaceBackdrop.java','WindowIdentity.java','Actions.java','Packages.java'])
+paths.extend(str(package_dir(root)/n) for n in ['WorkspaceBackdrop.java','WindowIdentity.java','Actions.java','Packages.java','WindowTypes.java'])
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.WallpaperLeaseRegression'],check=True)

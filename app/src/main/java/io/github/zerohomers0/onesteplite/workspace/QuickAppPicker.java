@@ -40,7 +40,7 @@ import java.util.Locale;
 
 /** A wallpaper-glass shortcut editor using the same palette and material as OneStepLite. */
 final class QuickAppPicker {
-    private static final int WINDOW_TYPE = 2017; // Native SystemUI dialog layer, above StatusBar.
+    private static final int WINDOW_TYPE = WindowTypes.SYSTEM_UI_DIALOG;
     private static final int BLUE = 0xff347ff4;
     private Dialog dialog;
     private View content;
