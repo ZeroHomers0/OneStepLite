@@ -125,6 +125,12 @@ jobs:
           gh run download "$GITHUB_RUN_ID" --pattern 'OneStepLite-apk' --dir dist
           shopt -s dotglob
           if gh release view latest >/dev/null 2>&1; then
+            # Drop assets from the previous build so a renamed file (signed vs
+            # unsigned) never lingers next to the fresh one.
+            gh release view latest --json assets --jq '.assets[].name' |
+              while read -r asset; do
+                gh release delete-asset latest "$asset" --yes
+              done
             gh release upload latest dist/*/* --clobber
           else
             gh release create latest dist/*/* --prerelease \

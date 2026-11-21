@@ -234,7 +234,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./test.ps1
 
 > Actions 页面上的 Artifact 也能下载，但 GitHub 规定它必须登录账号、而且永远是 zip 包，所以日常取包用 `latest` 更省事。
 
-发行签名通过仓库 Secrets 提供，未配置时普通构建产出未签名包，而标签构建会直接失败：
+发行签名通过仓库 Secrets 提供；未配置时普通构建产出未签名包，而标签构建会直接失败。
 
 | Secret | 用途 |
 | --- | --- |
@@ -242,6 +242,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./test.ps1
 | `ONESTEPLITE_KEY_ALIAS` | 密钥别名 |
 | `ONESTEPLITE_STORE_PASSWORD` | 密钥库口令 |
 | `ONESTEPLITE_KEY_PASSWORD` | 密钥口令 |
+
+四个 Secret 已配置，`latest` 与标签发行都是已签名包。证书指纹（SHA-256）：
+
+```
+7A:89:9B:AA:E7:0F:CF:D8:6A:B1:D8:8A:B9:F3:01:59:5D:6E:0E:AD:7A:8D:4B:ED:01:C6:DA:C4:87:04:60:F9
+```
+
+> 密钥库不在仓库里，只存在于本机 `.local/keystore/onesteplite-release.jks` 与仓库 Secrets。**丢失后无法覆盖安装**，请自行备份；换签名后已安装的版本必须先卸载。
 
 `apk` 作业用 `tools/assert_module_apk.py` 校验产物，与本地 `verifyApk` 是同一份检查逻辑。
 
