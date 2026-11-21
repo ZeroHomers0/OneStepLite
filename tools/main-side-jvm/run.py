@@ -38,7 +38,7 @@ public class SideSwitchRegression {
  void updateTouchRegion(Slot slot){slot.touchBlocked=liveSwapInputBlocked;}void updateChromeClip(){}
  void rememberMainSide(){saved++;remembered=mainOnRight;}void writeZoomAnimated(boolean on){check(on,"side switch never restores fullscreen");zoomWrites++;workspaceZoomStart=1032;}
  void setMainSide(boolean right){applyMainLayout(makeAdaptiveLayout(right));rememberMainSide();zoomWrites++;}
- void finishPendingSuspend(){}void log(String s){}void refreshVideoPane(){refreshes++;}
+ void finishPendingSuspend(){}void log(String s){}
 '''+methods+'''
  public static void main(String[]args){
   for(boolean old:new boolean[]{true,false}){

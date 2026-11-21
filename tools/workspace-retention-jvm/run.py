@@ -41,7 +41,7 @@ import java.util.*;
 import java.util.function.Consumer;
 
 public final class WorkspaceRetentionTest {
- void cancelMainSideSwitch(){}void refreshVideoPane(){}static class VideoPane {void releaseForPrivacy(){}}VideoPane videoPane;boolean lockExitPending;
+ void cancelMainSideSwitch(){}boolean lockExitPending;
     static int checks;
     static void check(boolean value, String message) {
         checks++;

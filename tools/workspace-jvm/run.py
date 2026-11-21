@@ -39,7 +39,7 @@ public class XposedHelpers {public static Object callMethod(Object o,String n,Ob
 'io/github/zerohomers0/onesteplite/WorkspaceRegression.java':r'''package io.github.zerohomers0.onesteplite;
 import java.util.*;import android.view.SurfaceControl;import android.graphics.Rect;import de.robv.android.xposed.XposedHelpers;
 public class WorkspaceRegression {
- void cancelMainSideSwitch(){}void refreshVideoPane(){}static class VideoPane {void releaseForPrivacy(){}}VideoPane videoPane;boolean lockExitPending;
+ void cancelMainSideSwitch(){}boolean lockExitPending;
  static class LiveSwapVisualLease {static void writeAlpha(View v,float a){v.setAlpha(a);}}
  static class SideDismiss {boolean isTracking(){return false;}void settle(boolean b){}}
  SideDismiss sideDismiss;
@@ -73,7 +73,7 @@ public class WorkspaceRegression {
  static class Roll{boolean rolling(){return false;}boolean showingTask(){return false;}}
  static class CellMotion{void finish(){}}
  Queue main=new Queue();Object ctx=new Object();CellMotion cellMotion;StatusBar statusBar=new StatusBar();Promotion promotion;Bitmap mainBackdrop,wallpaperBackdrop=new Bitmap();
-  boolean screenOn=true,zoomed=true,suspendRequested,landscapeSuspended,transferBusy,workspaceEntering,keyguardLocked;int scene=ACTIVE,zoomWrites,parks,returns,ready;long sceneEpoch=1,workspaceGeneration,zoomAnimUntil;String pendingSuspendReason;
+  boolean screenOn=true,zoomed=true,suspendRequested,landscapeSuspended,transferBusy,workspaceEntering,workspaceExiting,keyguardLocked;int scene=ACTIVE,zoomWrites,parks,returns,ready;long sceneEpoch=1,workspaceGeneration,zoomAnimUntil;String pendingSuspendReason;
  static class Layout {boolean tabletLandscape,mainOnRight;float mainScale=.7017717f;int mainOffsetX,mainOffsetY=606;int mainWidth=2286,sideWidth=762,topStrip=508;
   int[] cellBounds(int i){return new int[]{0,topStrip+i*400,762,topStrip+(i+1)*400};}}
  Layout layout=new Layout();int screenW=3048,screenH=2032;long workspaceZoomStart=10032;
@@ -150,6 +150,8 @@ public class WorkspaceRegression {
   for(boolean mainRight:new boolean[]{false,true}) {
    h=new WorkspaceRegression();h.layout.tabletLandscape=true;h.layout.mainOffsetX=mainRight?909:0;
    h.playWorkspaceFade(false,0,null);check(h.workspaceAnimator.delay==32,"Host shares the published monotonic start");
+   check(h.workspaceExiting,"exit fade mirrors the reveal curves");
+   h.workspaceExiting=false;
    for(float p:new float[]{0f,.25f,.5f,.75f,1f}) {
     h.setWorkspaceAlpha(p);var hole=((WallpaperCropDrawable)h.topStripBacking.background).hole;
     check(h.topStripBacking.alpha==1&&h.mainGapBacking.alpha==1,"wallpaper stays opaque outside moving main");
@@ -163,6 +165,16 @@ public class WorkspaceRegression {
     check(Math.abs(topHole.top-606*(1-(1-p)*(1-p)))<.01,"top bar follows the ease-out reveal curve");
     check(Math.abs(sideHole.top-606*(p*Math.sqrt(p)))<.01,"side cells follow the ease-in reveal curve");
    }
+   h.workspaceExiting=true;
+   for(float p:new float[]{0f,.25f,.5f,.75f,1f}) {
+    h.setWorkspaceAlpha(p);var hole=((WallpaperCropDrawable)h.topStripBacking.background).hole;
+    var topHole=h.workspaceTopHole();
+    var sideHole=h.workspaceSideHole();
+    check(topHole.top>=hole.top-.01&&sideHole.top>=hole.top-.01,"exit keeps both bands ahead of the advancing main");
+    check(topHole.top>=sideHole.top-.01,"exit keeps the bar ahead of the cells");
+    check(Math.abs(sideHole.top-606*(p*(1.5f-.5f*p)))<.01,"exit side cells follow the leading reveal curve");
+   }
+   h.workspaceExiting=false;
    h.workspaceBackdrop=new Object();h.setWorkspaceAlpha(.5f);
    check(h.topStripBacking.alpha==1&&h.mainGapBacking.alpha==1,"cutout wallpaper remains opaque while the native buffer reaches its first composition");
    check(h.slots[1].hint.background.alpha==255&&(h.slots[1].controller.surface.alpha==0f||h.slots[1].controller.surface.alpha==1f),"hint wallpaper and real task never acquire fractional opacity");

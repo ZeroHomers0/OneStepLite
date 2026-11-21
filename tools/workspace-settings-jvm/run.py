@@ -65,18 +65,19 @@ public class SettingsRegression {
   check(!WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(decoded.withShowLunar(false))).showLunar,"lunar choice reaches SystemUI");
   check(decoded.withShowLunar(false).entryGesture==1,"lunar toggle preserves entry");
   check(decoded.withSwapMode(0).entryGesture==1,"swap toggle preserves entry");
-  for(int mode=0;mode<3;mode++) {
+  for(int mode=1;mode<3;mode++) {
    WorkspaceOptions v=decoded.withLandscapeVideo(mode).withShowLunar(false).withSwapMode(0).withKeepOnLock(true).withScrollSideTasks(true);
-   check(WorkspaceSettingsStore.write(c,v),"video preference persists");
-   check(WorkspaceSettingsStore.read(c).landscapeVideo==mode,"video preference reads back");
-   check(WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(v)).landscapeVideo==mode,"video snapshot reaches Host");
+   check(WorkspaceSettingsStore.write(c,v),"landscape preference persists");
+   check(WorkspaceSettingsStore.read(c).landscapeVideo==mode,"landscape preference reads back");
+   check(WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(v)).landscapeVideo==mode,"landscape snapshot reaches Host");
   }
+  check(decoded.withLandscapeVideo(0).landscapeVideo==1,"retired top playback falls back to main landscape");
   check(WorkspaceSettingsStore.decode(new Bundle()).landscapeVideo==1,"existing installations retain main landscape");
-  check(decoded.withLandscapeVideo(99).landscapeVideo==1,"invalid video mode uses main landscape");
+  check(decoded.withLandscapeVideo(99).landscapeVideo==1,"invalid landscape mode uses main landscape");
   check(!WorkspaceSettingsStore.decode(new Bundle()).hideSideRecents,"old snapshot keeps visible recents");
   c.prefs.values.put("rounded_windows",true);
   for(boolean hide:new boolean[]{true,false}) {
-   WorkspaceOptions v=decoded.withHideSideRecents(hide).withLandscapeVideo(0).withShowLunar(false).withSwapMode(1).withKeepOnLock(true).withScrollSideTasks(true).withEntryGesture(1);
+   WorkspaceOptions v=decoded.withHideSideRecents(hide).withLandscapeVideo(1).withShowLunar(false).withSwapMode(1).withKeepOnLock(true).withScrollSideTasks(true).withEntryGesture(1);
    check(v.hideSideRecents==hide,"all setters preserve recents");
    check(WorkspaceSettingsStore.write(c,v),"new choices persist");
    WorkspaceOptions nativeRead=WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(WorkspaceSettingsStore.read(c)));

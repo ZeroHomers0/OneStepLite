@@ -125,7 +125,6 @@ public final class WorkspaceHost {
     private View topStripBacking;
     private View mainGapBacking;
     private Bitmap wallpaperBackdrop;
-    private VideoPane videoPane;
     private Bitmap wellWallpaperBackdrop;
     private ContentShare contentShare;
     private final android.graphics.Paint contentSharePaint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
@@ -524,7 +523,6 @@ public final class WorkspaceHost {
         }
         workspaceSettings = new WorkspaceSettingsClient(this.ctx, main, options -> {
             workspaceOptions = options;
-            refreshVideoPane();
             if (topBar != null) topBar.applyOptions(options);
             if (root != null) {
                 publishDesktopSideTasks();
@@ -1586,7 +1584,6 @@ public final class WorkspaceHost {
     /** Transfer live tasks first. Removing a SurfaceView while still bound hides its task. */
     private void suspendSession(String reason) {
         cancelMainSideSwitch();
-        if(videoPane!=null)videoPane.releaseForPrivacy();
         if (topBar != null) topBar.closeQuickAppPicker();
         if (!"native-landscape".equals(reason)) landscapeSuspended = false;
         statusBar.restore(); // Includes a deferred exit while native ownership is changing.
@@ -2088,7 +2085,6 @@ public final class WorkspaceHost {
         if (scene != RESUMING || sceneEpoch != epoch) return;
         scene = ACTIVE;
         if(lockExitPending){if(!retainedForLock)suspendSession("unlock-exit");return;}
-        refreshVideoPane();
         retainedOnExit = false;
         configureTabletTools();
         publishDesktopSideTasks();
@@ -3373,6 +3369,8 @@ public final class WorkspaceHost {
     private long workspaceGeneration;
     private float workspaceAlpha = 1f;
     private boolean workspaceEntering;
+    /** The fade is running towards zero, so the main edge advances instead of receding. */
+    private boolean workspaceExiting;
     private long workspaceZoomStart;
     private LiveBackdrop workspaceBackdrop;
     private View workspaceBackdropOwner;
@@ -3579,7 +3577,8 @@ public final class WorkspaceHost {
 
     /** Side rail exclusion: trails the real main edge so cell content slides in behind it. */
     private android.graphics.RectF workspaceSideHole() {
-        return workspaceMainHoleAt(WorkspaceRevealCurve.side(workspaceAlpha), workspaceSideHole);
+        return workspaceMainHoleAt(WorkspaceRevealCurve.side(workspaceAlpha, workspaceExiting),
+                workspaceSideHole);
     }
 
     /** Keep wallpaper opaque outside the moving main task; never fade to the empty display. */
@@ -3603,6 +3602,10 @@ public final class WorkspaceHost {
         android.animation.ValueAnimator previous = workspaceAnimator;
         workspaceAnimator = null;
         if (previous != null) previous.cancel();
+        // The reveal curves mirror with the direction: entering, the main edge
+        // recedes and the chrome is uncovered; exiting, it advances and the
+        // chrome is covered again.
+        workspaceExiting = !entering;
         final float from = entering ? 0f : workspaceAlpha;
         android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(from, entering ? 1f : 0f);
         animator.addUpdateListener(value -> {
@@ -3613,7 +3616,7 @@ public final class WorkspaceHost {
             @Override public void onAnimationEnd(android.animation.Animator value) {
                 if (workspaceAnimator != animator || generation != workspaceGeneration) return;
                 workspaceAnimator = null;
-                if (entering) {workspaceEntering = false;refreshVideoPane();}
+                if (entering) workspaceEntering = false;
                 setWorkspaceAlpha(entering ? 1f : 0f);
                 if (complete != null) complete.run();
             }
@@ -4050,19 +4053,6 @@ public final class WorkspaceHost {
         // The upper TaskView was added after the controls; its empty surface hole would
         // otherwise blank them until the first roll settles and reorders the views.
         if(!topFace && topBar!=null)topBar.bringToFront();
-    }
-
-    private void refreshVideoPane() {
-        if(videoPane!=null)videoPane.refresh();
-    }
-
-    private void createVideoPane() {
-        if(videoPane!=null)videoPane.releaseForPrivacy();
-        videoPane=new VideoPane(ctx,main,()->root!=null&&scene==ACTIVE&&screenOn&&!keyguardLocked
-                &&!retainedForLock&&!workspaceEntering&&workspaceOptions.landscapeVideo==WorkspaceOptions.VIDEO_TOP,
-                showing->{if(topBar!=null)topBar.setVisibility(showing?View.INVISIBLE:View.VISIBLE);});
-        videoPane.setWallpaper(wellWallpaperBackdrop,screenW,screenH);
-        root.addView(videoPane,new FrameLayout.LayoutParams(-1,layout.topStrip));
     }
 
     private void configureTabletTools() {
@@ -4862,9 +4852,6 @@ public final class WorkspaceHost {
         if(mode==WorkspaceOptions.VIDEO_FULLSCREEN) {
             log("wide video exits workspace task="+key.taskId);
             suspendSession("video-fullscreen");
-        } else if(mode==WorkspaceOptions.VIDEO_TOP) {
-            refreshVideoPane();
-            log("video-only mode waits for native PiP or floating video; main task unchanged="+key.taskId);
         } else log("wide video stays in main task="+key.taskId);
     }
 
@@ -4898,7 +4885,6 @@ public final class WorkspaceHost {
     private void createNext(final int index) {
         if (index >= SLOT_COUNT) {
             configureTabletTools();
-            createVideoPane();
             log("TaskViews ready cells="+layout.cellCount+" interactive=1; system main has no TaskView");
             requestCompaction();
             return;
@@ -5406,7 +5392,6 @@ public final class WorkspaceHost {
     }
 
     private void updateTopBarState() {
-        refreshVideoPane();
         if (workspaceAnimator != null || workspaceAlpha < 1f) return;
         boolean available = scene == ACTIVE && screenOn && !keyguardLocked
                 && promotion == null && !transferBusy;
@@ -5501,7 +5486,6 @@ public final class WorkspaceHost {
 
     private boolean retainWorkspaceForLock() {
         cancelMainSideSwitch();
-        if(videoPane!=null)videoPane.releaseForPrivacy();
         retainedGeometryConfirmed = false;
         lockExitPending=false;
         if (retainedForLock) {
@@ -5609,7 +5593,6 @@ public final class WorkspaceHost {
                 }
             }
         }
-        refreshVideoPane();
         log("keyguard privacy cleared");
     }
 
@@ -5749,7 +5732,6 @@ public final class WorkspaceHost {
                     bounds[0], bounds[1], HyperOsStyle.topWallpaperTint(ctx)));
         }
         if (topBar != null) topBar.setWallpaperBackdrop(wallpaperBackdrop, screenW, screenH);
-        if (videoPane != null) videoPane.setWallpaper(wellWallpaperBackdrop,screenW,screenH);
         if (topStripBacking != null) {
             topStripBacking.setBackground(new WallpaperCropDrawable(wallpaperBackdrop, screenW, screenH,
                     0, 0, HyperOsStyle.topWallpaperTint(ctx)));
@@ -7127,7 +7109,7 @@ public final class WorkspaceHost {
             enter.addUpdateListener(frame->{if(mainSideAnimator==enter&&generation==mainSideSwitchGeneration)updateMainSideFrame(incoming*(1-(Float)frame.getAnimatedValue()),fromMainX+(toMainX-fromMainX)*(Float)frame.getAnimatedValue());});
             enter.addListener(new android.animation.AnimatorListenerAdapter(){@Override public void onAnimationEnd(android.animation.Animator animation){
                 if(mainSideAnimator!=enter||generation!=mainSideSwitchGeneration)return;
-                mainSideAnimator=null;settleMainSidePresentation();refreshVideoPane();finishPendingSuspend();
+                mainSideAnimator=null;settleMainSidePresentation();finishPendingSuspend();
             }});WorkspaceMotionSpec.start(enter,workspaceZoomStart,ZOOM_ANIM_MS);
         }});WorkspaceMotionSpec.start(exit,SystemClock.uptimeMillis(),WorkspaceMotionSpec.CELL_EXIT_MS);
     }

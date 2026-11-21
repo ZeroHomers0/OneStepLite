@@ -93,7 +93,7 @@ public class WorkspaceHost {
  boolean emptyMainHomeFocused(){return false;} // Native Home focus has its separate production-method suite.
  android.animation.ValueAnimator workspaceAnimator;
  WorkspaceHost(java.io.File f){ctx=new Context(f);for(int i=0;i<SLOT_COUNT;i++){slots[i]=new Slot();slots[i].taskId=200+i;}sInstance=this;}
-  void cancelMainSideSwitch(){}void refreshVideoPane(){}static class VideoPane {void releaseForPrivacy(){}}VideoPane videoPane; static void log(String s){}String describeTasks(){return "same live tasks";}
+  void cancelMainSideSwitch(){} static void log(String s){}String describeTasks(){return "same live tasks";}
  void closeSwapPreview(){}void closeCellMovePreview(){}void publishDesktopSideTasks(){}void hideIme(){}
  void suspendSession(String reason){suspends++;scene=SUSPENDED;}
  void resumeSession(){}void updateTopBarState(){}void reapplyScale(Slot s){repairs++;}

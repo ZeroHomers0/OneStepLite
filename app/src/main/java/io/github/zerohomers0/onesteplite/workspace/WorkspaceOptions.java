@@ -4,7 +4,10 @@ package io.github.zerohomers0.onesteplite;
 final class WorkspaceOptions {
     static final int GROW_IN_PLACE=0,FIXED_MAIN=1;
     static final int STATUS_BAR_INWARD=0,BOTTOM_CENTER_OUTWARD=1;
-    static final int VIDEO_TOP=0,VIDEO_TURNED=1,VIDEO_FULLSCREEN=2;
+    // Top playback is gone: a floating player is docked automatically and a
+    // landscape app can be sent up by hand, so only these two remain. The
+    // numbers keep their old values so stored choices still read correctly.
+    static final int VIDEO_TURNED=1,VIDEO_FULLSCREEN=2;
     static final WorkspaceOptions DEFAULT=new WorkspaceOptions(0,0,0,false,false,true);
     final int swapMode,entryGesture,landscapeVideo;
     final boolean keepOnLock,scrollSideTasks,showLunar,hideSideRecents,allowSecureCapture;
@@ -29,7 +32,7 @@ final class WorkspaceOptions {
         hideSideRecents=hide;
         keepOnLock=keep;scrollSideTasks=scroll;showLunar=lunar;
         allowSecureCapture=secure;
-        landscapeVideo=video==VIDEO_TOP || video==VIDEO_FULLSCREEN?video:VIDEO_TURNED;
+        landscapeVideo=video==VIDEO_FULLSCREEN?VIDEO_FULLSCREEN:VIDEO_TURNED;
     }
     WorkspaceOptions withSwapMode(int mode){return new WorkspaceOptions(0,mode,entryGesture,keepOnLock,scrollSideTasks,showLunar,landscapeVideo,hideSideRecents,allowSecureCapture);}
     WorkspaceOptions withEntryGesture(int mode){return new WorkspaceOptions(0,swapMode,mode,keepOnLock,scrollSideTasks,showLunar,landscapeVideo,hideSideRecents,allowSecureCapture);}
@@ -39,7 +42,7 @@ final class WorkspaceOptions {
     WorkspaceOptions withLandscapeVideo(int video){return new WorkspaceOptions(0,swapMode,entryGesture,keepOnLock,scrollSideTasks,showLunar,video,hideSideRecents,allowSecureCapture);}
     WorkspaceOptions withHideSideRecents(boolean hide){return new WorkspaceOptions(0,swapMode,entryGesture,keepOnLock,scrollSideTasks,showLunar,landscapeVideo,hide,allowSecureCapture);}
     WorkspaceOptions withAllowSecureCapture(boolean allow){return new WorkspaceOptions(0,swapMode,entryGesture,keepOnLock,scrollSideTasks,showLunar,landscapeVideo,hideSideRecents,allow);}
-    static String videoLabel(int video){return video==VIDEO_TOP?"顶部播放":video==VIDEO_FULLSCREEN?"退出 OneStepLite，全屏播放":"主窗内播放";}
+    static String landscapeLabel(int video){return video==VIDEO_FULLSCREEN?"退出 OneStepLite，全屏播放":"主窗内播放";}
     boolean mainOnRightAfterSwap(boolean currentRight){return swapMode==FIXED_MAIN?currentRight:!currentRight;}
     static String modeLabel(int mode){return mode==FIXED_MAIN?"保持主窗位置":"随应用切换位置";}
 }

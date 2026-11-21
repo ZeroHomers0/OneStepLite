@@ -7,7 +7,7 @@ import android.graphics.Path;
 import android.graphics.RectF;
 import android.view.View;
 
-/** Native, theme-aware equivalents of Panes' three video placement diagrams. */
+/** Native, theme-aware diagrams for the two landscape placement choices. */
 final class VideoModeDiagram extends View {
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path arrow=new Path();
@@ -30,14 +30,12 @@ final class VideoModeDiagram extends View {
         frame.inset(3,3);
         if(fullscreen) {block(canvas,frame,accent);play(canvas,frame,false);}
         else {
-            header.set(frame.left,frame.top,frame.right,
-                    frame.top+frame.height()*(mode==WorkspaceOptions.VIDEO_TOP?.30f:.16f));
-            block(canvas,header,mode==WorkspaceOptions.VIDEO_TOP?accent:empty);
-            if(mode==WorkspaceOptions.VIDEO_TOP)play(canvas,header,false);
+            header.set(frame.left,frame.top,frame.right,frame.top+frame.height()*.16f);
+            block(canvas,header,empty);
             float side=frame.right-frame.width()*.24f, gap=1.5f;
             main.set(frame.left,header.bottom+gap,side-gap,frame.bottom);
-            block(canvas,main,mode==WorkspaceOptions.VIDEO_TURNED?accent:empty);
-            if(mode==WorkspaceOptions.VIDEO_TURNED)play(canvas,main,true);
+            block(canvas,main,accent);
+            play(canvas,main,true);
             float height=(main.height()-2*gap)/3f;
             for(int i=0;i<3;i++) {
                 float top=main.top+i*(height+gap);

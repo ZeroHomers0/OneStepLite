@@ -25,12 +25,12 @@ import android.widget.Toast;
 
 /** Settings use the installed system Settings resources and layout proportions. */
 final class WorkspaceSettingsPage extends FrameLayout {
-    private static final int HOME = 0, SWAP = 3, GESTURE = 5, VIDEO = 6;
+    private static final int HOME = 0, SWAP = 3, GESTURE = 5, LANDSCAPE = 6;
     private static final int BLUE = HyperOsStyle.CONTROL_ACCENT;
     private final SettingsActivity activity;
     private final boolean dark;
     private final int primary, secondary, surface;
-    private final int[] scrollPositions = new int[VIDEO + 1];
+    private final int[] scrollPositions = new int[LANDSCAPE + 1];
     private final android.database.ContentObserver gestureObserver =
             new android.database.ContentObserver(new android.os.Handler(android.os.Looper.getMainLooper())) {
         @Override public void onChange(boolean selfChange) {
@@ -56,7 +56,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
                 System.arraycopy(saved, 0, scrollPositions, 0, Math.min(saved.length, scrollPositions.length));
         }
         int restored = state == null ? HOME : state.getInt("settings_page", HOME);
-        show(restored == SWAP || restored == GESTURE || restored == VIDEO ? restored : HOME, false);
+        show(restored == SWAP || restored == GESTURE || restored == LANDSCAPE ? restored : HOME, false);
     }
 
     void save(Bundle state) {
@@ -93,10 +93,11 @@ final class WorkspaceSettingsPage extends FrameLayout {
         scroll.addView(centered, new ScrollView.LayoutParams(-1, -1));
         addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         activity.setPageTitle(next == SWAP ? "主窗与小窗交换方式"
-                : next == GESTURE ? "打开 OneStepLite 的手势" : next == VIDEO ? "横屏视频显示位置" : "OneStepLite");
+                : next == GESTURE ? "打开 OneStepLite 的手势"
+                : next == LANDSCAPE ? "横屏应用显示位置" : "OneStepLite");
         if (next == SWAP) swap();
         else if (next == GESTURE) gesture();
-        else if (next == VIDEO) video();
+        else if (next == LANDSCAPE) landscape();
         else home();
         int restoreY = scrollPositions[next];
         scroll.post(() -> scroll.scrollTo(0, restoreY));
@@ -128,10 +129,11 @@ final class WorkspaceSettingsPage extends FrameLayout {
                 checked -> persist(WorkspaceSettingsStore.read(activity).withHideSideRecents(checked)));
         add(interaction, 0, 12);
 
-        section("视频");
-        LinearLayout video = card();
-        menu(video, "横屏视频显示位置", WorkspaceOptions.videoLabel(options.landscapeVideo), () -> show(VIDEO, true));
-        add(video, 0, 12);
+        section("横屏");
+        LinearLayout landscape = card();
+        menu(landscape, "横屏应用显示位置", WorkspaceOptions.landscapeLabel(options.landscapeVideo),
+                () -> show(LANDSCAPE, true));
+        add(landscape, 0, 12);
 
         section("锁屏");
         LinearLayout lock = card();
@@ -189,18 +191,21 @@ final class WorkspaceSettingsPage extends FrameLayout {
         group.addView(item);
     }
 
-    private void video() {
-        section("视频进入横屏全屏时");
+    private void landscape() {
+        section("应用进入横屏全屏时");
         LinearLayout group=card();
-        String[] descriptions={"支持的播放器可在顶部显示视频，主窗和小窗仍可使用；不支持时保留在主窗播放。",
-                "视频在主窗内横屏播放，小窗仍可使用。",
-                "退出 OneStepLite，使用应用原有的全屏播放界面。"};
+        // Top playback is gone: a floating player is docked automatically, and a
+        // landscape app can be sent up by hand, so only these two remain.
+        int[] modes={WorkspaceOptions.VIDEO_TURNED,WorkspaceOptions.VIDEO_FULLSCREEN};
+        String[] descriptions={"应用在主窗内横屏显示，小窗仍可使用。",
+                "退出 OneStepLite，使用应用原有的全屏界面。"};
         int selected=WorkspaceSettingsStore.read(activity).landscapeVideo;
-        for(int mode=0;mode<descriptions.length;mode++) {
-            final int choice=mode;if(mode>0)divider(group);
-            choiceOption(group,WorkspaceOptions.videoLabel(mode),descriptions[mode],mode==selected,true,
-                    new VideoModeDiagram(activity,mode,secondary,dark?0xff353840:0xffe9e9e9,BLUE),()->{
-                        if(persist(WorkspaceSettingsStore.read(activity).withLandscapeVideo(choice)))show(VIDEO,false);
+        for(int index=0;index<modes.length;index++) {
+            final int choice=modes[index];if(index>0)divider(group);
+            choiceOption(group,WorkspaceOptions.landscapeLabel(choice),descriptions[index],choice==selected,true,
+                    new VideoModeDiagram(activity,choice,secondary,dark?0xff353840:0xffe9e9e9,BLUE),()->{
+                        if(persist(WorkspaceSettingsStore.read(activity).withLandscapeVideo(choice)))
+                            show(LANDSCAPE,false);
                     });
         }
         add(group,0,14);

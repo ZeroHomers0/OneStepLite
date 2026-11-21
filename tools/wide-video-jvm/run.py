@@ -43,7 +43,6 @@ public class WideVideoRegression {
  final TopTaskState topTaskState=new TopTaskState();
  final Map<TopTaskState.Key,Boolean> topDirections=new HashMap<>();
  final TopTaskState.Key key=new TopTaskState.Key(7,0,"original-token");TopCandidate current=new TopCandidate(key);
- int captureRequests;void refreshVideoPane(){captureRequests++;}
  int claimed,released,suspended;TopTaskState.Ticket ticket;
  boolean supportsTaskUser(int user){return user==0||user==999;}
  boolean topReady(){return ready&&scene==ACTIVE&&screenOn&&!keyguardLocked&&!retainedForLock;}
@@ -57,38 +56,37 @@ public class WideVideoRegression {
  void signal(boolean land,boolean full,boolean focused,int nativeMode){topDirections.put(key,land);observeWideVideo(key,land,full,focused,nativeMode,!land,1000);}
 '''+methods+'''
  public static void main(String[]args){
-  for(int mode=0;mode<3;mode++){
+  for(int mode=1;mode<3;mode++){
    var h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(mode);h.signal(true,true,true,1);
-   if(mode==0){check(h.claimed==0&&h.captureRequests==1&&h.topRoll.resets==0,"video-only waits for native floating video and never reparents the main APP");
+   if(mode==1){check(h.claimed==0&&h.suspended==0&&h.topRoll.resets==0,"turned remains native main");
     for(int i=0;i<20;i++){h.signal(false,false,false,6);h.signal(true,true,false,6);}
     check(h.released==0,"native state changes cannot release a main APP task");}
-   if(mode==1)check(h.claimed==0&&h.suspended==0&&h.topRoll.resets==0,"turned remains native main");
    if(mode==2)check(h.suspended==1&&h.claimed==0,"fullscreen exits workspace");
   }
   for(int mutation=0;mutation<9;mutation++){
-   var h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);
+   var h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);
    switch(mutation){case 0:h.keyguardLocked=true;break;case 1:h.screenOn=false;break;case 2:h.retainedForLock=true;break;
     case 3:h.root=null;break;case 4:h.suspendRequested=true;break;case 5:h.scene=3;break;case 6:((Info)h.current.task).isFocused=false;break;
     case 7:h.current=new TopCandidate(new TopTaskState.Key(7,0,"replacement-token"));break;case 8:EntryGuard.allowed=false;break;}
    h.signal(true,true,true,1);check(h.topRoll.resets==0&&h.claimed==0&&h.suspended==0,"privacy/ownership rejection "+mutation);EntryGuard.allowed=true;
   }
   for(int mutation=0;mutation<4;mutation++){
-   var h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);
+   var h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);
    h.signal(mutation!=0,mutation!=1,mutation!=2,mutation==3?6:1);check(h.claimed==0,"not foreground fullscreen landscape "+mutation);
   }
-  var h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);h.ready=false;h.signal(true,true,true,1);
-  check(h.main.queue.size()==1&&h.claimed==0,"entry waits without moving app");h.ready=true;h.main.drain();check(h.captureRequests==1&&h.claimed==0,"ready entry requests only a native video carrier");
-  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);h.ready=false;h.signal(true,true,true,1);h.sceneEpoch++;h.ready=true;h.main.drain();check(h.claimed==0,"stale request cannot collect into new scene");
-  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);h.ready=false;h.signal(true,true,true,1);h.keyguardLocked=true;h.ready=true;h.main.drain();check(h.claimed==0,"relock cancels deferred collection");
-  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);h.ready=false;h.signal(true,true,true,1);h.current=null;h.ready=true;h.main.drain();check(h.claimed==0&&!h.topFace,"switched task cannot replace header");
-  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);h.slots[4].occupied=true;h.signal(true,true,true,1);check(h.topRoll.resets==0&&h.claimed==0,"existing TOP never replaced");
-  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);h.signal(true,true,true,1);h.signal(false,false,false,6);
-  check(h.claimed==0&&h.released==0&&h.main.queue.isEmpty(),"video-only request never creates an APP admission or handback");
-  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);h.slots[4].view=null;h.signal(true,true,true,1);check(h.main.queue.size()==1&&h.claimed==0,"wait for native TaskView before auto admission");h.slots[4].view=new Object();h.main.drain();check(h.captureRequests==1&&h.claimed==0,"native video discovery does not collect a task");
-  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);h.ready=false;h.signal(true,true,true,1);h.signal(true,false,true,1);h.ready=true;h.main.drain();check(h.claimed==0,"fullscreen exit before admission cancels collection");
-  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);h.ready=false;h.signal(true,true,true,1);((Info)h.current.task).isFocused=false;h.ready=true;h.main.drain();check(h.claimed==0,"focus revalidated after entry");
-  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);h.ready=false;h.signal(true,true,true,1);android.os.SystemClock.now=4000;h.ready=true;h.main.drain();check(h.claimed==0,"expired deferred request cannot collect");android.os.SystemClock.now=1000;
-  h=new WideVideoRegression();h.signal(true,true,true,1);h.sceneEpoch++;h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(0);h.signal(true,true,true,1);check(h.captureRequests==1&&h.claimed==0,"fresh workspace can request video without collecting retained task");
+  var h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.ready=false;h.signal(true,true,true,1);
+  check(h.main.queue.size()==1&&h.claimed==0,"entry waits without moving app");h.ready=true;h.main.drain();check(h.claimed==0&&h.suspended==0,"ready entry leaves the main app alone");
+  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.ready=false;h.signal(true,true,true,1);h.sceneEpoch++;h.ready=true;h.main.drain();check(h.claimed==0,"stale request cannot collect into new scene");
+  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.ready=false;h.signal(true,true,true,1);h.keyguardLocked=true;h.ready=true;h.main.drain();check(h.claimed==0,"relock cancels deferred collection");
+  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.ready=false;h.signal(true,true,true,1);h.current=null;h.ready=true;h.main.drain();check(h.claimed==0&&!h.topFace,"switched task cannot replace header");
+  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.slots[4].occupied=true;h.signal(true,true,true,1);check(h.topRoll.resets==0&&h.claimed==0,"existing TOP never replaced");
+  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.signal(true,true,true,1);h.signal(false,false,false,6);
+  check(h.claimed==0&&h.released==0&&h.main.queue.isEmpty(),"turned request never creates an APP admission or handback");
+  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.slots[4].view=null;h.signal(true,true,true,1);check(h.main.queue.size()==1&&h.claimed==0,"wait for native TaskView before auto admission");h.slots[4].view=new Object();h.main.drain();check(h.claimed==0&&h.suspended==0,"ready strip does not collect a task");
+  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.ready=false;h.signal(true,true,true,1);h.signal(true,false,true,1);h.ready=true;h.main.drain();check(h.claimed==0,"fullscreen exit before admission cancels collection");
+  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.ready=false;h.signal(true,true,true,1);((Info)h.current.task).isFocused=false;h.ready=true;h.main.drain();check(h.claimed==0,"focus revalidated after entry");
+  h=new WideVideoRegression();h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.ready=false;h.signal(true,true,true,1);android.os.SystemClock.now=4000;h.ready=true;h.main.drain();check(h.claimed==0,"expired deferred request cannot collect");android.os.SystemClock.now=1000;
+  h=new WideVideoRegression();h.signal(true,true,true,1);h.sceneEpoch++;h.workspaceOptions=h.workspaceOptions.withLandscapeVideo(1);h.signal(true,true,true,1);check(h.claimed==0&&h.suspended==0,"fresh workspace leaves the retained task alone");
   var p=new WideVideoPolicy();TopTaskState.Key a=new TopTaskState.Key(7,0,"a"),b=new TopTaskState.Key(7,999,"a"),c=new TopTaskState.Key(7,0,"b");p.handled(a);
   check(!p.eligible(a,true,true,true,1)&&p.eligible(b,true,true,true,1)&&p.eligible(c,true,true,true,1),"dedup scoped to token and user");
   p.observe(a,false,false,6);check(!p.eligible(a,true,true,true,1),"native TOP configuration cannot start new episode");p.observe(a,false,false,1);check(p.eligible(a,true,true,true,1),"next fullscreen episode can trigger");
