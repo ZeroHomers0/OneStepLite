@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The same mark as a single silhouette; the system tints it, so the inner blocks are cut out. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="1.8" android:scaleY="1.8"
+        android:translateX="10.8" android:translateY="10.8">
+        <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+            android:pathData="M9.00,7.30H25.86A5.00,5.00 0 0 1 30.86,12.30V35.81A5.00,5.00 0 0 1 25.86,40.81H9.00A5.00,5.00 0 0 1 4.00,35.81V12.30A5.00,5.00 0 0 1 9.00,7.30ZM9.80,12.56H25.06A1.65,1.65 0 0 1 26.71,14.21V14.21A1.65,1.65 0 0 1 25.06,15.86H9.80A1.65,1.65 0 0 1 8.15,14.21V14.21A1.65,1.65 0 0 1 9.80,12.56ZM9.80,19.16H25.22A2.02,2.02 0 0 1 27.24,21.18V34.43A2.02,2.02 0 0 1 25.22,36.45H9.80A2.02,2.02 0 0 1 7.78,34.43V21.18A2.02,2.02 0 0 1 9.80,19.16ZM34.58,7.19H41.61A2.39,2.39 0 0 1 44.00,9.58V14.85A2.39,2.39 0 0 1 41.61,17.24H34.58A2.39,2.39 0 0 1 32.19,14.85V9.58A2.39,2.39 0 0 1 34.58,7.19ZM34.58,18.79H41.61A2.39,2.39 0 0 1 44.00,21.18V26.45A2.39,2.39 0 0 1 41.61,28.84H34.58A2.39,2.39 0 0 1 32.19,26.45V21.18A2.39,2.39 0 0 1 34.58,18.79ZM34.58,30.33H41.61A2.39,2.39 0 0 1 44.00,32.72V38.42A2.39,2.39 0 0 1 41.61,40.81H34.58A2.39,2.39 0 0 1 32.19,38.42V32.72A2.39,2.39 0 0 1 34.58,30.33Z" />
+    </group>
+</vector>

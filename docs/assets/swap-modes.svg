@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="300" viewBox="0 0 760 300" role="img" aria-labelledby="title desc">
+  <title id="title">两种主窗与小窗交换方式</title>
+  <desc id="desc">左图：随应用切换位置，小窗中的应用在原侧放大成主窗，主窗换到另一侧。右图：保持主窗位置，主窗不动，只交换主窗与小窗里的应用。</desc>
+  <defs>
+    <linearGradient id="blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a6bf0"/><stop offset="1" stop-color="#0157e6"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff8a2b"/><stop offset="1" stop-color="#fe7302"/>
+    </linearGradient>
+  </defs>
+  <g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Microsoft YaHei,Noto Sans CJK SC,sans-serif">
+
+    <g transform="translate(16 18)">
+      <text x="0" y="0" fill="#0f1b2d" font-size="17" font-weight="650">随应用切换位置</text>
+      <text x="0" y="24" fill="#6b7c94" font-size="13">小窗应用在原侧放大，主窗换到另一侧</text>
+      <g transform="translate(0 44)">
+        <rect x="0" y="0" width="140" height="196" rx="18" fill="#fff" stroke="#cfdcef" stroke-width="2"/>
+        <rect x="10" y="10" width="120" height="16" rx="6" fill="#eef3fd"/>
+        <rect x="10" y="34" width="86" height="152" rx="10" fill="url(#blue)"/>
+        <rect x="102" y="34" width="28" height="46" rx="8" fill="url(#orange)"/>
+        <rect x="102" y="86" width="28" height="46" rx="8" fill="#ffe9d6"/>
+        <rect x="102" y="138" width="28" height="48" rx="8" fill="#fff1e4"/>
+        <text x="53" y="118" text-anchor="middle" fill="#fff" font-size="15" font-weight="600">A</text>
+        <text x="116" y="62" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">B</text>
+        <path d="M156 98H196" fill="none" stroke="#0157e6" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M190 92L197 98L190 104" fill="none" stroke="#0157e6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="212" y="0" width="140" height="196" rx="18" fill="#fff" stroke="#cfdcef" stroke-width="2"/>
+        <rect x="222" y="10" width="120" height="16" rx="6" fill="#eef3fd"/>
+        <rect x="222" y="34" width="28" height="46" rx="8" fill="#ffe9d6"/>
+        <rect x="222" y="86" width="28" height="46" rx="8" fill="#fff1e4"/>
+        <rect x="222" y="138" width="28" height="48" rx="8" fill="#fff8f1"/>
+        <rect x="256" y="34" width="86" height="152" rx="10" fill="url(#blue)"/>
+        <text x="299" y="118" text-anchor="middle" fill="#fff" font-size="15" font-weight="600">B</text>
+        <text x="236" y="62" text-anchor="middle" fill="#c85a00" font-size="12" font-weight="600">A</text>
+      </g>
+    </g>
+
+    <g transform="translate(408 18)">
+      <text x="0" y="0" fill="#0f1b2d" font-size="17" font-weight="650">保持主窗位置</text>
+      <text x="0" y="24" fill="#6b7c94" font-size="13">主窗不动，只交换里面的应用</text>
+      <g transform="translate(0 44)">
+        <rect x="0" y="0" width="140" height="196" rx="18" fill="#fff" stroke="#cfdcef" stroke-width="2"/>
+        <rect x="10" y="10" width="120" height="16" rx="6" fill="#eef3fd"/>
+        <rect x="10" y="34" width="86" height="152" rx="10" fill="url(#blue)"/>
+        <rect x="102" y="34" width="28" height="46" rx="8" fill="url(#orange)"/>
+        <rect x="102" y="86" width="28" height="46" rx="8" fill="#ffe9d6"/>
+        <rect x="102" y="138" width="28" height="48" rx="8" fill="#fff1e4"/>
+        <text x="53" y="118" text-anchor="middle" fill="#fff" font-size="15" font-weight="600">A</text>
+        <text x="116" y="62" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">B</text>
+        <path d="M156 98H196" fill="none" stroke="#0157e6" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M190 92L197 98L190 104" fill="none" stroke="#0157e6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="212" y="0" width="140" height="196" rx="18" fill="#fff" stroke="#cfdcef" stroke-width="2"/>
+        <rect x="222" y="10" width="120" height="16" rx="6" fill="#eef3fd"/>
+        <rect x="222" y="34" width="86" height="152" rx="10" fill="url(#blue)"/>
+        <rect x="314" y="34" width="28" height="46" rx="8" fill="url(#orange)"/>
+        <rect x="314" y="86" width="28" height="46" rx="8" fill="#ffe9d6"/>
+        <rect x="314" y="138" width="28" height="48" rx="8" fill="#fff1e4"/>
+        <text x="265" y="96" text-anchor="middle" fill="#fff" font-size="15" font-weight="600">B</text>
+        <text x="328" y="62" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">A</text>
+        <g stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9">
+          <path d="M243 136H287"/>
+          <path d="M281 131L287 136L281 141"/>
+          <path d="M287 158H243"/>
+          <path d="M249 153L243 158L249 163"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

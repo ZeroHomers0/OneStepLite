@@ -6,8 +6,6 @@ import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
-import android.graphics.RectF;
-import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
@@ -268,11 +266,10 @@ final class WorkspaceSettingsPage extends FrameLayout {
                 if(persist(WorkspaceSettingsStore.read(activity).withSwapMode(choice)))show(SWAP,false);
             };
             choiceOption(group,WorkspaceOptions.modeLabel(mode),mode==WorkspaceOptions.FIXED_MAIN
-                    ?"主窗保持在当前一侧，只交换主窗与小窗中的应用":"小窗中的应用在原侧放大，主窗随之切换位置",mode==selected,true,null,select);
+                    ?"主窗保持在当前一侧，只交换主窗与小窗中的应用":"小窗中的应用在原侧放大，主窗随之切换位置",mode==selected,true,
+                    new SwapModeDiagram(activity,mode,secondary,dark?0xff353840:0xffe9e9e9,BLUE),select);
             group.setOnClickListener(v->select.run());
-            ModeDiagram diagram=new ModeDiagram(mode);
-            LinearLayout.LayoutParams preview=new LinearLayout.LayoutParams(-1,dp(104));
-            preview.setMargins(dp(18),0,dp(18),dp(16));group.addView(diagram,preview);add(group,0,14);
+            add(group,0,14);
         }
         TextView note=text("从下一次交换主窗与小窗开始生效",13,secondary);
         note.setPadding(dp(16),dp(2),dp(16),0);add(note,0,0);
@@ -415,42 +412,5 @@ final class WorkspaceSettingsPage extends FrameLayout {
         @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); }
         @Override public void setColorFilter(ColorFilter filter) { paint.setColorFilter(filter); }
         @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
-    }
-
-    private final class ModeDiagram extends View {
-        final int mode;
-        final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        ModeDiagram(int mode) { super(activity); this.mode = mode; setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO); }
-        @Override protected void onDraw(Canvas canvas) {
-            super.onDraw(canvas);
-            float scale = Math.min(getWidth() / 280f, getHeight() / 104f);
-            canvas.save(); canvas.translate((getWidth() - 280 * scale) / 2, (getHeight() - 104 * scale) / 2);
-            canvas.scale(scale, scale);
-            scene(canvas, 0, false, false);
-            paint.setColor(secondary); paint.setStrokeWidth(1.7f); paint.setStrokeCap(Paint.Cap.ROUND);
-            canvas.drawLine(128, 52, 150, 52, paint);
-            canvas.drawLine(145, 47, 150, 52, paint); canvas.drawLine(145, 57, 150, 52, paint);
-            scene(canvas, 170, mode == WorkspaceOptions.GROW_IN_PLACE, true);
-            canvas.restore();
-        }
-        void scene(Canvas canvas, float x, boolean right, boolean after) {
-            fill(canvas, x, 5, 110, 94, dark ? 0xff272a33 : 0xffeef1f8, 12);
-            fill(canvas, x + 8, 13, 94, 10, dark ? 0xff333742 : 0xffe0e5ef, 4);
-            float mainX = x + (right ? 38 : 8), sideX = x + (right ? 8 : 80);
-            fill(canvas, mainX, 30, 64, 61, dark ? 0xff244b80 : 0xffdceaff, 7);
-            label(canvas, after ? "B" : "A", mainX + 32, 64, BLUE);
-            for (int i = 0; i < 3; i++) {
-                fill(canvas, sideX, 30 + i * 22, 22, 17, i == 0
-                        ? dark ? 0xff49405e : 0xffe8e0f6 : dark ? 0xff373b46 : 0xffdfe3ec, 4);
-                if (i == 0) label(canvas, after ? "A" : "B", sideX + 11, 43, dark ? 0xffb9a5df : 0xff8b71bb);
-            }
-        }
-        void fill(Canvas canvas, float x, float y, float w, float h, int color, float radius) {
-            paint.setColor(color); canvas.drawRoundRect(new RectF(x, y, x + w, y + h), radius, radius, paint);
-        }
-        void label(Canvas canvas, String text, float x, float y, int color) {
-            paint.setColor(color); paint.setTypeface(Typeface.create("sans-serif-medium", 0));
-            paint.setTextSize(12); paint.setTextAlign(Paint.Align.CENTER); canvas.drawText(text, x, y, paint);
-        }
     }
 }
