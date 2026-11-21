@@ -11,8 +11,8 @@ import android.view.View;
 final class IconButton extends View {
     static final int SETTINGS = 0, EXIT = 1, PREVIOUS = 2, NEXT = 3, CLIPBOARD = 4,
             TORCH = 5, SCREENSHOT = 6, RECORD = 7, CLEAR = 8, DELETE = 9, CLOSE = 10,
-            TOOLS = 11, PORTRAIT_TASK = 12, SIDE_LEFT = 13, SIDE_RIGHT = 14, EXPAND = 15, PLAY = 16, PAUSE = 17, VIDEO_RETURN = 18,
-            TOP_APP = 19;
+            TOOLS = 11, PORTRAIT_TASK = 12, SIDE_LEFT = 13, SIDE_RIGHT = 14, PLAY = 16, PAUSE = 17, VIDEO_RETURN = 18,
+            TOP_APP = 19, EXPAND_LEFT = 20, EXPAND_RIGHT = 21;
     private int icon;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** One scratch path: a button paints exactly one glyph per frame. */
@@ -64,12 +64,15 @@ final class IconButton extends View {
             float start = icon == SIDE_LEFT ? 3f : 15f, end = icon == SIDE_LEFT ? 9f : 21f;
             canvas.drawLine(start, 9.3f, end, 9.3f, paint);
             canvas.drawLine(start, 14.7f, end, 14.7f, paint);
-        } else if (icon == EXPAND) {
-            canvas.drawLine(4, 10, 4, 4, paint); canvas.drawLine(4, 4, 10, 4, paint);
-            canvas.drawLine(14, 4, 20, 4, paint); canvas.drawLine(20, 4, 20, 10, paint);
-            canvas.drawLine(20, 14, 20, 20, paint); canvas.drawLine(20, 20, 14, 20, paint);
-            canvas.drawLine(10, 20, 4, 20, paint); canvas.drawLine(4, 20, 4, 14, paint);
-            canvas.drawLine(4, 4, 9, 9, paint); canvas.drawLine(20, 20, 15, 15, paint);
+        } else if (icon == EXPAND_LEFT || icon == EXPAND_RIGHT) {
+            // One arrow pointing at the corner the main window grows into, so the
+            // header reads the same way as the workspace it sits on.
+            boolean leftward = icon == EXPAND_LEFT;
+            float tipX = leftward ? 7f : 17f, tipY = 7f;
+            float tailX = leftward ? 19f : 5f, tailY = 19f;
+            canvas.drawLine(tailX, tailY, tipX, tipY, paint);
+            canvas.drawLine(tipX, tipY, tipX, tipY + 6f, paint);
+            canvas.drawLine(tipX, tipY, tipX + (leftward ? 6f : -6f), tipY, paint);
         } else if (icon == TOOLS) {
             for (int row = 0; row < 2; row++) for (int column = 0; column < 2; column++) {
                 float x = 4f + column * 9f, y = 4f + row * 9f;

@@ -67,8 +67,8 @@ final class TopBar extends FrameLayout {
     void applyOptions(WorkspaceOptions options) { clock.setShowLunar(options.showLunar); }
     void setMainOnRight(boolean right) {
         mainOnRight = right;
-        header.updateSelected();
-        if (tabletHeader != null) tabletHeader.updateSelected();
+        header.updateActions();
+        if (tabletHeader != null) tabletHeader.updateActions();
     }
     /** Grey the send-to-top action out while the main app cannot fill the strip. */
     void setSendMainToTopEnabled(boolean enabled) {
@@ -167,12 +167,24 @@ final class TopBar extends FrameLayout {
             right=button(IconButton.SIDE_RIGHT,"小窗放在右侧",()->listener.onSetMainSide(false));
             topApp=button(IconButton.TOP_APP,"把主窗应用放到顶栏",listener::onSendMainToTop);
             settings=button(IconButton.SETTINGS,"系统设置",listener::onOpenSettings);
-            expand=button(IconButton.EXPAND,"放大为全屏并退出工作区",listener::onExit);
+            expand=button(IconButton.EXPAND_LEFT,"放大为全屏并退出工作区",listener::onExit);
             buttons=new View[]{left,right,topApp,settings,expand};
             icons=new IconButton[]{left,right,topApp,settings,expand};
-            updateSelected();
+            updateActions();
         }
-        void updateSelected() {left.setSelected(mainOnRight);right.setSelected(!mainOnRight);}
+        /**
+         * The header mirrors with the workspace. The expand action always sits on
+         * the side the small windows occupy and points that way; the switch that
+         * would move them to the side they already occupy is greyed out.
+         */
+        void updateActions() {
+            expand.setIcon(mainOnRight ? IconButton.EXPAND_LEFT : IconButton.EXPAND_RIGHT);
+            left.setEnabled(!mainOnRight);
+            left.setAlpha(mainOnRight ? .32f : 1f);
+            right.setEnabled(mainOnRight);
+            right.setAlpha(mainOnRight ? 1f : .32f);
+            requestLayout();
+        }
         void setSendMainToTopEnabled(boolean enabled) {
             if (topApp.isEnabled() == enabled) return;
             topApp.setEnabled(enabled);
@@ -205,10 +217,19 @@ final class TopBar extends FrameLayout {
         }
         @Override protected void onLayout(boolean changed,int l,int t,int r,int b) {
             int w=r-l,h=b-t,edge=Math.round(10*getResources().getDisplayMetrics().density),bw=left.getMeasuredWidth();
-            left.layout(edge,0,edge+bw,h);right.layout(edge+bw,0,edge+2*bw,h);
-            topApp.layout(edge+2*bw,0,edge+3*bw,h);
-            settings.layout(w-edge-2*bw,0,w-edge-bw,h);expand.layout(w-edge-bw,0,w-edge,h);
-            title.layout(edge+3*bw,0,w-edge-2*bw,h);
+            if(mainOnRight) {
+                // Small windows on the left: expand and settings lead, the top-face
+                // action and the two switches close the row on the right.
+                expand.layout(edge,0,edge+bw,h);settings.layout(edge+bw,0,edge+2*bw,h);
+                topApp.layout(w-edge-3*bw,0,w-edge-2*bw,h);
+                left.layout(w-edge-2*bw,0,w-edge-bw,h);right.layout(w-edge-bw,0,w-edge,h);
+                title.layout(edge+2*bw,0,w-edge-3*bw,h);
+            } else {
+                left.layout(edge,0,edge+bw,h);right.layout(edge+bw,0,edge+2*bw,h);
+                topApp.layout(edge+2*bw,0,edge+3*bw,h);
+                settings.layout(w-edge-2*bw,0,w-edge-bw,h);expand.layout(w-edge-bw,0,w-edge,h);
+                title.layout(edge+3*bw,0,w-edge-2*bw,h);
+            }
             updateColors();
             float size=Math.min(HyperOsStyle.dp(getContext(),26f),Math.min(bw,h)*.84f);
             // Match the visible 2.1-unit stroke edge, rather than the icon touch target.
