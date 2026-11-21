@@ -8,7 +8,7 @@ public final class TopBarFitTest {
     TopBarGeometry g=new TopBarGeometry(size[0],layout.topStrip,Math.round(24*d),d);
     if(g.blankTop<0||g.blankBottom<g.blankTop||g.blankBottom>g.headerTop)throw new AssertionError("clock bounds");checks++;
     if(g.headerTop+g.headerHeight>g.railTop||g.railTop+g.railHeight>layout.topStrip)throw new AssertionError("three layers overlap");checks++;
-    if(g.titleInset!=g.edge+2*g.buttonWidth||2*g.titleInset>=size[0])throw new AssertionError("four buttons leave title room");checks++;
+    if(g.titleInset!=g.edge+3*g.buttonWidth||2*g.titleInset>=size[0])throw new AssertionError("five buttons leave title room");checks++;
     if(g.railHeight<=0||g.headerHeight<=0)throw new AssertionError("empty action row");checks++;
    }
   System.out.println("TopBarFit: "+checks+" checks passed");

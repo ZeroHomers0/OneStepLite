@@ -20,11 +20,11 @@ public final class TopAdmissionRegression {
  static int checks;static void check(boolean v,String why){checks++;if(!v)throw new AssertionError(why);}
  static class Slot {int index;boolean occupied;Slot(int i){index=i;}}
  static class Task {int id=42;Object token=new Binder();}
- static class TopCandidate {Task task=new Task();TopTaskState.Key key=new TopTaskState.Key(42,0,"token");Slot source;}
+ static class TopCandidate {Task task=new Task();TopTaskState.Key key=new TopTaskState.Key(42,0,"token");Slot source;boolean landscape=true;}
  static class Pane {boolean occupied;void occupied(boolean v){occupied=v;}void message(String s){}}
  static class Root {void requestLayout(){}}
  Root root=new Root();Pane topTaskPane=new Pane();Object promotion,cellMotion,topRoll=new Object();
- boolean screenOn=true,keyguardLocked,transferBusy,workspaceEntering,suspendRequested,topFromMain;
+ boolean screenOn=true,keyguardLocked,transferBusy,workspaceEntering,suspendRequested,topFromMain,topPortrait;
  boolean fail=true,defer;int adopted,restored,finished,released;Runnable pending;
  Slot[]slots={new Slot(0),new Slot(1),new Slot(2),new Slot(3),new Slot(4)};Slot topOriginalSlot;
  Context ctx=new Context();Handler main=new Handler();IBinder desktopSceneOwner=new Binder();Rect logicalBounds(Slot s){return new Rect(0,0,2964,1707);}

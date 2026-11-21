@@ -75,6 +75,15 @@ final class VideoDock {
         final int layer;
         Source(Object c,SurfaceControl s,boolean p,String name){container=c;surface=s;pip=p;pkg=name;layer=integer(c,"mLastLayer",0);}
     }
+    /** True while this dock owns the given task, so the top face never adopts a docked video. */
+    static boolean owns(int taskId) {
+        VideoDock dock=instance;
+        if(dock==null || taskId<0)return false;
+        synchronized(dock.lock){
+            Source current=dock.source;
+            return current!=null && current.pip && integer(current.container,"mTaskId",-1)==taskId;
+        }
+    }
     static synchronized void install(Object service,Context context,ClassLoader loader) {
         if(instance!=null)return;
         try {instance=new VideoDock(service,context,loader);}

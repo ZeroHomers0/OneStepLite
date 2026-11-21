@@ -191,7 +191,7 @@ import java.util.function.Consumer;
 public class TopControlsCreationRegression {
  static class View {float alpha=1f;boolean visible;void setAlpha(float a){alpha=a;}void setOnClickListener(Consumer<View> c){}void bringToFront(){}}
  static class FrameLayout extends View {float attachedAlpha=-1;View child;static class LayoutParams{LayoutParams(int w,int h){}}void addView(View v,LayoutParams p){child=v;attachedAlpha=v.alpha;}}
- static class TopTaskPane extends View {View hint;TopTaskPane(Object c,View h){hint=h;}}
+ static class TopTaskPane extends View {View hint;TopTaskPane(Object c,View h){hint=h;}void exitAction(Runnable r){}}
  static class TopRoll extends View {TopRoll(Object c,Runnable settled,Consumer<Float> render){}}
  static class Slot {View hint,view=new View();Object controller=new Object(),taskToken=new Object();}
  static class Layout {boolean tabletLandscape;int topStrip=450;}
@@ -199,6 +199,7 @@ public class TopControlsCreationRegression {
  Object ctx=new Object();float workspaceAlpha;FrameLayout root=new FrameLayout(),topLiveClip=new FrameLayout();View topBar=new View();
  TopTaskPane topTaskPane;TopRoll topRoll;Layout layout=new Layout();boolean topFace;
  View makeEmptyHint(){return new View();}void captureMainIntoTop(){}void topRollSettled(){}void renderTopRollFrame(float p){}
+ void releaseTopTask(boolean front,boolean dismissed,Runnable after){}
  void updateTopTaskGeometry(){topTaskPane.visible=true;}
  __CREATE__
  public static void main(String[] args){int checks=0;for(boolean tablet:new boolean[]{true,false})for(float alpha:new float[]{0f,.4f,1f}){

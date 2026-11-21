@@ -11,7 +11,8 @@ import android.view.View;
 final class IconButton extends View {
     static final int SETTINGS = 0, EXIT = 1, PREVIOUS = 2, NEXT = 3, CLIPBOARD = 4,
             TORCH = 5, SCREENSHOT = 6, RECORD = 7, CLEAR = 8, DELETE = 9, CLOSE = 10,
-            TOOLS = 11, PORTRAIT_TASK = 12, SIDE_LEFT = 13, SIDE_RIGHT = 14, EXPAND = 15, PLAY = 16, PAUSE = 17, VIDEO_RETURN = 18;
+            TOOLS = 11, PORTRAIT_TASK = 12, SIDE_LEFT = 13, SIDE_RIGHT = 14, EXPAND = 15, PLAY = 16, PAUSE = 17, VIDEO_RETURN = 18,
+            TOP_APP = 19;
     private int icon;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** One scratch path: a button paints exactly one glyph per frame. */
@@ -94,6 +95,12 @@ final class IconButton extends View {
             canvas.drawRoundRect(7, 8, 17, 20.5f, 1.5f, 1.5f, paint);
             canvas.drawLine(10, 11, 10, 17.5f, paint);
             canvas.drawLine(14, 11, 14, 17.5f, paint);
+        } else if (icon == TOP_APP) {
+            // A strip at the top and an arrow rising into it: send the main app up.
+            canvas.drawRoundRect(4, 3, 20, 7.5f, 1.2f, 1.2f, paint);
+            canvas.drawLine(12, 20.5f, 12, 10.5f, paint);
+            canvas.drawLine(8.5f, 14, 12, 10.5f, paint);
+            canvas.drawLine(15.5f, 14, 12, 10.5f, paint);
         } else if (icon == CLOSE) {
             canvas.drawLine(6, 6, 18, 18, paint);
             canvas.drawLine(18, 6, 6, 18, paint);

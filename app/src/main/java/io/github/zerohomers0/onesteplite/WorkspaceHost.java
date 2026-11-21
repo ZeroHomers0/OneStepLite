@@ -158,6 +158,8 @@ public final class WorkspaceHost {
     private TopCandidate tabletCoveredMain;
     private TopTaskState.Key tabletReturnedTop;
     private boolean topFromMain, topFace;
+    /** The admitted upper task is portrait-only, so the face letterboxes it instead of stretching. */
+    private boolean topPortrait;
     private boolean topSelectionPending;
     private long topFaceGeneration;
     private TopTaskTransition topTransition;
@@ -2383,7 +2385,11 @@ public final class WorkspaceHost {
     private Rect logicalBounds(Slot slot) {
         if(slot==null || slot.index!=SLOT_TOP)return logicalBounds();
         TopTaskGeometry upper=topGeometry();
-        return new Rect(0,0,upper.logicalWidth,upper.logicalHeight);
+        if(!topPortrait)return new Rect(0,0,upper.logicalWidth,upper.logicalHeight);
+        // A portrait-only app keeps its own aspect; the strip shows it centred with side bars.
+        int width=Math.max(1,Math.min(upper.logicalWidth,
+                Math.round(upper.logicalHeight*9f/16f)));
+        return new Rect(0,0,width,upper.logicalHeight);
     }
     private Slot slotForObject(Object object) {
         for(Slot slot:slots) if(slot.view==object || slot.controller==object)return slot;
@@ -3906,6 +3912,7 @@ public final class WorkspaceHost {
             }
 
             @Override public void onOpenLandscape() { openTopFace(true); }
+            @Override public void onSendMainToTop() { sendMainToTop(); }
             @Override public void onTaskCellsCovered(boolean covered) { setTaskCellsCovered(covered); }
         });
         refreshQuickApps();
@@ -3996,6 +4003,7 @@ public final class WorkspaceHost {
         Slot upper=slots[SLOT_TOP];upper.hint=makeEmptyHint();
         upper.hint.setOnClickListener(v->captureMainIntoTop());
         topTaskPane=new TopTaskPane(ctx,upper.hint);
+        topTaskPane.exitAction(()->releaseTopTask(false,true,null));
         topTaskPane.setAlpha(workspaceAlpha);
         FrameLayout taskParent=layout.tabletLandscape?root:topLiveClip;
         taskParent.addView(topTaskPane,new FrameLayout.LayoutParams(-1,layout.topStrip));
@@ -4059,6 +4067,17 @@ public final class WorkspaceHost {
         taskCellsCovered = covered;
         for (Slot slot : slots) if (slot.index > SLOT_MAIN && slot.index != SLOT_TOP) updateHint(slot);
         if (root != null) { root.requestLayout(); root.invalidate(); }
+    }
+
+    /** Header action: open the landscape face and pull the current main app into it. */
+    private void sendMainToTop() {
+        if(!topReady() || topRoll.rolling() || topTransition!=null)return;
+        if(topFace) {captureMainIntoTop(); return;}
+        Clipboard.get(ctx).close();
+        topSelectionPending=true;
+        prepareLiveTopRoll();
+        // The roll owns the face until it settles; settle the face first, then capture.
+        topRoll.show(true,()->{topRollSettled(true);captureMainIntoTop();});
     }
 
     private void captureMainIntoTop() {
@@ -4510,7 +4529,11 @@ public final class WorkspaceHost {
         try {
             LiveTask task=findMainTask();
             Object info=task==null?null:rootInfo(task);
-            return ordinaryRoot(info,1) && mainTaskVisible(info)?candidate(info,null):null;
+            if(!ordinaryRoot(info,1) || !mainTaskVisible(info))return null;
+            // A docked video is already presented by the video dock; adopting it would
+            // move the same surface twice and leave the dock pointing at a dead parent.
+            if(VideoDock.owns(task.id)) {log("upper candidate skipped: docked video task="+task.id);return null;}
+            return candidate(info,null);
         } catch(Throwable unavailable) {log("upper current candidate unavailable: "+unavailable);return null;}
     }
 
@@ -4588,6 +4611,7 @@ public final class WorkspaceHost {
         adoptExisting(slots[SLOT_TOP],selected.task,fromMain,()->{
             if(!topTaskState.commit(ticket,sceneEpoch)) {releaseTopTask(false,false,null);return;}
             topOriginalSlot=selected.source;topFromMain=fromMain;
+            topPortrait=!selected.landscape;
             topTaskPane.occupied(true);
             updateTopTaskGeometry();applyFullscreenBounds(slots[SLOT_TOP]);applySlotScale(slots[SLOT_TOP]);
             publishDesktopSideTasks();
@@ -8898,6 +8922,7 @@ public final class WorkspaceHost {
         if(slot.index==SLOT_TOP && topTaskState.owner()!=null) {
             topTaskState.release(topTaskState.owner(),false); topOriginalSlot=null;
         }
+        if(slot.index==SLOT_TOP) topPortrait=false;
 
         slot.taskEpoch++;
         slot.removalCheckTask = -1;
@@ -10178,7 +10203,14 @@ public final class WorkspaceHost {
             tx = Class.forName("android.view.SurfaceControl$Transaction")
                     .getDeclaredConstructor().newInstance();
             if (slot.scaleOnLeash) {
-                XposedHelpers.callMethod(tx, "setPosition", sc, 0f, 0f);
+                // A letterboxed portrait app sits centred in the strip instead of at its left edge.
+                float offsetX = 0f;
+                if (slot.index == SLOT_TOP && topPortrait) {
+                    TopTaskGeometry upper = topGeometry();
+                    Rect box = logicalBounds(slot);
+                    offsetX = Math.max(0f, (upper.right - box.width() * k) * .5f);
+                }
+                XposedHelpers.callMethod(tx, "setPosition", sc, offsetX, 0f);
                 // v1.1.3：视口也要对齐 —— 只缩不放位置会"比例对但只显示一部分"（真机反馈）。
                 try {
                     XposedHelpers.callMethod(tx, "setWindowCrop", sc,

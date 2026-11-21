@@ -60,7 +60,7 @@ public class HomeCompactRegression {
  static class Main{List<Runnable>queue=new ArrayList<>();void postDelayed(Runnable r,long d){queue.add(r);}void post(Runnable r){queue.add(r);}}
  int SLOT_COUNT=4,CELL_SLOT_COUNT=4,SLOT_TOP=4;final int SLOT_MAIN=0;Slot[]slots=new Slot[4];Root root=new Root();Layout layout=new Layout();
  static class TopState {Object owner(){return null;}void release(Object key,boolean dismissed){}}
- TopState topTaskState=new TopState();Slot topOriginalSlot;
+ TopState topTaskState=new TopState();Slot topOriginalSlot;boolean topPortrait;
  Promotion promotion;HomeTaskReturn coveredHome;CellMovePreview cellMovePreview;boolean compactPending;Slot launchCurrentSlot;Object cellMotion;
  final List<Slot> sideOrder=new ArrayList<>(),sideAttached=new ArrayList<>();
  final Map<Slot,Float> sideCompactionShift=new IdentityHashMap<>();

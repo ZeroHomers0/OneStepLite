@@ -28,8 +28,9 @@ final class TopBarGeometry {
         blankBottom = Math.max(clockTop, headerTop - Math.round(8f * density * fit));
         blankTop = Math.max(clockTop, blankBottom - Math.round(100f * density));
         edge = Math.max(2, Math.round(10f * density));
-        buttonWidth = Math.max(1, Math.min(headerHeight, (width - 2 * edge) / 6));
-        titleInset = edge + 2 * buttonWidth;
+        // Five actions: three layout actions on the left, settings and exit on the right.
+        buttonWidth = Math.max(1, Math.min(headerHeight, (width - 2 * edge) / 7));
+        titleInset = edge + 3 * buttonWidth;
         controlWidth = Math.max(1, width - 2 * edge);
     }
 }

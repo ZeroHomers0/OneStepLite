@@ -10,7 +10,7 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 import java.util.List;
 
-/** A clock, four fixed workspace actions, and an unmasked application rail. */
+/** A clock, five fixed workspace actions, and an unmasked application rail. */
 final class TopBar extends FrameLayout {
     interface Listener {
         void onOpenSettings();
@@ -19,6 +19,8 @@ final class TopBar extends FrameLayout {
         void onLaunch(QuickApp app);
         boolean canCustomizeApps();
         void onOpenLandscape();
+        /** Send the current main-window app up into the landscape task face. */
+        default void onSendMainToTop() {}
         default void onTaskCellsCovered(boolean covered) {}
     }
     private final Listener listener;
@@ -142,7 +144,7 @@ final class TopBar extends FrameLayout {
 
     private final class Header extends FrameLayout {
         final TextView title;
-        final IconButton left,right,settings,expand;
+        final IconButton left,right,topApp,settings,expand;
         /** Scratch arrays: measure and layout run on every frame of a resize. */
         private final View[] buttons;
         private final IconButton[] icons;
@@ -158,10 +160,11 @@ final class TopBar extends FrameLayout {
             addView(title);
             left=button(IconButton.SIDE_LEFT,"小窗放在左侧",()->listener.onSetMainSide(true));
             right=button(IconButton.SIDE_RIGHT,"小窗放在右侧",()->listener.onSetMainSide(false));
+            topApp=button(IconButton.TOP_APP,"把主窗应用放到顶栏",listener::onSendMainToTop);
             settings=button(IconButton.SETTINGS,"系统设置",listener::onOpenSettings);
             expand=button(IconButton.EXPAND,"放大为全屏并退出工作区",listener::onExit);
-            buttons=new View[]{left,right,settings,expand};
-            icons=new IconButton[]{left,right,settings,expand};
+            buttons=new View[]{left,right,topApp,settings,expand};
+            icons=new IconButton[]{left,right,topApp,settings,expand};
             updateSelected();
         }
         void updateSelected() {left.setSelected(mainOnRight);right.setSelected(!mainOnRight);}
@@ -185,16 +188,17 @@ final class TopBar extends FrameLayout {
         @Override protected void onMeasure(int ws,int hs) {
             int w=MeasureSpec.getSize(ws),h=MeasureSpec.getSize(hs);
             int edge=Math.round(10*getResources().getDisplayMetrics().density);
-            int bw=Math.min(h,Math.max(1,(w-2*edge)/6));
-            title.measure(MeasureSpec.makeMeasureSpec(Math.max(1,w-2*edge-4*bw),MeasureSpec.EXACTLY),hs);
+            int bw=Math.min(h,Math.max(1,(w-2*edge)/7));
+            title.measure(MeasureSpec.makeMeasureSpec(Math.max(1,w-2*edge-5*bw),MeasureSpec.EXACTLY),hs);
             for(View v:buttons)v.measure(MeasureSpec.makeMeasureSpec(bw,MeasureSpec.EXACTLY),hs);
             setMeasuredDimension(w,h);
         }
         @Override protected void onLayout(boolean changed,int l,int t,int r,int b) {
             int w=r-l,h=b-t,edge=Math.round(10*getResources().getDisplayMetrics().density),bw=left.getMeasuredWidth();
             left.layout(edge,0,edge+bw,h);right.layout(edge+bw,0,edge+2*bw,h);
+            topApp.layout(edge+2*bw,0,edge+3*bw,h);
             settings.layout(w-edge-2*bw,0,w-edge-bw,h);expand.layout(w-edge-bw,0,w-edge,h);
-            title.layout(edge+2*bw,0,w-edge-2*bw,h);
+            title.layout(edge+3*bw,0,w-edge-2*bw,h);
             updateColors();
             float size=Math.min(HyperOsStyle.dp(getContext(),26f),Math.min(bw,h)*.84f);
             // Match the visible 2.1-unit stroke edge, rather than the icon touch target.
