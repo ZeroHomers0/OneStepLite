@@ -1,12 +1,11 @@
 name: Build and publish
 
+# Only a merge into main builds. Pull requests and manual runs are deliberately
+# not wired up, so a branch under review never spends runner minutes.
 on:
   push:
     branches: [main]
     tags: ['v*']
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: read

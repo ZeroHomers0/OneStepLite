@@ -223,7 +223,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./test.ps1
 
 ### 持续集成
 
-`.github/workflows/build.yml` 在推送到 `main`、提交拉取请求和手动触发时运行两个作业：
+`.github/workflows/build.yml` 只在合并进 `main`（或推送 `v*` 标签）时运行两个作业，分支上的提交与拉取请求不触发构建：
 
 | 作业 | 运行环境 | 内容 |
 | --- | --- | --- |
