@@ -230,9 +230,9 @@ public class WorkspaceHost {
  android.content.Context ctx=new android.content.Context();FrameLayout root=new FrameLayout(ctx);
  View topBar=new View(ctx),topTaskPane=new View(ctx);Roll topRoll=new Roll();Layout layout=new Layout();
  static class Roll {boolean rolling(){return false;}boolean showingTask(){return true;}}
- static class Layout {int topStrip=622;boolean tabletLandscape;}
+ static class Layout {int topStrip=622;boolean tabletLandscape;int mainHeight=1838;int mainDispHeight=1838;}
  static class TopRollMotion {static class Frame {float frontScale=0,taskScale=1,frontTop,taskTop;}}
- void updateCellSurfaceVisibility(Slot upper){}void updateTopTaskGeometry(){}
+ void updateCellSurfaceVisibility(Slot upper){}void updateTopTaskGeometry(){}float mainScale(){return .5f;}
  TopTaskTransition topTransition;TopTaskState topTaskState=new TopTaskState();int opacityWrites,homeRequests;boolean translucent,failOpacity,failHome;
  java.util.List<Object> appliedOrder=java.util.List.of();
  static class Main {boolean post(Runnable r){r.run();return true;}}Main main=new Main();

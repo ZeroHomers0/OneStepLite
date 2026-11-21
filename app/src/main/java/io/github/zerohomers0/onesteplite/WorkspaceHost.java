@@ -4003,7 +4003,7 @@ public final class WorkspaceHost {
         Slot upper=slots[SLOT_TOP];upper.hint=makeEmptyHint();
         upper.hint.setOnClickListener(v->captureMainIntoTop());
         topTaskPane=new TopTaskPane(ctx,upper.hint);
-        topTaskPane.exitAction(()->releaseTopTask(false,true,null));
+        topTaskPane.exitAction(()->releaseTopTask(true,true,null));
         topTaskPane.setAlpha(workspaceAlpha);
         FrameLayout taskParent=layout.tabletLandscape?root:topLiveClip;
         taskParent.addView(topTaskPane,new FrameLayout.LayoutParams(-1,layout.topStrip));
@@ -4074,10 +4074,26 @@ public final class WorkspaceHost {
         if(!topReady() || topRoll.rolling() || topTransition!=null)return;
         if(topFace) {captureMainIntoTop(); return;}
         Clipboard.get(ctx).close();
-        topSelectionPending=true;
-        prepareLiveTopRoll();
-        // The roll owns the face until it settles; settle the face first, then capture.
-        topRoll.show(true,()->{topRollSettled(true);captureMainIntoTop();});
+        // No face flip: the drawer is the transition, so the task face is already
+        // in place underneath while the main window slides up into it.
+        enterTopFaceForDrawer();
+        captureMainIntoTop();
+    }
+
+    /**
+     * Puts the task face up without the roll. The drawer animation carries the
+     * change instead, and the task surface covers the clock and the app rail.
+     */
+    private void enterTopFaceForDrawer() {
+        topFace=true;
+        topFaceGeneration++;
+        // The roll never settles here, so clear the pending flag it would have cleared;
+        // leaving it set would block task retention for the rest of the session.
+        topSelectionPending=false;
+        topRoll.reset(true);
+        topTaskPane.occupied(slots[SLOT_TOP].occupied && !slots[SLOT_TOP].parked);
+        updateTopTaskGeometry();
+        root.requestLayout();
     }
 
     private void captureMainIntoTop() {
@@ -4107,6 +4123,10 @@ public final class WorkspaceHost {
                     ()->topCollectionSourceCurrent(organizer,selected,source),upper.view);
             if(started) {
                 TopTaskTransition prepared=topTransition;
+                // The drawer slides the real main surface up under the strip. Both
+                // values come from the live layout, so a swapped main side travels
+                // the same distance; the view's own height hides it exactly at the seam.
+                prepared.drawer(mainScale(),Math.max(1,layout.mainDispHeight));
                 prepared.setNativeRestore(()->setTopCollectionTranslucent(selected,false));
                 if(!executeOnShell(()->{
                     try {
@@ -4192,6 +4212,7 @@ public final class WorkspaceHost {
                         finishPendingSuspend();
                     },WorkspaceHost::log);
             if(intoTop)topTransition.collect(source,sourceCurrent,destination);
+            else topTransition.drawer(mainScale(),Math.max(1,layout.mainDispHeight));
             topTransition.start();
             return true;
         } catch(Throwable error) {
@@ -8596,12 +8617,17 @@ public final class WorkspaceHost {
             try {
                 boolean liveCenterReveal=ticket.liveMainReveal && topTransition!=null;
                 ticket.liveMainReveal=liveCenterReveal;
-                float initialScale=liveCenterReveal
-                        ?TopTaskReturnPolicy.CENTER_START_SCALE:1f;
-                float initialX=liveCenterReveal
+                // A drawer hands the task back at the strip seam, not at the screen
+                // centre, so the returning window continues the same motion.
+                boolean drawerReveal=liveCenterReveal && topTransition.drawerMode();
+                float initialScale=drawerReveal
+                        ?topTransition.drawerStartScale()
+                        :liveCenterReveal?TopTaskReturnPolicy.CENTER_START_SCALE:1f;
+                float initialX=liveCenterReveal && !drawerReveal
                         ?TopTaskReturnPolicy.centeredOffset(screenW,initialScale):0f;
-                float initialY=liveCenterReveal
-                        ?TopTaskReturnPolicy.centeredOffset(screenH,initialScale):0f;
+                float initialY=drawerReveal
+                        ?-topTransition.drawerStartOffsetY()
+                        :liveCenterReveal?TopTaskReturnPolicy.centeredOffset(screenH,initialScale):0f;
                 // Prepare every surface operation before changing listener ownership.
                 XposedHelpers.callMethod(area, "reparentToDisplayArea", 0, canonical, tx);
                 XposedHelpers.callMethod(tx, "setMatrix", canonical,
@@ -10139,6 +10165,9 @@ public final class WorkspaceHost {
         if (holdsLiveFlipZoom() || !canRender(slot) || slot.promoting || !slot.occupied || !mayWriteSideSurface(slot)) {
             return;
         }
+        // The drawer owns the main surface transform until it hands off; a delayed
+        // reapply would snap the window back to its resting frame mid-animation.
+        if (topTransition != null && slot.index == SLOT_MAIN) return;
         if (!controllerOwns(slot, slot.taskId, slot.taskToken)) return;
         Object current = getSurfaceField(slot.controller, "mTaskLeash");
         if (current == null || current != slot.scaleSurface) {

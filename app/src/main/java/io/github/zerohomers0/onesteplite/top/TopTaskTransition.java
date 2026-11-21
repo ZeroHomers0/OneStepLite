@@ -32,6 +32,9 @@ final class TopTaskTransition {
     private float collectionPivotX, collectionPivotY;
     private float collectionScaleX, collectionScaleY;
     private float collectionFrameScale=-1f;
+    private boolean drawer;
+    private float drawerScale=1f;
+    private float drawerTravel;
     private Runnable nativeRestore;
     private boolean liveSurfaceAtEnd;
     private ValueAnimator animator;
@@ -87,6 +90,25 @@ final class TopTaskTransition {
         collectionScaleX=destination.getScaleX();collectionScaleY=destination.getScaleY();
     }
 
+    /**
+     * Turn the collection into a drawer: the main surface slides up into the strip
+     * and is cropped at the boundary while the destination grows out of that edge.
+     */
+    void drawer(float scale,float travel) {
+        drawer=true;
+        drawerScale=scale>0f?scale:1f;
+        drawerTravel=Math.max(0f,travel);
+    }
+
+    /** True while the transition runs as a drawer instead of a centre zoom. */
+    boolean drawerMode() {return drawer;}
+
+    /** The scale the drawer starts from, so the native handoff can match it. */
+    float drawerStartScale() {return drawerScale*.92f;}
+
+    /** How far above its resting place the drawer starts, in surface pixels. */
+    float drawerStartOffsetY() {return drawerTravel;}
+
     void setNativeRestore(Runnable restore) {
         if(closed)restore.run();
         else nativeRestore=restore;
@@ -107,6 +129,16 @@ final class TopTaskTransition {
         face.postOnAnimation(()->{
             if(closed)return;
             if(!current.getAsBoolean() || !validLiveSurface()) {close();return;}
+            if(drawer) {
+                // The drawer runs forward: 0 is the resting main window, 1 is fully
+                // tucked under the strip. The destination grows back out afterwards.
+                animate(0f,1f,260L,()->{
+                    applyDrawerCollapse(1f);
+                    log.accept("upper live main tucked under the strip; collection handoff");
+                    handoff();
+                });
+                return;
+            }
             animate(1f,0f,160L,()->{
                 applyCollectionScale(0f);
                 log.accept("upper live main collapsed; collection handoff");
@@ -136,8 +168,8 @@ final class TopTaskTransition {
         revealing=true;
         if(collectionView!=null) {
             // Shell now owns the task matrix; animate only its original SurfaceView parent.
-            animate(0f,1f,180L,()->{
-                log.accept("upper live collection expanded");
+            animate(0f,1f,drawer?220L:180L,()->{
+                log.accept(drawer?"upper live drawer expanded":"upper live collection expanded");
                 close();
             });
             return;
@@ -145,6 +177,15 @@ final class TopTaskTransition {
         if(!validLiveSurface()) {
             log.accept("upper live main surface unavailable; skip center animation");
             close();return;
+        }
+        if(drawer) {
+            // The returning task slides back down out of the strip seam.
+            animate(0f,1f,220L,()->{
+                applyDrawerReveal(1f);
+                log.accept("upper live drawer returned to the workspace");
+                close();
+            });
+            return;
         }
         animate(0f,1f,180L,()->{
             applyLiveScale(1f);
@@ -162,7 +203,15 @@ final class TopTaskTransition {
         next.addUpdateListener(value->{
             if(!current.getAsBoolean()) {close();return;}
             float fraction=(Float)value.getAnimatedValue();
-            if(collectionView!=null && revealing) {
+            if(drawer) {
+                // Collapse drives the real main surface; reveal grows the destination
+                // (or slides the returning task back down) out of the same seam.
+                boolean ok=revealing?applyDrawerReveal(fraction):applyDrawerCollapse(fraction);
+                if(!ok) {
+                    log.accept("upper drawer surface lost; restoring full frame");
+                    close();return;
+                }
+            } else if(collectionView!=null && revealing) {
                 // Zero until admission, then start moving immediately. A .14 hold
                 // exposed a miniature task during the asynchronous native handoff.
                 applyCollectionScale(fraction);
@@ -184,7 +233,10 @@ final class TopTaskTransition {
     void close() {
         if(closed)return;
         closed=true;
-        if(!liveSurfaceAtEnd)applyLiveScale(1f);
+        if(!liveSurfaceAtEnd) {
+            if(drawer)applyDrawerCollapse(0f);
+            else applyLiveScale(1f);
+        }
         if(collectionView!=null) {
             collectionView.setPivotX(collectionPivotX);collectionView.setPivotY(collectionPivotY);
             collectionView.setScaleX(collectionScaleX);collectionView.setScaleY(collectionScaleY);
@@ -213,9 +265,92 @@ final class TopTaskTransition {
 
     private void applyCollectionScale(float scale) {
         collectionFrameScale=scale;
+        if(drawer) {
+            // Collapse moves the real main surface; reveal grows the destination.
+            if(revealing)applyDrawerReveal(scale);
+            else applyDrawerCollapse(scale);
+            return;
+        }
         collectionView.setPivotX(collectionView.getWidth()*.5f);
         collectionView.setPivotY(collectionView.getHeight()*.5f);
         collectionView.setScaleX(scale);collectionView.setScaleY(scale);
+    }
+
+    /**
+     * The main surface slides up out of the workspace. The strip backing and the
+     * task view's own clip hide it at the seam, so no extra crop is needed; the
+     * slight shrink keeps the motion reading as "flowing into" the strip.
+     */
+    private boolean applyDrawerCollapse(float fraction) {
+        float f=Math.max(0f,Math.min(1f,fraction));
+        // The destination must stay invisible until native admission confirms it;
+        // a miniature task peeking out of the strip reads as a glitch.
+        if(collectionView!=null) {
+            // Keep the recorded frame at zero so a geometry refresh cannot reveal it.
+            collectionFrameScale=0f;
+            collectionView.setPivotX(collectionView.getWidth()*.5f);
+            collectionView.setPivotY(collectionView.getHeight());
+            collectionView.setScaleX(0f);
+            collectionView.setScaleY(0f);
+        }
+        if(!validLiveSurface())return false;
+        Object transaction=null;
+        try {
+            transaction=Class.forName("android.view.SurfaceControl$Transaction")
+                    .getDeclaredConstructor().newInstance();
+            float k=drawerScale*(1f-.08f*f);
+            XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,k,0f,0f,k);
+            XposedHelpers.callMethod(transaction,"setPosition",liveSurface,0f,-f*drawerTravel);
+            XposedHelpers.callMethod(transaction,"setWindowCrop",liveSurface,
+                    new Rect(0,0,width,height));
+            XposedHelpers.callMethod(transaction,"apply");
+            liveSurfaceAtEnd=f>=1f;
+            return true;
+        } catch(Throwable error) {
+            log.accept("upper drawer collapse: "+error);
+            return false;
+        } finally {
+            if(transaction!=null)try {XposedHelpers.callMethod(transaction,"close");}
+            catch(Throwable ignored) {}
+        }
+    }
+
+    /**
+     * The destination grows downward out of the strip's lower edge; on the way back
+     * the returning task slides down from that same seam instead.
+     */
+    private boolean applyDrawerReveal(float fraction) {
+        float f=Math.max(0f,Math.min(1f,fraction));
+        if(collectionView==null) {
+            if(!validLiveSurface())return false;
+            Object transaction=null;
+            try {
+                transaction=Class.forName("android.view.SurfaceControl$Transaction")
+                        .getDeclaredConstructor().newInstance();
+                float k=drawerScale*(.92f+.08f*f);
+                XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,k,0f,0f,k);
+                XposedHelpers.callMethod(transaction,"setPosition",liveSurface,0f,-(1f-f)*drawerTravel);
+                XposedHelpers.callMethod(transaction,"setWindowCrop",liveSurface,
+                        new Rect(0,0,width,height));
+                XposedHelpers.callMethod(transaction,"apply");
+                liveSurfaceAtEnd=f>=1f;
+                return true;
+            } catch(Throwable error) {
+                log.accept("upper drawer reveal: "+error);
+                return false;
+            } finally {
+                if(transaction!=null)try {XposedHelpers.callMethod(transaction,"close");}
+                catch(Throwable ignored) {}
+            }
+        }
+        // Anchored on the bottom edge it shares with the main window, so the task
+        // grows downward out of the seam instead of from the screen centre.
+        collectionFrameScale=f;
+        collectionView.setPivotX(collectionView.getWidth()*.5f);
+        collectionView.setPivotY(collectionView.getHeight());
+        collectionView.setScaleX(f);
+        collectionView.setScaleY(f);
+        return true;
     }
 
     private boolean applyLiveScale(float scale) {
