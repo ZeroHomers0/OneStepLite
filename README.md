@@ -174,7 +174,7 @@
 
 模块包名统一为 `io.github.zerohomers0.onesteplite`，后续版本继续使用这个包名。已安装旧包名版本时，先退出工作区并在 LSPosed 中停用旧模块，再安装此包、启用新模块并重新选择作用域，最后正常重启；确认正常后可卸载旧模块。旧包名版本无法直接覆盖升级，请避免同时启用两个模块。
 
-1. 从发行页下载 `OneStepLite-1.0.4.apk`，可用同页的 `SHA256SUMS.txt` 核对文件。
+1. 从 [发行页](https://github.com/ZeroHomers0/OneStepLite/releases) 下载 `OneStepLite-1.0.4.apk`，可用同页的 `SHA256SUMS.txt` 核对文件。
 2. 安装后，在 LSPosed 中启用 **OneStepLite**，选择模块推荐作用域。
 3. **正常重启手机**，使系统进程加载模块。
 4. 在竖屏界面用上角横滑手势打开工作区，先在主窗打开一个应用，再点空格「＋」收纳。
