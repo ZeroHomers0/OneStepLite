@@ -58,7 +58,7 @@ public class TopConfigRegression {
   static Object callMethod(Object o,String n,Object...a){
    if(o instanceof android.window.WindowContainerTransaction){((android.window.WindowContainerTransaction)o).calls.add(n+":"+a[0]+":"+(a.length>1?a[1]:"")+(a.length>2?":"+a[2]:""));return o;}
    if(o instanceof SyncTransaction t && n.equals("addTransactionCommittedListener")){
-    t.executor=(Executor)a[0];t.callback=(Runnable)a[1];return null;
+    t.executor=(Executor)a[0];t.callback=((android.view.SurfaceControl.TransactionCommittedListener)a[1])::onTransactionCommitted;return null;
    }
    if(o instanceof Service){((Service)o).setFocusedTask((Integer)a[0]);return null;}throw new AssertionError(n);
   }
@@ -159,7 +159,8 @@ public class TopConfigRegression {
   System.out.println("Production top density/return/default-focus checks="+checks+" passed");
  }
 }'''
-files={'io/github/zerohomers0/onesteplite/TopConfigRegression.java':body,
+files={'android/view/SurfaceControl.java':'package android.view;public class SurfaceControl {public interface TransactionCommittedListener {void onTransactionCommitted();}}',
+ 'io/github/zerohomers0/onesteplite/TopConfigRegression.java':body,
  'android/window/WindowContainerTransaction.java':'package android.window;public class WindowContainerTransaction {public java.util.List<String>calls=new java.util.ArrayList<>();}',
  'android/view/WindowInsets.java':'package android.view;public class WindowInsets {public static class Type {public static int captionBar(){return 32;}}}',
  'android/graphics/Rect.java':'package android.graphics;public class Rect {int a,b,c,d;public Rect(){}public Rect(int a,int b,int c,int d){this.a=a;this.b=b;this.c=c;this.d=d;}public String toString(){return a+","+b+","+c+","+d;}}',

@@ -33,7 +33,7 @@ files = {
  public static void drain(){var q=new ArrayList<>(pending);pending.clear();for(var r:q)r.run();}}''',
 'android/view/Display.java': '''package android.view;public class Display {public static final int DEFAULT_DISPLAY=0;public int id;
  public int width=1080,height=2460,rotation;public int getDisplayId(){return id;}public int getRotation(){return rotation;}
- public static boolean cancelIfUnclaimed;public void getRealSize(android.graphics.Point p){
+ public static int geometryReads;public static boolean cancelIfUnclaimed;public void getRealSize(android.graphics.Point p){geometryReads++;
  if(cancelIfUnclaimed){cancelIfUnclaimed=false;var monitor=com.android.systemui.shared.system.InputMonitorCompat.latest;
  if(monitor.mInputMonitor.claims==0)monitor.listener.onInputEvent(new MotionEvent(3,552,2459,0));}
  p.x=width;p.y=height;}}''',
@@ -178,7 +178,8 @@ public class EntryGestureRegression {
   reset(0,1080,2460);fullscreen(true);fullscreen(false);swipe(false);check(opened==1,"leaving immersive failed to restore entry");
   reset(0,1080,2460);event(0,20,30);event(1,20,30);Handler.drain();untouched("ordinary tap");
   reset(0,1080,2460);EntryGuard.open=false;swipe(false);untouched("locked device");
-  reset(0,1080,2460);WorkspaceHost.active=true;event(0,300,500);event(2,300,100);event(1,300,100);untouched("active single finger");
+  reset(0,1080,2460);WorkspaceHost.active=true;int reads=android.view.Display.geometryReads;event(0,300,500);event(2,300,100);event(1,300,100);untouched("active single finger");
+  check(android.view.Display.geometryReads==reads,"active workspace must not query display geometry on each touch");
   // The TOP face has no gesture any more: two fingers over the strip always
   // stay with the app, in portrait and on a tablet alike.
   event(0,300,500);two(5,500);two(2,490);check(InputMonitorCompat.latest.mInputMonitor.claims==0,"two-finger jitter claimed");

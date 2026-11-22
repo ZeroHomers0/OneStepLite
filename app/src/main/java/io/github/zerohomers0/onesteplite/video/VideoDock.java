@@ -70,7 +70,7 @@ final class VideoDock {
                     Object tx=call(display(),"getPendingTransaction");if(tx!=null)XposedHelpers.callMethod(tx,"apply");
                     if(reply!=null)reply.writeNoException();return true;
                 }
-                active=false;if(!restore())throw new IllegalStateException("native video return pending");Object display=display();Object tx=call(display,"getPendingTransaction");
+                active=false;handler.post(() -> updateMediaMonitoring());if(!restore())throw new IllegalStateException("native video return pending");Object display=display();Object tx=call(display,"getPendingTransaction");
                 if(tx!=null)XposedHelpers.callMethod(tx,"apply");publish();
             }
             if(reply!=null)reply.writeNoException();return true;
@@ -106,7 +106,7 @@ final class VideoDock {
         }},filter,PERMISSION,handler,Context.RECEIVER_EXPORTED);
         XposedBridge.hookAllMethods(XposedHelpers.findClass("com.android.server.wm.RootWindowContainer",loader),"prepareSurfaces",new XC_MethodHook(){
             @Override protected void afterHookedMethod(MethodHookParam p){
-                if(!p.hasThrowable())try{synchronized(lock){preparingFrame=true;try{prepare();}finally{preparingFrame=false;}}}catch(Throwable error){log("video surface pass: "+error);}
+                if(!p.hasThrowable())try{synchronized(lock){if(!active&&source==null&&dock==null&&suppressedSurfaces.isEmpty())return;preparingFrame=true;try{prepare();}finally{preparingFrame=false;}}}catch(Throwable error){log("video surface pass: "+error);}
             }
         });
         // Suppress native hit regions only while their video is docked. Input flags are
@@ -129,17 +129,93 @@ final class VideoDock {
         handler.post(poll);
     }
     private boolean inputReady=true;
-    private final Runnable poll=new Runnable(){public void run(){
-        if(!active||owner==null||!owner.isBinderAlive())return;
-        try {MediaSessionManager manager=context.getSystemService(MediaSessionManager.class);
-            players=manager==null?Collections.emptyList():manager.getActiveSessions(null);
-            Map<String,Integer> states=new HashMap<>();for(MediaController player:players){PlaybackState state=player.getPlaybackState();if(state!=null)states.put(player.getPackageName(),state.getState());}playStates=states;
-            synchronized(lock){prepare();}}
-        catch(Throwable error){log("video refresh: "+error);}
-        // WM surface callbacks still detect new players immediately; idle media
-        // enumeration is only a recovery path, not a 350ms foreground loop.
-        synchronized(lock){handler.postDelayed(this,source==null?1200L:350L);}
-    }};
+    private MediaSessionManager mediaManager;
+    private boolean mediaListenerRegistered, playbackCallbacksReady, mediaMonitoring;
+    private final Map<android.media.session.MediaSession.Token,MediaController> observedPlayers = new HashMap<>();
+    private final MediaSessionManager.OnActiveSessionsChangedListener sessionsChanged = this::replaceMediaSessions;
+    private final MediaController.Callback playbackChanged = new MediaController.Callback() {
+        @Override public void onPlaybackStateChanged(PlaybackState state) { refreshPlaybackStates(); }
+        @Override public void onSessionDestroyed() { refreshMediaSessions(); }
+    };
+    private final Runnable poll = new Runnable() {
+        @Override public void run() {
+            if (!active || owner == null || !owner.isBinderAlive()) { stopMediaMonitoring(); return; }
+            refreshMediaSessions();
+            synchronized (lock) {
+                handler.removeCallbacks(this);
+                if (active && owner != null && owner.isBinderAlive())
+                    handler.postDelayed(this, mediaListenerRegistered && playbackCallbacksReady ? 15000L : 2000L);
+            }
+        }
+    };
+    private void updateMediaMonitoring() {
+        if (!active || owner == null || !owner.isBinderAlive()) { stopMediaMonitoring(); return; }
+        if (mediaMonitoring) return;
+        mediaMonitoring = true;
+        try {
+            if (mediaManager == null) mediaManager = context.getSystemService(MediaSessionManager.class);
+            if (mediaManager != null && !mediaListenerRegistered) {
+                mediaManager.addOnActiveSessionsChangedListener(sessionsChanged, null, handler);
+                mediaListenerRegistered = true;
+            }
+        } catch (Throwable unavailable) { log("video media callbacks unavailable: " + unavailable); }
+        handler.removeCallbacks(poll);
+        handler.post(poll);
+    }
+    private void refreshMediaSessions() {
+        if (!active) return;
+        try {
+            if (mediaManager == null) mediaManager = context.getSystemService(MediaSessionManager.class);
+            replaceMediaSessions(mediaManager == null ? Collections.emptyList() : mediaManager.getActiveSessions(null));
+        } catch (Throwable error) { playbackCallbacksReady = false; log("video refresh: " + error); }
+    }
+    private void replaceMediaSessions(List<MediaController> controllers) {
+        if (!active) return;
+        Map<android.media.session.MediaSession.Token,MediaController> next = new HashMap<>();
+        if (controllers != null) for (MediaController player : controllers) next.put(player.getSessionToken(), player);
+        for (android.media.session.MediaSession.Token token : new ArrayList<>(observedPlayers.keySet())) {
+            if (next.containsKey(token)) continue;
+            try { observedPlayers.get(token).unregisterCallback(playbackChanged); }
+            catch (Throwable error) { log("video callback removal: " + error); }
+            observedPlayers.remove(token);
+        }
+        playbackCallbacksReady = true;
+        for (Map.Entry<android.media.session.MediaSession.Token,MediaController> entry : next.entrySet()) {
+            if (observedPlayers.containsKey(entry.getKey())) continue;
+            try {
+                entry.getValue().registerCallback(playbackChanged, handler);
+                observedPlayers.put(entry.getKey(), entry.getValue());
+            } catch (Throwable unavailable) { playbackCallbacksReady = false; }
+        }
+        players = new ArrayList<>(next.values());
+        refreshPlaybackStates();
+    }
+    private void refreshPlaybackStates() {
+        if (!active) return;
+        Map<String,Integer> states = new HashMap<>();
+        for (MediaController player : players) {
+            try {
+                PlaybackState state = player.getPlaybackState();
+                if (state != null) states.put(player.getPackageName(), state.getState());
+            } catch (Throwable gone) { /* Session-list callback or the watchdog reconciles destroyed players. */ }
+        }
+        playStates = states;
+        synchronized (lock) { prepare(); }
+    }
+    private void stopMediaMonitoring() {
+        mediaMonitoring = false;
+        handler.removeCallbacks(poll);
+        if (mediaManager != null && mediaListenerRegistered) {
+            try { mediaManager.removeOnActiveSessionsChangedListener(sessionsChanged); }
+            catch (Throwable error) { log("video session listener removal: " + error); }
+        }
+        mediaListenerRegistered = false;
+        for (MediaController player : observedPlayers.values()) {
+            try { player.unregisterCallback(playbackChanged); }
+            catch (Throwable error) { log("video playback listener removal: " + error); }
+        }
+        observedPlayers.clear();players = Collections.emptyList();playStates = Collections.emptyMap();
+    }
     private void updateHost(Intent intent) {
         synchronized(lock){
             IBinder next=intent.getExtras()==null?null:intent.getExtras().getBinder("owner");
@@ -152,7 +228,7 @@ final class VideoDock {
                     while(retiredOwners.size()>64)retiredOwners.remove(retiredOwners.iterator().next());
                 }
                 owner=next;sequence=-1;dismissed.clear();final IBinder binding=next;
-                ownerDeath=()->handler.post(()->{synchronized(lock){if(owner==binding){active=false;restore();owner=null;publish();}}});
+                ownerDeath=()->handler.post(()->{synchronized(lock){if(owner==binding){active=false;handler.post(() -> updateMediaMonitoring());restore();owner=null;publish();}}});
                 try {owner.linkToDeath(ownerDeath,0);}catch(RemoteException gone){owner=null;return;}
             }
             hostUid=intent.getParcelableExtra("identity",PendingIntent.class).getCreatorUid();
@@ -160,8 +236,9 @@ final class VideoDock {
             width=intent.getIntExtra("width",0);height=intent.getIntExtra("height",0);
             active=intent.getBooleanExtra("active",false)&&width>1&&height>1;
             fill=intent.getBooleanExtra("fill",false);
-            prepare();handler.removeCallbacks(poll);if(active)handler.post(poll);
+            prepare();
         }
+        updateMediaMonitoring();
     }
     private Object display(){Object root=field(service,"mRoot");return call(root,"getDisplayContent",0);}
     private void prepare() {
@@ -299,7 +376,7 @@ final class VideoDock {
         }
     }
     private boolean retainPendingReturn(Object tx) {
-        active=false;
+        active=false;handler.post(() -> updateMediaMonitoring());
         // The server owns dock. Isolate it before the remote host can die even
         // when its original WM parent is temporarily unavailable.
         try {

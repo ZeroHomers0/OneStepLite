@@ -26,7 +26,7 @@ public final class Rect {
  public int hashCode(){return left+31*top+961*right+29791*bottom;}
  public String toString(){return left+","+top+","+right+","+bottom;}
 }''', encoding='utf8')
-source = package_dir(ROOT)/'StatusBarClip.java'
+source = package_dir(ROOT)/'MainWindowClip.java'
 test = Path(__file__).with_name('StatusBarClipRegression.java')
 subprocess.run([str(JDK / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(OUT),
                 str(fake), str(rect), str(source), str(test), str(package_dir(ROOT)/'Packages.java'), str(package_dir(ROOT)/'WindowTypes.java')], check=True)

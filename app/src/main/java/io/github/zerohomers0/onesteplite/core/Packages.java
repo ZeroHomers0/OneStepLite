@@ -10,6 +10,8 @@ final class Packages {
     static final String LAUNCHER = "com.miui.home";
     /** The settings app whose resources the settings page borrows. */
     static final String SETTINGS = "com.android.settings";
+    /** MIUI's native edge sidebar. */
+    static final String SECURITY_CENTER = "com.miui.securitycenter";
 
     private Packages() {}
 }

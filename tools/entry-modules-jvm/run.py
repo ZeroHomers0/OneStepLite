@@ -25,7 +25,7 @@ files={
 'android/provider/Settings.java':'''package android.provider;public class Settings {public static class Global {
  public static String value;public static boolean fail;public static boolean putString(Object r,String k,String v){if(fail)throw new IllegalStateException();value=v;return true;}}}''',
 'android/util/AtomicFile.java':'''package android.util;public class AtomicFile {
- java.io.File f;public AtomicFile(java.io.File f){this.f=f;}public java.io.FileOutputStream startWrite()throws java.io.IOException{return new java.io.FileOutputStream(f);}
+ public static int writes;java.io.File f;public AtomicFile(java.io.File f){this.f=f;}public java.io.FileOutputStream startWrite()throws java.io.IOException{writes++;return new java.io.FileOutputStream(f);}
  public void finishWrite(java.io.FileOutputStream s)throws java.io.IOException{s.close();}public void failWrite(java.io.FileOutputStream s){try{s.close();}catch(Exception e){}}}''',
 'android/graphics/Rect.java':'''package android.graphics;public class Rect {public int left,top,right,bottom;
  public Rect(int a,int b,int c,int d){left=a;top=b;right=c;bottom=d;}public boolean isEmpty(){return right<=left||bottom<=top;}
@@ -68,6 +68,13 @@ public class EntryModulesRegression {
   Intent sent=c.sent.get(0);check((float)sent.extras.get("scale")==.75f&&(float)sent.extras.get("offsetY")==600,"broadcast carries same target geometry");
   check(sent.flags==Intent.FLAG_RECEIVER_REGISTERED_ONLY,"zoom broadcast cannot start stopped receivers");
   Path file=c.files.toPath().resolve("onesteplite-zoom");check(Files.readString(file).startsWith("anim .75"),"atomic-file fallback preserves original command");
+  transport.publish(".75 600 100",1000);
+  int writes=android.util.AtomicFile.writes;transport.publish(".75 600 100",1001);
+  check(android.util.AtomicFile.writes==writes&&Files.getLastModifiedTime(file).toMillis()==1001,"same command renews file timestamp without rewriting buffers");
+  check(c.sent.size()==3&&android.provider.Settings.Global.value.startsWith("1001|"),"timestamp-only file renewal preserves independent broadcast and settings leases");
+  Files.delete(file);transport.publish(".75 600 100",1002);
+  check(Files.exists(file)&&android.util.AtomicFile.writes==writes+1,"missing fallback file is recreated despite command cache");
+  c.sent.subList(1,c.sent.size()).clear();
   android.provider.Settings.Global.fail=true;transport.publish("1 0 0",1001);check(c.sent.size()==2&&Files.readString(file).equals("1 0 0"),"settings failure cannot suppress broadcast or file");
   android.provider.Settings.Global.fail=false;c.fail=true;transport.publish(".5 800 0",1002);check(Files.readString(file).equals(".5 800 0"),"broadcast failure cannot suppress atomic-file channel");
   c.fail=false;c.files=new java.io.File(args[0],"missing/child");transport.publish("1 0 0",1003);check(c.sent.size()==3,"file failure cannot suppress broadcast channel");
@@ -100,6 +107,7 @@ paths=[]
 for name,body in files.items():
     p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body,encoding='utf-8');paths.append(str(p))
 paths.append(str(src/'ZoomTransport.java'))
+paths.append(str(src/'RoutineLog.java'))
 paths.append(str(src/'WorkspaceScreenObserver.java'))
 paths.append(str(src/'WorkspaceWindowHooks.java'))
 paths.append(str(src/'BackGestureDiagnostics.java'))

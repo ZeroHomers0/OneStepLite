@@ -17,6 +17,8 @@ final class WindowTypes {
     static final int APPLICATION_OVERLAY = 2038;
     /** Native screenshot animation and preview. */
     static final int SCREENSHOT = 2036;
+    /** Native display-overlay windows, including MIUI's edge-sidebar handle. */
+    static final int DISPLAY_OVERLAY = 2026;
 
     /** SystemUI's own dialog layer, above the status bar. */
     static final int SYSTEM_UI_DIALOG = 2017;

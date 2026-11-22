@@ -35,6 +35,8 @@ public final class StatusBarClipRegression {
     }
     public static final class Attrs {
         int type=2000; String packageName="com.android.systemui";
+        String title="StatusBar";
+        public CharSequence getTitle() { return title; }
     }
     public static final class Window {
         Object display; Token mToken; Attrs mAttrs=new Attrs();
@@ -56,7 +58,7 @@ public final class StatusBarClipRegression {
                 Object display=new Object(); Window w=new Window(display);
                 int width=rotation==0?1200:2608, height=rotation==0?2608:1200;
                 w.mToken.bounds=new Rect(0,0,width,height);
-                StatusBarClip owner=new StatusBarClip();
+                MainWindowClip owner=new MainWindowClip();
                 owner.update(w,display,logs::add);
                 Rect clip=w.mToken.surface.crop;
                 check(clip!=null,"production update did not submit a token crop");
@@ -84,7 +86,7 @@ public final class StatusBarClipRegression {
             }
     }
     static void lifecycle() {
-        Object d=new Object(); StatusBarClip owner=new StatusBarClip(); Window w=new Window(d);
+        Object d=new Object(); MainWindowClip owner=new MainWindowClip(); Window w=new Window(d);
         owner.update(w,d,logs::add); owner.update(w,d,logs::add);
         check(w.mToken.pending.writes==1,"unchanged traversal wrote crop every frame");
         w.mToken.bounds=new Rect(37,19,2645,1219); owner.update(w,d,logs::add);
@@ -107,7 +109,7 @@ public final class StatusBarClipRegression {
         check(w.mToken.pending.writes==writes,"cleanup wrote a destroyed surface");
     }
     static void scopeAndFailures() {
-        Object d=new Object(); StatusBarClip owner=new StatusBarClip();
+        Object d=new Object(); MainWindowClip owner=new MainWindowClip();
         for (int type : new int[]{1,2011,2012,2019,2038,2040}) {
             Window w=new Window(d); w.mAttrs.type=type; owner.update(w,d,logs::add);
             check(w.mToken.pending.writes==0,"non-status window changed: "+type);
@@ -137,8 +139,43 @@ public final class StatusBarClipRegression {
             check(f.mToken.surface.crop==null,"failed cleanup ownership was not retained for retry");
         }
     }
+    static void sidebarAnimationGeometry() {
+        for (int rotation : new int[]{0,1,3}) for (double scale : new double[]{.7466114,.62})
+            for (double ox : new double[]{0,1200-1200*scale}) for (boolean right : new boolean[]{false,true}) {
+                Object display=new Object(); Window w=new Window(display);
+                w.mAttrs.type=2026;w.mAttrs.packageName="com.miui.securitycenter";w.mAttrs.title="DockAssistantView";
+                int width=rotation==0?1200:2608,height=rotation==0?2608:1200;
+                w.mToken.bounds=new Rect(0,0,width,height);
+                MainWindowClip owner=new MainWindowClip();owner.update(w,display,logs::add);
+                Rect clip=w.mToken.surface.crop;
+                check(clip!=null&&clip.equals(w.mToken.bounds),"sidebar must clip on the stationary token, not its narrow moving window");
+                for (int travel : new int[]{96,48,12,0,12,48,96}) {
+                    int left=right?width-24+travel:-travel,rightEdge=left+24;
+                    int clippedLeft=Math.max(left,clip.left),clippedRight=Math.min(rightEdge,clip.right);
+                    near(Math.max(0,clippedRight-clippedLeft),Math.max(0,24-travel),"sidebar entry/exit must retain its native visible fraction");
+                    if (clippedRight<=clippedLeft) continue;
+                    for (int x : new int[]{clippedLeft,clippedRight}) for (int y : new int[]{400,600}) {
+                        double[] p=project(rotation,scale,ox,673,x,y);
+                        check(p[0]>=ox-.001&&p[0]<=ox+1200*scale+.001
+                                &&p[1]>=673-.001&&p[1]<=673+2608*scale+.001,
+                                "native sidebar animation crossed into the workspace rail");
+                    }
+                }
+                owner.update(w,display,logs::add);
+                check(w.mToken.pending.writes==1,"stationary token crop must not restart the native animation each frame");
+                owner.clear(logs::add);check(w.mToken.surface.crop==null,"workspace exit must restore the native sidebar canvas");
+            }
+        for (int gate=0;gate<4;gate++) {
+            Object display=new Object(); Window w=new Window(display);
+            w.mAttrs.type=2026;w.mAttrs.packageName="com.miui.securitycenter";w.mAttrs.title="DockAssistantView";
+            if(gate==0)w.mAttrs.packageName="foreign";if(gate==1)w.mAttrs.title="another security-center window";
+            if(gate==2)w.mAttrs.type=2038;if(gate==3)w.display=new Object();
+            new MainWindowClip().update(w,display,logs::add);
+            check(w.mToken.pending.writes==0,"sidebar clipping must use exact package/type/title/display ownership");
+        }
+    }
     public static void main(String[] args) {
-        animationGeometry(); lifecycle(); scopeAndFailures();
+        animationGeometry(); lifecycle(); scopeAndFailures(); sidebarAnimationGeometry();
         System.out.println("actual status-bar clip geometry/lifecycle checks="+checks+" passed");
     }
 }

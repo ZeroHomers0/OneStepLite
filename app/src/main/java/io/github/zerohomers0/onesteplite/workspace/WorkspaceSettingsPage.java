@@ -298,7 +298,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
                 : "需先在系统设置中关闭手势提示线";
         entryGestureOption(WorkspaceOptions.BOTTOM_CENTER_OUTWARD,
                 "底部向外滑", detail, selected, lineHidden);
-        previewNote("保存后生效");
+        previewNote("选择后自动保存");
     }
 
     private void entryGestureOption(int mode,String label,String detail,int selectedMode,boolean enabled) {

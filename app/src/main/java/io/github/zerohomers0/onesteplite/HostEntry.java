@@ -1269,7 +1269,7 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private static final SystemUiRotation sMainSystemUiRotation = new SystemUiRotation();
-    private static final StatusBarClip sMainStatusBarClip = new StatusBarClip();
+    private static final MainWindowClip sMainWindowClip = new MainWindowClip();
     private static final TopSystemBars sTopSystemBars = new TopSystemBars();
     private static final ImeProcessConfiguration sMainImeProcessConfiguration =
             new ImeProcessConfiguration();
@@ -1294,7 +1294,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             sMainSystemUiRotation.update(window, sDisplayContent, app, HostEntry::log);
             Object imeApp = sInteractiveImeViewport.update(window, sDisplayContent,
                     DesktopLaunchBridge::ownsTopTask, HostEntry::log);
-            sMainStatusBarClip.update(window, sDisplayContent, HostEntry::log);
+            sMainWindowClip.update(window, sDisplayContent, HostEntry::log);
             sMainImeProcessConfiguration.update(window, sDisplayContent,
                     imeApp == null ? app : imeApp, HostEntry::log);
         } catch (Throwable error) {
@@ -3640,7 +3640,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         sMainSystemUiRotation.clear(HostEntry::log);
         publishMainUiConfiguration(null);
         if (!sFullscreenRotationActive) {
-            sMainStatusBarClip.clear(HostEntry::log);
+            sMainWindowClip.clear(HostEntry::log);
             releaseAllTaskRotationsLocked("inactive cleanup");
             queueInactiveRotationCleanupLocked(display);
             return;
@@ -3648,7 +3648,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         sFullscreenRotationActive = false;
         releaseAllTaskRotationsLocked("host exit");
         queueInactiveRotationCleanupLocked(display);
-        sMainStatusBarClip.clear(HostEntry::log);
+        sMainWindowClip.clear(HostEntry::log);
         recomputeDisplayOrientationLocked(display, "exit OneStepLite");
     }
 
@@ -4269,6 +4269,7 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private static void log(String msg) {
+        if (!RoutineLog.allow(msg)) return;
         Log.i(TAG, msg);
         try {
             XposedBridge.log(TAG + ": " + msg);

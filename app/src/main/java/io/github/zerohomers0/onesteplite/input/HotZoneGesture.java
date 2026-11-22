@@ -83,6 +83,16 @@ public final class HotZoneGesture {
     private void onMotion(MotionEvent e) {
         if (!enabled || !Integer.valueOf(0).equals(XposedHelpers.callMethod(e, "getDisplayId"))
                 || !e.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)) return;
+        int action = e.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) bottomDownTime = e.getEventTime();
+        if (WorkspaceHost.hostSceneActive()) {
+            generation++;
+            swipe.reset();
+            bottomSwipe.reset();
+            bottomPilfered = false;
+            restoreBatching();
+            return;
+        }
         // DOWN already admitted this stream. Retain horizontal intent before binder-backed
         // geometry/settings/unlock queries let the native navigation monitor win the race.
         if (e.getActionMasked() == MotionEvent.ACTION_MOVE && !bottomPilfered
@@ -98,16 +108,6 @@ public final class HotZoneGesture {
         Point size = new Point();
         wm.getDefaultDisplay().getRealSize(size);
         int rotation = wm.getDefaultDisplay().getRotation();
-        int action = e.getActionMasked();
-        if (action == MotionEvent.ACTION_DOWN) bottomDownTime = e.getEventTime();
-        if (WorkspaceHost.hostSceneActive()) {
-            generation++;
-            swipe.reset();
-            bottomSwipe.reset();
-            bottomPilfered = false;
-            restoreBatching();
-            return;
-        }
         if (action == MotionEvent.ACTION_DOWN) {
             reset();
             if (!EntryGuard.canOpen(context)) return;

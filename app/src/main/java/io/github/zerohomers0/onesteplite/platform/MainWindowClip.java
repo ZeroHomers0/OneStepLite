@@ -5,8 +5,8 @@ import java.util.IdentityHashMap;
 import java.util.function.Consumer;
 import de.robv.android.xposed.XposedHelpers;
 
-/** Keep native status-bar insets animations inside the scaled main display. */
-final class StatusBarClip {
+/** Keep native status-bar and sidebar animations inside the scaled main display. */
+final class MainWindowClip {
     private static final class Owned {
         final Object display, surface;
         Rect crop;
@@ -18,15 +18,19 @@ final class StatusBarClip {
         if (window == null || display == null
                 || XposedHelpers.callMethod(window, "getDisplayContent") != display) return;
         Object attrs = XposedHelpers.getObjectField(window, "mAttrs");
-        if (XposedHelpers.getIntField(attrs, "type") != WindowTypes.STATUS_BAR
-                || !Packages.SYSTEM_UI.equals(XposedHelpers.getObjectField(attrs, "packageName"))) return;
+        int type=XposedHelpers.getIntField(attrs,"type");
+        Object pkg=XposedHelpers.getObjectField(attrs,"packageName");
+        boolean statusBar=type==WindowTypes.STATUS_BAR && Packages.SYSTEM_UI.equals(pkg);
+        boolean sidebar=type==WindowTypes.DISPLAY_OVERLAY && Packages.SECURITY_CENTER.equals(pkg)
+                && "DockAssistantView".contentEquals((CharSequence)XposedHelpers.callMethod(attrs,"getTitle"));
+        if (!statusBar && !sidebar) return;
         Object token = XposedHelpers.getObjectField(window, "mToken");
         if (token == null || XposedHelpers.callMethod(token, "getParent") == null) return;
         Object surface = XposedHelpers.callMethod(token, "getSurfaceControl");
         if (surface == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(surface, "isValid"))) return;
         Rect bounds = (Rect) XposedHelpers.callMethod(token, "getBounds");
         if (bounds == null || bounds.width() <= 0 || bounds.height() <= 0) return;
-        // The token is outside the moving insets leash. Its own native rotation
+        // The token is outside the moving window/insets leash. Its own native rotation
         // and ancestor magnification project this local canvas into the main area.
         Rect crop = new Rect(0, 0, bounds.width(), bounds.height());
         Owned current = owned.get(token);
@@ -39,7 +43,7 @@ final class StatusBarClip {
         XposedHelpers.callMethod(XposedHelpers.callMethod(token, "getPendingTransaction"),
                 "setCrop", surface, crop);
         current.crop = crop;
-        log.accept("main status bar clip=" + crop);
+        log.accept((sidebar ? "main sidebar clip=" : "main status bar clip=") + crop);
     }
 
     void clear(Consumer<String> log) {

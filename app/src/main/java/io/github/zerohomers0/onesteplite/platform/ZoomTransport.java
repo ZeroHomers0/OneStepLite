@@ -7,9 +7,9 @@ import java.util.function.Consumer;
 final class ZoomTransport {
     private final Context ctx;
     private final Consumer<String> logger;
-    private String lastBroadcastZoom;
+    private String lastBroadcastZoom, lastFileZoom;
     ZoomTransport(Context context,Consumer<String> logger) { ctx=context;this.logger=logger; }
-    private void log(String text) { logger.accept(text); }
+    private void log(String text) { if (RoutineLog.allow(text)) logger.accept(text); }
     // Legacy system_server fallback reads only this numeric zoom tuple.
     @android.annotation.SuppressLint("SetWorldReadable")
     void publish(String command,long issuedAt) {
@@ -17,12 +17,16 @@ final class ZoomTransport {
         broadcastZoom(command, issuedAt);
         try {
             java.io.File f = new java.io.File(ctx.getFilesDir(), "onesteplite-zoom");
+            // Identical contents only need a fresh lease timestamp, not another fsync.
+            if (!command.trim().startsWith("anim") && command.equals(lastFileZoom) && f.isFile() && f.setLastModified(issuedAt)) return;
             android.util.AtomicFile file = new android.util.AtomicFile(f);
             java.io.FileOutputStream stream = null;
             try {
                 stream = file.startWrite();
                 stream.write(command.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 file.finishWrite(stream);
+                lastFileZoom = command;
+                f.setLastModified(issuedAt);
                 // system_server 需要读这个文件来应用单手模式缩放；AtomicFile 默认 0600，必须放开读权限。
                 if (!f.setReadable(true, false)) {
                     log("writeZoom: setReadable(false) returned false");

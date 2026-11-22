@@ -2725,7 +2725,8 @@ public final class WorkspaceHost {
                     Runnable confirm = () -> checkReturned(ticket.slot, ticket, 0, success, failure);
                     try {
                         XposedHelpers.callMethod(sync, "addTransactionCommittedListener",
-                                (Executor) main::post, confirm);
+                                (Executor) main::post,
+                                (android.view.SurfaceControl.TransactionCommittedListener) confirm::run);
                     } catch (Throwable unavailable) {
                         log("retained desktop draw commit signal unavailable task=" + ticket.taskId);
                         main.post(confirm);
@@ -2857,7 +2858,9 @@ public final class WorkspaceHost {
                     try {
                         Executor uiExecutor = action -> h.main.post(action);
                         XposedHelpers.callMethod(p.thisObject, "addTransactionCommittedListener",
-                                uiExecutor, (Runnable) () -> { for (NativeObservation check : checks) check.run(); });
+                                uiExecutor, (android.view.SurfaceControl.TransactionCommittedListener) () -> {
+                                    for (NativeObservation check : checks) check.run();
+                                });
                     } catch (Throwable unavailable) {
                         log("commit signal unavailable; retain bounded observation watchdog");
                     }
@@ -2910,7 +2913,10 @@ public final class WorkspaceHost {
                                 scheduleOverlayRefresh();
                             }
                             else if ("onTransitionMerged".equals(name)
-                                    || "onTransitionFinished".equals(name)) traceSwapEvent(name);
+                                    || "onTransitionFinished".equals(name)) {
+                                traceSwapEvent(name);
+                                main.post(() -> { if (topBar != null) topBar.requestOpenedAppsRefresh(); });
+                            }
                             else if ("hashCode".equals(name)) return System.identityHashCode(self);
                             else if ("equals".equals(name)) return self == args[0];
                             else if ("toString".equals(name)) return "OneStepLiteRetainedSurfaceObserver";
@@ -2983,6 +2989,7 @@ public final class WorkspaceHost {
             refreshOverlayAfterTransition();
         }, 60L);
         main.postDelayed(this::refreshOverlayAfterTransition, 380L);
+        if (topBar != null) topBar.requestOpenedAppsRefresh();
     }
 
     private void refreshOverlayAfterTransition() {
@@ -3129,6 +3136,9 @@ public final class WorkspaceHost {
     private void setZoomState(boolean on) {
         on = on && !keyguardLocked && screenOn && !lockExitPending;
         zoomed = on;
+        if (topBar != null) topBar.setWorkspaceActive(on);
+        if (on) startWorkspaceHeartbeat();
+        else if (workspaceHeartbeat != null) main.removeCallbacks(workspaceHeartbeat);
         if (!on) unlockGeometryReplay.clear();
         HostEntry.setHostZoomed(on);
         StatusBarSampling.geometryChanged();
@@ -3664,46 +3674,36 @@ public final class WorkspaceHost {
     }
     }
 
-    /** Re-assert the hot zone and the cell transforms every four seconds. */
+    private Runnable workspaceHeartbeat;
+    private long lastWorkspaceRepair;
+
+    /** Renew the 15-second zoom lease; full recovery is an infrequent fallback. */
     private void startWorkspaceHeartbeat() {
-    // v0.9.9：心跳保证热区始终在位上（面板关闭路径异常时也能自动恢复，否则会卡在"撤下"）。
-    main.postDelayed(new Runnable() {
-        @Override
-        public void run() {
-            if (root == null || sInstance != WorkspaceHost.this) {
-                return;
-            }
-            if (scene != ACTIVE || !screenOn || keyguardLocked || root.getVisibility() != View.VISIBLE) {
-                main.postDelayed(this, 4000L);
-                return;
-            }
-            if (layout != null && !holdsLiveFlipZoom()
-                    && android.os.SystemClock.uptimeMillis() >= zoomAnimUntil) {
-                writeZoom(true);
-            }
-            if (carrierSlotIndex >= 0) {
-                reassertCarrier();
-            }
-            if (!zoomed && !HotZoneGesture.isAttached()) {
-                log("hotzone heartbeat: re-raise");
-                HotZoneGesture.raiseAll(ctx);
-            }
-            // v1.1.3：转场可能覆盖 leash 的位置/矩阵（"只显示一部分"），心跳里周期性重发。
-            for (Slot s : slots) {
-                if (holdsLiveFlipZoom()) continue;
-                if (s.carrier || s.index == leashPocSlot) {
-                    continue;
+        if (workspaceHeartbeat == null) workspaceHeartbeat = new Runnable() {
+            @Override public void run() {
+                if (root == null || sInstance != WorkspaceHost.this || scene != ACTIVE
+                        || !screenOn || keyguardLocked || root.getVisibility() != View.VISIBLE) return;
+                long now = SystemClock.uptimeMillis();
+                if (!holdsLiveFlipZoom() && now >= zoomAnimUntil) {
+                    if (layout != null) writeZoom(true);
+                    if (now - lastWorkspaceRepair >= 30000L) {
+                        lastWorkspaceRepair = now;
+                        if (carrierSlotIndex >= 0) reassertCarrier();
+                        if (!zoomed && !HotZoneGesture.isAttached()) HotZoneGesture.raiseAll(ctx);
+                        for (Slot slot : slots) {
+                            if (slot.carrier || slot.index == leashPocSlot) continue;
+                            ensureCellBackground(slot);
+                            if (!slot.occupied || slot.promoting) continue;
+                            reapplyScale(slot);
+                            if (!slot.taskVisible) scheduleSideVisibilityRepair(slot);
+                        }
+                    }
                 }
-                ensureCellBackground(s);
-                if (!s.occupied || s.promoting) {
-                    continue;
-                }
-                reapplyScale(s);
-                if (!s.taskVisible) scheduleSideVisibilityRepair(s);
+                main.postDelayed(this, 8000L);
             }
-            main.postDelayed(this, 4000L);
-        }
-    }, 4000L);
+        };
+        main.removeCallbacks(workspaceHeartbeat);
+        main.postDelayed(workspaceHeartbeat, 8000L);
     }
 
     private void createSubViews() {
@@ -5393,6 +5393,7 @@ public final class WorkspaceHost {
 
     /** Publish only confirmed bindings; system_server rechecks each native task before use. */
     private void publishDesktopSideTasks() {
+        if (topBar != null) topBar.requestOpenedAppsRefresh();
         final long sequence = ++desktopRegistrationSequence;
         final long epoch = sceneEpoch;
         final java.util.List<Slot> owners = new java.util.ArrayList<>();
@@ -8109,7 +8110,8 @@ public final class WorkspaceHost {
                 if (waitForCommit) {
                     try {
                         XposedHelpers.callMethod(tx, "addTransactionCommittedListener", (Executor) main::post,
-                                (Runnable) () -> restoreRetainedMainOpacityAfterHandoff(ticket));
+                                (android.view.SurfaceControl.TransactionCommittedListener)
+                                        () -> restoreRetainedMainOpacityAfterHandoff(ticket));
                     } catch (Throwable unavailable) {
                         waitForCommit = false;
                     }
@@ -8458,7 +8460,11 @@ public final class WorkspaceHost {
     }
 
     private void postForSlot(Slot slot, Consumer<Slot> callback) {
-        main.post(() -> { if (isActive(slot)) callback.accept(slot); });
+        main.post(() -> {
+            if (!isActive(slot)) return;
+            callback.accept(slot);
+            if (topBar != null) topBar.requestOpenedAppsRefresh();
+        });
     }
 
     /** Reject late callbacks from a task the native controller has already relinquished. */
@@ -9822,6 +9828,7 @@ public final class WorkspaceHost {
     }
 
     private static void log(String msg) {
+        if (!RoutineLog.allow(msg)) return;
         Log.i(TAG, msg);
         try {
             XposedBridge.log(TAG + ": " + msg);

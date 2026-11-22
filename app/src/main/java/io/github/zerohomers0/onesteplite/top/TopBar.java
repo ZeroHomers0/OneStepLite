@@ -35,15 +35,26 @@ final class TopBar extends FrameLayout {
     private boolean mainOnRight, tabletToolsExpanded;
     private RectF workspaceMain;
     private TopBarGeometry geometry;
-    private final Runnable refreshOpenedApps=new Runnable() {
+    private boolean workspaceActive = true;
+    private final Runnable refreshOpenedApps = new Runnable() {
         @Override public void run() {
-            if(isShown()) {
-                java.util.Set<String> packages=listener.openedAppPackages();
-                if(packages!=null)quickRail.setOpenedPackages(packages);
-            }
-            postDelayed(this,750L);
+            if (!workspaceActive || !isAttachedToWindow() || !isShown()
+                    || getWindowVisibility() != VISIBLE) return;
+            java.util.Set<String> packages = listener.openedAppPackages();
+            if (packages != null) quickRail.setOpenedPackages(packages);
+            postDelayed(this, 30000L);
         }
     };
+
+    void requestOpenedAppsRefresh() {
+        removeCallbacks(refreshOpenedApps);
+        if (workspaceActive && isAttachedToWindow() && isShown()
+                && getWindowVisibility() == VISIBLE) postDelayed(refreshOpenedApps, 100L);
+    }
+    void setWorkspaceActive(boolean active) {
+        workspaceActive = active;
+        requestOpenedAppsRefresh();
+    }
 
     TopBar(Context context, WorkspaceLayout layout, List<QuickApp> apps, Listener listener) {
         super(context);
@@ -82,6 +93,7 @@ final class TopBar extends FrameLayout {
     }
     /** Grey the send-to-top action out while the main app cannot fill the strip. */
     void setSendMainToTopEnabled(boolean enabled) {
+        requestOpenedAppsRefresh();
         header.setSendMainToTopEnabled(enabled);
         if (tabletHeader != null) tabletHeader.setSendMainToTopEnabled(enabled);
     }
@@ -142,13 +154,19 @@ final class TopBar extends FrameLayout {
         if(ow>0&&(w!=ow||h!=oh))appPicker.close();
     }
     @Override protected void onAttachedToWindow() {
-        super.onAttachedToWindow();post(refreshOpenedApps);
+        super.onAttachedToWindow();requestOpenedAppsRefresh();
     }
     @Override protected void onDetachedFromWindow() {
         removeCallbacks(refreshOpenedApps);appPicker.close();super.onDetachedFromWindow();
     }
     @Override protected void onVisibilityChanged(View view,int visibility) {
-        super.onVisibilityChanged(view,visibility);if(appPicker!=null&&!isShown())appPicker.close();
+        super.onVisibilityChanged(view,visibility);
+        if (refreshOpenedApps != null) requestOpenedAppsRefresh();
+        if(appPicker!=null&&!isShown())appPicker.close();
+    }
+    @Override protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        if (refreshOpenedApps != null) requestOpenedAppsRefresh();
     }
     @Override protected void onMeasure(int ws,int hs) {
         int width=MeasureSpec.getSize(ws),height=MeasureSpec.getSize(hs);

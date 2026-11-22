@@ -20,6 +20,7 @@ files={
  java.util.Map<Integer,T> m=new java.util.HashMap<>();public T get(int i){return m.get(i);}public void put(int i,T v){m.put(i,v);}}''',
 'android/view/SurfaceControl.java': '''package android.view;
 public class SurfaceControl {
+ public interface TransactionCommittedListener {void onTransactionCommitted();}
  public static java.util.List<String> events=new java.util.ArrayList<>();
  public static java.util.List<Runnable> commits=new java.util.ArrayList<>();
  public static class Layer {public Object parent;public float scale=1;public boolean shown;}
@@ -36,8 +37,8 @@ public class SurfaceControl {
   public Transaction setAlpha(SurfaceControl s,float a){return this;}
   public Transaction show(SurfaceControl s){ops.add(()->s.layer.shown=true);return this;}
   public Transaction hide(SurfaceControl s){ops.add(()->s.layer.shown=false);return this;}
-  public void addTransactionCommittedListener(java.util.concurrent.Executor executor,Runnable callback){
-   callbacks.add(()->executor.execute(callback));
+  public void addTransactionCommittedListener(java.util.concurrent.Executor executor,TransactionCommittedListener callback){
+   callbacks.add(()->executor.execute(callback::onTransactionCommitted));
   }
   public void apply(){for(var op:ops)op.run();ops.clear();commits.addAll(callbacks);callbacks.clear();}public void close(){closed=true;}
  }
