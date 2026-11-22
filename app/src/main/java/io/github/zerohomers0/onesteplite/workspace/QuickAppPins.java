@@ -33,9 +33,8 @@ final class QuickAppPins {
             List<String> installed = new java.util.ArrayList<>(apps.size());
             for (QuickApp app : apps) installed.add(app.component.flattenToString());
             List<String> pins = QuickAppReconcilePolicy.prune(saved, installed);
-            // An uninstalled app must not keep its pin: it would inflate the picker's
-            // selected count and shift every later pin's displayed position.
-            if (QuickAppReconcilePolicy.hasStaleKeys(saved, installed)) save(context, user, pins);
+            // A cold or invalidated cache is not an authoritative uninstall list.
+            // Rendering must never overwrite the user's saved selection.
             return QuickAppOrder.arrange(apps, pins, app -> app.component.flattenToString());
         } catch (Throwable unavailable) { return apps; }
     }

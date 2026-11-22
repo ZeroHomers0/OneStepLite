@@ -58,7 +58,11 @@ final class QuickAppPicker {
         if (dialog != null || available.isEmpty()) return;
         final int user = QuickAppPins.user();
         final LinkedHashSet<String> chosen;
-        try { chosen = new LinkedHashSet<>(QuickAppPins.read(base, user)); }
+        try {
+            List<String> keys = new ArrayList<>(available.size());
+            for (QuickApp app : available) keys.add(app.component.flattenToString());
+            chosen = new LinkedHashSet<>(QuickAppReconcilePolicy.prune(QuickAppPins.read(base, user), keys));
+        }
         catch (Throwable unavailable) {
             Toast.makeText(base, "无法读取快捷应用配置", Toast.LENGTH_SHORT).show();
             return;
