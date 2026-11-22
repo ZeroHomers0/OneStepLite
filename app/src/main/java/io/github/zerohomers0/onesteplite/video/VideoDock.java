@@ -49,6 +49,7 @@ final class VideoDock {
     private final java.util.concurrent.ConcurrentHashMap<String,Boolean> videoPackages=new java.util.concurrent.ConcurrentHashMap<>();
     private final Set<String> querying=java.util.concurrent.ConcurrentHashMap.newKeySet();
     private IBinder owner;
+    private final java.util.LinkedHashSet<IBinder> retiredOwners=new java.util.LinkedHashSet<>();
     private IBinder.DeathRecipient ownerDeath;
     private SurfaceControl host,dock;
     private Source source;
@@ -56,13 +57,19 @@ final class VideoDock {
     private long sequence=-1,sourceId;
     private volatile boolean active;
     private boolean preparingFrame;
+    private boolean fill;
     private int hostUid=-1;
     private final Binder releaseToken=new Binder(){
         @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags) throws RemoteException {
             if(code!=IBinder.FIRST_CALL_TRANSACTION)return super.onTransact(code,data,reply,flags);
             data.enforceInterface("io.github.zerohomers0.onesteplite.VideoRelease");IBinder binding=data.readStrongBinder();
             synchronized(lock){
-                if(Binder.getCallingUid()!=hostUid||owner==null||!owner.equals(binding))throw new SecurityException("video release owner");
+                if(Binder.getCallingUid()!=hostUid)throw new SecurityException("video release caller");
+                if(owner==null||!owner.equals(binding)) {
+                    if(!retiredOwners.contains(binding))throw new SecurityException("video release owner");
+                    Object tx=call(display(),"getPendingTransaction");if(tx!=null)XposedHelpers.callMethod(tx,"apply");
+                    if(reply!=null)reply.writeNoException();return true;
+                }
                 active=false;if(!restore())throw new IllegalStateException("native video return pending");Object display=display();Object tx=call(display,"getPendingTransaction");
                 if(tx!=null)XposedHelpers.callMethod(tx,"apply");publish();
             }
@@ -129,7 +136,9 @@ final class VideoDock {
             Map<String,Integer> states=new HashMap<>();for(MediaController player:players){PlaybackState state=player.getPlaybackState();if(state!=null)states.put(player.getPackageName(),state.getState());}playStates=states;
             synchronized(lock){prepare();}}
         catch(Throwable error){log("video refresh: "+error);}
-        handler.postDelayed(this,350L);
+        // WM surface callbacks still detect new players immediately; idle media
+        // enumeration is only a recovery path, not a 350ms foreground loop.
+        synchronized(lock){handler.postDelayed(this,source==null?1200L:350L);}
     }};
     private void updateHost(Intent intent) {
         synchronized(lock){
@@ -138,6 +147,10 @@ final class VideoDock {
             if(next==null||!next.isBinderAlive()||nextSequence<0||(next==owner&&nextSequence<=sequence))return;
             if(next!=owner){
                 if(!restore())return;if(owner!=null&&ownerDeath!=null)owner.unlinkToDeath(ownerDeath,0);
+                if(owner!=null) {
+                    retiredOwners.add(owner);
+                    while(retiredOwners.size()>64)retiredOwners.remove(retiredOwners.iterator().next());
+                }
                 owner=next;sequence=-1;dismissed.clear();final IBinder binding=next;
                 ownerDeath=()->handler.post(()->{synchronized(lock){if(owner==binding){active=false;restore();owner=null;publish();}}});
                 try {owner.linkToDeath(ownerDeath,0);}catch(RemoteException gone){owner=null;return;}
@@ -146,6 +159,7 @@ final class VideoDock {
             sequence=nextSequence;host=intent.getParcelableExtra("surface",SurfaceControl.class);
             width=intent.getIntExtra("width",0);height=intent.getIntExtra("height",0);
             active=intent.getBooleanExtra("active",false)&&width>1&&height>1;
+            fill=intent.getBooleanExtra("fill",false);
             prepare();handler.removeCallbacks(poll);if(active)handler.post(poll);
         }
     }
@@ -170,7 +184,9 @@ final class VideoDock {
                 if(!source.pip){WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)field(source.container,"mAttrs");
                     Object rawInsets=field(attrs,"surfaceInsets");
                     if(rawInsets instanceof Rect){Point inset=new Point();call(source.container,"transformSurfaceInsetsPosition",inset,rawInsets);position.offset(inset.x,inset.y);}}
-                float scale=Math.min(width/(float)bounds.width(),height/(float)bounds.height());
+                float scale=fill?Math.max(width/(float)bounds.width(),height/(float)bounds.height())
+                        :Math.min(width/(float)bounds.width(),height/(float)bounds.height());
+                XposedHelpers.callMethod(tx,"setWindowCrop",host,new Rect(0,0,width,height));
                 XposedHelpers.callMethod(tx,"reparent",dock,host);XposedHelpers.callMethod(tx,"reparent",source.surface,dock);
                 XposedHelpers.callMethod(tx,"setLayer",dock,1);XposedHelpers.callMethod(tx,"setLayer",source.surface,0);
                 XposedHelpers.callMethod(tx,"setMatrix",dock,scale,0f,0f,scale);
@@ -247,7 +263,7 @@ final class VideoDock {
             if(previous!=null&&previous.surface.isValid()){
                 Object parent=call(previous.container,"getParentSurfaceControl");
                 if(parent==null)parent=call(call(previous.container,"getParent"),"getSurfaceControl");
-                if(tx==null||!(parent instanceof SurfaceControl)||!((SurfaceControl)parent).isValid())return false;
+                if(tx==null||!(parent instanceof SurfaceControl)||!((SurfaceControl)parent).isValid())return retainPendingReturn(tx);
                 XposedHelpers.callMethod(tx,"reparent",previous.surface,parent);
                 XposedHelpers.callMethod(tx,"setLayer",previous.surface,integer(previous.container,"mLastLayer",previous.layer));
             }
@@ -255,19 +271,42 @@ final class VideoDock {
             // submit their native metadata so returned PiP/floating windows regain input.
             for(Map.Entry<Object,Object> entry:suppressedSurfaces.entrySet()){
                 if(entry.getValue() instanceof SurfaceControl&&((SurfaceControl)entry.getValue()).isValid()){
-                    if(tx==null)return false;
+                    if(tx==null)return retainPendingReturn(null);
                     XposedHelpers.callMethod(tx,"setInputWindowInfo",entry.getValue(),entry.getKey());
                 }
             }
             if(dock!=null&&dock.isValid()){
-                if(tx==null)return false;
+                if(tx==null)return retainPendingReturn(null);
                 XposedHelpers.callMethod(tx,"remove",dock);
             }
-        }catch(Throwable failure){log("video native return pending: "+failure);return false;}
+        }catch(Throwable failure){log("video native return pending: "+failure);return retainPendingReturn(tx);}
+        handler.removeCallbacks(returnRetry);
         source=null;inputHandles.clear();suppressedSurfaces.clear();
         if(dock!=null){dock.release();dock=null;}
         if(previous!=null){requestInput(display);call(display,"scheduleAnimation");}
         return true;
+    }
+    private final Runnable returnRetry=this::retryReturn;
+    private void retryReturn() {
+        try {
+            synchronized(lock) {
+                if(source==null)return;
+                if(restore()) {Object tx=call(display(),"getPendingTransaction");if(tx!=null)XposedHelpers.callMethod(tx,"apply");publish();}
+            }
+        } catch(Throwable failure) {
+            log("video return retry pending: "+failure);
+            handler.removeCallbacks(returnRetry);handler.postDelayed(returnRetry,1200L);
+        }
+    }
+    private boolean retainPendingReturn(Object tx) {
+        active=false;
+        // The server owns dock. Isolate it before the remote host can die even
+        // when its original WM parent is temporarily unavailable.
+        try {
+            if(tx!=null && dock!=null && dock.isValid()) {XposedHelpers.callMethod(tx,"reparent",dock,null);XposedHelpers.callMethod(tx,"apply");}
+        } catch(Throwable failure) {log("video return isolation pending: "+failure);}
+        handler.removeCallbacks(returnRetry);handler.postDelayed(returnRetry,1200L);
+        return false;
     }
     private void requestInput(Object display){Object monitor=call(display,"getInputMonitor");if(monitor==null)monitor=field(display,"mInputMonitor");
         call(monitor,"setUpdateInputWindowsNeededLw");call(monitor,"updateInputWindowsLw",true);}
@@ -277,6 +316,7 @@ final class VideoDock {
             IBinder token=intent.getExtras()==null?null:intent.getExtras().getBinder("owner");
             if(owner==null||!owner.equals(token)||source==null||intent.getLongExtra("source",-1)!=sourceId)return;
             if("release".equals(cmd)){dismissed.add(source.container);restore();publish();return;}
+            if("fill".equals(cmd)||"fit".equals(cmd)){fill="fill".equals(cmd);prepare();return;}
             for(MediaController candidate:players)if(source.pkg.equals(candidate.getPackageName())){player=candidate;break;}
         }
         if(player!=null&&"toggle".equals(cmd))try{

@@ -93,7 +93,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
         scroll.addView(centered, new ScrollView.LayoutParams(-1, -1));
         addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         activity.setPageTitle(next == SWAP ? "主窗与小窗交换方式"
-                : next == GESTURE ? "打开 OneStepLite 的手势"
+                : next == GESTURE ? "打开工作区的手势"
                 : next == LANDSCAPE ? "横屏应用显示位置" : "OneStepLite");
         if (next == SWAP) swap();
         else if (next == GESTURE) gesture();
@@ -103,7 +103,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
         scroll.post(() -> scroll.scrollTo(0, restoreY));
         if (animate && android.animation.ValueAnimator.areAnimatorsEnabled()) {
             content.setAlpha(0f);
-            content.animate().alpha(1f).setDuration(160).start();
+            content.animate().alpha(1f).setDuration(OverlayMotionSpec.PAGE_MS).start();
         }
     }
 
@@ -117,16 +117,20 @@ final class WorkspaceSettingsPage extends FrameLayout {
 
         section("窗口与操作");
         LinearLayout interaction = card();
-        menu(interaction, "打开 OneStepLite 的手势", gestureLabel(EntryGesturePolicy.effectiveMode(
+        menu(interaction, "打开工作区的手势", gestureLabel(EntryGesturePolicy.effectiveMode(
                 options.entryGesture, EntryGestureSettings.lineHidden(activity))), () -> show(GESTURE, true));
         divider(interaction);
         menu(interaction, "主窗与小窗交换方式", WorkspaceOptions.modeLabel(options.swapMode), () -> show(SWAP, true));
         divider(interaction);
-        switchOption(interaction, "滚动切换小窗", "上下滑动小窗区域，查看更多小窗", options.scrollSideTasks,
+        switchOption(interaction, "滚动浏览小窗", "上下滑动小窗区域，查看更多小窗", options.scrollSideTasks,
                 checked -> persist(WorkspaceSettingsStore.read(activity).withScrollSideTasks(checked)));
         divider(interaction);
         switchOption(interaction, "在最近任务中隐藏小窗应用", "仅在 OneStepLite 打开时生效，不会关闭应用", options.hideSideRecents,
                 checked -> persist(WorkspaceSettingsStore.read(activity).withHideSideRecents(checked)));
+        divider(interaction);
+        switchOption(interaction, "切换应用时收纳原主窗", "点击常用应用栏打开其他应用时，将原主窗收入空小窗；没有空位时正常切换",
+                options.parkMainOnLaunch,
+                checked -> persist(WorkspaceSettingsStore.read(activity).withParkMainOnLaunch(checked)));
         add(interaction, 0, 12);
 
         section("横屏");
@@ -137,7 +141,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
 
         section("锁屏");
         LinearLayout lock = card();
-        switchOption(lock, "解锁后恢复 OneStepLite", "开启后，解锁恢复原有窗口布局；关闭后，解锁返回正常全屏界面", options.keepOnLock,
+        switchOption(lock, "解锁后恢复工作区", "开启后，解锁恢复原有窗口布局；关闭后，解锁返回正常全屏界面", options.keepOnLock,
                 checked -> persist(WorkspaceSettingsStore.read(activity).withKeepOnLock(checked)));
         add(lock, 0, 0);
     }
@@ -291,7 +295,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
         WorkspaceOptions options = WorkspaceSettingsStore.read(activity);
         boolean lineHidden = EntryGestureSettings.lineHidden(activity);
         int selected = EntryGesturePolicy.effectiveMode(options.entryGesture, lineHidden);
-        section("选择打开 OneStepLite 的手势");
+        section("选择打开工作区的手势");
         LinearLayout group = card();
         entryGestureOption(group, WorkspaceOptions.STATUS_BAR_INWARD,
                 "状态栏向内滑", "从状态栏左侧或右侧向屏幕中间滑动", selected, true);

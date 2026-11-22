@@ -3836,7 +3836,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             // Must stay identical to WorkspaceHost.playWorkspaceFade: the Host chrome is
             // excluded from display magnification, so any curve difference shows up
             // directly as chrome drawn over an application that has not shrunk yet.
-            zoomAnimInterpolator = new PathInterpolator(0.4f, 0f, 0.2f, 1.0f);
+            zoomAnimInterpolator = WorkspaceMotionSpec.interpolator();
         }
         final ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(plan.durationMs);
@@ -3949,7 +3949,6 @@ public class HostEntry implements IXposedHookLoadPackage {
                     Object self = param.thisObject;
                     if (self instanceof Context) {
                         sContext = (Context) self;
-                        Clipboard.start(sContext);
                         Warmup.start(sContext, cl);
                         log("captured Context -> " + sContext);
                         scheduleStart();

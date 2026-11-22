@@ -26,7 +26,7 @@ files = {
  public class Editor {Map<String,Object> pending=new HashMap<>();
   public Editor remove(String k){pending.put(k,null);return this;}public Editor putInt(String k,int v){pending.put(k,v);return this;}
   public Editor putBoolean(String k,boolean v){pending.put(k,v);return this;}
-  public boolean commit(){if(commit)values.putAll(pending);return commit;}}}''',
+  public boolean commit(){if(commit)for(var entry:pending.entrySet()){if(entry.getValue()==null)values.remove(entry.getKey());else values.put(entry.getKey(),entry.getValue());}return commit;}}}''',
 'android/content/Context.java': '''package android.content;public class Context {
  public static final int MODE_PRIVATE=0;public SharedPreferences prefs=new SharedPreferences();
  public ContentResolver resolver=new ContentResolver();public Context createDeviceProtectedStorageContext(){return this;}
@@ -84,6 +84,14 @@ public class SettingsRegression {
    check(nativeRead.hideSideRecents==hide,"snapshot carries recents choices");
    check(c.prefs.values.get("rounded_windows")==null,"obsolete rounded preference removed");
   }
+  check(!WorkspaceSettingsStore.decode(new Bundle()).parkMainOnLaunch,"old snapshots never enable automatic collection");
+  c.prefs.values.put("allow_secure_capture",true);
+  check(!WorkspaceSettingsStore.read(c).parkMainOnLaunch,"legacy secure-capture choice must not become automatic collection");
+  check(WorkspaceSettingsStore.write(c,decoded.withParkMainOnLaunch(true)),"automatic collection choice persists");
+  check(WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(WorkspaceSettingsStore.read(c))).parkMainOnLaunch,"provider snapshot carries automatic collection");
+  check(!c.prefs.values.containsKey("allow_secure_capture"),"retired capture setting is removed on write");
+  check(WorkspaceSettingsStore.write(c,decoded.withParkMainOnLaunch(false)),"automatic collection can be disabled");
+  check(!WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(WorkspaceSettingsStore.read(c))).parkMainOnLaunch,"disabled collection survives reload");
   Settings.Global.hidden=0;
   check(EntryGesturePolicy.effectiveMode(decoded.entryGesture,EntryGestureSettings.lineHidden(c))==0,"line reappears uses original corner");
   check(WorkspaceSettingsStore.write(c,decoded.withShowLunar(false)),"other settings still save while bottom blocked");

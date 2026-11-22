@@ -52,7 +52,7 @@
         errorLine2="                                                ~~~~~~~~~~~~~">
         <location
             file="src/main/java/io/github/zerohomers0/onesteplite/chrome/HyperOsStyle.java"
-            line="70"
+            line="95"
             column="49"/>
     </issue>
 
@@ -151,7 +151,7 @@
         errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/io/github/zerohomers0/onesteplite/WorkspaceHost.java"
-            line="3701"
+            line="3678"
             column="22"/>
     </issue>
 
@@ -173,7 +173,7 @@
         errorLine2="                 ^">
         <location
             file="src/main/java/io/github/zerohomers0/onesteplite/top/TopBar.java"
-            line="139"
+            line="140"
             column="18"/>
     </issue>
 
@@ -185,17 +185,6 @@
         <location
             file="src/main/java/io/github/zerohomers0/onesteplite/input/BottomReplayInput.java"
             line="22"
-            column="13"/>
-    </issue>
-
-    <issue
-        id="StaticFieldLeak"
-        message="Do not place Android context classes in static fields (static reference to `Clipboard` which has field `context` pointing to `Context`); this is a memory leak"
-        errorLine1="    private static Clipboard instance;"
-        errorLine2="            ~~~~~~">
-        <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/clipboard/Clipboard.java"
-            line="32"
             column="13"/>
     </issue>
 
@@ -290,12 +279,12 @@
     <issue
         id="SetTextI18n"
         message="Do not concatenate text displayed with `setText`. Use resource string with placeholders."
-        errorLine1="        Runnable count = () -> summary.setText(&quot;已选 &quot; + chosen.size() + &quot; 个&quot;);"
-        errorLine2="                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="        private void count() {summary.setText(&quot;已选 &quot;+chosen.size()+&quot; 个&quot;);}"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/io/github/zerohomers0/onesteplite/workspace/QuickAppPicker.java"
-            line="113"
-            column="48"/>
+            line="140"
+            column="47"/>
     </issue>
 
     <issue
@@ -305,7 +294,7 @@
         errorLine2="                                                      ~~~~~~~~~~">
         <location
             file="src/main/java/io/github/zerohomers0/onesteplite/top/TopBar.java"
-            line="157"
+            line="158"
             column="55"/>
     </issue>
 

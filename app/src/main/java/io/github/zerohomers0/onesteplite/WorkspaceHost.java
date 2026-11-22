@@ -142,7 +142,6 @@ public final class WorkspaceHost {
     private volatile WorkspaceOptions workspaceOptions = WorkspaceOptions.DEFAULT;
     private WorkspaceSettingsClient workspaceSettings;
     private FrameLayout topLiveClip;
-    private TopTaskPane topTaskPane;
     private VideoPane videoPane;
     private final TopTaskState topTaskState = new TopTaskState();
     private final java.util.Map<TopTaskState.Key, Boolean> topDirections = new java.util.HashMap<>();
@@ -214,7 +213,7 @@ public final class WorkspaceHost {
     private volatile boolean liveSwapInputBlocked;
     private TransitionInput transitionInput;
     private View transitionInputWindow;
-    private View topExitWindow;
+    private TopOverlayControls topControls;
     private final android.os.IBinder desktopSceneOwner = new android.os.Binder();
     private volatile long desktopRegistrationSequence;
     private final FinishTransactions<RenderBinding> finishTransactions = new FinishTransactions<>(16);
@@ -364,6 +363,7 @@ public final class WorkspaceHost {
         boolean nativeHome;
         boolean nativeCollect;
         Runnable notificationLaunch;
+        Runnable collectionLaunch;
         long liveZoomGuardUntil;
         WorkspaceLayout previousLayout;
         WorkspaceLayout targetLayout;
@@ -1581,7 +1581,6 @@ public final class WorkspaceHost {
         if (topBar != null) topBar.closeQuickAppPicker();
         if (!"native-landscape".equals(reason)) landscapeSuspended = false;
         statusBar.restore(); // Includes a deferred exit while native ownership is changing.
-        Clipboard.get(ctx).close();
         if (root == null) return;
         if (scene == RESUMING) {
             pendingSuspendReason = reason;
@@ -1675,7 +1674,7 @@ public final class WorkspaceHost {
     private void finishRetainedSuspend(long epoch) {
         if (scene != SUSPENDING || sceneEpoch != epoch) return;
         retainedOnExit = true;
-        releaseWorkspaceBackdrop();
+        retireWorkspaceBackdrop();
         root.setVisibility(View.GONE);
         setMirrorLayerVisible(false);
         scene = SUSPENDED;
@@ -1785,7 +1784,7 @@ public final class WorkspaceHost {
 
     private void parkNext(int index) {
         if (index >= slots.length) {
-            releaseWorkspaceBackdrop();
+            retireWorkspaceBackdrop();
             root.setVisibility(View.GONE);
             setMirrorLayerVisible(false);
             scene = SUSPENDED;
@@ -1804,7 +1803,6 @@ public final class WorkspaceHost {
             if(index==SLOT_TOP) {
                 topTaskState.sceneChanged();clearSlot(slot);topFace=false;
                 if(topBar!=null && !layout.tabletLandscape) {topBar.setVisibility(View.VISIBLE);topBar.bringToFront();}
-                if(topTaskPane!=null)topTaskPane.setVisibility(View.INVISIBLE);
             }
             parkNext(index + 1);
         }, error -> {
@@ -2560,34 +2558,8 @@ public final class WorkspaceHost {
             try { main = findMainTask(); } catch (Throwable error) {
                 log("roots[" + reason + "] findMainTask threw: " + error);
             }
-            log("roots[" + reason + "] count=" + roots.size()
-                    + " main=" + (main == null ? -1 : main.id));
-            for (Object info : roots) {
-                int taskId = XposedHelpers.getIntField(info, "taskId");
-                int userId = XposedHelpers.getIntField(info, "userId");
-                int type = (Integer) XposedHelpers.callMethod(info, "getActivityType");
-                boolean visible = XposedHelpers.getBooleanField(info, "isVisible");
-                boolean focused = XposedHelpers.getBooleanField(info, "isFocused");
-                boolean hasParent = Boolean.TRUE.equals(
-                        XposedHelpers.callMethod(info, "hasParentTask"));
-                int mode = -1;
-                try {
-                    Object config = XposedHelpers.getObjectField(info, "configuration");
-                    Object wc = XposedHelpers.getObjectField(config, "windowConfiguration");
-                    mode = (Integer) XposedHelpers.callMethod(wc, "getWindowingMode");
-                } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-                Object token = XposedHelpers.getObjectField(info, "token");
-                boolean side = isSideToken(token);
-                boolean ordinary = ordinaryRoot(info, 1);
-                ComponentName base = (ComponentName) XposedHelpers.getObjectField(
-                        info, "baseActivity");
-                log("roots[" + reason + "] task=" + taskId + " type=" + type
-                        + " user=" + userId
-                        + " vis=" + visible + " focused=" + focused + " mode=" + mode
-                        + " parent=" + hasParent + " side=" + side
-                        + " ordinary=" + ordinary
-                        + " base=" + (base == null ? "?" : base.getPackageName()));
-            }
+            WorkspaceDiagnostics.dumpRoots(reason,roots,main==null?-1:main.id,
+                    this::isSideToken,info->ordinaryRoot(info,1),WorkspaceHost::log);
         } catch (Throwable error) {
             log("roots dump[" + reason + "] failed: " + error);
         }
@@ -3122,6 +3094,7 @@ public final class WorkspaceHost {
                 java.util.List<RenderBinding> frames = h.finishTransactions.take(p.thisObject);
                 if (!frames.isEmpty()) h.appendRetainedSurfaces(p.thisObject, frames);
                 h.appendWorkspaceSurfaces(p.thisObject, h.workspaceFinishes.take(p.thisObject));
+                h.appendTopTransitionSurfaces(p.thisObject);
                 java.util.List<NativeObservation> checks = h.nativeObservations.take(p.thisObject);
                 if (!checks.isEmpty()) {
                     try {
@@ -3148,6 +3121,16 @@ public final class WorkspaceHost {
     }
 
     /** Watch the shell transitions so the retained surfaces are restored at the right moment. */
+    private void appendTopTransitionSurfaces(Object transaction) {
+        TopTaskTransition bridge=topTransition;
+        if(bridge==null)return;
+        Slot upper=slots[SLOT_TOP];
+        Object parent=getSurfaceField(upper.controller,"mSurfaceControl");
+        Object leash=getSurfaceField(upper.controller,"mTaskLeash");
+        try {bridge.appendDestination(transaction,parent,leash);}
+        catch(Throwable error) {log("upper transition opacity guard: "+error);}
+    }
+
     private void registerSurfaceObserver(ClassLoader cl) {
         try {
             Class<?> iface = XposedHelpers.findClass(
@@ -3385,10 +3368,10 @@ public final class WorkspaceHost {
 
     private void prepareWorkspaceBackdrop(long generation, int attempt, Runnable ready) {
         if(generation!=workspaceGeneration || root==null || scene!=ACTIVE && scene!=RESUMING)return;
-        if(layout.tabletLandscape && wallpaperBackdrop==null && attempt<24) {
+        if(wallpaperBackdrop==null && attempt<24) {
             main.postDelayed(()->prepareWorkspaceBackdrop(generation,attempt+1,ready),16L);return;
         }
-        if (!layout.tabletLandscape || workspaceBackdrop != null || wallpaperBackdrop == null) {
+        if (workspaceBackdrop != null || wallpaperBackdrop == null) {
             ready.run(); return;
         }
         final View owner=root;
@@ -3419,6 +3402,16 @@ public final class WorkspaceHost {
         workspaceBackdropOwner=null;workspaceBackdropDetach=null;
         if(workspaceBackdrop!=null)workspaceBackdrop.close();
         workspaceBackdrop=null;
+    }
+
+    private void retireWorkspaceBackdrop() {
+        if(workspaceBackdrop==null)return;
+        if(!screenOn || keyguardLocked || workspaceBackdropOwner==null) {releaseWorkspaceBackdrop();return;}
+        final LiveBackdrop backing=workspaceBackdrop;
+        final long generation=workspaceGeneration;
+        WorkspaceBackdrop.retire(ctx,main,workspaceBackdropOwner.getWindowToken(),
+                ()->workspaceBackdrop==backing && workspaceGeneration==generation && !zoomed,
+                this::releaseWorkspaceBackdrop,WorkspaceHost::log);
     }
 
     private void awaitWorkspaceFrame(long generation, int attempt, Runnable ready) {
@@ -3460,7 +3453,6 @@ public final class WorkspaceHost {
         // being pushed out instead of fading in as a ghost over the app.
         if (topBar != null) topBar.setAlpha(layout == null ? workspaceAlpha : 1f);
         if (tabletTools != null) tabletTools.setAlpha(workspaceAlpha);
-        if (topTaskPane != null) topTaskPane.setAlpha(workspaceAlpha);
         boolean movingBackdrop = layout != null;
         android.graphics.RectF hole = movingBackdrop ? workspaceMainHole() : null;
         android.graphics.RectF sideHole = movingBackdrop ? workspaceSideHole() : null;
@@ -3496,12 +3488,11 @@ public final class WorkspaceHost {
         // zero at rest, which leaves the settled layout untouched.
         if (layout != null && !layout.tabletLandscape && mainSideAnimator == null) {
             if (topLiveClip != null) topLiveClip.setTranslationY(hole.top - layout.mainOffsetY);
-            float sideOffset = layout.mainOnRight
-                    ? hole.left - layout.mainOffsetX
-                    : hole.right - (layout.mainOffsetX + layout.mainDispWidth);
+            float sideOffset = WorkspaceTransition.sideOffset(layout.mainOnRight,layout.mainOffsetX,
+                    layout.mainDispWidth,hole.left,hole.right);
             for (Slot slot : slots) {
                 if (slot == null || slot.index <= SLOT_MAIN || slot.index == SLOT_TOP) continue;
-                if (slot.rect == null || slot.sideRow >= 0) continue;
+                if (slot.rect == null) continue;
                 if (slot.view != null) slot.view.setX(slot.rect[0] + sideOffset);
                 if (slot.hint != null) slot.hint.setX(slot.rect[0] + sideOffset);
             }
@@ -3586,11 +3577,8 @@ public final class WorkspaceHost {
      * without fighting over one shared field.
      */
     private android.graphics.RectF workspaceMainHoleAt(float progress, android.graphics.RectF out) {
-        float scale = 1f + (layout.mainScale - 1f) * progress;
-        float x = Float.isNaN(mainSideFrameX) ? layout.mainOffsetX * progress : mainSideFrameX;
-        float y = layout.mainOffsetY * progress;
-        out.set(x, y, x + screenW * scale, y + screenH * scale);
-        return out;
+        return WorkspaceTransition.mainHole(progress,screenW,screenH,layout.mainScale,
+                layout.mainOffsetX,layout.mainOffsetY,mainSideFrameX,out);
     }
 
     /** Top strip exclusion: leads the real main edge so the bar is opaque when uncovered. */
@@ -3630,23 +3618,17 @@ public final class WorkspaceHost {
         // chrome is covered again.
         workspaceExiting = !entering;
         final float from = entering ? 0f : workspaceAlpha;
-        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(from, entering ? 1f : 0f);
-        animator.addUpdateListener(value -> {
-            if (workspaceAnimator == animator && generation == workspaceGeneration)
-                setWorkspaceAlpha((Float) value.getAnimatedValue());
-        });
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(android.animation.Animator value) {
-                if (workspaceAnimator != animator || generation != workspaceGeneration) return;
-                workspaceAnimator = null;
-                if (entering) workspaceEntering = false;
-                setWorkspaceAlpha(entering ? 1f : 0f);
-                if (complete != null) complete.run();
-                updateTopBarState();
-            }
-        });
-        workspaceAnimator = animator;
-        WorkspaceMotionSpec.start(animator, workspaceZoomStart, ZOOM_ANIM_MS);
+        WorkspaceTransition transition=new WorkspaceTransition(from,entering?1f:0f,
+                ()->generation==workspaceGeneration,
+                this::setWorkspaceAlpha,()->{
+                    workspaceAnimator=null;
+                    if(entering)workspaceEntering=false;
+                    setWorkspaceAlpha(entering?1f:0f);
+                    if(complete!=null)complete.run();
+                    updateTopBarState();
+                });
+        workspaceAnimator=transition.animator();
+        transition.start(workspaceZoomStart);
     }
     /** 动画期间宿主不得写普通稳态（会取消动画）；心跳按此时间窗跳过。 */
     private volatile long zoomAnimUntil;
@@ -4035,10 +4017,6 @@ public final class WorkspaceHost {
 
     private void createTopTaskControls() {
         Slot upper=slots[SLOT_TOP];upper.hint=new View(ctx);
-        topTaskPane=new TopTaskPane(ctx,upper.hint);
-        topTaskPane.setAlpha(workspaceAlpha);
-        FrameLayout taskParent=layout.tabletLandscape?root:topLiveClip;
-        taskParent.addView(topTaskPane,new FrameLayout.LayoutParams(-1,layout.topStrip));
         updateTopTaskGeometry();
         // The upper TaskView was added after the controls; its empty surface hole would
         // otherwise blank them until the controls are explicitly raised.
@@ -4070,7 +4048,6 @@ public final class WorkspaceHost {
         tabletToolsOpen=open;
         if (!open) {
             topBar.closeQuickAppPicker();
-            Clipboard.get(ctx).close();
 
         }
         topBar.setTabletToolsExpanded(open,true);
@@ -4096,7 +4073,6 @@ public final class WorkspaceHost {
             return;
         }
         if(topFace) {captureMainIntoTop(); return;}
-        Clipboard.get(ctx).close();
         // The strip keeps its
         // clock and rail while the landscape task fades in on top of them.
         enterTopFaceForFade();
@@ -4119,7 +4095,6 @@ public final class WorkspaceHost {
             topBar.setTranslationY(0f);
             topBar.setVisibility(View.VISIBLE);
         }
-        if(topTaskPane!=null) topTaskPane.setVisibility(View.INVISIBLE);
         root.requestLayout();
     }
 
@@ -4236,7 +4211,10 @@ public final class WorkspaceHost {
                         updateTopBarState();
                         finishPendingSuspend();
                     },WorkspaceHost::log);
-            if(intoTop)topTransition.collect(source,sourceCurrent,destination);
+            if(intoTop) {
+                topTransition.collect(source,sourceCurrent,destination);
+                topTransition.holdDestination(getSurfaceField(slots[SLOT_TOP].controller,"mSurfaceControl"));
+            }
             topTransition.start();
             return true;
         } catch(Throwable error) {
@@ -4247,11 +4225,25 @@ public final class WorkspaceHost {
     }
 
     private void revealTopTaskTransition() {
-        if(topTransition==null)return;
-        Slot upper=slots[SLOT_TOP];
-        if(upper.occupied && !upper.promoting)
-            topTransition.setLiveSurface(getSurfaceField(upper.controller,"mTaskLeash"));
-        topTransition.reveal();
+        final TopTaskTransition bridge=topTransition;
+        final Slot upper=slots[SLOT_TOP];
+        if(bridge==null || !upper.occupied || upper.promoting)return;
+        final Object token=upper.taskToken;
+        final long binding=upper.taskEpoch,epoch=sceneEpoch;
+        TopTaskFrame.Target target=new TopTaskFrame.Target(upper.controller,transitions,token,upper.taskId,
+                logicalBounds(upper),upper.rect[2]-upper.rect[0],upper.rect[3]-upper.rect[1]);
+        TopTaskFrame.await(main,upper.view,command->{
+            if(!executeOnShell(command))throw new IllegalStateException("Shell queue unavailable");
+        },target,()->topTransition==bridge && sceneEpoch==epoch && scene==ACTIVE && screenOn
+                && !keyguardLocked && !suspendRequested && upper.occupied && upper.taskEpoch==binding
+                && token.equals(upper.taskToken) && controllerOwns(upper,target.taskId,token),()->{
+                    reapplyScale(upper);
+                    bridge.setLiveSurface(getSurfaceField(upper.controller,"mTaskLeash"));
+                    bridge.reveal();
+                },error->{
+                    log("upper frame admission failed: "+error);
+                    bridge.abortAdmission();releaseTopTaskNow(true,false,null);
+                });
     }
 
     private void cancelTopTaskTransition() {
@@ -4259,11 +4251,10 @@ public final class WorkspaceHost {
     }
 
     private void updateTopTaskGeometry() {
-        if(layout==null || topTaskPane==null)return;
+        if(layout==null || slots[SLOT_TOP].view==null)return;
         Slot upper=slots[SLOT_TOP];
         FrameLayout taskParent=layout.tabletLandscape?root:topLiveClip;
         reparentTopView(upper.view,taskParent);
-        reparentTopView(topTaskPane,taskParent);
         upper.rect=slotBounds(upper);applyRect(upper);
         if(layout.tabletLandscape) {
             topFace=true;
@@ -4272,9 +4263,6 @@ public final class WorkspaceHost {
             FrameLayout.LayoutParams p=new FrameLayout.LayoutParams(
                     upper.rect[2]-upper.rect[0],upper.rect[3]-upper.rect[1]);
             p.leftMargin=upper.rect[0];p.topMargin=upper.rect[1];
-            topTaskPane.setLayoutParams(p);topTaskPane.setVisibility(View.INVISIBLE);
-            topTaskPane.setTranslationX(0);topTaskPane.setTranslationY(0);
-            topTaskPane.setScaleX(1);topTaskPane.setScaleY(1);
             upper.view.setScaleX(1);upper.view.setScaleY(1);
             upper.view.setClipBounds(new Rect(0,0,p.width,p.height));
             updateCellSurfaceVisibility(upper);
@@ -4282,8 +4270,6 @@ public final class WorkspaceHost {
         }
         topLiveClip.setLayoutParams(new FrameLayout.LayoutParams(-1,layout.topStrip));
         topLiveClip.setClipBounds(new Rect(0,0,screenW,layout.topStrip));
-        topTaskPane.setLayoutParams(new FrameLayout.LayoutParams(-1,layout.topStrip));
-        topTaskPane.setTranslationX(0);topTaskPane.setTranslationY(0);
     }
 
     private void reparentTopView(View view,FrameLayout parent) {
@@ -4317,7 +4303,6 @@ public final class WorkspaceHost {
         cancelTopTaskTransition();
         topTaskState.sceneChanged();
         topFace=false;
-        if(topTaskPane!=null)topTaskPane.setVisibility(View.INVISIBLE);
         releaseTopExitWindow();
         tabletToolsOpen=false;
         if(topBar!=null) {
@@ -4338,7 +4323,6 @@ public final class WorkspaceHost {
         // The empty SurfaceView can still clear its old hole while Shell finishes returning.
         // Paint the restored controls after it, including the now full-width adaptive hole.
         if(!taskFace)topBar.bringToFront();
-        topTaskPane.setVisibility(View.INVISIBLE);
         updateTopExitWindow();
         if(!taskFace) {
 
@@ -4398,16 +4382,15 @@ public final class WorkspaceHost {
             if(selected.source==null && (!ordinaryRoot(fresh,1) || !mainTaskVisible(fresh))) {cancelTopTaskTransition();return;}
             if(selected.source!=null && (!ordinaryRoot(fresh,6) || !controllerOwns(selected.source,selected.task.id,selected.task.token))) {cancelTopTaskTransition();return;}
             TopCandidate checked=candidate(fresh,selected.source);
-            TopTaskState.Ticket ticket=topTaskState.request(checked.key,sceneEpoch,true,checked.landscape,manual,selected.source==null);
+            TopTaskState.Ticket ticket=topTaskState.request(checked.key,sceneEpoch,true,manual);
             if(ticket==null) {cancelTopTaskTransition();return;}
-            topTaskPane.message("正在接入原任务…");
             if(selected.source==null)adoptTopTask(checked,ticket,true);
             else returnToSystem(selected.source,false,()->{
                 if(!topTaskState.current(ticket,sceneEpoch)) {topTaskState.cancel(ticket);finishPendingSuspend();return;}
                 clearSlot(selected.source);
                 adoptTopTask(checked,ticket,false);
-            },error->{topTaskState.cancel(ticket);topTaskPane.message("原窗口保持："+error);finishPendingSuspend();});
-        } catch(Throwable error) {cancelTopTaskTransition();log("upper admission stopped: "+error);topTaskPane.message("接入未完成，原任务保持");}
+            },error->{topTaskState.cancel(ticket);log("upper task kept: "+error);finishPendingSuspend();});
+        } catch(Throwable error) {cancelTopTaskTransition();log("upper admission stopped: "+error);}
     }
 
     private void adoptTopTask(TopCandidate selected, TopTaskState.Ticket ticket, boolean fromMain) {
@@ -4449,8 +4432,6 @@ public final class WorkspaceHost {
             if(!topTaskState.commit(ticket,sceneEpoch)) {releaseTopTask(false,false,null);return;}
             topOriginalSlot=selected.source;topFromMain=fromMain;
             topPortrait=!selected.landscape;
-            topTaskPane.occupied(true);
-            topTaskPane.setVisibility(View.INVISIBLE);
             updateTopTaskGeometry();applyFullscreenBounds(slots[SLOT_TOP]);applySlotScale(slots[SLOT_TOP]);
             // The strip's surface is shared with the main window during a cross-fade,
             // so its alpha and crop must be re-staged for the new owner explicitly.
@@ -4468,7 +4449,7 @@ public final class WorkspaceHost {
     private void topAdoptionFailed(TopCandidate selected,TopTaskState.Ticket ticket,String error) {
             topTaskState.cancel(ticket);
             cancelTopTaskTransition();
-            topTaskPane.message("横屏接入失败，正在归还原任务");
+            log("upper admission failed; returning native task");
             log("upper adoption failed: "+error);
             Slot origin=selected.source;
             if(origin!=null && !origin.occupied && topReady() && !suspendRequested)
@@ -4554,7 +4535,7 @@ public final class WorkspaceHost {
         final TopTaskTransition bridge=topTransition;
         final long binding=upper.taskEpoch;
         final Object token=upper.taskToken;
-        if(bridge!=null)bridge.followOpacity(topExitWindow);
+        if(bridge!=null)bridge.followOpacity(topControls==null?null:topControls.view());
         if(topBar!=null) {
             topBar.setPivotY(0f);
             topBar.setScaleY(1f);
@@ -4562,7 +4543,6 @@ public final class WorkspaceHost {
             topBar.setVisibility(View.VISIBLE);
             topBar.bringToFront();
         }
-        if(topTaskPane!=null) topTaskPane.setVisibility(View.INVISIBLE);
         if(bridge==null || surface==null || !Boolean.TRUE.equals(XposedHelpers.callMethod(surface,"isValid"))) {
             after.run();
             return;
@@ -4582,7 +4562,7 @@ public final class WorkspaceHost {
         try { if(topFromMain && origin==null && findMainTask()==null)returnFront=true; } catch(Throwable ignored){}
         final boolean bringingFront=returnFront;
         returnToSystem(upper,bringingFront,liveMainReveal,()->{
-            topTaskState.release(key,dismissed);clearSlot(upper);topOriginalSlot=null;
+            topTaskState.release(key);clearSlot(upper);topOriginalSlot=null;
             Runnable finish=()->{
                 if(front) {
                     // The strip is empty again, so the title face (clock and app rail)
@@ -4599,7 +4579,7 @@ public final class WorkspaceHost {
             log("upper task returned alive="+task.id+" front="+bringingFront+" dismissed="+dismissed);
         },error->{
             cancelTopTaskTransition();
-            topTaskPane.message("收回未确认，保留原任务："+error);
+            log("upper return pending: "+error);
             if(!topFace)topFace=true;
             updateHint(upper);root.requestLayout();log("upper return stopped: "+error);finishPendingSuspend();
         });
@@ -4665,7 +4645,6 @@ public final class WorkspaceHost {
         if(root==null || !supportsTaskUser(key.userId))return;
         topDirections.put(key,landscape);
         if(topDirections.size()>64)topDirections.keySet().removeIf(item->!item.equals(topTaskState.owner()) && !item.equals(key));
-        topTaskState.observe(key,landscape);
         // Observe only. A direction change never opens the upper face or claims a task.
         updateTopBarState();
     }
@@ -4809,7 +4788,6 @@ public final class WorkspaceHost {
         }
         if(slot.index==SLOT_TOP) {
             ensureCellBackground(slot); updateCellSurfaceVisibility(slot);
-            if(topTaskPane!=null)topTaskPane.occupied(slot.occupied && !slot.parked);
             updateTopExitWindow();
             return;
         }
@@ -5326,7 +5304,6 @@ public final class WorkspaceHost {
         workspaceAnimator = null;
         if (previous != null) previous.cancel();
         if (topBar != null) topBar.closeQuickAppPicker();
-        Clipboard.get(ctx).close();
         publishDesktopSideTasks();
         statusBar.restore();
         // Hide native overlay/input before publishing physical fullscreen geometry.
@@ -5492,7 +5469,6 @@ public final class WorkspaceHost {
             main.postDelayed(wallpaperRetry, 1500L);
             return;
         }
-        Clipboard.get(ctx).close();
         // Old drawables/native animations retain their bitmap until their last
         // frame. Let GC reclaim it after those owners release, never recycle live textures.
         wallpaperBackdrop = bitmap;
@@ -5630,7 +5606,6 @@ public final class WorkspaceHost {
             wallpaperReceiver = new BroadcastReceiver() {
                 @Override public void onReceive(Context context, Intent intent) {
                     log("wallpaper changed; reloading blur backdrop");
-                    Clipboard.get(ctx).close();
                     wallpaperBackdropDirty = true;
                     ++wallpaperLoadGeneration;
                     wallpaperBackdropRequested = false;
@@ -5932,7 +5907,6 @@ public final class WorkspaceHost {
         promotion = ticket;
         slot.promoting = true;
         recycleBuffered(slot);
-        Clipboard.get(ctx).close();
         statusBar.hideFor(ticket, () -> {
             if (promotion == ticket && !ticket.cancelled)
                 failPromotion(ticket, "external promotion status-bar lease expired");
@@ -6001,34 +5975,7 @@ public final class WorkspaceHost {
     public static void debugDumpViews() {
         WorkspaceHost host = sInstance;
         if (host == null) { log("debugDumpViews: host not started"); return; }
-        host.main.post(() -> host.dumpViewTree());
-    }
-
-    private void dumpViewTree() {
-        if (root == null) { log("view tree: root null"); return; }
-        log("view tree root children=" + root.getChildCount());
-        dumpViewRecursive(root, 0);
-    }
-
-    private void dumpViewRecursive(View view, int depth) {
-        if (view == null) return;
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < depth; i++) sb.append("| ");
-        sb.append(view.getClass().getSimpleName())
-                .append(" vis=").append(view.getVisibility())
-                .append(" l=").append(view.getLeft()).append(" t=").append(view.getTop())
-                .append(" w=").append(view.getWidth()).append(" h=").append(view.getHeight())
-                .append(" a=").append(view.getAlpha());
-        if (view.getBackground() != null) {
-            sb.append(" bg=").append(view.getBackground().getClass().getSimpleName());
-        }
-        log("view: " + sb);
-        if (view instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                dumpViewRecursive(group.getChildAt(i), depth + 1);
-            }
-        }
+        host.main.post(() -> WorkspaceDiagnostics.dumpViewTree(host.root,WorkspaceHost::log));
     }
 
     /** 交换确认后把新主任务 leash 完全复位：position/matrix/alpha/crop，避免副格残留变换把画面顶到主区上方。 */
@@ -6069,7 +6016,7 @@ public final class WorkspaceHost {
 
     private void launchQuick(QuickApp entry) {
         if (entry == null || entry.component == null || scene != ACTIVE
-                || promotion != null || transferBusy) return;
+                || promotion != null || transferBusy || !screenOn || keyguardLocked) return;
         for (Slot slot : slots) {
             if (slot.index > SLOT_MAIN && sideTaskMatchesEntry(slot, currentUserId(), entry.component)) {
                 log("top shortcut promotes existing side task slot=" + slot.index);
@@ -6077,6 +6024,28 @@ public final class WorkspaceHost {
                 return;
             }
         }
+        if(parkMainForQuickLaunch(entry))return;
+        launchQuickInMain(entry);
+    }
+
+    private boolean parkMainForQuickLaunch(QuickApp entry) {
+        if(!workspaceOptions.parkMainOnLaunch || topTransition!=null || swapPreview!=null
+                || cellMotion!=null || workspaceEntering || carrierSlotIndex>=0)return false;
+        for(Slot slot:slots)if(slot.launching || slot.promoting || slot.closing)return false;
+        for(int index=1;index<CELL_SLOT_COUNT;index++) {
+            Slot slot=slots[index];
+            if(slot.occupied || slot.parked || slot.frozen || slot.controller==null)continue;
+            final int user=currentUserId();final long epoch=sceneEpoch;
+            captureMainIntoEmptySlot(slot,entry.component,()->{
+                if(scene==ACTIVE && sceneEpoch==epoch && screenOn && !keyguardLocked
+                        && !suspendRequested && currentUserId()==user)launchQuickInMain(entry);
+            });
+            return true;
+        }
+        return false;
+    }
+
+    private void launchQuickInMain(QuickApp entry) {
         Intent launch = new Intent(Intent.ACTION_MAIN)
                 .addCategory(Intent.CATEGORY_LAUNCHER)
                 .setComponent(entry.component)
@@ -6113,13 +6082,6 @@ public final class WorkspaceHost {
             android.widget.Toast.makeText(ctx, "无法打开系统设置",
                     android.widget.Toast.LENGTH_SHORT).show();
         }
-    }
-
-    private void setDropHighlight(Slot slot, boolean active) {
-        if (slot == null || slot.hint == null) return;
-        slot.hint.setScaleX(1f);
-        slot.hint.setScaleY(1f);
-        LiveSwapVisualLease.writeAlpha(slot.hint, 1f);
     }
 
     /** 侧栏第 slotIndex 格的分段底板 top（与相邻格共享边界，保证列无缝）。 */
@@ -6616,7 +6578,13 @@ public final class WorkspaceHost {
 
     private void placeSideView(View view, int[] rect, Rect crop) {
         if (view == null) return;
-        view.setX(rect[0]);
+        float offset=0f;
+        if(layout!=null && !layout.tabletLandscape && workspaceAlpha<1f && mainSideAnimator==null) {
+            android.graphics.RectF edge=workspaceMainHole();
+            offset=WorkspaceTransition.sideOffset(layout.mainOnRight,layout.mainOffsetX,
+                    layout.mainDispWidth,edge.left,edge.right);
+        }
+        view.setX(rect[0]+offset);
         view.setY(rect[1]);
         android.view.ViewGroup.LayoutParams params = view.getLayoutParams();
         if (params != null && (params.width != rect[2] - rect[0] || params.height != rect[3] - rect[1])) {
@@ -6962,7 +6930,7 @@ public final class WorkspaceHost {
                         } else touchable.op(new Rect(layout.cellX, layout.topStrip,
                                         layout.cellX + layout.cellWidth, screenH), Region.Op.UNION);
                         Slot upper=slots[SLOT_TOP];
-                        if(topFace && topTaskPane!=null && !topTaskPane.choosing()
+                        if(topFace
                                 && upper.occupied && !upper.parked
                                 && !upper.promoting && upper.rect!=null)
                             touchable.op(new Rect(upper.rect[0],upper.rect[1],upper.rect[2],upper.rect[3]),Region.Op.DIFFERENCE);
@@ -7257,6 +7225,10 @@ public final class WorkspaceHost {
 
     /** Official empty-cell flow: open an app from Home, then collect that exact task. */
     private void captureMainIntoEmptySlot(Slot requestedSlot) {
+        captureMainIntoEmptySlot(requestedSlot,null,null);
+    }
+
+    private void captureMainIntoEmptySlot(Slot requestedSlot, ComponentName target, Runnable after) {
         if (requestedSlot == null) return;
         final Slot slot = requestedSlot;
         if (carrierSlotIndex >= 0) {
@@ -7283,13 +7255,19 @@ public final class WorkspaceHost {
                     }
                     if (task == null) {
                         transferBusy = false;
+                        if(after!=null) {after.run();return;}
                         log("empty cell keeps Home in main; open an app there first");
                         android.widget.Toast.makeText(ctx, "先在主屏打开应用，再点此格收进来",
                                 android.widget.Toast.LENGTH_SHORT).show();
                         return;
                     }
+                    if(target!=null && target.getPackageName().equals(task.pkg)) {
+                        transferBusy=false;after.run();return;
+                    }
                     hideIme();
                     startLiveCollect(slot, task);
+                    if(promotion!=null && promotion.nativeCollect && promotion.previousMain==task)
+                        promotion.collectionLaunch=after;
                 });
             } catch (Throwable error) {
                 main.post(() -> {
@@ -7438,6 +7416,8 @@ public final class WorkspaceHost {
                 + " confirmed=" + result.rolesConfirmed + " animated=" + result.succeeded + " error=" + result.error);
         main.post(this::compactCellsAfterCollection);
         finishPendingSuspend();
+        Runnable launch=ticket.collectionLaunch;ticket.collectionLaunch=null;
+        if(launch!=null && result.rolesConfirmed && result.sideOwned)main.post(launch);
     }
 
     /** Promote through the existing Shell queue; retain the slot until actual detachment. */
@@ -7469,7 +7449,6 @@ public final class WorkspaceHost {
             return;
         }
         final Promotion ticket = new Promotion(cellSlot, slots);
-        Clipboard.get(ctx).close();
         ticket.sceneEpoch = sceneEpoch;
         ticket.bindingEpoch = cellSlot.taskEpoch;
         ticket.previousMainOnRight = mainOnRight;
@@ -7582,42 +7561,12 @@ public final class WorkspaceHost {
                 && !slots[SLOT_TOP].promoting && layout != null && !layout.tabletLandscape
                 && topTransition==null && !workspaceEntering && workspaceAlpha>=1f;
         if (!wanted) { releaseTopExitWindow(); return; }
-        if (topExitWindow != null) return;
-        try {
-            int size = HyperOsStyle.dp(ctx, 40f), margin = HyperOsStyle.dp(ctx, 12f);
-            FrameLayout plate = new FrameLayout(ctx);
-            IconButton exit = new IconButton(ctx, IconButton.CLOSE, "退出顶栏，应用回到主窗");
-            exit.setTooltipText("退出顶栏，应用回到主窗");
-            exit.setBackground(HyperOsStyle.controlButton(ctx, false, 20f));
-            exit.setOnClickListener(v -> releaseTopTask(true, true, null));
-            plate.addView(exit, new FrameLayout.LayoutParams(size, size));
-            WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                    size, size, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                    PixelFormat.TRANSLUCENT);
-            params.gravity = Gravity.TOP | Gravity.START;
-            params.x = Math.max(0, screenW - size - margin);
-            params.y = Math.max(0, layout.topStrip - size - margin);
-            params.setTitle("OneStepLiteTopExit");
-            HostWindowPolicy.configure(params);
-            params.setFitInsetsTypes(0);
-            params.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-            wm.addView(plate, params);
-            topExitWindow = plate;
-        } catch (Throwable error) {
-            log("upper exit plate unavailable: " + error);
-        }
+        if(topControls==null)topControls=new TopOverlayControls(ctx,wm,()->releaseTopTask(true,true,null));
+        topControls.show(screenW,layout.topStrip);
     }
 
     private void releaseTopExitWindow() {
-        View plate = topExitWindow;
-        topExitWindow = null;
-        if (plate == null) return;
-        plate.setVisibility(View.GONE);
-        try { wm.removeViewImmediate(plate); }
-        catch (Throwable error) { log("upper exit plate release: " + error); }
+        if(topControls!=null)topControls.close();
     }
 
     private Object liveHostRootSurface() {
@@ -8800,7 +8749,7 @@ public final class WorkspaceHost {
 
     private void clearSlot(Slot slot) {
         if(slot.index==SLOT_TOP && topTaskState.owner()!=null) {
-            topTaskState.release(topTaskState.owner(),false); topOriginalSlot=null;
+            topTaskState.release(topTaskState.owner()); topOriginalSlot=null;
         }
         if(slot.index==SLOT_TOP) topPortrait=false;
 

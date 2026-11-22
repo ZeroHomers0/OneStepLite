@@ -108,7 +108,7 @@ public final class WorkspaceRetentionTest {
     }
     boolean isActive(Slot slot){return root!=null&&sInstance==this&&slot.index>0&&slot.index<slots.length;}
     boolean controllerOwns(Slot slot,int id,Object token){return slot.owned&&slot.taskId==id&&token.equals(slot.taskToken);}
-    void releaseWorkspaceBackdrop(){releasedBackdrop=true;}
+    void retireWorkspaceBackdrop(){releasedBackdrop=true;}
     void releaseVisibleNativeRetainedTask(){}
     void setMirrorLayerVisible(boolean value){mirrorVisible=value;}
     void publishDesktopSideTasks(){publishes++;}

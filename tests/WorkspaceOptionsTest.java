@@ -14,6 +14,13 @@ public final class WorkspaceOptionsTest {
         return new LiveSwapGeometry.Rect(b[0], b[1], b[2] - b[0], b[3] - b[1]);
     }
     public static void main(String[] args) {
+        check(!WorkspaceOptions.DEFAULT.parkMainOnLaunch,"main collection must be opt-in");
+        check(WorkspaceOptions.DEFAULT.withParkMainOnLaunch(true).withSwapMode(1).withEntryGesture(1)
+                .withKeepOnLock(true).withScrollSideTasks(true).withShowLunar(false)
+                .withLandscapeVideo(WorkspaceOptions.VIDEO_FULLSCREEN).withHideSideRecents(true).parkMainOnLaunch,
+                "other settings must preserve main collection preference");
+        check(!WorkspaceOptions.DEFAULT.withParkMainOnLaunch(true).withParkMainOnLaunch(false).parkMainOnLaunch,
+                "main collection can be disabled again");
         WorkspaceOptions defaults = WorkspaceOptions.DEFAULT;
         check(defaults.showLunar, "lunar date visible by default");
         check(!defaults.withShowLunar(false).withSwapMode(1).withEntryGesture(1).showLunar,

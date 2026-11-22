@@ -41,7 +41,7 @@ public final class TopAdmissionRegression {
  void finishPendingSuspend(){finished++;}static void log(String text){}
 '''+member('    private boolean topReady(')+member('    private void adoptTopTask(')+member('    private void prepareTopViewport(')+member('    private void adoptTopTaskPrepared(')+member('    private void topAdoptionFailed(')+'''
  static TopCandidate candidate(TopAdmissionRegression h){TopCandidate c=new TopCandidate();c.source=h.slots[1];return c;}
- static TopTaskState.Ticket ticket(TopAdmissionRegression h,TopCandidate c){return h.topTaskState.request(c.key,1,true,true,true,false);}
+ static TopTaskState.Ticket ticket(TopAdmissionRegression h,TopCandidate c){return h.topTaskState.request(c.key,1,true,true);}
  public static void main(String[]args){
   var h=new TopAdmissionRegression();var c=candidate(h);h.adoptTopTask(c,ticket(h,c),false);
   check(h.restored==1&&h.finished==1&&!h.topTaskState.busy(),"awake failure restores original empty side once");
@@ -54,12 +54,12 @@ public final class TopAdmissionRegression {
   h=new TopAdmissionRegression();c=candidate(h);var stale=ticket(h,c);h.topTaskState.sceneChanged();h.adoptTopTask(c,stale,false);
   check(h.adopted==0,"stale scene starts no transfer");
   h=new TopAdmissionRegression();c=candidate(h);h.defer=true;h.adoptTopTask(c,ticket(h,c),false);h.sceneEpoch++;h.topTaskState.sceneChanged();h.pending.run();
-  check(h.released==1&&h.topTaskState.owner()==null&&!h.topTaskPane.occupied,"late completion returns task instead of publishing owner");
+  check(h.released==1&&h.topTaskState.owner()==null&&!h.topTaskState.busy(),"late completion returns task instead of publishing owner");
   h=new TopAdmissionRegression();c=candidate(h);h.fail=false;h.adoptTopTask(c,ticket(h,c),false);
-  check(h.topTaskState.owner().equals(c.key)&&h.topOriginalSlot==c.source&&h.topTaskPane.occupied&&h.finished==1,"confirmed same task retains origin");
+  check(h.topTaskState.owner().equals(c.key)&&h.topOriginalSlot==c.source&&h.topTaskState.owner()!=null&&h.finished==1,"confirmed same task retains origin");
   h=new TopAdmissionRegression();c=candidate(h);h.ctx.auto=false;h.fail=false;h.adoptTopTask(c,ticket(h,c),false);
   check(h.adopted==0&&h.topTaskState.busy(),"WCT started before native viewport acknowledgement");h.ctx.ack(-1);
-  check(h.adopted==1&&h.topTaskPane.occupied&&h.main.queued.isEmpty(),"acknowledged viewport did not start exactly once");h.ctx.ack(-1);check(h.adopted==1,"duplicate viewport ack starts another WCT");
+  check(h.adopted==1&&h.topTaskState.owner()!=null&&h.main.queued.isEmpty(),"acknowledged viewport did not start exactly once");h.ctx.ack(-1);check(h.adopted==1,"duplicate viewport ack starts another WCT");
   h=new TopAdmissionRegression();c=candidate(h);h.ctx.auto=false;h.adoptTopTask(c,ticket(h,c),false);h.ctx.ack(0);
   check(h.adopted==0&&h.restored==1&&!h.topTaskState.busy(),"rejected viewport changed canonical task");
   h=new TopAdmissionRegression();c=candidate(h);h.ctx.auto=false;h.adoptTopTask(c,ticket(h,c),false);h.main.fire();h.ctx.ack(-1);
@@ -178,7 +178,7 @@ public class TopDirectionRegression {
   h.topTaskDirection(a,true);if(!h.topBar.enabled)throw new AssertionError("landscape main action was not refreshed");
   h.topTaskDirection(a,false);if(h.topBar.enabled)throw new AssertionError("return to portrait did not disable action");
   if(h.opened!=0||h.claimed!=0||h.topTaskState.owner()!=null||h.topTaskState.busy())throw new AssertionError("direction change admitted/opened upper task");
-  var t=h.topTaskState.request(a,1,true,false,true,true);h.topTaskState.commit(t,1);h.topTaskDirection(a,false);
+  var t=h.topTaskState.request(a,1,true,true);h.topTaskState.commit(t,1);h.topTaskDirection(a,false);
   if(!a.equals(h.topTaskState.owner())||h.topDirections.get(a)!=false)throw new AssertionError("portrait navigation lost explicit owner");
   var foreign=new TopTaskState.Key(8,10,"foreign");h.topTaskDirection(foreign,true);
   if(h.topDirections.containsKey(foreign))throw new AssertionError("unsupported user recorded");

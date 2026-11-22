@@ -47,8 +47,8 @@ public class WideVideoRegression {
  void log(String s){}void settleTopFace(boolean t){topFace=t;}
  void suspendSession(String s){check(s.equals("video-fullscreen"),"explicit fullscreen exit reason");suspended++;scene=3;sceneEpoch++;}
  void claimTopTask(TopCandidate c,boolean manual){check(manual&&c.key.equals(key),"claims exact original task");claimed++;
-  ticket=topTaskState.request(c.key,sceneEpoch,true,true,true,true);}
- void releaseTopTask(boolean front,boolean dismissed,Runnable r){check(front&&!dismissed,"automatic return alive to main");released++;topTaskState.release(topTaskState.owner(),false);}
+  ticket=topTaskState.request(c.key,sceneEpoch,true,true);}
+ void releaseTopTask(boolean front,boolean dismissed,Runnable r){check(front&&!dismissed,"automatic return alive to main");released++;topTaskState.release(topTaskState.owner());}
  void commit(){check(topTaskState.commit(ticket,sceneEpoch),"native ownership commit");slots[SLOT_TOP].occupied=true;}
  void signal(boolean land,boolean full,boolean focused,int nativeMode){topDirections.put(key,land);observeWideVideo(key,land,full,focused,nativeMode,!land,1000);}
 '''+methods+'''

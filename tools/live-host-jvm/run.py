@@ -56,7 +56,7 @@ public class LiveHostRegression {
   static class Backdrop {int closes;void close(){closes++;}void closeAfterFrame(View v){if(v!=null&&v.layouts==0)throw new AssertionError("backdrop retired before Host restoration");closes++;}} Backdrop liveBackdrop;
   Slot slot; int taskId; Object token; LiveTask previousMain=new LiveTask(1,new Object());
   boolean cancelled, nativeCompleting, nativeSubmitted, cancelRequested, externalLaunch, nativeHome, nativeFlip, nativeCollect;
-  long liveZoomGuardUntil;
+  long liveZoomGuardUntil;Runnable collectionLaunch;
   long sceneEpoch=7,bindingEpoch=3; LiveSwapVisualLease liveVisual;
   ArrayList<LiveSwapVisualLease> peerVisuals=new ArrayList<>();
   OwnedTask previousMainCandidate;
@@ -169,7 +169,8 @@ public class LiveHostRegression {
   main.flush();check(promotion==null&&p.slot.taskId==2&&!p.slot.frozen&&!p.slot.promoting&&!inputPass&&LiveSwap.cancels==0,"preflight cancellation preserves original side binding");
   check(!ownedTasks.containsKey(p.previousMain.token),"confirmed original roles release the A recovery candidate only");
  }
- void uncertainCollect(){Promotion p=promotion;p.nativeCollect=true;var r=new LiveSwap.Result(false,false,new RuntimeException("inverse timeout"));r.rolesConfirmed=false;finishLiveCollect(p,r);check(p.slot.frozen&&p.slot.occupied&&!p.slot.promoting&&!p.slot.launching,"terminal uncertain collect must not block every empty cell");main.flush();check(promotion==null&&!p.slot.promoting,"collect releases global promotion even when one cell is quarantined");}
+ void uncertainCollect(){Promotion p=promotion;p.nativeCollect=true;int[] launches={0};p.collectionLaunch=()->launches[0]++;var r=new LiveSwap.Result(false,false,new RuntimeException("inverse timeout"));r.rolesConfirmed=false;finishLiveCollect(p,r);check(p.slot.frozen&&p.slot.occupied&&!p.slot.promoting&&!p.slot.launching,"terminal uncertain collect must not block every empty cell");main.flush();check(promotion==null&&!p.slot.promoting,"collect releases global promotion even when one cell is quarantined");check(launches[0]==0&&p.collectionLaunch==null,"uncertain collection cannot launch a replacement app");}
+ void quickCollection(){Promotion p=promotion;p.nativeCollect=true;int[] launches={0};p.collectionLaunch=()->launches[0]++;finishLiveCollect(p,new LiveSwap.Result(true,true,null));check(launches[0]==0,"native completion alone cannot launch before focus handoff");focus.run();check(launches[0]==0,"replacement launch is serialized after cleanup");main.flush();check(launches[0]==1&&p.collectionLaunch==null,"confirmed collection launches exactly once");finishLiveCollect(p,new LiveSwap.Result(true,true,null));main.flush();check(launches[0]==1,"duplicate native finish cannot launch again");}
  void uncertainRoles(){Promotion p=promotion;p.nativeSubmitted=true;var r=new LiveSwap.Result(false,false,new RuntimeException("role timeout"));r.rolesConfirmed=false;finishLiveSwap(p,r);check(p.slot.frozen&&p.slot.promoting&&ownedTasks.containsKey(p.previousMain.token)&&ownedTasks.containsKey(p.token),"unconfirmed role timeout preserves both A/B recovery ledger entries");}
  void staleCompletion(){Promotion old=promotion;promotion=new Promotion(slots[2]);finishLiveSwap(old,new LiveSwap.Result(true,true,null));check(clears==0&&binds==0&&promotion.slot==slots[2],"stale callback cannot mutate a newer ticket");}
  void staleEpoch(){Promotion old=promotion;old.slot.taskEpoch++;finishLiveSwap(old,new LiveSwap.Result(true,true,null));check(clears==0&&binds==0&&!old.nativeCompleting,"stale binding epoch cannot retire a replacement task");}
@@ -223,6 +224,7 @@ public class LiveHostRegression {
   new LiveHostRegression().nativeRoleCompletion();new LiveHostRegression().cancellation();new LiveHostRegression().beforeSubmission();new LiveHostRegression().uncertainRoles();new LiveHostRegression().uncertainCollect();new LiveHostRegression().staleCompletion();new LiveHostRegression().staleEpoch();new LiveHostRegression().guard();
   new LiveHostRegression().zoomGuardCompletion();new LiveHostRegression().newerZoomGuard();new LiveHostRegression().uncertainZoomGuard();
   new LiveHostRegression().collectCompletion();new LiveHostRegression().collectCancellation();
+  new LiveHostRegression().quickCollection();
   System.out.println("actual Host live completion/cancel/visual/external guard checks="+checks+" passed");
  }
 }

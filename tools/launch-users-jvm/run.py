@@ -23,10 +23,13 @@ import android.content.*;import de.robv.android.xposed.XposedHelpers;
 public class LaunchUsersRegression {
  static int checks;static void check(boolean b,String m){checks++;if(!b)throw new AssertionError(m);}
  static class Info {int userId;Object token=new Object();boolean ordinary=true;ComponentName baseActivity=new ComponentName("app");Info(int u){userId=u;}}static class Controller {Info mTaskInfo;Controller(int u){mTaskInfo=new Info(u);}}
- static class Slot {int index,taskId=42;boolean occupied=true,parked,frozen,owns=true,closing,carrier;Object taskToken=new Object();String pkg="app";Controller controller;Slot(int i,int u){index=i;controller=new Controller(u);}}
+ static class Slot {int index,taskId=42;boolean occupied=true,parked,frozen,owns=true,closing,carrier,launching,promoting;Object taskToken=new Object();String pkg="app";Controller controller;Slot(int i,int u){index=i;controller=new Controller(u);}}
  static class QuickApp {ComponentName component=new ComponentName("app");String label="app";}
  static final int ACTIVE=1,SLOT_MAIN=0,SLOT_COUNT=3,SLOT_TOP=4;int scene=ACTIVE,tapped=-1,queued=-1,current;
- boolean transferBusy,taskCellsCovered;Object promotion;Context ctx=new Context();Slot[]slots={new Slot(0,0),new Slot(1,999),new Slot(2,0)};
+ boolean transferBusy,taskCellsCovered,screenOn=true,keyguardLocked;Object promotion;Context ctx=new Context();Slot[]slots={new Slot(0,0),new Slot(1,999),new Slot(2,0)};
+ WorkspaceOptions workspaceOptions=WorkspaceOptions.DEFAULT;Object topTransition,swapPreview,cellMotion;
+ boolean workspaceEntering,suspendRequested;int carrierSlotIndex=-1,CELL_SLOT_COUNT=3;long sceneEpoch=1;Runnable afterCollect;
+ void captureMainIntoEmptySlot(Slot slot,ComponentName target,Runnable after){queued=slot.index;afterCollect=after;}
  int currentUserId(){return current;}boolean supportsTaskUser(int u){return u==0||u==999;}
  boolean controllerOwns(Slot s,int id,Object token){return s.owns;}
  static class LiveTask{Object source;LiveTask(Slot s){source=s;}LiveTask(Object i){source=i;}}
@@ -38,7 +41,7 @@ public class LaunchUsersRegression {
  void swapWithMain(int i){tapped=i;}void captureMainIntoEmptySlot(Slot s){tapped=s.index;}
  void adoptExisting(Slot s,LiveTask task,Runnable done,java.util.function.Consumer<String> failed){tapped=s.index;done.run();}
  void queueSidePromotion(Slot s,boolean desktop){queued=s.index;}void releaseTopTask(boolean front,boolean dismissed,Runnable after){if(!front||!dismissed)throw new AssertionError();tapped=SLOT_TOP;}void scheduleMainCropClear(long t){}static void log(String s){}
-'''+member('private void onSlotTapped(')+member('private boolean sideTaskMatchesUser(')+member('private boolean sideTaskMatchesEntry(')+member('private void launchQuick(')+member('private void openSettingsInMain(')+member('private void promoteSideTaskForDesktopLaunch(')+member('private LiveTask findPackageTask(String pkg, ComponentName entry)')+'''
+'''+member('private void onSlotTapped(')+member('private boolean sideTaskMatchesUser(')+member('private boolean sideTaskMatchesEntry(')+member('private void launchQuick(')+member('private boolean parkMainForQuickLaunch(')+member('private void launchQuickInMain(')+member('private void openSettingsInMain(')+member('private void promoteSideTaskForDesktopLaunch(')+member('private LiveTask findPackageTask(String pkg, ComponentName entry)')+'''
  public static void main(String[]args)throws Exception{
   var h=new LaunchUsersRegression();h.launchQuick(new QuickApp());check(h.tapped==2&&h.ctx.launches==0,"owner shortcut selected clone or relaunched owner");
   h=new LaunchUsersRegression();h.slots[2].occupied=false;h.launchQuick(new QuickApp());check(h.tapped==-1&&h.ctx.launches==1,"clone captured owner shortcut");
@@ -67,6 +70,17 @@ public class LaunchUsersRegression {
   h.roots.remove(app);check(h.findPackageTask("app",new ComponentName("app"))==null,"only an independent mini task permits a fresh native application launch");
   h.roots.add(app);h.roots.add(new Info(0));boolean rejected=false;try{h.findPackageTask("app",new ComponentName("app"));}catch(IllegalStateException expected){rejected=true;}
   check(rejected,"multiple matching application roots remain ambiguous");
+  h=new LaunchUsersRegression();h.workspaceOptions=h.workspaceOptions.withParkMainOnLaunch(true);
+  h.slots[2].occupied=false;h.launchQuick(new QuickApp());check(h.queued==2&&h.ctx.launches==0,"new app must wait for old main collection");
+  h.afterCollect.run();check(h.ctx.launches==1,"confirmed collection launches requested app");
+  for(int state=0;state<5;state++){
+   h=new LaunchUsersRegression();h.workspaceOptions=h.workspaceOptions.withParkMainOnLaunch(true);h.slots[2].occupied=false;h.launchQuick(new QuickApp());
+   switch(state){case 0:h.sceneEpoch++;break;case 1:h.keyguardLocked=true;break;case 2:h.screenOn=false;break;case 3:h.current=999;break;case 4:h.suspendRequested=true;break;}
+   h.afterCollect.run();check(h.ctx.launches==0,"late collection launch crossed scene/user/privacy boundary "+state);
+  }
+  h=new LaunchUsersRegression();h.workspaceOptions=h.workspaceOptions.withParkMainOnLaunch(true);h.slots[1].controller.mTaskInfo.baseActivity=h.slots[2].controller.mTaskInfo.baseActivity=new ComponentName("other");
+  h.launchQuick(new QuickApp());check(h.ctx.launches==1&&h.queued==-1,"full cells must keep normal app switching");
+  h=new LaunchUsersRegression();h.slots[2].occupied=false;h.launchQuick(new QuickApp());check(h.ctx.launches==1&&h.queued==-1,"collection remains opt-in");
   System.out.println("actual Host launch user checks="+checks+" passed");
  }
 }'''
@@ -75,5 +89,5 @@ paths=[]
 for name,text in files.items():
     p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8');paths.append(str(p))
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths,str(src/'DesktopIconLaunchPolicy.java'),str(src/'TaskLaunchIdentity.java'),str(src/'TaskUserPolicy.java'),str(src/'Packages.java')],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths,str(src/'DesktopIconLaunchPolicy.java'),str(src/'TaskLaunchIdentity.java'),str(src/'TaskUserPolicy.java'),str(src/'Packages.java'),str(src/'WorkspaceOptions.java')],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.LaunchUsersRegression'],check=True)

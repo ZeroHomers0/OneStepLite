@@ -14,20 +14,22 @@ def member(signature):
   elif host[i]=='}':d-=1
   i+=1
  return host[a:i]
-methods='\n'.join(member(s) for s in ['    private void beginWorkspaceEntry(', '    private void awaitWorkspaceFrame(', '    private void setWorkspaceAlpha(', '    private void stageCellPresentation(', '    private Rect workspaceCellCrop(Slot slot)', '    private Rect workspaceCellCrop(int[] rect,', '    private android.graphics.RectF workspaceMainHole(', '    private android.graphics.RectF workspaceMainHoleAt(', '    private android.graphics.RectF workspaceTopHole(', '    private android.graphics.RectF workspaceSideHole(', '    private void updateWorkspaceBacking(', '    private void updateWorkspaceBackdropVisibility(', '    private void updateChromeClip(', '    private void clipChromeBesideMain(', '    private int[] sideBackingBounds(', '    private int sideSegmentTop(', '    private int sideSegmentHeight(', '    private void playWorkspaceFade(', '    private void suspendSession(', '    private void finishPendingSuspend(', '    private boolean ownsCellPresentation(', '    private boolean cellPresentationVisible(', '    private void updateCellSurfaceVisibility('])
+methods='\n'.join(member(s) for s in ['    private void prepareWorkspaceBackdrop(', '    private void releaseWorkspaceBackdrop(', '    private void retireWorkspaceBackdrop(', '    private void placeSideView(', '    private void beginWorkspaceEntry(', '    private void awaitWorkspaceFrame(', '    private void setWorkspaceAlpha(', '    private void stageCellPresentation(', '    private Rect workspaceCellCrop(Slot slot)', '    private Rect workspaceCellCrop(int[] rect,', '    private android.graphics.RectF workspaceMainHole(', '    private android.graphics.RectF workspaceMainHoleAt(', '    private android.graphics.RectF workspaceTopHole(', '    private android.graphics.RectF workspaceSideHole(', '    private void updateWorkspaceBacking(', '    private void updateWorkspaceBackdropVisibility(', '    private void updateChromeClip(', '    private void clipChromeBesideMain(', '    private int[] sideBackingBounds(', '    private int sideSegmentTop(', '    private int sideSegmentHeight(', '    private void playWorkspaceFade(', '    private void suspendSession(', '    private void finishPendingSuspend(', '    private boolean ownsCellPresentation(', '    private boolean cellPresentationVisible(', '    private void updateCellSurfaceVisibility('])
+methods=methods.replace('WorkspaceHost::log','WorkspaceRegression::log')
 files={
 'android/os/SystemClock.java':'package android.os;public class SystemClock {public static long uptimeMillis(){return 10000;}}',
 'android/animation/Animator.java':'package android.animation;public class Animator {}',
-'android/animation/AnimatorListenerAdapter.java':'package android.animation;public class AnimatorListenerAdapter {public void onAnimationEnd(Animator a){}}',
+'android/animation/AnimatorListenerAdapter.java':'package android.animation;public class AnimatorListenerAdapter {public void onAnimationCancel(Animator a){}public void onAnimationEnd(Animator a){}}',
 'android/animation/ValueAnimator.java':r'''package android.animation;
 import java.util.*;import java.util.function.*;public class ValueAnimator extends Animator {
  float from,to,value;List<Consumer<ValueAnimator>>updates=new ArrayList<>();List<AnimatorListenerAdapter>listeners=new ArrayList<>();
  public static ValueAnimator ofFloat(float...f){ValueAnimator v=new ValueAnimator();v.from=f[0];v.to=f[1];v.value=v.from;return v;}
  public long delay;public void setStartDelay(long d){delay=d;}public void setCurrentPlayTime(long t){tick(t/300f);}public void setDuration(long d){}public void setInterpolator(Object i){}public void addUpdateListener(Consumer<ValueAnimator>u){updates.add(u);}public void addListener(AnimatorListenerAdapter l){listeners.add(l);}
  public Object getAnimatedValue(){return value;}public void tick(float p){value=from+(to-from)*p;for(var u:updates)u.accept(this);}public void start(){tick(0f);}
- public void cancel(){for(var l:listeners)l.onAnimationEnd(this);}public void end(){tick(1f);for(var l:listeners)l.onAnimationEnd(this);}
+ public void cancel(){for(var l:listeners)l.onAnimationCancel(this);for(var l:listeners)l.onAnimationEnd(this);}public void end(){tick(1f);for(var l:listeners)l.onAnimationEnd(this);}
 }''',
 'android/view/animation/PathInterpolator.java':'package android.view.animation;public class PathInterpolator {public PathInterpolator(float a,float b,float c,float d){}}',
+'android/view/ViewGroup.java':'package android.view;public class ViewGroup {public static class LayoutParams {public int width,height;}}',
 'android/graphics/RectF.java':'package android.graphics;public class RectF {public float left,top,right,bottom;public RectF(){}public RectF(float a,float b,float c,float d){left=a;top=b;right=c;bottom=d;}public void set(float a,float b,float c,float d){left=a;top=b;right=c;bottom=d;}}',
 'android/graphics/Rect.java':'package android.graphics;public class Rect {public int left,top,right,bottom;public Rect(int a,int b,int c,int d){left=a;top=b;right=c;bottom=d;}public boolean isEmpty(){return right<=left||bottom<=top;}public String toString(){return left+","+top+","+right+","+bottom;}}',
 'android/view/SurfaceControl.java':r'''package android.view;
@@ -50,7 +52,7 @@ public class WorkspaceRegression {
  static int checks;static void check(boolean b,String m){checks++;if(!b)throw new AssertionError(m);}
  static class Drawable {int alpha=255;void setAlpha(int a){alpha=a;}}
  static class WallpaperCropDrawable extends Drawable {android.graphics.RectF hole;void setMainHole(android.graphics.RectF r){hole=r==null?null:new android.graphics.RectF(r.left,r.top,r.right,r.bottom);}}
- static class View {static final int VISIBLE=0,GONE=8;float alpha=1,x,y,translationY;int pickerCloses;Drawable background=new WallpaperCropDrawable();android.graphics.Rect clip;Drawable getBackground(){return background;}void setAlpha(float v){alpha=v;}void setX(float v){x=v;}void setY(float v){y=v;}void setTranslationY(float v){translationY=v;}void setClipBounds(android.graphics.Rect r){clip=r;}void invalidate(){}void setWorkspaceMainHole(android.graphics.RectF r){if(background instanceof WallpaperCropDrawable)((WallpaperCropDrawable)background).setMainHole(r);}void closeQuickAppPicker(){pickerCloses++;}}
+ static class View {interface OnAttachStateChangeListener {void onViewAttachedToWindow(View v);void onViewDetachedFromWindow(View v);}OnAttachStateChangeListener listener;void addOnAttachStateChangeListener(OnAttachStateChangeListener l){listener=l;}void removeOnAttachStateChangeListener(OnAttachStateChangeListener l){if(listener==l)listener=null;}android.view.ViewGroup.LayoutParams params=new android.view.ViewGroup.LayoutParams();android.view.ViewGroup.LayoutParams getLayoutParams(){return params;}void setLayoutParams(android.view.ViewGroup.LayoutParams p){params=p;}Object getWindowToken(){return this;}static final int VISIBLE=0,GONE=8;float alpha=1,x,y,translationY;int pickerCloses;Drawable background=new WallpaperCropDrawable();android.graphics.Rect clip;Drawable getBackground(){return background;}void setAlpha(float v){alpha=v;}void setX(float v){x=v;}void setY(float v){y=v;}void setTranslationY(float v){translationY=v;}void setClipBounds(android.graphics.Rect r){clip=r;}void invalidate(){}void setWorkspaceMainHole(android.graphics.RectF r){if(background instanceof WallpaperCropDrawable)((WallpaperCropDrawable)background).setMainHole(r);}void closeQuickAppPicker(){pickerCloses++;}}
  static class Observer {Runnable frame;void registerFrameCommitCallback(Runnable r){frame=r;}}
  static class FrameLayout extends View {Observer observer=new Observer();boolean attached=true,hardware=true;int invalidates;
   boolean isAttachedToWindow(){return attached;}boolean isHardwareAccelerated(){return hardware;}Observer getViewTreeObserver(){return observer;}void invalidate(){invalidates++;}void draw(){Runnable r=observer.frame;observer.frame=null;if(r!=null)r.run();}}
@@ -76,7 +78,7 @@ public class WorkspaceRegression {
  boolean mayWriteSideSurface(Slot s){return true;}boolean presentsSlot(Slot s){return true;}
  Rect logicalBounds(Slot s){return new Rect(0,0,screenW,screenH);}
  static class CellMotion{void finish(){}}
- Queue main=new Queue();Object ctx=new Object();CellMotion cellMotion;StatusBar statusBar=new StatusBar();Promotion promotion;Bitmap mainBackdrop,wallpaperBackdrop=new Bitmap();
+ Queue main=new Queue();Object ctx=this;CellMotion cellMotion;StatusBar statusBar=new StatusBar();Promotion promotion;Bitmap mainBackdrop,wallpaperBackdrop=new Bitmap();
   boolean screenOn=true,zoomed=true,suspendRequested,landscapeSuspended,transferBusy,workspaceEntering,workspaceExiting,keyguardLocked;int scene=ACTIVE,zoomWrites,parks,returns,ready;long sceneEpoch=1,workspaceGeneration,zoomAnimUntil;String pendingSuspendReason;
  static class Layout {boolean tabletLandscape,mainOnRight;float mainScale=.7017717f;int mainOffsetX,mainOffsetY=606;int mainWidth=2286,sideWidth=762,topStrip=508,mainDispWidth=2139;
   int[] cellBounds(int i){return new int[]{0,topStrip+i*400,762,topStrip+(i+1)*400};}}
@@ -84,14 +86,18 @@ public class WorkspaceRegression {
  final android.graphics.RectF workspaceHole=new android.graphics.RectF();
  final android.graphics.RectF workspaceTopHole=new android.graphics.RectF();
  final android.graphics.RectF workspaceSideHole=new android.graphics.RectF();
- Object workspaceBackdrop;int backdropAcquires;void prepareWorkspaceBackdrop(long g,int attempt,Runnable ready){backdropAcquires++;ready.run();}
+ static class LiveBackdrop {boolean closed;void close(){closed=true;}}
+ static class WorkspaceBackdrop {static boolean defer;static java.util.function.Consumer<LiveBackdrop> pending;static java.util.function.BooleanSupplier exitCurrent;static Runnable exit;
+  static void acquire(Object ctx,Queue handler,Object token,Bitmap wallpaper,int w,int h,java.util.function.Consumer<LiveBackdrop> ready,java.util.function.Consumer<String> log){((WorkspaceRegression)ctx).backdropAcquires++;if(defer)pending=ready;else ready.accept(new LiveBackdrop());}
+  static void retire(Object ctx,Queue handler,Object token,java.util.function.BooleanSupplier current,Runnable release,java.util.function.Consumer<String> log){exitCurrent=current;exit=release;}}
+ int backdropAcquires;LiveBackdrop workspaceBackdrop;View workspaceBackdropOwner;View.OnAttachStateChangeListener workspaceBackdropDetach;
  android.animation.ValueAnimator workspaceAnimator;float workspaceAlpha=1f;float mainSideFrameX=Float.NaN;Object mainSideAnimator;
  void writeZoomAnimated(boolean on){zoomWrites++;}void writeZoom(boolean on){zoomWrites++;}void setZoomState(boolean on){zoomed=on;}void scheduleMainCropClear(long d){}void publishDesktopSideTasks(){}
  void resetTopForSuspend(){}
  boolean retentionAllowed,retainedOnExit;long retainedExitSourceEpoch=-1;int retainedHides;
  boolean canRetainBoundTasks(){return retentionAllowed;}
  void finishRetainedSuspend(long epoch){retainedHides++;}
- void closeSwapPreview(){}void closeCellMovePreview(){}void restoreCarrierToMain(){}void hideIme(){}void log(String s){}void failPromotion(Promotion p,String s){}
+ void closeSwapPreview(){}void closeCellMovePreview(){}void restoreCarrierToMain(){}void hideIme(){}static void log(String s){}void failPromotion(Promotion p,String s){}
  void returnUnboundOwnedCandidates(long epoch,Runnable r){returns++;r.run();}void parkNext(int i){parks++;}
  Object getSurfaceField(Object o,String n){return o==null?null:((Controller)o).surface;}
  boolean controllerOwns(Slot s,int id,Object token){return s.taskId==id&&s.controller.token==token;}
@@ -180,7 +186,7 @@ public class WorkspaceRegression {
     check(Math.abs(sideHole.top-606*(p*(1.5f-.5f*p)))<.01,"exit side cells follow the leading reveal curve");
    }
    h.workspaceExiting=false;
-   h.workspaceBackdrop=new Object();h.setWorkspaceAlpha(.5f);
+   h.workspaceBackdrop=new LiveBackdrop();h.setWorkspaceAlpha(.5f);
    check(h.topStripBacking.alpha==1&&h.mainGapBacking.alpha==1,"cutout wallpaper remains opaque while the native buffer reaches its first composition");
    check(h.slots[1].hint.background.alpha==255&&(h.slots[1].controller.surface.alpha==0f||h.slots[1].controller.surface.alpha==1f),"hint wallpaper and real task never acquire fractional opacity");
    h.setWorkspaceAlpha(1f);check(h.slots[1].hint.background.alpha==255,"settled hint wallpaper restores opacity");
@@ -194,12 +200,15 @@ public class WorkspaceRegression {
   for(boolean mainRight:new boolean[]{false,true}) {
    h=new WorkspaceRegression();h.layout.mainOnRight=mainRight;h.layout.mainOffsetX=mainRight?835:0;
    for(float p:new float[]{0f,.25f,.5f,.75f,1f}) {
-    h.setWorkspaceAlpha(p);
+    h.slots[1].sideRow=0;h.setWorkspaceAlpha(p);
     check(Math.abs(h.topLiveClip.translationY-(606*p-606))<.01,"top strip rides the main edge");
     float expected=mainRight?(835*p-835):(3048*(1+(.7017717f-1)*p)-2139);
     check(Math.abs(h.slots[1].view.x-expected)<.01,"side cells ride the main edge");
     check(h.slots[1].view.clip!=null&&h.slots[1].view.clip.left==0&&h.slots[1].view.clip.right==762,"riding cells keep their full crop");
     check(h.slots[1].hint.x==expected,"side placeholders ride with their cells");
+    h.placeSideView(h.slots[1].view,h.slots[1].rect,new Rect(0,0,762,392));
+    h.placeSideView(h.slots[1].hint,h.slots[1].rect,new Rect(0,0,762,392));
+    check(Math.abs(h.slots[1].view.x-expected)<.01&&Math.abs(h.slots[1].hint.x-expected)<.01,"row relayout cannot reset the entry/exit offset");
    }
    h.setWorkspaceAlpha(1f);
    check(h.topLiveClip.translationY==0&&h.slots[1].view.x==0,"settled chrome returns to its layout position");
@@ -221,6 +230,20 @@ public class WorkspaceRegression {
   check(h.slots[1].controller.surface.alpha==coldSurfaceAlpha&&h.slots[1].taskToken==coldTask,"asynchronous wallpaper replacement never changes live task visibility or identity");
   h.main.flush();check(h.root.observer.frame!=null&&h.zoomWrites==0,"wallpaper readiness still waits for a real Host frame");
   h.root.draw();h.main.flush();check(h.zoomWrites==1,"cold entry starts one zoom after the actual frame gate");
+  for(boolean tablet:new boolean[]{false,true}) {
+   h=new WorkspaceRegression();h.layout.tabletLandscape=tablet;h.prepareWorkspaceBackdrop(0,0,()->{});
+   check(h.workspaceBackdrop!=null,"phone and tablet both acquire physical wallpaper below the moving main");
+   LiveBackdrop backing=h.workspaceBackdrop;h.zoomed=false;h.retireWorkspaceBackdrop();
+   check(!backing.closed&&h.workspaceBackdrop==backing,"Host animation completion cannot remove backing before native commit");
+   h.workspaceGeneration++;check(!WorkspaceBackdrop.exitCurrent.getAsBoolean(),"a resumed scene cancels the old backing retirement");
+   h.workspaceGeneration--;if(WorkspaceBackdrop.exitCurrent.getAsBoolean())WorkspaceBackdrop.exit.run();
+   check(backing.closed&&h.workspaceBackdrop==null,"native settled frame releases only its own wallpaper lease");
+  }
+  h=new WorkspaceRegression();WorkspaceBackdrop.defer=true;h.prepareWorkspaceBackdrop(0,0,()->{});
+  h.workspaceGeneration++;LiveBackdrop staleBacking=new LiveBackdrop();WorkspaceBackdrop.pending.accept(staleBacking);
+  check(staleBacking.closed&&h.workspaceBackdrop==null,"late parent acquisition cannot attach to a newer transition");WorkspaceBackdrop.defer=false;
+  h=new WorkspaceRegression();h.playWorkspaceFade(true,0,()->{throw new AssertionError("cancel completed");});h.workspaceAnimator.tick(.4f);float cancelled=h.workspaceAlpha;
+  h.workspaceAnimator.cancel();h.workspaceAnimator.tick(.8f);h.workspaceAnimator.end();check(h.workspaceAlpha==cancelled,"cancelled same-scene controller never writes another frame");
   System.out.println("actual workspace entry/exit/real-surface/late-frame checks="+checks+" passed");
  }
 }'''.replace('__METHODS__',methods)
@@ -231,24 +254,22 @@ import java.util.function.Consumer;
 public class TopControlsCreationRegression {
  static class View {float alpha=1f;boolean visible;View(){}View(Object context){}void setAlpha(float a){alpha=a;}void setOnClickListener(Consumer<View> c){}void bringToFront(){}}
  static class FrameLayout extends View {float attachedAlpha=-1;View child;static class LayoutParams{LayoutParams(int w,int h){}}void addView(View v,LayoutParams p){child=v;attachedAlpha=v.alpha;}}
- static class TopTaskPane extends View {View hint;TopTaskPane(Object c,View h){hint=h;}void exitAction(Runnable r){}}
  static class Slot {View hint,view=new View();Object controller=new Object(),taskToken=new Object();}
  static class Layout {boolean tabletLandscape;int topStrip=450;}
  static final int SLOT_TOP=5;Slot[] slots={new Slot(),new Slot(),new Slot(),new Slot(),new Slot(),new Slot()};
  Object ctx=new Object();float workspaceAlpha;FrameLayout root=new FrameLayout(),topLiveClip=new FrameLayout();View topBar=new View();
- TopTaskPane topTaskPane;Layout layout=new Layout();boolean topFace;
+ Layout layout=new Layout();boolean topFace;int geometryUpdates;
  View makeEmptyHint(){return new View();}void captureMainIntoTop(){}void settleTopFace(boolean taskFace){}
  void releaseTopTask(boolean front,boolean dismissed,Runnable after){}
- void updateTopTaskGeometry(){topTaskPane.visible=true;}
+ void updateTopTaskGeometry(){geometryUpdates++;}
  __CREATE__
  public static void main(String[] args){int checks=0;for(boolean tablet:new boolean[]{true,false})for(float alpha:new float[]{0f,.4f,1f}){
   var h=new TopControlsCreationRegression();h.layout.tabletLandscape=tablet;h.workspaceAlpha=alpha;
   Slot upper=h.slots[SLOT_TOP];View liveView=upper.view;Object controller=upper.controller,token=upper.taskToken;
   h.createTopTaskControls();FrameLayout parent=tablet?h.root:h.topLiveClip;
-  // Portrait subsequently attaches the roll to the same parent; capture at pane attachment separately.
-  if(h.topTaskPane.alpha!=alpha)throw new AssertionError("late-created pane exposes white hint before workspace entry: "+alpha);checks++;
-  if(tablet&&parent.attachedAlpha!=alpha)throw new AssertionError("pane must inherit opacity before attachment");checks++;
-  if(!h.topTaskPane.visible||h.topTaskPane.hint!=upper.hint)throw new AssertionError("created pane keeps its live empty hint while visible");checks++;
+  if(parent.child!=null)throw new AssertionError("empty top attaches a placeholder");checks++;
+  if(h.geometryUpdates!=1)throw new AssertionError("top geometry was not initialized");checks++;
+  if(upper.hint==null)throw new AssertionError("missing task accessibility hint");checks++;
   if(upper.view!=liveView||upper.controller!=controller||upper.taskToken!=token)throw new AssertionError("creation changes the real task owner");checks++;
  }System.out.println("actual asynchronous TOP controls creation checks="+checks+" passed");}
 }'''.replace('__CREATE__',member('    private void createTopTaskControls()'))
@@ -256,6 +277,6 @@ files['io/github/zerohomers0/onesteplite/WorkspaceRegression.java']=files['io/gi
 for name,text in files.items():
  p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8')
 jdk=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out)]+[str(out/n)for n in files]+[str(package_dir(root)/'WorkspaceCellReveal.java'),str(package_dir(root)/'WorkspaceMotionSpec.java'),str(package_dir(root)/'WorkspaceRevealCurve.java')],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out)]+[str(out/n)for n in files]+[str(package_dir(root)/'WorkspaceCellReveal.java'),str(package_dir(root)/'WorkspaceMotionSpec.java'),str(package_dir(root)/'WorkspaceRevealCurve.java'),str(src/'WorkspaceTransition.java'),str(src/'TransitionSession.java')],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.WorkspaceRegression'],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.TopControlsCreationRegression'],check=True)

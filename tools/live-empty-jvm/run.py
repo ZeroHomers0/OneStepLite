@@ -49,7 +49,6 @@ public class EmptyHostRegression {
  Slot[] slots=new Slot[SLOT_COUNT];Bitmap wallpaperBackdrop;
  EmptyHostRegression(int w,int h){wallpaperBackdrop=new Bitmap(w,h);for(int i=1;i<SLOT_COUNT;i++)slots[i]=new Slot();slots[1].occupied=true;}
  __METHOD__
- __HIGHLIGHT__
  __PLUS__
  void run(boolean right){
   var a=WorkspaceLayout.of(1200,2608,right,2.75f);var b=WorkspaceLayout.of(1200,2608,!right,2.75f);Canvas c=new Canvas();
@@ -79,13 +78,10 @@ public class EmptyHostRegression {
    for(int i=1;i<SLOT_COUNT;i++)check(slots[i].hint.draws==(i==selected?0:1),"occupied hint or app content never leaks into the empty-cell painter");
    check(slots[selected].hint.visibility==8&&slots[selected].occupied,"painting an empty affordance never changes real task occupancy or live visibility");
    check(c.stack.isEmpty()&&slots[selected].hint.background.x==-1,"temporary painting does not retain transforms or wallpaper origins");
-   setDropHighlight(slots[selected],true);setDropHighlight(slots[selected],false);
-   check(slots[selected].hint.alpha==1&&slots[selected].hint.sx==1&&slots[selected].hint.sy==1,"entering and leaving a drop target never pre-dims or enlarges a cell");
   }
-  setDropHighlight(null,true);
  }
  public static void main(String[]args){for(int tint:new int[]{0x1fffffff,0x26000000}){HyperOsStyle.tint=tint;for(boolean right:new boolean[]{false,true})for(int[] wh:new int[][]{{1200,2608},{360,782}}){new EmptyHostRegression(wh[0],wh[1]).run(right);new EmptyHostRegression(wh[0],wh[1]).reveal(right);}}System.out.println("actual Host empty controls checks="+checks+" passed");}
-}'''.replace('__METHOD__', method).replace('__HIGHLIGHT__', extract('setDropHighlight')).replace('__PLUS__', extract('drawEmptyCellPlus'))
+}'''.replace('__METHOD__', method).replace('__PLUS__', extract('drawEmptyCellPlus'))
 cpath = out / 'android/graphics/Canvas.java'
 cpath.parent.mkdir(parents=True, exist_ok=True)
 cpath.write_text(canvas, encoding='utf8')

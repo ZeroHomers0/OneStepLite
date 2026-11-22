@@ -23,12 +23,12 @@ files={
  public void drawBitmap(Bitmap b,Object from,Rect r,Paint p){bitmapDraws++;image=r;}}''',
 'android/view/SurfaceControl.java':'''package android.view;import android.graphics.Rect;public class SurfaceControl {
  public static class Transaction {
-  public static Transaction last;public Object surface;public float sx,sy,x,y,alpha=1;public Rect crop;public int applies,closes;
+  public static Transaction last;public java.util.Map<Object,Float> alphas=new java.util.IdentityHashMap<>();public Object surface;public float sx,sy,x,y,alpha=1;public Rect crop;public int applies,closes;
   public Transaction(){last=this;}
   public Transaction setPosition(Object s,float px,float py){x=px;y=py;return this;}
   public Transaction setMatrix(Object s,float dsdx,float dtdx,float dsdy,float dtdy){surface=s;sx=dsdx;sy=dtdy;return this;}
   public Transaction setWindowCrop(Object s,Rect r){crop=r;return this;}
-  public Transaction setAlpha(Object s,float a){surface=s;alpha=a;return this;}
+  public Transaction setAlpha(Object s,float a){surface=s;alpha=a;alphas.put(s,a);return this;}
   public void apply(){applies++;}public void close(){closes++;}
  }}''',
 'android/view/View.java':'''package android.view;import java.util.*;import android.content.Context;import android.graphics.Canvas;
@@ -177,6 +177,17 @@ public class TopTransitionRegression {
   ValueAnimator.all.get(0).step(.5f);check(exit.alpha==.5f,"exit plate shares the outgoing fade frame");
   ValueAnimator.all.get(0).end();check(restores==1,"native return starts only after the exit plate is hidden");
   run.close();check(exit.alpha==1f&&exit.visibility==View.VISIBLE,"cancelled native return restores the retained exit control");
+  reset();destination=new View(ctx);destination.alpha=1f;run=make(()->handoffs++);
+  Object parent=new Object(),child=new Object();run.collect(new Object(),()->true,destination);run.holdDestination(parent);
+  check(destination.alpha==0f,"destination hides before Shell can attach a main-sized buffer");
+  var late=new android.view.SurfaceControl.Transaction();late.setAlpha(parent,1f);late.setAlpha(child,1f);run.appendDestination(late,parent,child);
+  check(late.alphas.get(parent)==0f&&late.alphas.get(child)==0f,"late native open transaction cannot expose the unready top buffer");
+  run.collectionReady();handoff(run);ValueAnimator.all.get(0).end();run.setLiveSurface(child);
+  late=new android.view.SurfaceControl.Transaction();run.appendDestination(late,parent,child);
+  check(late.alphas.get(parent)==0f&&late.alphas.get(child)==0f,"native ownership remains hidden until the draw gate releases");
+  run.reveal();ValueAnimator.all.get(1).step(.4f);late=new android.view.SurfaceControl.Transaction();run.appendDestination(late,parent,child);
+  check(late.alphas.get(parent)==1f&&late.alphas.get(child)==.4f,"native finish repair preserves current reveal opacity instead of snapping to one");
+  run.abortAdmission();check(destination.alpha==0f,"failed admission keeps destination hidden for native handback");
   System.out.println("Production upper center transition checks="+checks+" passed (visual timing still needs device)");
  }
 }'''
@@ -185,6 +196,8 @@ paths=[]
 for name,text in files.items():
     p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8');paths.append(str(p))
 paths.append(str(src/'TopTaskTransition.java'))
+paths.append(str(src/'OverlayMotionSpec.java'))
+paths.append(str(src/'TransitionSession.java'))
 paths.append(str(src/'TopTaskReturnPolicy.java'))
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths],check=True)
@@ -206,11 +219,12 @@ public class WorkspaceHost {
  View topBar=new View(ctx),topTaskPane=new View(ctx);Layout layout=new Layout();
  static class Layout {int topStrip=622;boolean tabletLandscape;int mainHeight=1838;int mainDispHeight=1838;int mainOffsetX=0,mainOffsetY=622;}
  void updateCellSurfaceVisibility(Slot upper){}void updateTopTaskGeometry(){}float mainScale(){return .5f;}
- TopTaskTransition topTransition;TopTaskState topTaskState=new TopTaskState();int opacityWrites,homeRequests;boolean translucent,failOpacity,failHome;
+ Object transitions=new Object();TopTaskTransition topTransition;TopTaskState topTaskState=new TopTaskState();int opacityWrites,homeRequests;boolean translucent,failOpacity,failHome;
  java.util.List<Object> appliedOrder=java.util.List.of();
  static class Main {boolean post(Runnable r){r.run();return true;}}Main main=new Main();
  boolean executeOnShell(Runnable r){r.run();return true;}
- static class Slot {View view;Object controller;boolean occupied,promoting;}
+ static class Slot {View view;Object controller;boolean occupied,promoting;int taskId=42;long taskEpoch=1;Object taskToken="token";int[]rect={0,0,1080,622};}
+ Rect logicalBounds(Slot s){return new Rect(0,0,1080,622);}void reapplyScale(Slot s){}void releaseTopTaskNow(boolean front,boolean dismissed,Runnable after){}
  static class Task {int id=42;Object token="token";boolean matches(Object o){return o instanceof Info&&((Info)o).taskId==id&&token.equals(((Info)o).token);}}
  static class TopCandidate {Task task=new Task();TopTaskState.Key key=new TopTaskState.Key(42,0,"token");}
  public static class Info {public int taskId=42,userId,mode=1;public Object token="token";boolean visible=true;}
@@ -221,7 +235,8 @@ public class WorkspaceHost {
  WorkspaceHost(){Controller c=new Controller();Organizer o=new Organizer();o.mTasks.put(42,new Entry());c.mTaskOrganizer=o;
   slots[4].controller=c;slots[4].view=new View(ctx);}
  Entry entry(){return ((Organizer)((Controller)slots[4].controller).mTaskOrganizer).mTasks.get(42);}
- Object getSurfaceField(Object controller,String name){return entry().leash;}
+ Object parentSurface=new Object();Object getSurfaceField(Object controller,String name){return "mSurfaceControl".equals(name)?parentSurface:entry().leash;}
+ boolean controllerOwns(Slot slot,int id,Object token){return true;}
  void updateTopBarState(){}void settleTopFace(boolean task){topFace=task;}
  Object rootInfo(Task task){return entry().info;}
  Object homeForCollection(Task task)throws Exception{homeRequests++;if(failHome)throw new Exception("Home unavailable");return "home";}
@@ -262,6 +277,8 @@ host_body+='''public static void main(String[]args){
  android.animation.ValueAnimator.all.get(0).end();check(h.claimed==1,"production admission claims exactly once after collapse");
  check(android.view.SurfaceControl.Transaction.last.alpha==0,"production handoff keeps the shared surface invisible while native admission waits");
  h.entry().info.mode=6;h.slots[4].occupied=true;h.revealTopTaskTransition();
+ check(android.animation.ValueAnimator.all.size()==1,"native ownership alone cannot reveal an old-sized buffer");
+ TopTaskFrame.ready.run();
  check(android.animation.ValueAnimator.all.size()==2,"native admission restores the real destination expansion");
  android.animation.ValueAnimator.all.get(1).step(.5f);
  check(android.view.SurfaceControl.Transaction.last.alpha==.5f,"production reveal keeps the shared surface in step with the fade");
@@ -278,7 +295,7 @@ host_body+='''public static void main(String[]args){
  ValueAnimatorReset();h=new WorkspaceHost();h.captureMainIntoTop();h.commitPreparation();h.ctx.windows.view.draw(new android.graphics.Canvas());View.drain();
  android.animation.ValueAnimator.all.get(0).step(.2f);h.entry().leash=new Object();
  var tx=android.view.SurfaceControl.Transaction.last;android.animation.ValueAnimator.all.get(0).step(.8f);
- check(h.claimed==0&&h.topTransition==null&&android.view.SurfaceControl.Transaction.last==tx,
+ check(h.claimed==0&&h.topTransition==null&&android.view.SurfaceControl.Transaction.last.surface!=h.entry().leash,
   "canonical replacement interrupts before handoff and never resets the replacement");
  check(!h.translucent&&h.opacityWrites==2,"cancelled fullscreen source regains its native opacity even after canonical replacement");
  ValueAnimatorReset();h=new WorkspaceHost();h.captureMainIntoTop();h.commitPreparation();h.topTransition.close();
@@ -313,6 +330,10 @@ extra={
  public void reorder(Object token,boolean onTop){if(!onTop)throw new AssertionError("unexpected reorder direction");order.add(token);}
  public void setForceTranslucent(Object token,boolean value){translucent=value;}}'''
 }
+extra['io/github/zerohomers0/onesteplite/TopTaskFrame.java']='''package io.github.zerohomers0.onesteplite;
+import java.util.concurrent.Executor;import java.util.function.*;import android.view.View;
+class TopTaskFrame {static Runnable ready;static class Target {int taskId=42;Target(Object...args){}}
+static void await(Object ui,View view,Executor shell,Target target,BooleanSupplier current,Runnable next,Consumer<String> failed){ready=()->{if(current.getAsBoolean())next.run();};}}'''
 extra_paths=[]
 for name,text in extra.items():
     p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf8');extra_paths.append(str(p))
