@@ -26,6 +26,14 @@ public final class QuickAppOrderTest {
                 QuickAppOrder.decode("custom/C\noften/B"), s -> s),
                 List.of("custom/C", "often/B", "other/D", "recent/A"));
         equal(apps, List.of("recent/A", "often/B", "custom/C", "other/D"));
+        equal(QuickAppOrder.move(apps,"recent/A","other/D"),List.of("often/B","custom/C","other/D","recent/A"));
+        equal(QuickAppOrder.move(apps,"other/D","recent/A"),List.of("other/D","recent/A","often/B","custom/C"));
+        equal(QuickAppOrder.move(apps,"missing","recent/A"),apps);
+        equal(QuickAppOrder.move(apps,"recent/A","missing"),apps);
+        equal(QuickAppOrder.move(apps,"recent/A","recent/A"),apps);
+        equal(QuickAppOrder.decode(QuickAppOrder.encode(QuickAppOrder.move(apps,"custom/C","often/B"))),
+                List.of("recent/A","custom/C","often/B","other/D"));
+        equal(apps,List.of("recent/A","often/B","custom/C","other/D"));
         System.out.println("QuickAppOrder: " + checks + " checks passed");
     }
 }

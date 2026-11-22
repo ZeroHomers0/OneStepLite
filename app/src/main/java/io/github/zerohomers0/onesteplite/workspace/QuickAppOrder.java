@@ -24,6 +24,14 @@ final class QuickAppOrder {
         return String.join("\n", unique);
     }
 
+    static List<String> move(List<String> order, String key, String target) {
+        List<String> result=new ArrayList<>(order);
+        int from=result.indexOf(key),to=result.indexOf(target);
+        if(from<0 || to<0 || from==to)return result;
+        result.remove(from);result.add(to,key);
+        return result;
+    }
+
     static <T> List<T> arrange(List<T> available, Iterable<String> pinned, Function<T, String> key) {
         LinkedHashMap<String, T> remaining = new LinkedHashMap<>();
         for (T app : available) remaining.putIfAbsent(key.apply(app), app);
