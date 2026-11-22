@@ -124,6 +124,27 @@ synchronized(dc.mWmService.mGlobalLock){lease.finishAuthenticatedRelease(dc,tran
 win.mAttrs.alpha=0;win.onScreen=false;lease.retain(dc,request(101));final int[] workspaceRestores={0};
 synchronized(dc.mWmService.mGlobalLock){lease.finishAuthenticatedRelease(dc,transaction,true,true,true,()->{throw new AssertionError("successful workspace reveal must not become physical fullscreen");},()->{check(held.surface.alpha==0,"retained geometry reasserted before unmasking main");workspaceRestores[0]++;});}
 check(held.surface.alpha==1&&workspaceRestores[0]==1&&restored[0]==2,"stale native Host visibility cannot turn a committed workspace into clipped fullscreen");
+// Sleep hides all owned chrome in the SAME transaction as main; wake draws behind that hold.
+fresh();handler=new Handler();lease.setHandler(handler);lease.setGlobalLock(dc.mWmService.mGlobalLock);
+Window mirror=new Window();mirror.dc=dc;mirror.mAttrs.title="OneStepLiteMirrorLayer";dc.mWmService.mWindowMap.put(new Token(),mirror);
+Window transition=new Window();transition.dc=dc;transition.mAttrs.title="OneStepLiteTransition";dc.mWmService.mWindowMap.put(new Token(),transition);
+Window foreign=new Window();foreign.dc=dc;foreign.mAttrs.title="foreign";dc.mWmService.mWindowMap.put(new Token(),foreign);
+main=new Window();main.dc=dc;main.mAttrs.type=1;main.mActivityRecord=new Activity();main.onScreen=true;dc.mWmService.mWindowMap.put(new Token(),main);
+synchronized(dc.mWmService.mGlobalLock){lease.holdOpeningMainForLock(dc);}
+check(main.surface.alpha==0&&win.surface.alpha==0&&mirror.surface.alpha==0&&transition.surface.alpha==0,"sleep must not leave chrome visible after main disappears");
+check(foreign.surface.alpha==1,"unrelated overlay must not join workspace sleep hold");
+check(!WindowIdentity.ownsHost(mirror,dc)&&WindowIdentity.ownsChrome(mirror,dc),"mirror ownership must never authorize a retained Host lease");
+win.surface.alpha=mirror.surface.alpha=transition.surface.alpha=1;XposedBridge.rootHook.run(null);
+check(win.surface.alpha==0&&mirror.surface.alpha==0&&transition.surface.alpha==0,"native prepare cannot reveal held workspace chrome on the next sleep frame");
+win.mAttrs.alpha=0;check(lease.retain(dc,request(100))!=null,"retained Host takes over the same chrome hold");
+authenticated=true;win.onScreen=true;win.mAttrs.alpha=1;win.surface.alpha=1;XposedBridge.hook.run(win);
+check(calls==1&&win.surface.alpha==0&&main.surface.alpha==0,"Host can draw and report readiness without exposing empty chrome before main");
+win.surface.alpha=mirror.surface.alpha=transition.surface.alpha=1;XposedBridge.rootHook.run(null);
+check(win.surface.alpha==0&&mirror.surface.alpha==0&&transition.surface.alpha==0,"authenticated drawing does not bypass the correlated finish gate");
+final Window sleepingMain=main;
+synchronized(dc.mWmService.mGlobalLock){lease.finishAuthenticatedRelease(dc,transaction,true,true,true,()->{throw new AssertionError("workspace reveal became fullscreen");},()->{check(win.surface.alpha==0&&sleepingMain.surface.alpha==0,"geometry restoration must happen before group reveal");});}
+check(win.surface.alpha==1&&mirror.surface.alpha==1&&transition.surface.alpha==1&&main.surface.alpha==1,"wake reveals main and all own chrome in one transaction");
+for(int identity=0;identity<3;identity++){fresh();handler=new Handler();lease.setHandler(handler);lease.setGlobalLock(dc.mWmService.mGlobalLock);if(identity==0)win.mAttrs.packageName="foreign";if(identity==1)win.mOwnerUid=2000;if(identity==2)win.mAttrs.flags=524288;synchronized(dc.mWmService.mGlobalLock){lease.holdOpeningMainForLock(dc);}check(win.surface.alpha==1,"untrusted/showWhenLocked chrome must stay native");}
 fresh();Context c=new Context();final int[] ready={0};RetainedWindow.request(c,new Handler(),token,100,.7f,0,606,ok->{if(ok)ready[0]++;});check("android".equals(c.sent.pkg)&&"protected".equals(c.permission),"request not protected/scoped");c.receiver.code=-1;c.receiver.extras=new Bundle();c.receiver.extras.putLong("generation",99);c.receiver.onReceive(c,c.sent);check(ready[0]==0,"stale WM hidden acknowledgement warmed Host");c.receiver.extras.putLong("generation",100);c.receiver.onReceive(c,c.sent);check(ready[0]==1,"exact native hidden acknowledgement lost");
 System.out.println("Production retained native WindowState: "+checks+" checks passed");
 }}

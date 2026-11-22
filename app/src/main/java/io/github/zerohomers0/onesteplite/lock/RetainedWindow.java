@@ -22,6 +22,7 @@ final class RetainedWindow {
     private float scale, x, y;
     private final java.util.Map<Object, Float> heldMain = new java.util.IdentityHashMap<>();
     private final java.util.Map<Object,Object> heldParents=new java.util.IdentityHashMap<>();
+    private final java.util.Map<Object,Object> heldChrome=new java.util.IdentityHashMap<>();
     private long heldUntil;
     private Handler wmHandler;
     private Object globalLock;
@@ -92,6 +93,7 @@ final class RetainedWindow {
                         || p.hasThrowable() || p.args.length != 0) return;
                 try {
                     Object current = p.thisObject;
+                    if (!authenticated.getAsBoolean()) holdWorkspaceChrome(current, display.get());
                     if (window == null) {
                         if (XposedHelpers.callMethod(current, "getDisplayContent") != lockHoldDisplay) return;
                         if (authenticated.getAsBoolean()) {
@@ -118,6 +120,9 @@ final class RetainedWindow {
                             || !Boolean.TRUE.equals(XposedHelpers.callMethod(current, "isOnScreen"))
                             || !authenticated.getAsBoolean()) return;
                     Object transaction = XposedHelpers.callMethod(current, "getPendingTransaction");
+                    // Layout alpha may now permit drawing the Host, but its real
+                    // surface stays hidden until the main/task finish gate opens.
+                    reapplyChrome(transaction);
                     if(!warmNotified) {
                         warmNotified=true;
                         reveal.apply(transaction, generation, scale, x, y);
@@ -153,6 +158,7 @@ final class RetainedWindow {
         Object tx=XposedHelpers.callMethod(display,"getPendingTransaction");
         for(Object surface:heldMain.keySet())if(Boolean.TRUE.equals(XposedHelpers.callMethod(surface,"isValid")))
             XposedHelpers.callMethod(tx,"setAlpha",surface,0f);
+        reapplyChrome(tx);
     }
 
     static boolean surfaceShown(Object animator) {
@@ -238,6 +244,7 @@ final class RetainedWindow {
     /** Native keyguard has already chosen these opening windows. Only postpone
      * their visibility; never show a task or touch the physical lockscreen. */
     private void holdOpeningMain(Object current, Object display, boolean prime) {
+        if (!authenticated.getAsBoolean()) holdWorkspaceChrome(current, display);
         if (wmHandler == null || XposedHelpers.callMethod(current, "getDisplayContent") != display
                 || XposedHelpers.getObjectField(current, "mActivityRecord") == null
                 || ((Number) XposedHelpers.callMethod(current, "getWindowingMode")).intValue() != 1
@@ -321,7 +328,32 @@ final class RetainedWindow {
         XposedHelpers.callMethod(transaction,"setAlpha",surface,alpha instanceof Number?((Number)alpha).floatValue():fallback);
     }
 
+    /** The Host, its TaskView children, and separate mirror/transition windows leave together. */
+    private void holdWorkspaceChrome(Object current, Object display) {
+        if (!WindowIdentity.ownsChrome(current, display)) return;
+        Object surface=optionalCall(current,"getSurfaceControl");
+        if (surface==null || !Boolean.TRUE.equals(optionalCall(surface,"isValid"))) return;
+        heldChrome.put(surface,current);
+        XposedHelpers.callMethod(XposedHelpers.callMethod(current,"getPendingTransaction"),"setAlpha",surface,0f);
+    }
+
+    private void releaseChrome(Object transaction) {
+        for (java.util.Map.Entry<Object,Object> entry : heldChrome.entrySet()) {
+            if (!Boolean.TRUE.equals(optionalCall(entry.getKey(),"isValid"))) continue;
+            WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(entry.getValue(),"mAttrs");
+            XposedHelpers.callMethod(transaction,"setAlpha",entry.getKey(),attrs.alpha);
+        }
+        heldChrome.clear();
+    }
+
+    private void reapplyChrome(Object transaction) {
+        for (Object surface : heldChrome.keySet())
+            if (Boolean.TRUE.equals(optionalCall(surface,"isValid")))
+                XposedHelpers.callMethod(transaction,"setAlpha",surface,0f);
+    }
+
     private void releaseMain(Object transaction) {
+        releaseChrome(transaction);
         for (java.util.Map.Entry<Object, Float> entry : heldMain.entrySet()) {
             if (Boolean.TRUE.equals(XposedHelpers.callMethod(entry.getKey(), "isValid"))) {
                 Object alpha=optionalField(heldParents.get(entry.getKey()),"mLastSurfaceAlpha");

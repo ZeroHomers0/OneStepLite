@@ -46,7 +46,9 @@ final class PinnedAppEditor extends HorizontalScrollView {
             row.addView(empty,new LinearLayout.LayoutParams(-2,-1));return;
         }
         for(String key:chosen)for(QuickApp app:apps)if(key.equals(app.component.flattenToString())) {
-            row.addView(tile(app,key),new LinearLayout.LayoutParams(dp(52),dp(52)));break;
+            LinearLayout.LayoutParams bounds=new LinearLayout.LayoutParams(dp(48),dp(48));
+            bounds.setMarginEnd(dp(4));
+            row.addView(tile(app,key),bounds);break;
         }
     }
 
@@ -68,10 +70,9 @@ final class PinnedAppEditor extends HorizontalScrollView {
     }
 
     private View tile(QuickApp app, String key) {
-        ImageView tile=new ImageView(getContext());tile.setPadding(dp(7),dp(7),dp(7),dp(7));
+        ImageView tile=new ImageView(getContext());tile.setPadding(dp(4),dp(4),dp(4),dp(4));
         Drawable.ConstantState state=app.icon==null?null:app.icon.getConstantState();
         tile.setImageDrawable(state==null?app.icon:state.newDrawable().mutate());
-        tile.setBackground(HyperOsStyle.glassButton(getContext(),16,false));
         tile.setContentDescription(app.label+"，固定应用第"+(new ArrayList<>(chosen).indexOf(key)+1)+"位，长按拖动排序");
         tile.setTooltipText(app.label);tile.setFocusable(true);
         tile.setOnLongClickListener(view->{

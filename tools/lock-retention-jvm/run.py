@@ -65,6 +65,7 @@ public class WorkspaceHost {
  static class UnlockHandoff {boolean active(){return true;}void cancel(){}}
  UnlockHandoff unlockHandoff;
  static class UnlockGeometryReplay {void clear(){}}UnlockGeometryReplay unlockGeometryReplay=new UnlockGeometryReplay();
+ static class UnlockFinishGate {void reset(long e){}}UnlockFinishGate unlockFinishGate=new UnlockFinishGate();
  static class RetainedWindow {static boolean accepted;static void request(Context c,Queue q,Object token,long generation,float s,float x,float y,java.util.function.Consumer<Boolean> ready){ready.accept(accepted);}}
  boolean retainedWindowPrepared,retainedGeometryConfirmed;long retainedWindowGeneration;
  static boolean autoCommit=true;static WorkspaceHost waitingGeometry;int handoffs;

@@ -1,0 +1,70 @@
+package io.github.zerohomers0.onesteplite;
+
+import android.view.WindowManager;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import java.util.function.Consumer;
+import de.robv.android.xposed.XposedHelpers;
+
+/** Only our visible picker temporarily sits above the native screenshot preview. */
+final class ModalWindowLayers {
+    private final Map<Object, Layer> held = new IdentityHashMap<>();
+
+    void reconcile(Object display, Object transaction) {
+        Object[] modal={null}, screenshot={null};
+        Consumer<Object> scan=window->{
+            if (!Boolean.TRUE.equals(XposedHelpers.callMethod(window,"isVisible"))) return;
+            if (WindowIdentity.ownsPicker(window,display)) modal[0]=window;
+            WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(window,"mAttrs");
+            if (attrs.type==WindowTypes.SCREENSHOT && "ScreenshotAnimation".contentEquals(attrs.getTitle())
+                    && "com.miui.screenshot".equals(attrs.packageName)) screenshot[0]=window;
+        };
+        XposedHelpers.callMethod(display,"forAllWindows",scan,false);
+        Object anchor=screenshot[0]==null?null:XposedHelpers.callMethod(screenshot[0],"getSurfaceControl");
+        if (!valid(anchor)) anchor=null;
+        var iterator=held.entrySet().iterator();
+        while (iterator.hasNext()) {
+            var entry=iterator.next();Object window=entry.getKey();Layer layer=entry.getValue();
+            if (XposedHelpers.callMethod(window,"getDisplayContent")!=display) continue;
+            if (XposedHelpers.callMethod(window,"getSurfaceControl")!=layer.surface || !valid(layer.surface)) {
+                iterator.remove();continue;
+            }
+            remember(window,layer);
+            if (window==modal[0] && anchor!=null) continue;
+            restore(window,layer,transaction);iterator.remove();
+        }
+        if (modal[0]==null || anchor==null) return;
+        Object surface=XposedHelpers.callMethod(modal[0],"getSurfaceControl");
+        if (!valid(surface)) return;
+        Layer layer=held.computeIfAbsent(modal[0],ignored->new Layer(surface));
+        remember(modal[0],layer);
+        XposedHelpers.callMethod(modal[0],"assignRelativeLayer",transaction,anchor,1,true);
+        layer.anchor=anchor;
+    }
+
+    private static boolean valid(Object surface) {
+        return surface!=null && Boolean.TRUE.equals(XposedHelpers.callMethod(surface,"isValid"));
+    }
+
+    private static void remember(Object window, Layer state) {
+        int layer=XposedHelpers.getIntField(window,"mLastLayer");
+        Object relative=XposedHelpers.getObjectField(window,"mLastRelativeToLayer");
+        if (state.anchor==null || relative!=state.anchor || layer!=1) {
+            state.normalLayer=layer;state.normalRelative=relative;
+        }
+    }
+
+    private static void restore(Object window, Layer state, Object transaction) {
+        if (state.normalRelative==null) XposedHelpers.callMethod(window,"setLayer",transaction,state.normalLayer);
+        else XposedHelpers.callMethod(window,"setRelativeLayer",transaction,state.normalRelative,state.normalLayer);
+        XposedHelpers.setIntField(window,"mLastLayer",state.normalLayer);
+        XposedHelpers.setObjectField(window,"mLastRelativeToLayer",state.normalRelative);
+    }
+
+    private static final class Layer {
+        final Object surface;
+        Object anchor,normalRelative;
+        int normalLayer;
+        Layer(Object surface) {this.surface=surface;}
+    }
+}

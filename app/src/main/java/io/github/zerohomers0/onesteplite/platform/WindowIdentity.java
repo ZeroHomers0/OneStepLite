@@ -8,14 +8,31 @@ import de.robv.android.xposed.XposedHelpers;
 /** WM lock only: resolve the registered window's native session and package owner. */
 final class WindowIdentity {
     static boolean ownsHost(Object window, Object display) {
+        return owns(window, display, 0);
+    }
+
+    static boolean ownsChrome(Object window, Object display) {
+        return owns(window, display, 1);
+    }
+
+    static boolean ownsPicker(Object window, Object display) {
+        return owns(window, display, 2);
+    }
+
+    private static boolean owns(Object window, Object display, int scope) {
         if (window == null || display == null) return false;
         try {
             if (XposedHelpers.callMethod(window, "getDisplayContent") != display) return false;
             WindowManager.LayoutParams attrs = (WindowManager.LayoutParams)
                     XposedHelpers.getObjectField(window, "mAttrs");
-            if (attrs.type != WindowTypes.APPLICATION_OVERLAY || !Packages.SYSTEM_UI.equals(attrs.packageName)
-                    || !"WorkspaceHost".contentEquals(attrs.getTitle())
+            if (attrs.type != (scope==2 ? WindowTypes.SYSTEM_UI_DIALOG : WindowTypes.APPLICATION_OVERLAY)
+                    || !Packages.SYSTEM_UI.equals(attrs.packageName)
                     || (attrs.flags & WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED) != 0) return false;
+            String title = String.valueOf(attrs.getTitle());
+            if (scope==2) {
+                if (!"OneStepLiteQuickAppPicker".equals(title)) return false;
+            } else if (!"WorkspaceHost".equals(title) && (scope!=1
+                    || (!"OneStepLiteMirrorLayer".equals(title) && !"OneStepLiteTransition".equals(title)))) return false;
             int uid = XposedHelpers.getIntField(window, "mOwnerUid");
             Object session = XposedHelpers.getObjectField(window, "mSession");
             if (uid < 0 || session == null || XposedHelpers.getIntField(session, "mUid") != uid) return false;

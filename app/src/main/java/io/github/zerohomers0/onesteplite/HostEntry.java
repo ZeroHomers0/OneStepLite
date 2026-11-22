@@ -3187,8 +3187,10 @@ public class HostEntry implements IXposedHookLoadPackage {
             Class<?> display = XposedHelpers.findClass("com.android.server.wm.DisplayContent", cl);
             XposedBridge.hookAllMethods(display, "assignChildLayers", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (p.thisObject != sDisplayContent || p.args.length != 1
-                            || (!sZoomed && sNativeFreeformHostLayers.isEmpty())) return;
+                    if (p.thisObject != sDisplayContent || p.args.length != 1) return;
+                    try { sModalWindowLayers.reconcile(p.thisObject,p.args[0]); }
+                    catch (Throwable error) { log("workspace modal layering skipped: " + error); }
+                    if (!sZoomed && sNativeFreeformHostLayers.isEmpty()) return;
                     try { layerWorkspaceWithNativeFreeforms(p.thisObject, p.args[0]); }
                     catch (Throwable error) { log("native freeform layering skipped: " + error); }
                 }
@@ -3198,6 +3200,7 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private static Object sNativeFreeformLayerAnchor;
+    private static final ModalWindowLayers sModalWindowLayers = new ModalWindowLayers();
     private static Object sNativeFreeformPinManager;
     private static final java.util.Map<Object, NativeHostLayer> sNativeFreeformHostLayers =
             new java.util.IdentityHashMap<>();

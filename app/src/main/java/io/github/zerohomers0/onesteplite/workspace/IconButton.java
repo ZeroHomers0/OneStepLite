@@ -67,28 +67,28 @@ final class IconButton extends View {
             canvas.drawLine(12,11,21,11,paint);canvas.drawLine(12,11,12,19,paint);
         } else if (icon == SIDE_LEFT || icon == SIDE_RIGHT) {
             // Open line segments avoid OEM stroked-round-rect paths becoming solid plates.
-            canvas.drawLine(3, 4, 21, 4, paint);
-            canvas.drawLine(21, 4, 21, 20, paint);
-            canvas.drawLine(21, 20, 3, 20, paint);
-            canvas.drawLine(3, 20, 3, 4, paint);
+            canvas.drawLine(3, 3, 21, 3, paint);
+            canvas.drawLine(21, 3, 21, 21, paint);
+            canvas.drawLine(21, 21, 3, 21, paint);
+            canvas.drawLine(3, 21, 3, 3, paint);
             float split = icon == SIDE_LEFT ? 9f : 15f;
-            canvas.drawLine(split, 4, split, 20, paint);
+            canvas.drawLine(split, 3, split, 21, paint);
             float start = icon == SIDE_LEFT ? 3f : 15f, end = icon == SIDE_LEFT ? 9f : 21f;
-            canvas.drawLine(start, 9.3f, end, 9.3f, paint);
-            canvas.drawLine(start, 14.7f, end, 14.7f, paint);
+            canvas.drawLine(start, 9f, end, 9f, paint);
+            canvas.drawLine(start, 15f, end, 15f, paint);
         } else if (icon == EXPAND_LEFT || icon == EXPAND_RIGHT) {
             // One arrow pointing at the corner the main window grows into, so the
             // header reads the same way as the workspace it sits on.
             boolean leftward = icon == EXPAND_LEFT;
-            float tipX = leftward ? 7f : 17f, tipY = 7f;
-            float tailX = leftward ? 19f : 5f, tailY = 19f;
+            float tipX = leftward ? 3f : 21f, tipY = 3f;
+            float tailX = leftward ? 21f : 3f, tailY = 21f;
             canvas.drawLine(tailX, tailY, tipX, tipY, paint);
             canvas.drawLine(tipX, tipY, tipX, tipY + 6f, paint);
             canvas.drawLine(tipX, tipY, tipX + (leftward ? 6f : -6f), tipY, paint);
         } else if (icon == TOP_APP) {
             // A strip at the top and an arrow rising into it: send the main app up.
-            canvas.drawRoundRect(4, 3, 20, 7.5f, 1.2f, 1.2f, paint);
-            canvas.drawLine(12, 20.5f, 12, 10.5f, paint);
+            canvas.drawRoundRect(3, 3, 21, 7.5f, 1.2f, 1.2f, paint);
+            canvas.drawLine(12, 21, 12, 10.5f, paint);
             canvas.drawLine(8.5f, 14, 12, 10.5f, paint);
             canvas.drawLine(15.5f, 14, 12, 10.5f, paint);
         } else if (icon == CLOSE) {
@@ -98,7 +98,7 @@ final class IconButton extends View {
             Path gear = glyph; gear.reset();
             for (int i = 0; i < 32; i++) {
                 double angle = Math.PI * 2 * i / 32 - Math.PI / 2;
-                float radius = (i % 4 == 0 || i % 4 == 3) ? 10f : 8f;
+                float radius = (i % 4 == 0 || i % 4 == 3) ? 9f : 7.2f;
                 float x = 12 + (float) Math.cos(angle) * radius;
                 float y = 12 + (float) Math.sin(angle) * radius;
                 if (i == 0) gear.moveTo(x, y); else gear.lineTo(x, y);

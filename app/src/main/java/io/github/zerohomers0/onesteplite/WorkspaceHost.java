@@ -134,6 +134,8 @@ public final class WorkspaceHost {
     private UnlockHandoff unlockHandoff;
     private final FinishTransactions<Long> keyguardTransactions = new FinishTransactions<>(16);
     private final UnlockGeometryReplay unlockGeometryReplay = new UnlockGeometryReplay();
+    private final UnlockFinishGate unlockFinishGate = new UnlockFinishGate();
+    private final FinishTransactions<Long> unlockFinishTransactions = new FinishTransactions<>(16);
     /** mirror 承载时主区显示的桌面/上一主区快照（避免隐藏任务后主区全黑）。 */
     private View carrierBackdrop;
     private int carrierSlotIndex = -1;
@@ -658,9 +660,13 @@ public final class WorkspaceHost {
                             UnlockHandoff current = h.unlockHandoff;
                             if (current == owner[0] && h == sInstance && h.sceneEpoch == epoch
                                     && h.retainedForLock && EntryGuard.canOpen(h.ctx) && current.active()) {
-                                frameReady[0] = true;
-                                log("authenticated retained geometry and Host frame committed before reveal completion");
-                                current.presented();
+                                h.unlockFinishGate.afterHostFrame(epoch, () -> {
+                                    if (h.unlockHandoff != current || h != sInstance || h.sceneEpoch != epoch
+                                            || !h.retainedForLock || !EntryGuard.canOpen(h.ctx) || !current.active()) return;
+                                    frameReady[0] = true;
+                                    log("Host frame and native unlock finish committed before main reveal");
+                                    current.presented();
+                                });
                             }
                         }));
                         h.root.invalidate();
@@ -2830,6 +2836,7 @@ public final class WorkspaceHost {
                     h.workspaceFinishes.merge(p.thisObject, p.args[0]);
                     h.nativeObservations.merge(p.thisObject, p.args[0]);
                     h.keyguardTransactions.merge(p.thisObject, p.args[0]);
+                    h.unlockFinishTransactions.merge(p.thisObject, p.args[0]);
                 }
             }
         }));
@@ -2844,6 +2851,7 @@ public final class WorkspaceHost {
                 h.appendWorkspaceSurfaces(p.thisObject, h.workspaceFinishes.take(p.thisObject));
                 h.appendUnlockGeometry(p.thisObject, unlockEpochs);
                 h.appendTopTransitionSurfaces(p.thisObject);
+                h.appendUnlockFinishCommit(p.thisObject);
                 java.util.List<NativeObservation> checks = h.nativeObservations.take(p.thisObject);
                 if (!checks.isEmpty()) {
                     try {
@@ -2864,6 +2872,7 @@ public final class WorkspaceHost {
                     h.workspaceFinishes.forget(p.thisObject);
                     h.nativeObservations.forget(p.thisObject);
                     h.keyguardTransactions.forget(p.thisObject);
+                    h.unlockFinishTransactions.forget(p.thisObject);
                 }
             }
         }));
@@ -2893,6 +2902,7 @@ public final class WorkspaceHost {
                                         && (((Integer) XposedHelpers.callMethod(args[1], "getFlags")) & 0x100) != 0) {
                                     keyguardTransactions.mark(args[2], java.util.Collections.singletonList(sceneEpoch));
                                     keyguardTransactions.mark(args[3], java.util.Collections.singletonList(sceneEpoch));
+                                    trackUnlockFinish(args[3]);
                                 }
                                 SwapTrace trace = swapTrace;
                                 if (trace != null) trace.transition(args[1], args[2], args[3]);
@@ -3077,6 +3087,30 @@ public final class WorkspaceHost {
             } catch (Throwable error) { log("hidden retained parent skipped task=" + slot.taskId + ": " + error); }
         }
         if (count > 0) log("native keyguard transaction retained hidden parents=" + count);
+    }
+
+    private void trackUnlockFinish(Object transaction) {
+        if (transaction == null) return;
+        java.util.List<Long> tickets = unlockFinishTransactions.take(transaction);
+        if (tickets.isEmpty()) {
+            long ticket = unlockFinishGate.begin(sceneEpoch);
+            if (ticket == 0) return;
+            tickets = java.util.Collections.singletonList(ticket);
+        }
+        unlockFinishTransactions.mark(transaction, tickets);
+    }
+
+    /** Observer onTransitionFinished precedes apply; only the compositor commit opens this gate. */
+    private void appendUnlockFinishCommit(Object transaction) {
+        java.util.List<Long> tickets = unlockFinishTransactions.take(transaction);
+        if (tickets.isEmpty()) return;
+        try {
+            ((android.view.SurfaceControl.Transaction) transaction).addTransactionCommittedListener(
+                    action -> main.post(action), () -> unlockFinishGate.committed(tickets));
+        } catch (Throwable failure) {
+            // Keep main held. The existing handoff watchdog returns through hidden cleanup.
+            log("native unlock finish commit listener unavailable: " + failure);
+        }
     }
 
     /** Append last: native unlock cleanup may contain an older fullscreen matrix. */
@@ -4950,6 +4984,7 @@ public final class WorkspaceHost {
     }
 
     private boolean retainWorkspaceForLock() {
+        unlockFinishGate.reset(sceneEpoch);
         unlockGeometryReplay.clear();
         cancelMainSideSwitch();
         retainedGeometryConfirmed = false;

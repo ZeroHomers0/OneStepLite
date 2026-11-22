@@ -15,6 +15,8 @@ final class WindowTypes {
     static final int SYSTEM_DIALOG = 2008;
     /** {@code LayoutParams.TYPE_APPLICATION_OVERLAY}. */
     static final int APPLICATION_OVERLAY = 2038;
+    /** Native screenshot animation and preview. */
+    static final int SCREENSHOT = 2036;
 
     /** SystemUI's own dialog layer, above the status bar. */
     static final int SYSTEM_UI_DIALOG = 2017;

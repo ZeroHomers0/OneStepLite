@@ -83,6 +83,12 @@ helper_start=host_source.index('    private boolean handoffLockExit(')
 helper_end=host_source.index('{',helper_start)+1;helper_depth=1
 while helper_depth:
  helper_depth+=(host_source[helper_end]=='{')-(host_source[helper_end]=='}');helper_end+=1
+finish_methods=[]
+for signature in ['    private void trackUnlockFinish(', '    private void appendUnlockFinishCommit(']:
+ method_start=host_source.index(signature);method_end=host_source.index('{',method_start)+1;method_depth=1
+ while method_depth:
+  method_depth+=(host_source[method_end]=='{')-(host_source[method_end]=='}');method_end+=1
+ finish_methods.append(host_source[method_start:method_end])
 files['io/github/zerohomers0/onesteplite/WorkspaceHost.java']=r'''package io.github.zerohomers0.onesteplite;
 import android.content.Context;import android.os.*;import android.view.SurfaceControl.Transaction;import java.util.*;
 public class WorkspaceHost {
@@ -91,6 +97,8 @@ public class WorkspaceHost {
  int scene=ACTIVE;long sceneEpoch=7,workspaceGeneration,zoomAnimUntil=800;float alpha;
  UnlockHandoff unlockHandoff;WorkspaceLayout layout=new WorkspaceLayout();Root root=new Root();int parents,closes;
  static class UnlockGeometryReplay {void capture(Transaction t,long e,float s,float x,float y){}}UnlockGeometryReplay unlockGeometryReplay=new UnlockGeometryReplay();
+ final UnlockFinishGate unlockFinishGate=new UnlockFinishGate();{unlockFinishGate.reset(7);}
+ final FinishTransactions<Long> unlockFinishTransactions=new FinishTransactions<>(16);
  static class WorkspaceLayout {float mainScale=.7f,mainOffsetX,mainOffsetY=606;}
  static class View {static final int GONE=8;}
  static class Root {boolean gone;void setVisibility(int v){gone=v==8;}Runnable frame;Root getViewTreeObserver(){return this;}void registerFrameCommitCallback(Runnable r){frame=r;}void invalidate(){}void commit(){Runnable r=frame;frame=null;if(r!=null)r.run();}}
@@ -103,6 +111,7 @@ public class WorkspaceHost {
  void setZoomState(boolean value){zoomed=value;}boolean setKeyguardWindowHidden(boolean hidden){keyguardWindowHidden=hidden;return true;}
  ACTUAL
  EXIT_ACTUAL
+ FINISH_ACTUAL
  static int checks,hides;static void check(boolean ok,String message){checks++;if(!ok)throw new AssertionError(message);}
  static WorkspaceHost fresh(){EntryGuard.unlocked=true;Looper.current=Looper.MAIN;hides=0;sInstance=new WorkspaceHost();return sInstance;}
  static android.content.Intent ack(WorkspaceHost h){long g=h.ctx.sent.getLongExtra(LiveSwapZoomProtocol.GENERATION,0);return UnlockHandoffRegression.ack(g,true,.7f,new Transaction());}
@@ -140,13 +149,31 @@ public class WorkspaceHost {
   h=fresh();h.workspaceOptions.keepOnLock=false;handoffNativeUnlock(()->hides++);EntryGuard.unlocked=false;h.main.timeout();check(h.suspends==0&&hides==0&&h.retainedForLock&&h.root.gone,"relock cannot complete a stale deferred exit");
   h=fresh();h.workspaceOptions.keepOnLock=false;handoffNativeUnlock(()->hides++);h.main.timeout();check(h.suspends==1&&h.root.gone&&hides==1,"missing physical ack falls back to normal hidden cleanup, never clipped workspace");
   h=fresh();handoffNativeUnlock(()->hides++);h.ctx.deliver(ack(h));h.workspaceOptions.keepOnLock=false;Transaction.commitLatest();check(h.root.gone&&h.lockExitPending&&h.parents==1&&hides==0&&h.unlockHandoff!=null&&h.unlockHandoff.active(),"changing to exit before SF commit switches to hidden physical handoff without revealing Host");
+  h=fresh();long nativeTicket=h.unlockFinishGate.begin(7);handoffNativeUnlock(()->hides++);h.ctx.deliver(ack(h));Transaction.commitLatest();h.root.commit();
+  check(hides==0&&h.unlockHandoff.active()&&!h.retainedGeometryConfirmed,"Host frame cannot unmask main while native cleanup is still pending");
+  h.unlockFinishGate.committed(List.of(nativeTicket));check(hides==1&&h.unlockHandoff==null&&h.retainedGeometryConfirmed,"native cleanup commit must release the same correlated Host frame");
+  h.unlockFinishGate.committed(List.of(nativeTicket));check(hides==1,"duplicate native completion cannot unmask twice");
+  h=fresh();nativeTicket=h.unlockFinishGate.begin(7);h.unlockFinishGate.committed(List.of(nativeTicket));handoffNativeUnlock(()->hides++);h.ctx.deliver(ack(h));Transaction.commitLatest();h.root.commit();
+  check(hides==1&&h.retainedGeometryConfirmed,"native finish before Host frame must not add a delay");
+  h=fresh();nativeTicket=h.unlockFinishGate.begin(7);handoffNativeUnlock(()->hides++);h.ctx.deliver(ack(h));Transaction.commitLatest();h.root.commit();EntryGuard.unlocked=false;
+  h.unlockFinishGate.committed(List.of(nativeTicket));check(hides==0&&!h.retainedGeometryConfirmed,"native finish after quick relock cannot expose main");
+  h=fresh();Transaction nativeFinish=new Transaction();h.trackUnlockFinish(nativeFinish);h.trackUnlockFinish(nativeFinish);
+  check(h.unlockFinishTransactions.size()==1,"repeated observer notification must reuse the finish ticket");
+  handoffNativeUnlock(()->hides++);h.ctx.deliver(ack(h));Transaction.commitLatest();h.root.commit();
+  h.appendUnlockFinishCommit(nativeFinish);check(hides==0,"registering a commit listener is not a native finish commit");
+  Transaction.commitLatest();check(hides==1&&h.retainedGeometryConfirmed,"actual native finish listener releases the held main");
+  h=fresh();nativeFinish=new Transaction();h.trackUnlockFinish(nativeFinish);Transaction mergedFinish=new Transaction();
+  h.unlockFinishTransactions.merge(mergedFinish,nativeFinish);handoffNativeUnlock(()->hides++);h.ctx.deliver(ack(h));Transaction.commitLatest();h.root.commit();
+  h.appendUnlockFinishCommit(nativeFinish);check(hides==0,"consumed source cannot complete merged native cleanup");
+  h.appendUnlockFinishCommit(mergedFinish);Transaction.commitLatest();check(hides==1,"native finish ticket follows exact transaction merge");
+  h=fresh();h.trackUnlockFinish(null);handoffNativeUnlock(()->hides++);h.ctx.deliver(ack(h));Transaction.commitLatest();h.root.commit();check(hides==1,"absent finish transaction must not create an unfinishable ticket");
   System.out.println("Production Host authenticated handoff: "+checks+" checks passed");
  }
-}'''.replace('EXIT_ACTUAL',host_source[helper_start:helper_end]).replace('ACTUAL',host_source[start:end])
+}'''.replace('FINISH_ACTUAL','\n'.join(finish_methods)).replace('EXIT_ACTUAL',host_source[helper_start:helper_end]).replace('ACTUAL',host_source[start:end])
 paths=[]
 for rel,body in files.items():
  p=out/rel;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body,encoding='utf8');paths.append(str(p))
-for name in ['UnlockHandoff','LiveSwapZoom','LiveSwapZoomProtocol','Actions']:paths.append(str(src/(name+'.java')))
+for name in ['UnlockHandoff','LiveSwapZoom','LiveSwapZoomProtocol','Actions','UnlockFinishGate','FinishTransactions']:paths.append(str(src/(name+'.java')))
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.UnlockHandoffRegression'],check=True)
