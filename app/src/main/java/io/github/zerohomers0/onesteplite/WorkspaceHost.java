@@ -133,6 +133,7 @@ public final class WorkspaceHost {
     private LiveZoomRequest pendingLiveZoom;
     private UnlockHandoff unlockHandoff;
     private final FinishTransactions<Long> keyguardTransactions = new FinishTransactions<>(16);
+    private final UnlockGeometryReplay unlockGeometryReplay = new UnlockGeometryReplay();
     /** mirror 承载时主区显示的桌面/上一主区快照（避免隐藏任务后主区全黑）。 */
     private View carrierBackdrop;
     private int carrierSlotIndex = -1;
@@ -640,6 +641,8 @@ public final class WorkspaceHost {
             h.setWorkspaceAlpha(1f);
             Object tx = null;
             try {
+                h.unlockGeometryReplay.capture((android.view.SurfaceControl.Transaction) ack.finishReplay,
+                        epoch, geometry.mainScale, geometry.mainOffsetX, geometry.mainOffsetY);
                 tx = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
                 XposedHelpers.callMethod(tx, "merge", ack.finishReplay);
                 h.appendWorkspaceSurfaces(tx, java.util.Collections.singletonList(epoch));
@@ -2834,10 +2837,12 @@ public final class WorkspaceHost {
             @Override protected void beforeHookedMethod(MethodHookParam p) {
                 WorkspaceHost h = sInstance;
                 if (h == null) return;
-                h.appendHiddenKeyguardSurfaces(p.thisObject, h.keyguardTransactions.take(p.thisObject));
+                java.util.List<Long> unlockEpochs = h.keyguardTransactions.take(p.thisObject);
+                h.appendHiddenKeyguardSurfaces(p.thisObject, unlockEpochs);
                 java.util.List<RenderBinding> frames = h.finishTransactions.take(p.thisObject);
                 if (!frames.isEmpty()) h.appendRetainedSurfaces(p.thisObject, frames);
                 h.appendWorkspaceSurfaces(p.thisObject, h.workspaceFinishes.take(p.thisObject));
+                h.appendUnlockGeometry(p.thisObject, unlockEpochs);
                 h.appendTopTransitionSurfaces(p.thisObject);
                 java.util.List<NativeObservation> checks = h.nativeObservations.take(p.thisObject);
                 if (!checks.isEmpty()) {
@@ -2884,9 +2889,11 @@ public final class WorkspaceHost {
                         try {
                             String name = method.getName();
                             if ("onTransitionReady".equals(name) && args != null && args.length == 4) {
-                                if (retainedForLock && keyguardWindowHidden
-                                        && (((Integer) XposedHelpers.callMethod(args[1], "getFlags")) & 0x100) != 0)
+                                if ((retainedForLock || zoomed)
+                                        && (((Integer) XposedHelpers.callMethod(args[1], "getFlags")) & 0x100) != 0) {
+                                    keyguardTransactions.mark(args[2], java.util.Collections.singletonList(sceneEpoch));
                                     keyguardTransactions.mark(args[3], java.util.Collections.singletonList(sceneEpoch));
+                                }
                                 SwapTrace trace = swapTrace;
                                 if (trace != null) trace.transition(args[1], args[2], args[3]);
                                 trackRetainedSurfaces(args[1], args[2], args[3]);
@@ -3072,9 +3079,23 @@ public final class WorkspaceHost {
         if (count > 0) log("native keyguard transaction retained hidden parents=" + count);
     }
 
+    /** Append last: native unlock cleanup may contain an older fullscreen matrix. */
+    private void appendUnlockGeometry(Object transaction, java.util.List<Long> epochs) {
+        if (root == null || layout == null || !epochs.contains(sceneEpoch)
+                || !screenOn || keyguardLocked || keyguardWindowHidden || !zoomed
+                || workspaceEntering || workspaceAnimator != null || mainSideAnimator != null
+                || (scene != ACTIVE && scene != RESUMING)) return;
+        try {
+            if (unlockGeometryReplay.append((android.view.SurfaceControl.Transaction) transaction,
+                    sceneEpoch, layout.mainScale, layout.mainOffsetX, layout.mainOffsetY))
+                log("authenticated main geometry appended atomically to native unlock finish");
+        } catch (Throwable failure) { log("native unlock geometry replay unavailable: " + failure); }
+    }
+
     private void setZoomState(boolean on) {
         on = on && !keyguardLocked && screenOn && !lockExitPending;
         zoomed = on;
+        if (!on) unlockGeometryReplay.clear();
         HostEntry.setHostZoomed(on);
         StatusBarSampling.geometryChanged();
         HotZoneGesture.raiseAll(ctx);
@@ -4929,6 +4950,7 @@ public final class WorkspaceHost {
     }
 
     private boolean retainWorkspaceForLock() {
+        unlockGeometryReplay.clear();
         cancelMainSideSwitch();
         retainedGeometryConfirmed = false;
         lockExitPending=false;

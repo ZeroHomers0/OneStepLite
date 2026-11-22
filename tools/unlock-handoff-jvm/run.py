@@ -90,6 +90,7 @@ public class WorkspaceHost {
  boolean lockExitPending;int keyguardResumeIndex;static class Options {boolean keepOnLock=true;}Options workspaceOptions=new Options();boolean retainedGeometryConfirmed;boolean retainedForLock=true,keyguardWindowHidden=true,keyguardLocked=true,screenOn,workspaceEntering=true,zoomed;
  int scene=ACTIVE;long sceneEpoch=7,workspaceGeneration,zoomAnimUntil=800;float alpha;
  UnlockHandoff unlockHandoff;WorkspaceLayout layout=new WorkspaceLayout();Root root=new Root();int parents,closes;
+ static class UnlockGeometryReplay {void capture(Transaction t,long e,float s,float x,float y){}}UnlockGeometryReplay unlockGeometryReplay=new UnlockGeometryReplay();
  static class WorkspaceLayout {float mainScale=.7f,mainOffsetX,mainOffsetY=606;}
  static class View {static final int GONE=8;}
  static class Root {boolean gone;void setVisibility(int v){gone=v==8;}Runnable frame;Root getViewTreeObserver(){return this;}void registerFrameCommitCallback(Runnable r){frame=r;}void invalidate(){}void commit(){Runnable r=frame;frame=null;if(r!=null)r.run();}}
