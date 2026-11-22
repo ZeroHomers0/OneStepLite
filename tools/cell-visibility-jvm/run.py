@@ -21,6 +21,7 @@ public class CellVisibilityRegression {
  static int checks;static final int SLOT_TOP=4,CELL_SLOT_COUNT=4;boolean topFace,taskCellsCovered;
  static void check(boolean b,String why){checks++;if(!b)throw new AssertionError(why);}
  float workspaceAlpha=1f;Object cellMotion;Promotion promotion;boolean owns=true,sideScrolling,writable=true;
+ static class TopTaskTransition {boolean collecting;boolean ownsTopOpacity(){return !collecting;}boolean ownsTaskOpacity(){return collecting;}}TopTaskTransition topTransition;
  static class Promotion{boolean nativeSwap=true,cancelled;}
  static class View{float alpha;void setAlpha(float a){alpha=a;}void setClipBounds(Rect r){}}
  static class Slot{int index=1,sideRow=-1;boolean occupied,parked,promoting,launching,sideShown,sidePrepared,frozen;int taskId=42;Object taskToken=new Object();View view=new View();Object controller=new SurfaceControl();}
@@ -62,6 +63,14 @@ public class CellVisibilityRegression {
   check(s.view.alpha==1&&surface.shown,"fade close restores the same live task");
   s.index=SLOT_TOP;h.topFace=true;h.taskCellsCovered=true;h.updateCellSurfaceVisibility(s);
   check(s.view.alpha==1&&surface.shown,"independent interactive pane is not hidden by top-row controls");
+  h.topTransition=new TopTaskTransition();surface.alpha=.6f;surface.child.alpha=.4f;s.view.alpha=1f;
+  h.updateCellSurfaceVisibility(s);
+  check(surface.alpha==.6f&&surface.child.alpha==.4f&&s.view.alpha==1f,"visibility repair preserves the active top fade");
+  h.topTransition.collecting=true;surface.child.alpha=0f;h.updateCellSurfaceVisibility(s);
+  check(surface.alpha==1f&&surface.child.alpha==0f,"admission prepares the parent without flashing the transparent canonical task");
+  h.workspaceAlpha=0;h.updateCellSurfaceVisibility(s);
+  check(surface.alpha==0&&surface.child.alpha==0,"privacy hiding still overrides a top fade");
+  h.topTransition=null;h.workspaceAlpha=1f;
   h.taskCellsCovered=false;s.index=8;s.sideRow=5;h.updateCellSurfaceVisibility(s);
   check(!surface.shown&&s.occupied,"offscreen list row hides the surface without clearing its task");
   s.sideShown=true;h.updateCellSurfaceVisibility(s);

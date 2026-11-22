@@ -44,6 +44,7 @@ final class TopBar extends FrameLayout {
         clock = new WorkspaceClock(context);
         addView(clock, new LayoutParams(-1, 1));
         header = new Header(context, null);
+        header.setSendMainToTopEnabled(false);
         addView(header, new LayoutParams(-1, 1));
         availableApps = new java.util.ArrayList<>(apps);
         quickRail = new QuickAppRail(context, QuickAppPins.arrange(context, availableApps), new QuickAppRail.Listener() {
@@ -189,9 +190,12 @@ final class TopBar extends FrameLayout {
             topApp.setAlpha(enabled ? 1f : .32f);
         }
         void updateColors() {
-            int color=HyperOsStyle.textPrimary(getContext());
-            for(IconButton icon:icons)icon.setIconColor(color);
-            title.setTextColor(color);
+            int fallback=HyperOsStyle.textPrimary(getContext());
+            for(IconButton icon:icons)icon.setIconColor(HyperOsStyle.wallpaperTextColor(
+                    glassWallpaper,glassWidth,glassHeight,getLeft()+icon.getLeft(),getTop()+icon.getTop(),
+                    icon.getWidth(),icon.getHeight(),fallback));
+            title.setTextColor(HyperOsStyle.wallpaperTextColor(glassWallpaper,glassWidth,glassHeight,
+                    getLeft()+title.getLeft(),getTop()+title.getTop(),title.getWidth(),title.getHeight(),fallback));
         }
         private IconButton button(int icon,String text,Runnable action) {
             IconButton b=new IconButton(getContext(),icon,text);b.setTooltipText(text);

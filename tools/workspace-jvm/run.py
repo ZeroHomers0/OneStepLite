@@ -40,6 +40,10 @@ public class XposedHelpers {public static Object callMethod(Object o,String n,Ob
 import java.util.*;import android.view.SurfaceControl;import android.graphics.Rect;import de.robv.android.xposed.XposedHelpers;
 public class WorkspaceRegression {
  void cancelMainSideSwitch(){}boolean lockExitPending;
+ int exitPlateReleases;void releaseTopExitWindow(){exitPlateReleases++;}
+ void updateTopBarState(){}
+ static class VideoPane {void refresh(){}void releaseForPrivacy(){}}VideoPane videoPane;
+ static class TopTaskTransition {boolean ownsTopOpacity(){return true;}boolean ownsTaskOpacity(){return true;}}TopTaskTransition topTransition;
  static class LiveSwapVisualLease {static void writeAlpha(View v,float a){v.setAlpha(a);}}
  static class SideDismiss {boolean isTracking(){return false;}void settle(boolean b){}}
  SideDismiss sideDismiss;
@@ -95,6 +99,7 @@ public class WorkspaceRegression {
  __METHODS__
  public static void main(String[]args){
   var kept=new WorkspaceRegression();kept.retentionAllowed=true;kept.suspendSession("exit");
+  check(kept.exitPlateReleases==1,"retained workspace exit removes the independent top exit plate before zooming");
   check(kept.retainedHides==0&&kept.returns==0,"retained task hiding waits for real exit fade");
   kept.workspaceAnimator.end();check(kept.retainedHides==1&&kept.returns==0&&kept.parks==0,"normal exit retains bindings without native handback");
   kept=new WorkspaceRegression();kept.retentionAllowed=true;kept.suspendSession("homekey");kept.workspaceAnimator.end();
@@ -224,7 +229,7 @@ public class WorkspaceRegression {
 files['io/github/zerohomers0/onesteplite/TopControlsCreationRegression.java']=r'''package io.github.zerohomers0.onesteplite;
 import java.util.function.Consumer;
 public class TopControlsCreationRegression {
- static class View {float alpha=1f;boolean visible;void setAlpha(float a){alpha=a;}void setOnClickListener(Consumer<View> c){}void bringToFront(){}}
+ static class View {float alpha=1f;boolean visible;View(){}View(Object context){}void setAlpha(float a){alpha=a;}void setOnClickListener(Consumer<View> c){}void bringToFront(){}}
  static class FrameLayout extends View {float attachedAlpha=-1;View child;static class LayoutParams{LayoutParams(int w,int h){}}void addView(View v,LayoutParams p){child=v;attachedAlpha=v.alpha;}}
  static class TopTaskPane extends View {View hint;TopTaskPane(Object c,View h){hint=h;}void exitAction(Runnable r){}}
  static class Slot {View hint,view=new View();Object controller=new Object(),taskToken=new Object();}

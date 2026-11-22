@@ -143,6 +143,7 @@ public final class WorkspaceHost {
     private WorkspaceSettingsClient workspaceSettings;
     private FrameLayout topLiveClip;
     private TopTaskPane topTaskPane;
+    private VideoPane videoPane;
     private final TopTaskState topTaskState = new TopTaskState();
     private final java.util.Map<TopTaskState.Key, Boolean> topDirections = new java.util.HashMap<>();
     private final WideVideoPolicy wideVideoPolicy = new WideVideoPolicy();
@@ -159,9 +160,7 @@ public final class WorkspaceHost {
     private boolean topFromMain, topFace;
     /** The admitted upper task is portrait-only, so the face letterboxes it instead of stretching. */
     private boolean topPortrait;
-    private boolean topSelectionPending;
-    private long topFaceGeneration;
-    private TopTaskTransition topTransition;
+    private volatile TopTaskTransition topTransition;
 
     private static final class TopCandidate {
         final LiveTask task;
@@ -1618,6 +1617,8 @@ public final class WorkspaceHost {
         retainedOnExit = keepBoundTasks;
         sceneEpoch++;
         scene = SUSPENDING;
+        releaseTopExitWindow();
+        if(videoPane!=null)videoPane.releaseForPrivacy();
         if (!keepBoundTasks) resetTopForSuspend();
         publishDesktopSideTasks();
         suspendRequested = false;
@@ -1655,7 +1656,7 @@ public final class WorkspaceHost {
     private boolean canRetainBoundTasks() {
         if (root == null || (root.getVisibility() != View.VISIBLE&&!lockExitPending) || !screenOn || retainedForLock
                 || promotion != null || transferBusy || workspaceEntering || workspaceAnimator != null
-                || topTransition != null || topSelectionPending
+                || topTransition != null
                 || cellMotion != null
                 || (sideDismiss != null && sideDismiss.isTracking())) return false;
         int bound = 0;
@@ -3506,6 +3507,7 @@ public final class WorkspaceHost {
             }
         }
         updateChromeClip();
+        if(videoPane!=null)videoPane.refresh();
     }
 
     /**
@@ -3640,6 +3642,7 @@ public final class WorkspaceHost {
                 if (entering) workspaceEntering = false;
                 setWorkspaceAlpha(entering ? 1f : 0f);
                 if (complete != null) complete.run();
+                updateTopBarState();
             }
         });
         workspaceAnimator = animator;
@@ -3814,8 +3817,6 @@ public final class WorkspaceHost {
     root = new FrameLayout(ctx) {
         private final android.graphics.Paint divider = new android.graphics.Paint(
                 android.graphics.Paint.ANTI_ALIAS_FLAG);
-        private final android.graphics.Paint rimPaint = new android.graphics.Paint(
-                android.graphics.Paint.ANTI_ALIAS_FLAG);
         @Override protected void dispatchDraw(android.graphics.Canvas canvas) {
             // A stationary substrate covers both edges while native main geometry
             // moves. Cell content can leave without taking its wallpaper with it.
@@ -3829,26 +3830,6 @@ public final class WorkspaceHost {
                 canvas.restoreToCount(backdropSave);
             }
             super.dispatchDraw(canvas);
-            // A dark rim hugs the main window while it is in flight: widest at the
-            // start of the shrink and at the end of the grow, gone once the window
-            // settles. It reads as the card lifting off the page instead of the app
-            // simply changing size, and the settled workspace keeps its clean edge.
-            // Only the ring outside the window is painted: the interior belongs to
-            // the app, and filling it black flashed the whole screen whenever this
-            // overlay sat above a still-fullscreen main task.
-            if (layout != null && workspaceAlpha < 1f && mainSideAnimator == null) {
-                float rim = HyperOsStyle.dp(ctx, 10f) * (1f - workspaceAlpha);
-                if (rim > 0.5f) {
-                    android.graphics.RectF main = workspaceMainHole();
-                    rimPaint.setStyle(android.graphics.Paint.Style.FILL);
-                    rimPaint.setColor(0xFF000000);
-                    int rimSave = canvas.save();
-                    canvas.clipOutRect(main);
-                    canvas.drawRect(main.left - rim, main.top - rim,
-                            main.right + rim, main.bottom + rim, rimPaint);
-                    canvas.restoreToCount(rimSave);
-                }
-            }
             if (layout == null || workspaceAlpha <= 0f || mainSideAnimator != null) return;
             int saved = canvas.save();
             android.graphics.RectF main = workspaceMainHole();
@@ -3981,6 +3962,11 @@ public final class WorkspaceHost {
         topLiveClip.setClipBounds(new Rect(0,0,screenW,layout.tabletLandscape?screenH:layout.topStrip));
         root.addView(topLiveClip,new FrameLayout.LayoutParams(-1,layout.tabletLandscape?-1:layout.topStrip));
         topLiveClip.addView(topBar, new FrameLayout.LayoutParams(-1, layout.topStrip));
+        videoPane=new VideoPane(ctx,main,()->scene==ACTIVE && screenOn && !keyguardLocked
+                && !workspaceEntering && workspaceAlpha>=1f && !slots[SLOT_TOP].occupied
+                && !topTaskState.busy() && topTransition==null && !topFace,
+                embedded->updateTopBarState());
+        topLiveClip.addView(videoPane,new FrameLayout.LayoutParams(-1,layout.topStrip));
         topBar.setStatusBarInset(DeviceProfile.statusBarHeightPx(ctx));
         main.post(this::applyWallpaperBackdrops);
         for (int i = 1; i < CELL_SLOT_COUNT; i++) {
@@ -4048,15 +4034,14 @@ public final class WorkspaceHost {
     }
 
     private void createTopTaskControls() {
-        Slot upper=slots[SLOT_TOP];upper.hint=makeEmptyHint();
-        upper.hint.setOnClickListener(v->captureMainIntoTop());
+        Slot upper=slots[SLOT_TOP];upper.hint=new View(ctx);
         topTaskPane=new TopTaskPane(ctx,upper.hint);
         topTaskPane.setAlpha(workspaceAlpha);
         FrameLayout taskParent=layout.tabletLandscape?root:topLiveClip;
         taskParent.addView(topTaskPane,new FrameLayout.LayoutParams(-1,layout.topStrip));
         updateTopTaskGeometry();
         // The upper TaskView was added after the controls; its empty surface hole would
-        // otherwise blank them until the first roll settles and reorders the views.
+        // otherwise blank them until the controls are explicitly raised.
         if(!topFace && topBar!=null)topBar.bringToFront();
     }
 
@@ -4066,7 +4051,7 @@ public final class WorkspaceHost {
         if (!layout.tabletLandscape) {
             tabletToolsOpen=false;
             topBar.clearTabletHeader();
-            topBar.setVisibility(topFace?View.INVISIBLE:View.VISIBLE);
+            topBar.setVisibility(View.VISIBLE);
             return;
         }
         topFace=true;
@@ -4112,23 +4097,19 @@ public final class WorkspaceHost {
         }
         if(topFace) {captureMainIntoTop(); return;}
         Clipboard.get(ctx).close();
-        // No face flip: the cross-fade is the transition, so the strip keeps its
+        // The strip keeps its
         // clock and rail while the landscape task fades in on top of them.
         enterTopFaceForFade();
         captureMainIntoTop();
     }
 
     /**
-     * Puts the task face up without the roll. The cross-fade carries the change
-     * instead: the strip keeps its clock and app rail, and the landscape task
+     * Prepares admission while the strip keeps its clock and app rail. The landscape task
      * fades in on top of them, so no empty placeholder is ever shown.
      */
     private void enterTopFaceForFade() {
         topFace=true;
-        topFaceGeneration++;
-        // The roll never settles here, so clear the pending flag it would have cleared;
-        // leaving it set would block task retention for the rest of the session.
-        topSelectionPending=false;
+        if(videoPane!=null)videoPane.releaseForPrivacy();
         updateTopTaskGeometry();
         // updateTopTaskGeometry renders the settled task face, which hides the bar;
         // the fade needs it visible underneath the incoming task.
@@ -4173,7 +4154,6 @@ public final class WorkspaceHost {
                 // so a swapped main side needs no special case and nothing shifts.
                 // The main slot's surface rests at (0,0) with matrix=mainScale;
                 // its view carries the offset, so the fade must not add one.
-                prepared.fade();
                 prepared.setNativeRestore(()->setTopCollectionTranslucent(selected,false));
                 if(!executeOnShell(()->{
                     try {
@@ -4232,10 +4212,6 @@ public final class WorkspaceHost {
         } catch(Throwable unavailable) {return false;}
     }
 
-    private boolean startTopTaskTransition(boolean intoTop, Runnable transfer) {
-        return startTopTaskTransition(intoTop,false,transfer);
-    }
-
     private boolean startLiveMainRevealTransition(Runnable transfer) {
         return startTopTaskTransition(false,true,transfer);
     }
@@ -4256,10 +4232,11 @@ public final class WorkspaceHost {
                             && screenOn && !keyguardLocked && !suspendRequested,
                     transfer,closed->{
                         if(topTransition==closed)topTransition=null;
+                        if(scene==ACTIVE && !slots[SLOT_TOP].occupied && !topTaskState.busy())settleTopFace(false);
+                        updateTopBarState();
                         finishPendingSuspend();
                     },WorkspaceHost::log);
             if(intoTop)topTransition.collect(source,sourceCurrent,destination);
-            else topTransition.fade();
             topTransition.start();
             return true;
         } catch(Throwable error) {
@@ -4270,7 +4247,11 @@ public final class WorkspaceHost {
     }
 
     private void revealTopTaskTransition() {
-        if(topTransition!=null)topTransition.reveal();
+        if(topTransition==null)return;
+        Slot upper=slots[SLOT_TOP];
+        if(upper.occupied && !upper.promoting)
+            topTransition.setLiveSurface(getSurfaceField(upper.controller,"mTaskLeash"));
+        topTransition.reveal();
     }
 
     private void cancelTopTaskTransition() {
@@ -4291,12 +4272,11 @@ public final class WorkspaceHost {
             FrameLayout.LayoutParams p=new FrameLayout.LayoutParams(
                     upper.rect[2]-upper.rect[0],upper.rect[3]-upper.rect[1]);
             p.leftMargin=upper.rect[0];p.topMargin=upper.rect[1];
-            topTaskPane.setLayoutParams(p);topTaskPane.setVisibility(View.VISIBLE);
+            topTaskPane.setLayoutParams(p);topTaskPane.setVisibility(View.INVISIBLE);
             topTaskPane.setTranslationX(0);topTaskPane.setTranslationY(0);
             topTaskPane.setScaleX(1);topTaskPane.setScaleY(1);
             upper.view.setScaleX(1);upper.view.setScaleY(1);
             upper.view.setClipBounds(new Rect(0,0,p.width,p.height));
-            if(topTransition!=null)topTransition.applyCollectionFrame(upper.view);
             updateCellSurfaceVisibility(upper);
             return;
         }
@@ -4335,9 +4315,7 @@ public final class WorkspaceHost {
     private void resetTopForSuspend() {
         tabletCoveredMain=null;tabletReturnedTop=null;
         cancelTopTaskTransition();
-        topFaceGeneration++;
         topTaskState.sceneChanged();
-        topSelectionPending=false;
         topFace=false;
         if(topTaskPane!=null)topTaskPane.setVisibility(View.INVISIBLE);
         releaseTopExitWindow();
@@ -4348,27 +4326,19 @@ public final class WorkspaceHost {
         }
     }
 
-    private void prepareTopFace() {
-        ++topFaceGeneration;
-        topTaskPane.occupied(slots[SLOT_TOP].occupied && !slots[SLOT_TOP].parked);
-        // Paint the other live face after SurfaceView clears its transparent hole.
-        // The projected faces meet at an edge, so this does not cover the live task.
-        topBar.bringToFront();
-    }
-
     private void settleTopFace(boolean taskFace) {
         if(root==null || scene!=ACTIVE || !screenOn || keyguardLocked)return;
         if(layout.tabletLandscape) {
-            topFace=true;topSelectionPending=false;
+            topFace=true;
             // The cross-fade owns its visibility until its current animation settles.
             updateTopTaskGeometry();updateHint(slots[SLOT_TOP]);root.requestLayout();return;
         }
-        topFace=taskFace; topFaceGeneration++;
-        topBar.setVisibility(taskFace?View.INVISIBLE:View.VISIBLE);
+        topFace=taskFace;
+        topBar.setVisibility(View.VISIBLE);
         // The empty SurfaceView can still clear its old hole while Shell finishes returning.
         // Paint the restored controls after it, including the now full-width adaptive hole.
         if(!taskFace)topBar.bringToFront();
-        topTaskPane.setVisibility(taskFace?View.VISIBLE:View.INVISIBLE);
+        topTaskPane.setVisibility(View.INVISIBLE);
         updateTopExitWindow();
         if(!taskFace) {
 
@@ -4385,10 +4355,7 @@ public final class WorkspaceHost {
                         releaseTopTask(false,true,null);
                 } else releaseTopTask(false,true,null);
             }
-        } else if(!slots[SLOT_TOP].occupied) {
-            showTopCandidates();
         }
-        topSelectionPending=false;
         updateHint(slots[SLOT_TOP]); root.requestLayout();
     }
 
@@ -4411,12 +4378,6 @@ public final class WorkspaceHost {
             if(VideoDock.owns(task.id)) {log("upper candidate skipped: docked video task="+task.id);return null;}
             return candidate(info,null);
         } catch(Throwable unavailable) {log("upper current candidate unavailable: "+unavailable);return null;}
-    }
-
-    private void showTopCandidates() {
-        if(topTaskPane==null || !topFace || !topReady())return;
-        topTaskPane.occupied(slots[SLOT_TOP].occupied && !slots[SLOT_TOP].parked);
-        root.requestLayout();
     }
 
     private Boolean mainTaskOccupiedBeside(int upperTaskId) {
@@ -4489,7 +4450,7 @@ public final class WorkspaceHost {
             topOriginalSlot=selected.source;topFromMain=fromMain;
             topPortrait=!selected.landscape;
             topTaskPane.occupied(true);
-            topTaskPane.setVisibility(View.VISIBLE);
+            topTaskPane.setVisibility(View.INVISIBLE);
             updateTopTaskGeometry();applyFullscreenBounds(slots[SLOT_TOP]);applySlotScale(slots[SLOT_TOP]);
             // The strip's surface is shared with the main window during a cross-fade,
             // so its alpha and crop must be re-staged for the new owner explicitly.
@@ -4505,8 +4466,9 @@ public final class WorkspaceHost {
     }
 
     private void topAdoptionFailed(TopCandidate selected,TopTaskState.Ticket ticket,String error) {
+            topTaskState.cancel(ticket);
             cancelTopTaskTransition();
-            topTaskState.cancel(ticket);topTaskPane.message("横屏接入失败，正在归还原任务");
+            topTaskPane.message("横屏接入失败，正在归还原任务");
             log("upper adoption failed: "+error);
             Slot origin=selected.source;
             if(origin!=null && !origin.occupied && topReady() && !suspendRequested)
@@ -4551,7 +4513,7 @@ public final class WorkspaceHost {
         final Object token=upper.taskToken;
         java.util.function.BooleanSupplier stillBound = () -> upper.taskEpoch == binding
                 && upper.taskId == taskId && java.util.Objects.equals(upper.taskToken, token);
-        // Explicit returns roll the real TOP and control faces before changing the task's mode.
+        // Explicit returns fade the top task before changing its native ownership.
         if(front && topReady() && slots[SLOT_TOP].occupied
                 && !slots[SLOT_TOP].promoting && !suspendRequested
                 && startLiveMainRevealTransition(()->{
@@ -4570,7 +4532,7 @@ public final class WorkspaceHost {
                     };
                     if (topFace && !layout.tabletLandscape) {
                         // Fade the task out over the strip's own clock and rail so the
-                        // exit mirrors the entry instead of flipping the face.
+                        // exit mirrors the entry.
                         fadeTopTaskOut(handBack);
                     } else handBack.run();
                 }))return;
@@ -4589,7 +4551,10 @@ public final class WorkspaceHost {
     private void fadeTopTaskOut(Runnable after) {
         final Slot upper=slots[SLOT_TOP];
         final Object surface=getSurfaceField(upper.controller,"mSurfaceControl");
-        final Object leash=getSurfaceField(upper.controller,"mTaskLeash");
+        final TopTaskTransition bridge=topTransition;
+        final long binding=upper.taskEpoch;
+        final Object token=upper.taskToken;
+        if(bridge!=null)bridge.followOpacity(topExitWindow);
         if(topBar!=null) {
             topBar.setPivotY(0f);
             topBar.setScaleY(1f);
@@ -4598,38 +4563,11 @@ public final class WorkspaceHost {
             topBar.bringToFront();
         }
         if(topTaskPane!=null) topTaskPane.setVisibility(View.INVISIBLE);
-        if(surface==null || !Boolean.TRUE.equals(XposedHelpers.callMethod(surface,"isValid"))) {
+        if(bridge==null || surface==null || !Boolean.TRUE.equals(XposedHelpers.callMethod(surface,"isValid"))) {
             after.run();
             return;
         }
-        android.animation.ValueAnimator animator=android.animation.ValueAnimator.ofFloat(1f,0f);
-        animator.setDuration(200L);
-        animator.addUpdateListener(value->writeTopTaskAlpha(surface,leash,(Float)value.getAnimatedValue()));
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(android.animation.Animator value) {
-                writeTopTaskAlpha(surface,leash,0f);
-                after.run();
-            }
-        });
-        animator.start();
-    }
-
-    /** Writes one alpha step to the upper task surface and its animation leash. */
-    private void writeTopTaskAlpha(Object surface,Object leash,float alpha) {
-        Object tx=null;
-        try {
-            tx=Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
-            XposedHelpers.callMethod(tx,"setAlpha",surface,alpha);
-            if(leash!=null && leash!=surface
-                    && Boolean.TRUE.equals(XposedHelpers.callMethod(leash,"isValid")))
-                XposedHelpers.callMethod(tx,"setAlpha",leash,alpha);
-            XposedHelpers.callMethod(tx,"apply");
-        } catch(Throwable error) {
-            log("upper fade out: "+error);
-        } finally {
-            closeSurfaceObject(tx,"close");
-        }
+        bridge.fadeOut(surface,()->upper.taskEpoch==binding && java.util.Objects.equals(upper.taskToken,token),after);
     }
 
     private void releaseTopTaskNow(boolean front, boolean dismissed, Runnable after,
@@ -4662,7 +4600,7 @@ public final class WorkspaceHost {
         },error->{
             cancelTopTaskTransition();
             topTaskPane.message("收回未确认，保留原任务："+error);
-            if(!topFace) {topFace=true;topBar.setVisibility(View.INVISIBLE);topTaskPane.setVisibility(View.VISIBLE);}
+            if(!topFace)topFace=true;
             updateHint(upper);root.requestLayout();log("upper return stopped: "+error);finishPendingSuspend();
         });
     }
@@ -4729,6 +4667,7 @@ public final class WorkspaceHost {
         if(topDirections.size()>64)topDirections.keySet().removeIf(item->!item.equals(topTaskState.owner()) && !item.equals(key));
         topTaskState.observe(key,landscape);
         // Observe only. A direction change never opens the upper face or claims a task.
+        updateTopBarState();
     }
 
     /** Default focus at admission only; later explicit top touches use native focus. */
@@ -4778,7 +4717,7 @@ public final class WorkspaceHost {
             if (!boundsHooksReady) throw new IllegalStateException("logical bounds hooks unavailable");
             // ViewGroup clipping does not constrain separately composed task surfaces.
             XposedHelpers.callMethod(view,"setEnableSurfaceClipping",true);
-            if (index != SLOT_TOP && !DeviceProfile.isTablet(ctx)
+            if (!DeviceProfile.isTablet(ctx)
                     && view instanceof android.view.SurfaceView) {
                 // TaskView renders task leashes as children, not in its opaque buffer.
                 // Do not expose SurfaceView's opaque resize colour between real frames.
@@ -4937,14 +4876,15 @@ public final class WorkspaceHost {
         Rect crop = workspaceCellCrop(slot);
         boolean showing = visible && workspaceAlpha > 0f && (crop == null || !crop.isEmpty());
         float alpha = showing ? 1f : 0f;
+        boolean fading = showing && slot.index == SLOT_TOP && topTransition != null && topTransition.ownsTopOpacity();
         if (slot.view != null) {
             if (crop != null) slot.view.setClipBounds(crop);
-            slot.view.setAlpha(alpha);
+            if (!fading) slot.view.setAlpha(alpha);
         }
         Object surface = getSurfaceField(slot.controller, "mSurfaceControl");
         if (surface == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(surface, "isValid"))) return;
         if (crop != null && !crop.isEmpty()) XposedHelpers.callMethod(tx, "setWindowCrop", surface, crop);
-        XposedHelpers.callMethod(tx, "setAlpha", surface, alpha);
+        if (!fading) XposedHelpers.callMethod(tx, "setAlpha", surface, alpha);
         // SurfaceView's RenderThread owns its outer parent and can rewrite that
         // parent's alpha. Also gate our settled task leash, which it cannot reset.
         if (ownsCellPresentation(slot) && slot.occupied && !slot.parked && !slot.frozen
@@ -4958,7 +4898,9 @@ public final class WorkspaceHost {
                 // TaskView parent, which is already cell sized; reusing it here showed
                 // only the buffer's top-left corner until the next scale pass.
                 XposedHelpers.callMethod(tx, "setWindowCrop", leash, logicalBounds(slot));
-                XposedHelpers.callMethod(tx, "setAlpha", leash, alpha);
+                boolean collecting = showing && slot.index == SLOT_TOP && topTransition != null
+                        && topTransition.ownsTaskOpacity();
+                if (!fading && !collecting) XposedHelpers.callMethod(tx, "setAlpha", leash, alpha);
             }
         }
     }
@@ -4991,7 +4933,7 @@ public final class WorkspaceHost {
 
     /** A host-owned backing stays inside the cell, below the real task, even for translucent apps. */
     private void ensureCellBackground(Slot slot) {
-        if (!slot.occupied || slot.parked || (sideScrolling && slot.sideRow >= 0)) {
+        if (slot.index == SLOT_TOP || !slot.occupied || slot.parked || (sideScrolling && slot.sideRow >= 0)) {
             removeCellBackground(slot);
             return;
         }
@@ -5270,6 +5212,7 @@ public final class WorkspaceHost {
             topBar.setSendMainToTopEnabled(available && mainCanFillTop());
         }
         updateTopExitWindow();
+        if(videoPane!=null)videoPane.refresh();
     }
 
     /**
@@ -5278,6 +5221,7 @@ public final class WorkspaceHost {
      */
     private boolean mainCanFillTop() {
         if (layout == null || layout.tabletLandscape || !topReady()) return false;
+        if(videoPane!=null && videoPane.embedded())return false;
         if (slots[SLOT_TOP].occupied) return false;
         try {
             TopCandidate candidate = currentTopCandidate();
@@ -5290,6 +5234,10 @@ public final class WorkspaceHost {
 
     /** Hide the overlay window without detaching TaskViews or handing their tasks back. */
     private boolean setKeyguardWindowHidden(boolean hidden) {
+        if(hidden) {
+            releaseTopExitWindow();
+            if(videoPane!=null)videoPane.releaseForPrivacy();
+        }
         if (hidden == keyguardWindowHidden) return true;
         if (root == null || wm == null || lp == null) return false;
         float previousAlpha = lp.alpha;
@@ -7631,7 +7579,8 @@ public final class WorkspaceHost {
     private void updateTopExitWindow() {
         boolean wanted = topFace && scene == ACTIVE && screenOn && !keyguardLocked
                 && slots[SLOT_TOP].occupied && !slots[SLOT_TOP].parked
-                && !slots[SLOT_TOP].promoting && layout != null && !layout.tabletLandscape;
+                && !slots[SLOT_TOP].promoting && layout != null && !layout.tabletLandscape
+                && topTransition==null && !workspaceEntering && workspaceAlpha>=1f;
         if (!wanted) { releaseTopExitWindow(); return; }
         if (topExitWindow != null) return;
         try {
@@ -8525,28 +8474,22 @@ public final class WorkspaceHost {
                     .getDeclaredConstructor().newInstance();
             boolean unregistered = false;
             try {
-                boolean liveCenterReveal=ticket.liveMainReveal && topTransition!=null;
+                TopTaskTransition bridge=topTransition;
+                boolean liveCenterReveal=ticket.liveMainReveal && bridge!=null;
                 ticket.liveMainReveal=liveCenterReveal;
                 // A cross-fade hands the task back at its resting workspace frame and
                 // only its alpha moves, so the window never jumps orientation. The
                 // workspace scales the slot's own leash, so the canonical surface must
                 // stay at identity or the window would be scaled twice and shrink.
-                boolean fadeReveal=liveCenterReveal && topTransition.fadeMode();
-                float initialScale=liveCenterReveal && !fadeReveal
-                        ?TopTaskReturnPolicy.CENTER_START_SCALE:1f;
-                float initialX=liveCenterReveal && !fadeReveal
-                        ?TopTaskReturnPolicy.centeredOffset(screenW,initialScale):0f;
-                float initialY=liveCenterReveal && !fadeReveal
-                        ?TopTaskReturnPolicy.centeredOffset(screenH,initialScale):0f;
                 // Prepare every surface operation before changing listener ownership.
                 XposedHelpers.callMethod(area, "reparentToDisplayArea", 0, canonical, tx);
                 XposedHelpers.callMethod(tx, "setMatrix", canonical,
-                        initialScale, 0f, 0f, initialScale);
-                XposedHelpers.callMethod(tx, "setPosition", canonical, initialX, initialY);
+                        1f, 0f, 0f, 1f);
+                XposedHelpers.callMethod(tx, "setPosition", canonical, 0f, 0f);
                 XposedHelpers.callMethod(tx, "setWindowCrop", canonical,
                         new Rect(0, 0, screenW, screenH));
                 XposedHelpers.callMethod(tx, "setAlpha", canonical,
-                        fadeReveal ? topTransition.fadeStartAlpha() : 1f);
+                        liveCenterReveal ? 0f : 1f);
                 XposedHelpers.callMethod(tx, ticket.background ? "hide" : "show", canonical);
                 ticket.handoffAttempted = true;
                 if (owner == HandoffOwner.OUR_CONTROLLER) {
@@ -8576,7 +8519,7 @@ public final class WorkspaceHost {
                 XposedHelpers.callMethod(tx, "apply");
                 if(liveCenterReveal) {
                     ticket.liveRevealSurface=canonical;
-                    topTransition.setLiveSurface(canonical);
+                    bridge.setLiveSurface(canonical);
                 }
                 unregistered = false;
                 ticket.handoffComplete = true;
@@ -10125,7 +10068,7 @@ public final class WorkspaceHost {
         Rect viewClip = slot.view.getClipBounds();
         if (crop.isEmpty() || viewClip != null && !crop.intersect(viewClip)) return;
         // Never rotate, move or scale this parent. TaskView's own render thread
-        // continues to place it, including TOP's live roll/collection clipping.
+        // continues to place it, including the top task's collection clipping.
         XposedHelpers.callMethod(tx, "setWindowCrop", parent, crop);
         // TaskView parent pixels are physical and stay outside task rotation.
         XposedHelpers.callMethod(tx, "setCornerRadius", parent, 0f);

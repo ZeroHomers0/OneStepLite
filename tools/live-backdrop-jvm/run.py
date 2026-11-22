@@ -57,7 +57,7 @@ static class HyperOsStyle {static int page(Object c){return 0;}}
 static class Slot {int index=1,sideRow=-1;boolean occupied,parked;Object controller=new Object(),cellBackground,cellBackgroundParent;int[]rect={0,0,267,609};int cellBackgroundWidth,cellBackgroundHeight;}
 static class Host {
  boolean sideScrolling;
- Bitmap wallpaperBackdrop;Object root=new Object(),ctx=new Object(),parent=new Object();static final int SLOT_MAIN=0;int removed;
+ Bitmap wallpaperBackdrop;Object root=new Object(),ctx=new Object(),parent=new Object();static final int SLOT_MAIN=0,SLOT_TOP=5;int removed;
  void applyWallpaperBackdrops(){}Object getSurfaceField(Object c,String f){return parent;}
  void removeCellBackground(Slot s){if(s.cellBackground!=null)removed++;s.cellBackground=null;s.cellBackgroundParent=null;}
  void destroyCellSurface(Object o){}void closeSurfaceObject(Object o,String n){if(o!=null)XposedHelpers.callMethod(o,n);}void log(String m){}
@@ -88,6 +88,7 @@ public static void main(String[]args)throws Exception {
  Object occupied=slot.cellBackground;host.ensureCellBackground(slot);check(slot.cellBackground==occupied,"same occupied generation reuses owned backing");
  slot.occupied=false;host.ensureCellBackground(slot);check(slot.cellBackground==null&&host.removed==1,"retiring app removes stale backing immediately");
  slot.occupied=true;host.ensureCellBackground(slot);slot.parked=true;host.ensureCellBackground(slot);check(slot.cellBackground==null&&host.removed==2,"parked task cannot leave opaque empty placeholder");
+ slot.parked=false;slot.index=5;host.ensureCellBackground(slot);check(slot.cellBackground==null,"top overlay never allocates an opaque cell background over the original header");
  Object parent=new Object();Bitmap wallpaper=new Bitmap();
  int[]painted={0};LiveBackdrop decorated=LiveBackdrop.create(parent,wallpaper,1080,2460,null,null,c->{check(Canvas.source==wallpaper,"empty controls paint after wallpaper in the same buffer");painted[0]++;},s->{});
  check(painted[0]==1&&Surface.latest.posts==1,"empty controls posted before any cell drawing is hidden");decorated.close();

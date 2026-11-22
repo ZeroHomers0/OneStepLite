@@ -118,14 +118,12 @@ public final class TopLayerRegression {
  void releaseTopTask(boolean front,boolean dismissed,Runnable after,boolean live){returned++;order+="return;";returnedLive=live;}
  void releaseRetainedTopSnapshot(){}static void log(String text){}
  void claimTopTask(TopCandidate c,boolean manual){claimed++;}
+ void updateTopBarState(){}
  TopCandidate currentTopCandidate(){return current;}
  void showTopCandidates(){selected++;}void updateHint(Slot slot){hints++;}
  void updateTopExitWindow(){}void releaseTopExitWindow(){}
-'''+member('    private void prepareTopFace(')+member('    private void settleTopFace(')+member('    private void resetTopForSuspend(')+'''
+'''+member('    private void settleTopFace(')+member('    private void resetTopForSuspend(')+'''
  public static void main(String[]args){
-  var moving=new TopLayerRegression();moving.slots[4].occupied=true;moving.prepareTopFace();
-  check(moving.topBar.raises==1&&moving.topTaskPane.occupied&&moving.topFace,"controls paint after the live SurfaceView hole before a return begins");
-  check(moving.returned==0&&moving.slots[4].occupied,"preparing the other live face preserves the bound task");
   order="";
   var h=new TopLayerRegression();h.slots[4].occupied=true;h.settleTopFace(false);
   check(h.topBar.visibility==0&&h.topTaskPane.visibility==4&&!h.topFace,"control face visibility");
@@ -140,11 +138,11 @@ public final class TopLayerRegression {
   h=new TopLayerRegression();h.slots[4].occupied=true;h.mainOccupied=false;h.topFromMain=false;h.topOriginalSlot=new Object();h.settleTopFace(false);
   check(h.returned==1&&h.liveTransitions==0&&!h.returnedLive,"side-origin upper task returns without a main-center animation");
   h=new TopLayerRegression();h.topFace=false;h.topSelectionPending=true;h.current=new TopCandidate();h.current.landscape=true;h.settleTopFace(true);
-  check(h.topFace&&h.selected==1&&h.claimed==0&&h.topBar.raises==0&&h.topBar.visibility==4,"manual flip shows empty plus and waits for explicit add");
-  h=new TopLayerRegression();h.settleTopFace(true);check(h.selected==1,"empty face chooser");
+  check(h.topFace&&h.selected==0&&h.claimed==0&&h.topBar.raises==0&&h.topBar.visibility==0&&h.topTaskPane.visibility==4,"top admission never replaces the original header with a cell");
+  h=new TopLayerRegression();h.settleTopFace(true);check(h.selected==0,"empty top keeps the original header instead of opening a chooser");
   h=new TopLayerRegression();h.keyguardLocked=true;h.settleTopFace(false);check(h.topFace&&h.topBar.raises==0&&h.returned==0,"stale locked completion ignored");
   h=new TopLayerRegression();h.topSelectionPending=true;h.resetTopForSuspend();
-  check(!h.topFace&&!h.topSelectionPending&&h.topBar.raises==1,"suspend restores control paint order");
+  check(!h.topFace&&h.topBar.raises==1,"suspend restores control paint order");
   h=new TopLayerRegression();h.layout.tabletLandscape=true;h.tabletToolsOpen=true;h.resetTopForSuspend();
   check(!h.tabletToolsOpen&&h.topBar.visibility==4&&h.topBar.raises==0,"tablet suspend collapses instead of exposing the old control face");
   h.topBar.visibility=0;h.settleTopFace(false);
@@ -161,14 +159,24 @@ import java.util.*;
 public class TopDirectionRegression {
  Object root=new Object();Map<TopTaskState.Key,Boolean> topDirections=new HashMap<>();
  TopTaskState topTaskState=new TopTaskState();boolean topAuto=true,topFace=true;
- static class TopCandidate {TopTaskState.Key key;}TopCandidate current;int opened,claimed;
+ static class TopCandidate {TopTaskState.Key key;boolean landscape;}TopCandidate current;int opened,claimed;
+ static final int ACTIVE=1,SLOT_TOP=4;int scene=ACTIVE;boolean screenOn=true,keyguardLocked,transferBusy;
+ Object promotion,workspaceAnimator;float workspaceAlpha=1f;
+ static class VideoPane {boolean embedded(){return false;}void refresh(){}}VideoPane videoPane;
+ static class Layout {boolean tabletLandscape;}Layout layout=new Layout();
+ static class Slot {boolean occupied;}Slot[] slots={null,null,null,null,new Slot()};
+ static class Bar {boolean enabled;void setAlpha(float a){}void setSendMainToTopEnabled(boolean b){enabled=b;}}Bar topBar=new Bar();
+ void updateTopExitWindow(){}static void log(String s){}
  boolean supportsTaskUser(int user){return user==0||user==999;}boolean topReady(){return true;}
- TopCandidate currentTopCandidate(){return current;}
+ TopCandidate currentTopCandidate(){if(current!=null)current.landscape=Boolean.TRUE.equals(topDirections.get(current.key));return current;}
  void claimTopTask(TopCandidate c,boolean manual){claimed++;}
-'''+member('    private void topTaskDirection(')+'''
+'''+member('    private void topTaskDirection(')+member('    private void updateTopBarState(')+member('    private boolean mainCanFillTop(')+'''
  public static void main(String[]args){
   var h=new TopDirectionRegression();var a=new TopTaskState.Key(7,0,"a");h.current=new TopCandidate();h.current.key=a;
   for(int i=0;i<4;i++){h.topFace=i%2==0;h.topTaskDirection(a,true);h.topTaskDirection(a,false);}
+  if(h.topBar.enabled)throw new AssertionError("portrait main action stays enabled");
+  h.topTaskDirection(a,true);if(!h.topBar.enabled)throw new AssertionError("landscape main action was not refreshed");
+  h.topTaskDirection(a,false);if(h.topBar.enabled)throw new AssertionError("return to portrait did not disable action");
   if(h.opened!=0||h.claimed!=0||h.topTaskState.owner()!=null||h.topTaskState.busy())throw new AssertionError("direction change admitted/opened upper task");
   var t=h.topTaskState.request(a,1,true,false,true,true);h.topTaskState.commit(t,1);h.topTaskDirection(a,false);
   if(!a.equals(h.topTaskState.owner())||h.topDirections.get(a)!=false)throw new AssertionError("portrait navigation lost explicit owner");
@@ -176,7 +184,7 @@ public class TopDirectionRegression {
   if(h.topDirections.containsKey(foreign))throw new AssertionError("unsupported user recorded");
   h.root=null;h.topTaskDirection(new TopTaskState.Key(9,0,"late"),true);
   if(h.topDirections.size()!=1)throw new AssertionError("detached Host consumed direction callback");
-  System.out.println("Production upper manual-only direction checks=4 passed");
+  System.out.println("Production upper manual-only direction checks=7 passed");
  }
 }'''
 p=out/'io/github/zerohomers0/onesteplite/TopDirectionRegression.java';p.write_text(direction,encoding='utf-8')

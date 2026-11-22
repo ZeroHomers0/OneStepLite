@@ -68,7 +68,8 @@ final class WorkspaceClock extends View {
         super.onDraw(c);
         float d=getResources().getDisplayMetrics().density,font=getResources().getDisplayMetrics().scaledDensity;
         float anchor=startInset>=0?startInset:20*d,cy=getHeight()*.5f;
-        paint.setColor(HyperOsStyle.textPrimary(getContext()));paint.setAlpha(255);
+        paint.setColor(HyperOsStyle.wallpaperTextColor(wallpaper,wallpaperWidth,wallpaperHeight,
+                getLeft(),getTop(),getWidth(),getHeight(),HyperOsStyle.textPrimary(getContext())));paint.setAlpha(255);
         paint.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
         paint.setTextSize(Math.min(46*font,getHeight()*.84f));
         float advance=paint.measureText(time);

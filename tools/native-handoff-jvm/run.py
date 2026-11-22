@@ -67,7 +67,7 @@ public class NativeHandoffRegression {
  static class Slot {Object controller;String pkg="com.android.settings";}
  static class Promotion {boolean handoffAttempted,cancelled,candidateRecovery,background,handoffComplete,liveMainReveal,restoreMainOpacityAfterHandoff;
   Slot slot=new Slot();int taskId=88;Object token,liveRevealSurface;}
- static class TopTransition {Object surface;void setLiveSurface(Object s){surface=s;}boolean fadeMode(){return false;}float fadeStartAlpha(){return 0f;}}
+ static class TopTaskTransition {Object surface;void setLiveSurface(Object s){surface=s;}}
  static class Layout {int mainOffsetX=0,mainOffsetY=622;}
  Layout layout=new Layout();
  float mainScale(){return .5f;}
@@ -86,8 +86,7 @@ public class NativeHandoffRegression {
    if(n.equals("removeListener")){var org=(Organizer)o;org.assigned=org.mTaskListeners.get(-2);SurfaceControl.events.add("fallback");return null;}
    return XposedHelpers.callMethod(o,n,args);
   }}
- static class TopTaskReturnPolicy {static final float CENTER_START_SCALE=.14f;static float centeredOffset(int size,float scale){return size*(1-scale)/2;}}
- int screenW=1080,screenH=2460;Object transitions=new Object();TopTransition topTransition;
+ int screenW=1080,screenH=2460;Object transitions=new Object();TopTaskTransition topTransition;
  static class Handler {void post(Runnable callback){callback.run();}}
  Handler main=new Handler();
  void restoreRetainedMainOpacityAfterHandoff(Promotion p){
@@ -109,8 +108,8 @@ public class NativeHandoffRegression {
   check(f.p.handoffComplete&&f.c.mTaskToken==null&&f.c.mTaskOrganizer.assigned==f.c.mTaskOrganizer.mTaskListeners.get(-2),"native fullscreen owns same task after cleanup");
   check(SurfaceControl.events.lastIndexOf("attach")>SurfaceControl.events.lastIndexOf("detach"),"final display attachment follows native detach");
   int events=SurfaceControl.events.size();f.run();check(SurfaceControl.events.size()==events&&f.c.vanished==1,"completed handoff cannot detach twice");
-  f=new Fixture();f.p.liveMainReveal=true;f.h.topTransition=new TopTransition();f.run();
-  check(f.a.canonical.layer.parent==f.c.mTaskOrganizer.area.parent&&f.a.canonical.layer.scale==.14f&&f.h.topTransition.surface==f.a.canonical,"live reveal gets attached canonical at center scale");
+  f=new Fixture();f.p.liveMainReveal=true;f.h.topTransition=new TopTaskTransition();f.run();
+  check(f.a.canonical.layer.parent==f.c.mTaskOrganizer.area.parent&&f.a.canonical.layer.scale==1f&&f.h.topTransition.surface==f.a.canonical,"live reveal preserves native identity geometry");
   f=new Fixture();f.p.restoreMainOpacityAfterHandoff=true;f.run();
   check(SurfaceControl.commits.size()==1&&!SurfaceControl.events.contains("restore opacity"),
         "real desktop stays behind the app until the canonical surface transaction commits");

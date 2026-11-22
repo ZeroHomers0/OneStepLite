@@ -5,7 +5,6 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.graphics.Canvas;
 import android.graphics.PixelFormat;
-import android.graphics.Rect;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
@@ -15,48 +14,39 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import de.robv.android.xposed.XposedHelpers;
 
-/** Visual bridge only for main <-> upper task. Native task ownership stays with Host. */
+/** Fades real task surfaces across native ownership changes without changing geometry. */
 final class TopTaskTransition {
     private final FrameLayout host;
     private final WindowManager windows;
     private final WindowManager.LayoutParams params;
     private final Face face;
-    private final int width, height;
     private final BooleanSupplier current;
     private final Runnable handoff;
     private final Consumer<TopTaskTransition> finished;
     private final Consumer<String> log;
-    private Object liveSurface;
-    private View collectionView;
-    private BooleanSupplier collectionSourceCurrent;
-    private float collectionPivotX, collectionPivotY;
-    private float collectionScaleX, collectionScaleY;
-    private float collectionAlpha=1f;
-    private float collectionFrameScale=-1f;
-    private boolean fade;
-    private boolean fadeRevealed;
+    private volatile Object liveSurface;
+    private Object outgoingSurface;
+    private BooleanSupplier sourceCurrent, outgoingCurrent;
+    private View destination;
+    private View companion;
+    private float destinationAlpha;
     private Runnable nativeRestore;
-    private boolean liveSurfaceAtEnd;
     private ValueAnimator animator;
-    private boolean attached, closed, firstDraw, collapsed, revealing;
-    private boolean collectionPrepared, collectionStarted;
+    private boolean attached, firstDraw, prepared, started, handedOff, revealing, admitted;
+    private volatile boolean closed;
     private final Runnable timeout=this::close;
     private final View.OnAttachStateChangeListener attachment=new View.OnAttachStateChangeListener() {
         @Override public void onViewAttachedToWindow(View view) {}
         @Override public void onViewDetachedFromWindow(View view) {close();}
     };
 
-    TopTaskTransition(FrameLayout host,int width,int height,
-            BooleanSupplier current,Runnable handoff,
+    TopTaskTransition(FrameLayout host,int width,int height,BooleanSupplier current,Runnable handoff,
             Consumer<TopTaskTransition> finished,Consumer<String> log) throws Throwable {
-        this.host=host;this.width=width;this.height=height;
-        this.current=current;this.handoff=handoff;this.finished=finished;this.log=log;
+        this.host=host;this.current=current;this.handoff=handoff;this.finished=finished;this.log=log;
         face=new Face();
         windows=(WindowManager)host.getContext().getSystemService(android.content.Context.WINDOW_SERVICE);
-        params=new WindowManager.LayoutParams(-1,-1,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        params=new WindowManager.LayoutParams(-1,-1,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,PixelFormat.TRANSLUCENT);
         params.gravity=Gravity.TOP|Gravity.START;
         params.windowAnimations=0;
@@ -72,174 +62,90 @@ final class TopTaskTransition {
         if(closed || attached)return;
         if(!current.getAsBoolean()) {close();return;}
         windows.addView(face,params);attached=true;
-        log.accept("upper live center start");
         host.addOnAttachStateChangeListener(attachment);
-        // A failed/late native handoff must never leave an input-blocking overlay behind.
         host.postDelayed(timeout,5000L);
     }
 
-    void setLiveSurface(Object surface) {
-        liveSurface=surface;
-        // The canonical surface now belongs to the strip, not to the main task it
-        // was collected from. Keeping the source check would fail every later
-        // alpha write once the task's windowing mode changed, leaving the strip
-        // blank until some unrelated refresh showed it again.
-        collectionSourceCurrent=null;
-    }
-
     void collect(Object surface,BooleanSupplier sourceCurrent,View destination) {
-        liveSurface=surface;
-        collectionSourceCurrent=sourceCurrent;
-        collectionView=destination;
-        collectionPivotX=destination.getPivotX();collectionPivotY=destination.getPivotY();
-        collectionScaleX=destination.getScaleX();collectionScaleY=destination.getScaleY();
-        collectionAlpha=destination.getAlpha();
+        liveSurface=surface;this.sourceCurrent=sourceCurrent;this.destination=destination;
+        destinationAlpha=destination.getAlpha();
     }
 
-    /**
-     * Cross-fade instead of moving surfaces: the main window fades out over the
-     * strip's own clock and rail, and the admitted task fades in on top of them.
-     * Only alpha moves. The workspace already sizes each window through its own
-     * view, so writing a matrix here would scale the window a second time.
-     */
-    void fade() {fade=true;}
-
-    /** True while the transition cross-fades instead of zooming. */
-    boolean fadeMode() {return fade;}
-
-    /** The alpha the returning task starts from, so the native handoff can match it. */
-    float fadeStartAlpha() {return 0f;}
-
-    /** True once the admitted task finished fading in over the strip. */
-    boolean fadeRevealed() {return fadeRevealed;}
+    /** Native admission has replaced fullscreen ownership; retire its old predicate. */
+    void setLiveSurface(Object surface) {
+        liveSurface=surface;sourceCurrent=null;admitted=destination!=null;
+        // The Shell callback can arrive after the watchdog retired this bridge.
+        // Its native handoff starts at alpha zero, so release that late surface too.
+        if(closed)writeAlpha(surface,1f);
+    }
 
     void setNativeRestore(Runnable restore) {
-        if(closed)restore.run();
-        else nativeRestore=restore;
+        if(closed)restore.run();else nativeRestore=restore;
     }
 
-    /** The source stays full size until the native background sync is committed. */
     boolean collectionReady() {
-        if(closed || collectionView==null)return false;
+        if(closed || destination==null)return false;
         if(!current.getAsBoolean() || !validLiveSurface()) {close();return false;}
-        collectionPrepared=true;
-        startCollectionIfReady();
-        return true;
+        prepared=true;startCollectionIfReady();return true;
     }
 
     private void startCollectionIfReady() {
-        if(closed || !firstDraw || !collectionPrepared || collectionStarted)return;
-        collectionStarted=true;
+        if(closed || !firstDraw || !prepared || started)return;
+        started=true;
         face.postOnAnimation(()->{
             if(closed)return;
             if(!current.getAsBoolean() || !validLiveSurface()) {close();return;}
-            if(fade) {
-                // The main window fades out in place; the strip's clock and rail stay
-                // visible underneath, so no empty placeholder is ever shown.
-                animate(0f,1f,200L,()->{
-                    applyFadeOut(1f);
-                    log.accept("upper live main faded out; collection handoff");
-                    handoff();
-                });
-                return;
-            }
-            animate(1f,0f,160L,()->{
-                applyCollectionScale(0f);
-                log.accept("upper live main collapsed; collection handoff");
-                handoff();
-            });
+            animate(1f,0f,this::handoff);
         });
-    }
-
-    /** Keep geometry refreshes from exposing the destination before native admission. */
-    void applyCollectionFrame(View destination) {
-        if(!closed && collectionView==destination && collectionFrameScale>=0f)
-            applyCollectionScale(collectionFrameScale);
     }
 
     private void handoff() {
-        if(closed || collapsed)return;
-        collapsed=true;
-        log.accept("upper roll finished; live main reveal handoff");
+        if(closed || handedOff)return;
+        handedOff=true;
         if(!current.getAsBoolean()) {close();return;}
         try {handoff.run();}
-        catch(Throwable error) {log.accept("upper center handoff: "+error);close();}
+        catch(Throwable error) {log.accept("upper handoff: "+error);close();}
     }
 
-    /** Called after the existing adoption/return callback confirms task ownership. */
-    void reveal() {
-        if(closed || !collapsed || revealing)return;
-        revealing=true;
-        if(collectionView!=null) {
-            if(fade) {
-                // The canonical surface is shared: it faded out as the main window
-                // and must fade back in as the strip's task. Animating the view's
-                // alpha would leave the surface itself at zero, so the strip would
-                // stay blank until an unrelated refresh showed it again.
-                animate(0f,1f,200L,()->{
-                    applyFadeIn(1f);
-                    liveSurfaceAtEnd=true;
-                    fadeRevealed=true;
-                    log.accept("upper live task faded in");
-                    close();
-                });
-                return;
-            }
-            // Shell now owns the task matrix; animate only its original SurfaceView parent.
-            animate(0f,1f,180L,()->{
-                // The task now belongs to the strip; the old main surface must not
-                // be moved again by close().
-                liveSurfaceAtEnd=true;
-                log.accept("upper live collection expanded");
-                close();
-            });
-            return;
-        }
-        if(!validLiveSurface()) {
-            log.accept("upper live main surface unavailable; skip center animation");
-            close();return;
-        }
-        animate(0f,1f,fade?200L:180L,()->{
-            // A fade only moves alpha; the zoom path must also restore the identity
-            // matrix, or the returning window stays shrunk around the display centre.
-            if(fade)applyFadeIn(1f);
-            else applyLiveScale(1f);
-            fadeRevealed=fade;
-            log.accept(fade?"upper live main faded in":"upper live main surface expanded");
-            close();
-        });
-    }
-
-    private void animate(float from,float to,long duration,Runnable end) {
+    /** The outgoing strip shares the bridge's scene guard and cancellation. */
+    void fadeOut(Object surface,BooleanSupplier sourceCurrent,Runnable after) {
         if(closed)return;
-        ValueAnimator next=ValueAnimator.ofFloat(from,to);
-        animator=next;
-        next.setDuration(duration);
+        outgoingSurface=surface;outgoingCurrent=sourceCurrent;
+        liveSurface=surface;this.sourceCurrent=sourceCurrent;
+        animate(1f,0f,after);
+    }
+
+    /** The exit plate follows the outgoing frame and is hidden before native return. */
+    void followOpacity(View view) {companion=view;}
+
+    boolean ownsTopOpacity() {return !closed && (admitted && revealing || outgoingSurface!=null && !revealing);}
+
+    /** Keep the collected canonical task transparent while native admission is pending. */
+    boolean ownsTaskOpacity() {return !closed && destination!=null && handedOff;}
+
+    void reveal() {
+        if(closed || !handedOff || revealing)return;
+        revealing=true;
+        if(destination!=null)destination.setAlpha(1f);
+        if(!validLiveSurface()) {close();return;}
+        animate(0f,1f,this::close);
+    }
+
+    private void animate(float from,float to,Runnable end) {
+        if(closed)return;
+        ValueAnimator next=ValueAnimator.ofFloat(from,to);animator=next;
+        next.setDuration(200L);
         next.setInterpolator(new AccelerateDecelerateInterpolator());
         next.addUpdateListener(value->{
-            if(!current.getAsBoolean()) {close();return;}
-            float fraction=(Float)value.getAnimatedValue();
-            if(fade) {
-                // Fade drives the real main surface out; the reveal fades the
-                // admitted task, or the returning window, back in.
-                boolean ok=revealing?applyFadeIn(fraction):applyFadeOut(fraction);
-                if(!ok) {
-                    log.accept("upper fade surface lost; restoring full frame");
-                    close();return;
-                }
-            } else if(collectionView!=null && revealing) {
-                // Zero until admission, then start moving immediately. A .14 hold
-                // exposed a miniature task during the asynchronous native handoff.
-                applyCollectionScale(fraction);
-            } else if(!applyLiveScale(TopTaskReturnPolicy.revealScale(fraction))) {
-                    log.accept("upper live main surface transform failed; restoring full frame");
-                close();return;
-            }
-            face.invalidate();
+            if(closed || animator!=next)return;
+            if(!current.getAsBoolean() || !validLiveSurface()
+                    || !writeAlpha(liveSurface,(Float)value.getAnimatedValue())) {close();return;}
+            if(companion!=null && !revealing)companion.setAlpha((Float)value.getAnimatedValue());
         });
         next.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
                 if(closed || animator!=animation)return;
+                if(companion!=null && !revealing && to==0f)companion.setVisibility(View.INVISIBLE);
                 animator=null;end.run();
             }
         });
@@ -249,29 +155,18 @@ final class TopTaskTransition {
     void close() {
         if(closed)return;
         closed=true;
-        if(!liveSurfaceAtEnd) {
-            if(fade)applyFadeOut(0f);
-            else applyLiveScale(1f);
-        } else if(fade) {
-            // The fade left the surface at zero alpha because the same canonical
-            // surface now belongs to the strip. Hand it back fully opaque, or the
-            // strip stays blank until some unrelated refresh shows it again.
-            applyFadeIn(1f);
-        }
-        if(collectionView!=null) {
-            collectionView.setPivotX(collectionPivotX);collectionView.setPivotY(collectionPivotY);
-            collectionView.setScaleX(collectionScaleX);collectionView.setScaleY(collectionScaleY);
-            // The captured alpha was taken before admission, when the destination was
-            // still hidden. Restoring it after a fade would blank the task that just
-            // faded in, so a completed fade leaves the destination fully visible.
-            collectionView.setAlpha(fadeRevealed?1f:collectionAlpha);
-        }
-
-        Runnable restore=nativeRestore;nativeRestore=null;
-        if(restore!=null)try {restore.run();}
-        catch(Throwable error) {log.accept("upper live main state restore: "+error);}
         ValueAnimator old=animator;animator=null;
         if(old!=null)old.cancel();
+        if(validLiveSurface())writeAlpha(liveSurface,1f);
+        if(outgoingSurface!=null && outgoingCurrent!=null && outgoingCurrent.getAsBoolean())
+            writeAlpha(outgoingSurface,1f);
+        if(destination!=null)destination.setAlpha(admitted?1f:destinationAlpha);
+        if(companion!=null && outgoingCurrent!=null && outgoingCurrent.getAsBoolean()) {
+            companion.setAlpha(1f);companion.setVisibility(View.VISIBLE);
+        }
+        Runnable restore=nativeRestore;nativeRestore=null;
+        if(restore!=null)try {restore.run();}
+        catch(Throwable error) {log.accept("upper native restore: "+error);}
         host.removeCallbacks(timeout);host.removeOnAttachStateChangeListener(attachment);
         if(attached) {
             face.setVisibility(View.GONE);
@@ -284,102 +179,20 @@ final class TopTaskTransition {
 
     private boolean validLiveSurface() {
         try {
-            return (collectionSourceCurrent==null || collectionSourceCurrent.getAsBoolean())
-                    && liveSurface!=null && Boolean.TRUE.equals(XposedHelpers.callMethod(liveSurface,"isValid"));
+            return (sourceCurrent==null || sourceCurrent.getAsBoolean()) && liveSurface!=null
+                    && Boolean.TRUE.equals(XposedHelpers.callMethod(liveSurface,"isValid"));
         } catch(Throwable ignored) {return false;}
     }
 
-    private void applyCollectionScale(float scale) {
-        collectionFrameScale=scale;
-        if(fade) {
-            // A fade drives the shared surface alpha; touching the view alpha too
-            // would fade the task twice and leave it invisible.
-            return;
-        }
-        collectionView.setPivotX(collectionView.getWidth()*.5f);
-        collectionView.setPivotY(collectionView.getHeight()*.5f);
-        collectionView.setScaleX(scale);collectionView.setScaleY(scale);
-    }
-
-    /**
-     * The main surface fades out where it stands. Its resting transform is kept
-     * exactly as the workspace set it, so the window never shifts or resizes and
-     * the strip's own clock and rail stay visible underneath.
-     */
-    private boolean applyFadeOut(float fraction) {
-        float f=Math.max(0f,Math.min(1f,fraction));
-        // The destination must stay invisible until native admission confirms it;
-        // a half-faded task peeking out of the strip reads as a glitch. A fade
-        // hides it through the shared surface alpha instead of the view alpha.
-        if(collectionView!=null && !revealing && !fade) {
-            collectionFrameScale=0f;
-            collectionView.setAlpha(0f);
-        }
-        if(!validLiveSurface())return false;
+    private boolean writeAlpha(Object surface,float alpha) {
         Object transaction=null;
         try {
-            transaction=Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
-            XposedHelpers.callMethod(transaction,"setAlpha",liveSurface,1f-f);
-            XposedHelpers.callMethod(transaction,"apply");
-            liveSurfaceAtEnd=f>=1f;
-            return true;
-        } catch(Throwable error) {
-            log.accept("upper fade out: "+error);
-            return false;
-        } finally {
-            if(transaction!=null)try {XposedHelpers.callMethod(transaction,"close");}
-            catch(Throwable ignored) {}
-        }
-    }
-
-    /**
-     * The admitted task, or the returning window, fades in over the strip content.
-     * Only alpha moves, so a landscape task never jumps orientation on the way in.
-     */
-    private boolean applyFadeIn(float fraction) {
-        float f=Math.max(0f,Math.min(1f,fraction));
-        if(fade || collectionView==null) {
-            if(!validLiveSurface())return false;
-            Object transaction=null;
-            try {
-                transaction=Class.forName("android.view.SurfaceControl$Transaction")
-                        .getDeclaredConstructor().newInstance();
-                XposedHelpers.callMethod(transaction,"setAlpha",liveSurface,f);
-                XposedHelpers.callMethod(transaction,"apply");
-                liveSurfaceAtEnd=f>=1f;
-                return true;
-            } catch(Throwable error) {
-                log.accept("upper fade in: "+error);
-                return false;
-            } finally {
-                if(transaction!=null)try {XposedHelpers.callMethod(transaction,"close");}
-                catch(Throwable ignored) {}
-            }
-        }
-        collectionFrameScale=f;
-        collectionView.setAlpha(f);
-        return true;
-    }
-
-    private boolean applyLiveScale(float scale) {
-        if(!validLiveSurface())return false;
-        Object transaction=null;
-        try {
-            transaction=Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
-            float x=TopTaskReturnPolicy.centeredOffset(width,scale);
-            float y=TopTaskReturnPolicy.centeredOffset(height,scale);
-            XposedHelpers.callMethod(transaction,"setPosition",liveSurface,x,y);
-            XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,scale,0f,0f,scale);
-            XposedHelpers.callMethod(transaction,"setWindowCrop",liveSurface,new Rect(0,0,width,height));
-            XposedHelpers.callMethod(transaction,"apply");
-            liveSurfaceAtEnd=scale>=1f;
-            return true;
-        } catch(Throwable error) {
-            log.accept("upper live main surface transaction: "+error);
-            return false;
-        } finally {
+            if(!Boolean.TRUE.equals(XposedHelpers.callMethod(surface,"isValid")))return false;
+            transaction=Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+            XposedHelpers.callMethod(transaction,"setAlpha",surface,alpha);
+            XposedHelpers.callMethod(transaction,"apply");return true;
+        } catch(Throwable error) {log.accept("upper fade: "+error);return false;}
+        finally {
             if(transaction!=null)try {XposedHelpers.callMethod(transaction,"close");}
             catch(Throwable ignored) {}
         }
@@ -389,11 +202,10 @@ final class TopTaskTransition {
         Face() {super(host.getContext());}
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            if(!firstDraw) {
-                firstDraw=true;
-                if(collectionView!=null)startCollectionIfReady();
-                else postOnAnimation(()->{if(!closed)handoff();});
-            }
+            if(firstDraw)return;
+            firstDraw=true;
+            if(destination!=null)startCollectionIfReady();
+            else postOnAnimation(()->{if(!closed)handoff();});
         }
     }
 }

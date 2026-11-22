@@ -28,7 +28,7 @@ files={
   public Transaction setPosition(Object s,float px,float py){x=px;y=py;return this;}
   public Transaction setMatrix(Object s,float dsdx,float dtdx,float dsdy,float dtdy){surface=s;sx=dsdx;sy=dtdy;return this;}
   public Transaction setWindowCrop(Object s,Rect r){crop=r;return this;}
-  public Transaction setAlpha(Object s,float a){alpha=a;return this;}
+  public Transaction setAlpha(Object s,float a){surface=s;alpha=a;return this;}
   public void apply(){applies++;}public void close(){closes++;}
  }}''',
 'android/view/View.java':'''package android.view;import java.util.*;import android.content.Context;import android.graphics.Canvas;
@@ -123,87 +123,60 @@ public class TopTransitionRegression {
   check(handoffs==1&&SwapPreview.captures==0&&Canvas.colorDraws==0&&Canvas.bitmapDraws==0,
    "live center handoff draws neither wallpaper nor a bitmap snapshot");
   Object liveSurface=new Object();run.setLiveSurface(liveSurface);run.reveal();run.reveal();
-  check(ValueAnimator.all.size()==1&&android.view.SurfaceControl.Transaction.last.sx==.14f,
-   "live app starts at the center scale after native ownership is confirmed");
-  var liveExpand=ValueAnimator.all.get(0);liveExpand.step(.5f);
-  var tx=android.view.SurfaceControl.Transaction.last;float middle=.14f+.86f*.5f;
-  check(Math.abs(tx.sx-middle)<.001f&&Math.abs(tx.x-1080f*(1f-middle)/2f)<.01f
-   &&Math.abs(tx.y-2460f*(1f-middle)/2f)<.01f&&tx.applies==1,
-   "live task leash expands from the display center through SurfaceControl");
-  Canvas liveCanvas=new Canvas();ctx.windows.view.draw(liveCanvas);
-  check(Canvas.colorDraws==0&&Canvas.bitmapDraws==0,"live app remains the only rendered image during expansion");
-  liveExpand.end();tx=android.view.SurfaceControl.Transaction.last;
-  check(tx.sx==1f&&tx.x==0f&&tx.y==0f&&ctx.windows.removes==1&&finishes==1,
-   "completed live reveal restores identity transform and removes the touch blocker");
-  reset();run=new TopTaskTransition(host,1080,2460,valid::get,
-   ()->handoffs++,v->finishes++,s->{});run.start();ctx.windows.view.draw(new Canvas());View.drain();
-  run.setLiveSurface(new Object());run.reveal();var cancelExpand=ValueAnimator.all.get(0);cancelExpand.step(.4f);run.close();
-  check(android.view.SurfaceControl.Transaction.last.sx==1f&&ctx.windows.removes==1&&finishes==1,
-   "cancelled live reveal restores the application surface before retiring the overlay");
-  reset();run=new TopTaskTransition(host,1080,2460,valid::get,
-   ()->handoffs++,v->finishes++,s->{});run.start();ctx.windows.view.draw(new Canvas());View.drain();run.reveal();
-  check(ctx.windows.removes==1&&finishes==1&&ValueAnimator.all.isEmpty(),"missing live surface skips animation and releases the blocker");
-  for(int reason=0;reason<4;reason++) {
-   reset();run=new TopTaskTransition(host,1080,2460,valid::get,
-    ()->handoffs++,v->finishes++,s->{});
-   run.setNativeRestore(()->restores++);run.start();ctx.windows.view.draw(new Canvas());View.drain();
-   if(reason==0) {run.setLiveSurface(new Object());run.reveal();ValueAnimator.all.get(0).end();}
-   else if(reason==1) {run.setLiveSurface(new Object());run.reveal();ValueAnimator.all.get(0).step(.4f);run.close();}
-   else if(reason==2) View.timers.get(0).run();
-   else run.reveal();
-   run.close();
-   check(restores==1&&finishes==1,"native visibility policy restored exactly once on completion/cancel/timeout/no-surface "+reason);
-   check(Canvas.colorDraws==0&&Canvas.bitmapDraws==0&&SwapPreview.captures==0,"no captured or wallpaper layer on live return "+reason);
-  }
-  reset();AtomicBoolean sourceCurrent=new AtomicBoolean(true);View destination=new View(ctx);
-  Object source=new Object();run=make(()->handoffs++);run.collect(source,sourceCurrent::get,destination);
-  handoff(run);
-  check(ValueAnimator.all.isEmpty()&&android.view.SurfaceControl.Transaction.last==null,
-   "first overlay draw cannot shrink the source before native Home readiness");
-  run.collectionReady();run.collectionReady();View.drain();
-  check(handoffs==0&&ValueAnimator.all.size()==1,"collection waits for actual main task collapse");
-  var shrink=ValueAnimator.all.get(0);shrink.step(.5f);
-  tx=android.view.SurfaceControl.Transaction.last;
-  check(tx.surface==source&&Math.abs(tx.sx-.57f)<.001f&&destination.scaleX==1,
-   "collection halfway moves only the canonical fullscreen task");
-  shrink.end();tx=android.view.SurfaceControl.Transaction.last;
-  check(handoffs==1&&Math.abs(tx.sx-.14f)<.001f&&destination.scaleX==0&&destination.scaleY==0,
-   "native admission wait never exposes a miniature destination task");
-  sourceCurrent.set(false);run.reveal();
-  check(ValueAnimator.all.size()==2&&destination.pivotX==540&&destination.pivotY==311,
-   "confirmed target restores its expansion around the actual TaskView center");
-  var expand=ValueAnimator.all.get(1);
-  check(destination.scaleX==0&&destination.scaleY==0,"destination remains zero size through the first expansion frame");
-  expand.step(.5f);
-  check(Math.abs(destination.scaleX-.5f)<.001f&&Math.abs(destination.scaleY-.5f)<.001f
-   &&android.view.SurfaceControl.Transaction.last==tx,"target animation never overwrites the new native task matrix");
-  expand.end();
-  check(destination.scaleX==1&&destination.scaleY==1&&destination.pivotX==0&&destination.pivotY==0
-   &&finishes==1&&ctx.windows.removes==1,"collection completes with original view geometry and no input blocker");
-  check(SwapPreview.captures==0&&Canvas.colorDraws==0&&Canvas.bitmapDraws==0,"collection renders only actual app surfaces");
+  check(ValueAnimator.all.size()==1&&android.view.SurfaceControl.Transaction.last.alpha==0f,"native return starts fully transparent");
+  var expand=ValueAnimator.all.get(0);expand.step(.5f);
+  var tx=android.view.SurfaceControl.Transaction.last;
+  check(tx.alpha==.5f&&tx.sx==0f&&tx.crop==null,"return changes alpha only, preserving native task geometry");
+  expand.end();check(android.view.SurfaceControl.Transaction.last.alpha==1f&&finishes==1&&ctx.windows.removes==1,"return completes opaque and frees its input blocker");
+  run.setLiveSurface(new Object());check(android.view.SurfaceControl.Transaction.last.alpha==1f,"late native handoff cannot strand a retired bridge at alpha zero");
   for(int reason=0;reason<5;reason++) {
-   reset();sourceCurrent=new AtomicBoolean(true);destination=new View(ctx);source=new Object();
-   run=make(()->handoffs++);run.collect(source,sourceCurrent::get,destination);run.collectionReady();handoff(run);
-   shrink=ValueAnimator.all.get(0);shrink.step(.4f);
+   reset();AtomicBoolean sourceCurrent=new AtomicBoolean(true);View destination=new View(ctx);destination.alpha=0f;
+   Object source=new Object();run=make(()->handoffs++);run.collect(source,sourceCurrent::get,destination);handoff(run);
+   check(ValueAnimator.all.isEmpty(),"source waits for native background preparation");
+   run.collectionReady();View.drain();var fade=ValueAnimator.all.get(0);fade.step(.4f);
+   check(android.view.SurfaceControl.Transaction.last.alpha==.6f,"source fades at its existing geometry");
    if(reason==0)run.close();
    else if(reason==1)View.timers.get(0).run();
-   else if(reason==2){valid.set(false);shrink.step(.5f);}
-   else if(reason==3){sourceCurrent.set(false);tx=android.view.SurfaceControl.Transaction.last;shrink.step(.5f);
-    check(android.view.SurfaceControl.Transaction.last==tx,"changed source role is never reset through its new owner");}
-   else {shrink.end();sourceCurrent.set(false);tx=android.view.SurfaceControl.Transaction.last;run.reveal();ValueAnimator.all.get(1).step(.4f);run.close();
-    check(android.view.SurfaceControl.Transaction.last==tx,"cancelled target keeps the native fitted matrix");}
-   check(finishes==1&&destination.scaleX==1&&destination.scaleY==1&&ctx.windows.removes==1,
-    "collection cancel/timeout/scene-loss/role-change/target-cancel restores original view "+reason);
-   if(reason<3)check(android.view.SurfaceControl.Transaction.last.sx==1&&handoffs==0,
-    "interrupted source collapse restores fullscreen before any native transfer "+reason);
+   else if(reason==2){valid.set(false);fade.step(.5f);}
+   else if(reason==3){sourceCurrent.set(false);fade.step(.5f);}
+   else {
+    fade.end();check(handoffs==1,"admission starts once after source faded out");
+    sourceCurrent.set(false);run.setLiveSurface(new Object());destination.alpha=1f;run.reveal();
+    ValueAnimator.all.get(1).step(.4f);run.close();
+    check(destination.alpha==1f&&android.view.SurfaceControl.Transaction.last.alpha==1f,"admitted target survives an interrupted reveal");
+   }
+   tx=android.view.SurfaceControl.Transaction.last;fade.end();
+   check(finishes==1&&ctx.windows.removes==1,"collection cancellation releases once "+reason);
+   check(android.view.SurfaceControl.Transaction.last==tx,"retired source animator never writes another frame");
+   if(reason<3)check(tx.alpha==1f&&handoffs==0,"unadmitted source is restored without native transfer");
+  }
+  reset();View destination=new View(ctx);destination.alpha=0f;run=make(()->handoffs++);
+  run.collect(new Object(),()->true,destination);run.collectionReady();handoff(run);ValueAnimator.all.get(0).end();
+  run.setLiveSurface(new Object());run.reveal();ValueAnimator.all.get(1).step(.5f);
+  check(run.ownsTopOpacity()&&destination.alpha==1f&&android.view.SurfaceControl.Transaction.last.alpha==.5f,"admitted child owns the fade under an opaque destination");
+  ValueAnimator.all.get(1).end();check(destination.alpha==1f&&finishes==1,"completed admission stays visible");
+  for(int reason=0;reason<4;reason++) {
+   reset();AtomicBoolean bound=new AtomicBoolean(true);run=make(()->handoffs++);handoff(run);
+   run.fadeOut(new Object(),bound::get,()->restores++);var outgoing=ValueAnimator.all.get(0);outgoing.step(.4f);
+   check(android.view.SurfaceControl.Transaction.last.alpha==.6f&&run.ownsTopOpacity(),"outgoing strip uses the managed fade");
+   if(reason==0)run.close();else if(reason==1)View.timers.get(0).run();
+   else if(reason==2){valid.set(false);outgoing.step(.5f);}else{bound.set(false);outgoing.step(.5f);}
+   tx=android.view.SurfaceControl.Transaction.last;outgoing.end();
+   check(restores==0&&finishes==1&&ctx.windows.removes==1,"cancelled outgoing fade never returns a native task "+reason);
+   check(android.view.SurfaceControl.Transaction.last==tx,"retired outgoing animator never writes again");
+   if(reason<3)check(tx.alpha==1f,"interrupted strip is opaque again");
   }
   for(int reason=0;reason<3;reason++) {
    reset();run=make(()->handoffs++);run.collect(new Object(),()->true,new View(ctx));handoff(run);
    if(reason==0)run.close();else if(reason==1)View.timers.get(0).run();else valid.set(false);
-   check(!run.collectionReady(),"late/invalid readiness cannot revive a cancelled waiting collection "+reason);
-   View.drain();check(ValueAnimator.all.isEmpty()&&handoffs==0&&finishes==1,
-    "waiting cancellation/timeout/scene loss does not start animation or claim a task "+reason);
+   check(!run.collectionReady(),"late readiness cannot revive a cancelled collection");
+   View.drain();check(ValueAnimator.all.isEmpty()&&handoffs==0&&finishes==1,"waiting cancellation never claims a task");
   }
+  reset();View exit=new View(ctx);run=make(()->handoffs++);handoff(run);run.followOpacity(exit);
+  run.fadeOut(new Object(),()->true,()->{check(exit.visibility==View.INVISIBLE&&exit.alpha==0f,"exit plate disappears before native handback");restores++;});
+  ValueAnimator.all.get(0).step(.5f);check(exit.alpha==.5f,"exit plate shares the outgoing fade frame");
+  ValueAnimator.all.get(0).end();check(restores==1,"native return starts only after the exit plate is hidden");
+  run.close();check(exit.alpha==1f&&exit.visibility==View.VISIBLE,"cancelled native return restores the retained exit control");
   System.out.println("Production upper center transition checks="+checks+" passed (visual timing still needs device)");
  }
 }'''
@@ -237,7 +210,7 @@ public class WorkspaceHost {
  java.util.List<Object> appliedOrder=java.util.List.of();
  static class Main {boolean post(Runnable r){r.run();return true;}}Main main=new Main();
  boolean executeOnShell(Runnable r){r.run();return true;}
- static class Slot {View view;Object controller;boolean occupied;}
+ static class Slot {View view;Object controller;boolean occupied,promoting;}
  static class Task {int id=42;Object token="token";boolean matches(Object o){return o instanceof Info&&((Info)o).taskId==id&&token.equals(((Info)o).token);}}
  static class TopCandidate {Task task=new Task();TopTaskState.Key key=new TopTaskState.Key(42,0,"token");}
  public static class Info {public int taskId=42,userId,mode=1;public Object token="token";boolean visible=true;}
@@ -248,6 +221,8 @@ public class WorkspaceHost {
  WorkspaceHost(){Controller c=new Controller();Organizer o=new Organizer();o.mTasks.put(42,new Entry());c.mTaskOrganizer=o;
   slots[4].controller=c;slots[4].view=new View(ctx);}
  Entry entry(){return ((Organizer)((Controller)slots[4].controller).mTaskOrganizer).mTasks.get(42);}
+ Object getSurfaceField(Object controller,String name){return entry().leash;}
+ void updateTopBarState(){}void settleTopFace(boolean task){topFace=task;}
  Object rootInfo(Task task){return entry().info;}
  Object homeForCollection(Task task)throws Exception{homeRequests++;if(failHome)throw new Exception("Home unavailable");return "home";}
  boolean applyWct(String what,Object wct){opacityWrites++;if(failOpacity)return false;
@@ -266,10 +241,10 @@ public class WorkspaceHost {
 for signature in ('    private boolean startTopCollectionTransition(',
                   '    private boolean topCollectionSourceCurrent(',
                   '    private boolean setTopCollectionTranslucent(',
-                  '    private Object topCollectionTransaction('):
+                  '    private Object topCollectionTransaction(',
+                  '    private void revealTopTaskTransition('):
     if signature in host:host_body+=member(signature)
-for signature in ('    private boolean startTopTaskTransition(boolean intoTop, Runnable transfer)',
-                  '    private boolean startTopTaskTransition(boolean intoTop, boolean liveMainReveal, Runnable transfer)'):
+for signature in ('    private boolean startTopTaskTransition(boolean intoTop, boolean liveMainReveal, Runnable transfer)',):
     host_body+=member(signature)
 signature='    private boolean startTopTaskTransition(boolean intoTop, boolean liveMainReveal, Runnable transfer,'
 if signature in host:host_body+=member(signature)
@@ -286,7 +261,7 @@ host_body+='''public static void main(String[]args){
  check(android.animation.ValueAnimator.all.size()==1&&h.claimed==0,"production admission waits for source collapse");
  android.animation.ValueAnimator.all.get(0).end();check(h.claimed==1,"production admission claims exactly once after collapse");
  check(android.view.SurfaceControl.Transaction.last.alpha==0,"production handoff keeps the shared surface invisible while native admission waits");
- h.entry().info.mode=6;h.topTransition.setLiveSurface(h.entry().leash);h.topTransition.reveal();
+ h.entry().info.mode=6;h.slots[4].occupied=true;h.revealTopTaskTransition();
  check(android.animation.ValueAnimator.all.size()==2,"native admission restores the real destination expansion");
  android.animation.ValueAnimator.all.get(1).step(.5f);
  check(android.view.SurfaceControl.Transaction.last.alpha==.5f,"production reveal keeps the shared surface in step with the fade");

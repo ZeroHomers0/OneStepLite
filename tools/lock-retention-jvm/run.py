@@ -95,6 +95,7 @@ public class WorkspaceHost {
  WorkspaceHost(java.io.File f){ctx=new Context(f);for(int i=0;i<SLOT_COUNT;i++){slots[i]=new Slot();slots[i].taskId=200+i;}sInstance=this;}
   void cancelMainSideSwitch(){} static void log(String s){}String describeTasks(){return "same live tasks";}
  void closeSwapPreview(){}void closeCellMovePreview(){}void publishDesktopSideTasks(){}void hideIme(){}
+ static class VideoPane {void releaseForPrivacy(){}}VideoPane videoPane;void releaseTopExitWindow(){}
  void suspendSession(String reason){suspends++;scene=SUSPENDED;}
  void resumeSession(){}void updateTopBarState(){}void updateTopExitWindow(){}void reapplyScale(Slot s){repairs++;}
  void awaitRetainedWorkspaceFrame(long epoch){confirmRetainedResume(epoch,0);}

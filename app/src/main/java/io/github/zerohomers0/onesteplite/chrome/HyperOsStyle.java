@@ -55,6 +55,31 @@ final class HyperOsStyle {
         return dark(context) ? DARK_TEXT_SECONDARY : LIGHT_TEXT_SECONDARY;
     }
 
+    /** Choose the higher-contrast black or white ink from the wallpaper under a view. */
+    static int wallpaperTextColor(Bitmap bitmap, int screenWidth, int screenHeight,
+            int left, int top, int width, int height, int fallback) {
+        if (bitmap == null || bitmap.isRecycled() || screenWidth <= 0 || screenHeight <= 0
+                || width <= 0 || height <= 0) return fallback;
+        try {
+            double luminance = 0;
+            for (int row = 0; row < 4; row++) for (int column = 0; column < 8; column++) {
+                int x = Math.max(0, Math.min(bitmap.getWidth() - 1,
+                        (int) ((left + width * (column + .5) / 8) * bitmap.getWidth() / screenWidth)));
+                int y = Math.max(0, Math.min(bitmap.getHeight() - 1,
+                        (int) ((top + height * (row + .5) / 4) * bitmap.getHeight() / screenHeight)));
+                int pixel = bitmap.getPixel(x, y);
+                double red = ((pixel >> 16) & 255) / 255.0;
+                double green = ((pixel >> 8) & 255) / 255.0;
+                double blue = (pixel & 255) / 255.0;
+                red = red <= .04045 ? red / 12.92 : Math.pow((red + .055) / 1.055, 2.4);
+                green = green <= .04045 ? green / 12.92 : Math.pow((green + .055) / 1.055, 2.4);
+                blue = blue <= .04045 ? blue / 12.92 : Math.pow((blue + .055) / 1.055, 2.4);
+                luminance += .2126 * red + .7152 * green + .0722 * blue;
+            }
+            return luminance / 32 < .179 ? 0xffffffff : 0xff000000;
+        } catch (RuntimeException unavailable) { return fallback; }
+    }
+
     static int page(Context context) {
         if (dark(context)) {
             return DARK_PAGE;
