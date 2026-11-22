@@ -39,7 +39,7 @@ public class ZoomEntryRegression {
  }
  void beginFixedMainRotationLocked(Object dc){sFullscreenRotationActive=true;callbacks++;if(!sZoomed)nativeSuspensions++;if(failRotation)throw new IllegalStateException("orientation failure");}
  void endFixedMainRotationLocked(Object dc){sFullscreenRotationActive=false;}
- void placeHostBelowNativeFreeforms(Object d,Object tx){}void restoreExitedMagnificationLocked(ZoomTarget t){}void applyGestureSurfacesLocked(ZoomTarget t,float s,float y,float x){}void log(String s){}
+ void layerWorkspaceWithNativeFreeforms(Object d,Object tx){}void restoreExitedMagnificationLocked(ZoomTarget t){}void applyGestureSurfacesLocked(ZoomTarget t,float s,float y,float x){}void log(String s){}
  ACTUAL
  static Object sWmsContext=new Object();
  static class EntryGuard {static boolean unlocked=true;static boolean canOpen(Object c){return unlocked;}}

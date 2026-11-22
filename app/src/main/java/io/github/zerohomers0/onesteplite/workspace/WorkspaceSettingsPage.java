@@ -315,6 +315,12 @@ final class WorkspaceSettingsPage extends FrameLayout {
             else persist(WorkspaceSettingsStore.read(activity).withEntryGesture(mode));
             show(GESTURE,false);
         });
+        EntryGestureDiagram diagram=new EntryGestureDiagram(activity,mode,secondary,
+                dark?0xff353840:0xffe9e9e9,BLUE);
+        diagram.setAlpha(enabled?1f:.38f);
+        LinearLayout.LayoutParams preview=new LinearLayout.LayoutParams(-1,dp(170));
+        preview.leftMargin=preview.rightMargin=dp(12);preview.bottomMargin=dp(12);
+        group.addView(diagram,preview);
     }
 
     @Override protected void onAttachedToWindow() {

@@ -706,7 +706,7 @@ public final class WorkspaceHost {
         WorkspaceHost h = sInstance;
         if (h != null) h.main.post(() -> {
             if (h.retainedForLock) return;
-            if ("fs_gesture".equals(reason)) {
+            if ("fs_gesture".equals(reason) || "gestureNav".equals(reason)) {
                 h.emptyMainGesture.begin(h.sceneEpoch, SystemClock.uptimeMillis(),
                         h.emptyMainHomeFocused());
                 return;
@@ -4227,7 +4227,11 @@ public final class WorkspaceHost {
     private void revealTopTaskTransition() {
         final TopTaskTransition bridge=topTransition;
         final Slot upper=slots[SLOT_TOP];
-        if(bridge==null || !upper.occupied || upper.promoting)return;
+        if(bridge==null)return;
+        // Return has already cleared TOP and installed the fullscreen surface on
+        // this bridge. The incoming-TOP draw gate must not stall that reveal.
+        if(!upper.occupied) {bridge.reveal();return;}
+        if(upper.promoting)return;
         final Object token=upper.taskToken;
         final long binding=upper.taskEpoch,epoch=sceneEpoch;
         TopTaskFrame.Target target=new TopTaskFrame.Target(upper.controller,transitions,token,upper.taskId,

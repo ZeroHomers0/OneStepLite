@@ -85,6 +85,7 @@ final class QuickAppPicker {
         private ListView list;
         private BaseAdapter adapter;
         private PinnedAppEditor editor;
+        private ModalIslandLease island;
 
         PickerSession(Context base,List<QuickApp> available,Bitmap wallpaper,int screenWidth,int screenHeight,
                 int user,LinkedHashSet<String> chosen,Runnable changed) {
@@ -255,6 +256,7 @@ final class QuickAppPicker {
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
                     | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
             next.setOnDismissListener(ignored -> {
+                if(island!=null) {island.close();island=null;}
                 if (dialog == next) { dialog = null; content = null; }
                 panel.animate().cancel();
             });
@@ -262,6 +264,7 @@ final class QuickAppPicker {
                 next.show();
                 dialog = next;
                 content = panel;
+                island=new ModalIslandLease(panel);island.start();
                 window.setLayout(Math.min(dp(context, 420), base.getResources().getDisplayMetrics().widthPixels
                         - dp(context, 32)), -2);
                 panel.setAlpha(0f);

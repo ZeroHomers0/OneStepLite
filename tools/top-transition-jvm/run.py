@@ -311,6 +311,11 @@ host_body+='''public static void main(String[]args){
  ValueAnimatorReset();h=new WorkspaceHost();h.captureMainIntoTop();h.topTransition.close();h.commitPreparation();View.drain();
  check(h.topTransition==null&&!h.translucent&&h.claimed==0&&android.animation.ValueAnimator.all.isEmpty(),
   "late native completion restores opacity after cancellation without reviving the bridge");
+ ValueAnimatorReset();h=new WorkspaceHost();h.startTopTaskTransition(false,true,()->{});
+ h.ctx.windows.view.draw(new android.graphics.Canvas());View.drain();
+ h.topTransition.setLiveSurface(new Object());h.slots[4].occupied=false;h.revealTopTaskTransition();
+ check(android.animation.ValueAnimator.all.size()==1,"cleared TOP returns immediately through fullscreen reveal, not the admission gate watchdog");
+ android.animation.ValueAnimator.all.get(0).end();check(h.topTransition==null,"fullscreen return releases the bridge without waiting five seconds");
  System.out.println("Production Host collection entry checks="+checks+" passed");
  }
  static void ValueAnimatorReset(){android.animation.ValueAnimator.all.clear();View.frames.clear();View.timers.clear();SyncPreparation.wct=null;}

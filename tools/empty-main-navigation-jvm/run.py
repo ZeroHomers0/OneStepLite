@@ -78,6 +78,10 @@ public class EmptyMainRegression {
   h=fresh();h.retainedForLock=true;send("fs_gesture");send("homekey");check(h.suspends==0&&q.shows==1,"lock-retained workspace untouched");
   h=fresh();q.fail=true;send("fs_gesture");send("homekey");check(h.suspends==0&&q.shows==1,"failed overview does not falsely exit empty workspace");q.fail=false;
   h=fresh();send("fs_gesture");SystemClock.now=99;send("homekey");check(h.suspends==1&&q.shows==1,"negative clock delta rejects stale gesture");
+  h=fresh();send("gestureNav");send("homekey");
+  check(h.suspends==0&&q.shows==2,"OEM gestureNav alias retains empty Home workspace and requests overview");
+  h=fresh();h.currentMain=new Object();send("gestureNav");h.currentMain=null;send("homekey");
+  check(h.suspends==1&&q.shows==2,"OEM gesture alias retains app-origin Home exit policy");
   System.out.println("actual empty-main navigation/overview checks="+checks+" passed");
  }
 }'''

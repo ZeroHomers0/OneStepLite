@@ -48,7 +48,7 @@ public class ExitSurfaceRegression {
  static void log(String s){}
  // Layer ordering is exercised against the actual bridge in rotation-jvm.
  // Here verify the late-finish callback forwards the current display/transaction.
- static void placeHostBelowNativeFreeforms(Object d,Object t){
+ static void layerWorkspaceWithNativeFreeforms(Object d,Object t){
   if(d!=sDisplayContent||t!=((Display)d).transaction)throw new AssertionError("native layer reconciliation target");
   nativeLayerReconciliations++;
  }

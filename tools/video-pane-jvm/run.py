@@ -53,7 +53,7 @@ files.update({
     'android/view/Gravity.java': 'package android.view;public class Gravity {public static final int TOP=1,START=2,CENTER=4;}',
     'android/view/View.java': '''package android.view;public class View {
         public static final int VISIBLE=0,INVISIBLE=4,GONE=8,IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS=4;
-        public int backgroundColor;public int visibility;public float alpha=1f;public boolean enabled=true,attached=true,clickable;protected android.content.Context context;
+        public float translationZ;public void setTranslationZ(float z){translationZ=z;}public int backgroundColor;public int visibility;public float alpha=1f;public boolean enabled=true,attached=true,clickable;protected android.content.Context context;
         public View(android.content.Context c){context=c;}public android.content.Context getContext(){return context;}
         public android.content.res.Resources getResources(){return context.getResources();}
         public float getAlpha(){return alpha;}public void setAlpha(float f){alpha=f;}public void setVisibility(int v){visibility=v;}
@@ -115,6 +115,7 @@ files.update({
             public static void main(String[]args)throws Exception {
                 Context ctx=new Context();Handler handler=new Handler();boolean[] allowed={true};int[] changes={0};
                 VideoPane pane=new VideoPane(ctx,handler,()->allowed[0],v->changes[0]++);
+                check(pane.translationZ>0f,"entire video carrier remains above the header drawing and input plane");
                 SurfaceView video=(SurfaceView)field(pane,"video");
                 pane.onAttachedToWindow();pane.surfaceCreated(video.getHolder());
                 SurfaceControl surface=(SurfaceControl)field(pane,"carrier");

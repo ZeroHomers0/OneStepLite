@@ -85,10 +85,10 @@ public final class NativeFreeformLayerBridgeTest {
         Task child = new Task(5); child.root=low;
         display.tasks.addAll(List.of(main, side, child, low, high));
         apply(display, transaction);
-        check(host.calls==1 && host.anchor==low.surface && host.layer==-4 && host.force);
-        check(bridge.calls==1 && bridge.anchor==low.surface && bridge.layer==-2);
-        check(mirror.calls==1 && mirror.anchor==low.surface && mirror.layer==-3);
-        check(clipboard.calls==1 && clipboard.anchor==low.surface && clipboard.layer==-1);
+        check(host.calls==1 && host.anchor==high.surface && host.layer==1 && host.force);
+        check(bridge.calls==1 && bridge.anchor==high.surface && bridge.layer==3);
+        check(mirror.calls==1 && mirror.anchor==high.surface && mirror.layer==2);
+        check(clipboard.calls==1 && clipboard.anchor==high.surface && clipboard.layer==4);
         check(host.tx==transaction && bridge.tx==transaction
                 && mirror.tx==transaction && clipboard.tx==transaction);
         check(display.zoomReplays==1 && display.zoomTransaction==transaction);
@@ -106,9 +106,9 @@ public final class NativeFreeformLayerBridgeTest {
         check(host.layer==10 && host.restoredTransactions.contains(finish)
                 && host.restoredTransactions.contains(display.pending));
         check(bridge.anchor==null && mirror.anchor==null && clipboard.anchor==null);
-        check(host.calls==2 && display.zoomReplays==3);
+        check(host.calls==2 && display.zoomReplays==2);
         display.tasks.clear(); display.tasks.add(side); apply(display, transaction);
-        check(host.calls==2 && display.zoomReplays==3);
+        check(host.calls==2 && display.zoomReplays==2);
 
         // A later normal layer assignment replaces the saved order; a retained OEM
         // relative anchor must also be restored, rather than flattened to zero.
@@ -183,7 +183,7 @@ public final class NativeFreeformLayerBridgeTest {
         var field = HostEntry.class.getDeclaredField(name); field.setAccessible(true); field.set(null, value);
     }
     static void apply(Display display, Object tx) throws Exception {
-        Method method = HostEntry.class.getDeclaredMethod("placeHostBelowNativeFreeforms", Object.class, Object.class);
+        Method method = HostEntry.class.getDeclaredMethod("layerWorkspaceWithNativeFreeforms", Object.class, Object.class);
         method.setAccessible(true); method.invoke(null, display, tx);
     }
     static void check(boolean value) { checks++; if (!value) throw new AssertionError(); }

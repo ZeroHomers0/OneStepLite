@@ -54,6 +54,10 @@ final class VideoPane extends FrameLayout implements SurfaceHolder.Callback {
 
     VideoPane(Context context,Handler handler,BooleanSupplier allowed,Consumer<Boolean> changed) {
         super(context);this.handler=handler;this.allowed=allowed;this.changed=changed;
+        // SurfaceView's native Z order does not order this View's background or
+        // input region. Keep the whole carrier above the header, even when the
+        // header calls bringToFront during layout or workspace transitions.
+        setTranslationZ(1f);
         identity=PendingIntent.getBroadcast(context,9301,new Intent(VideoDock.HOST).setPackage(context.getPackageName()),
                 PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         video=new SurfaceView(context);video.setZOrderOnTop(true);

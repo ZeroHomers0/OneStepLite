@@ -1168,7 +1168,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                             // A closing native task can stop normal child-layer assignment.
                             // Detach our windows before its leash becomes hidden, and include
                             // the same restoration in the transition's finish transaction.
-                            placeHostBelowNativeFreeforms(target.display, p.args[0]);
+                            layerWorkspaceWithNativeFreeforms(target.display, p.args[0]);
                             sMagnificationFinishReplays.put(p.thisObject, target.display);
                             log("display magnification reasserted in transition finish");
                         }
@@ -1203,7 +1203,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                                             "getPendingTransaction");
                                     ShellCompat.call(display, "reapplyMagnificationSpec",
                                             transaction);
-                                    placeHostBelowNativeFreeforms(display, transaction);
+                                    layerWorkspaceWithNativeFreeforms(display, transaction);
                                     XposedHelpers.callMethod(transaction, "apply");
                                 } else {
                                     restoreExitedMagnificationLocked(target);
@@ -3179,11 +3179,11 @@ public class HostEntry implements IXposedHookLoadPackage {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     if (p.thisObject != sDisplayContent || p.args.length != 1
                             || (!sZoomed && sNativeFreeformHostLayers.isEmpty())) return;
-                    try { placeHostBelowNativeFreeforms(p.thisObject, p.args[0]); }
+                    try { layerWorkspaceWithNativeFreeforms(p.thisObject, p.args[0]); }
                     catch (Throwable error) { log("native freeform layering skipped: " + error); }
                 }
             });
-            log("native freeform inherits main zoom and layers above WorkspaceHost");
+            log("native freeform inherits main zoom; workspace masks overflow outside main");
         } catch (Throwable error) { log("native freeform coexistence hook unavailable: " + error); }
     }
 
@@ -3235,7 +3235,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                 Object transaction = Class.forName("android.view.SurfaceControl$Transaction")
                         .getDeclaredConstructor().newInstance();
                 try {
-                    placeHostBelowNativeFreeforms(target.display, transaction);
+                    layerWorkspaceWithNativeFreeforms(target.display, transaction);
                     XposedHelpers.callMethod(transaction, "apply");
                 } finally { XposedHelpers.callMethod(transaction, "close"); }
                 log("native foreground pin layers reconciled task=" + taskId);
@@ -3301,27 +3301,12 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     /** Amend WM's own layer transaction; never reparent or transform an OEM task. */
-    private static void placeHostBelowNativeFreeforms(Object display, Object transaction) {
+    private static void layerWorkspaceWithNativeFreeforms(Object display, Object transaction) {
         boolean touchExclusionChanged = false;
-        java.util.List<Object> hosts = new java.util.ArrayList<>();
-        Object[] lowestFreeform = {null};
-        Consumer<Object> pickHost = window -> {
-            WindowManager.LayoutParams attrs = (WindowManager.LayoutParams)
-                    XposedHelpers.getObjectField(window, "mAttrs");
-            String title = String.valueOf(attrs.getTitle());
-            boolean hostOverlay = ("WorkspaceHost".equals(title)
-                    || "OneStepLiteTransition".equals(title) || "OneStepLiteMirrorLayer".equals(title)
-                    || "Clipboard".equals(title))
-                    && attrs.type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-            // This status bar has been magnified into the main region. Keep it
-            // with main chrome, not above an OEM freeform crossing that region.
-            boolean mainStatusBar = sZoomed && attrs.type == WindowTypes.STATUS_BAR && "StatusBar".equals(title);
-            if (SYSTEMUI.equals(attrs.packageName) && (hostOverlay || mainStatusBar)
-                    && Boolean.TRUE.equals(XposedHelpers.callMethod(window, "isVisible"))) hosts.add(window);
-        };
-        XposedHelpers.callMethod(display, "forAllWindows", pickHost, false);
+        Object[] highestFreeform = {null};
+        java.util.List<Object> hosts = workspaceOverlayWindows(display);
         Consumer<Object> pickFreeform = task -> {
-            if (!sZoomed || lowestFreeform[0] != null || (!Integer.valueOf(5).equals(
+            if (!sZoomed || (!Integer.valueOf(5).equals(
                     XposedHelpers.callMethod(task, "getWindowingMode"))
                     && !NativeFreeformHandoff.keepNativeTransform(task, false))
                     || XposedHelpers.callMethod(task, "getRootTask") != task
@@ -3332,15 +3317,15 @@ public class HostEntry implements IXposedHookLoadPackage {
             if (isNativeForegroundPin(task)) return;
             Object surface = XposedHelpers.callMethod(task, "getSurfaceControl");
             if (surface != null && Boolean.TRUE.equals(XposedHelpers.callMethod(surface, "isValid")))
-                lowestFreeform[0] = surface;
+                highestFreeform[0] = surface;
         };
         XposedHelpers.callMethod(display, "forAllTasks", pickFreeform, false);
-        if (sNativeFreeformLayerAnchor != lowestFreeform[0]) {
+        if (sNativeFreeformLayerAnchor != highestFreeform[0]) {
             // A newly excluded leaf does not undo a spec already on its shared ancestor.
             // Re-split that ancestor in this same WM transaction before showing freeform.
             if (sZoomed) ShellCompat.call(display, "reapplyMagnificationSpec", transaction);
-            sNativeFreeformLayerAnchor = lowestFreeform[0];
-            log("native freeform anchor changed present=" + (lowestFreeform[0] != null)
+            sNativeFreeformLayerAnchor = highestFreeform[0];
+            log("native freeform anchor changed present=" + (highestFreeform[0] != null)
                     + " hostWindows=" + hosts.size());
             ZoomTarget target = sZoomTarget;
             if (target != null && target.display == display) target.handler.post(() -> {
@@ -3363,7 +3348,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                 touchExclusionChanged = true;
                 continue;
             }
-            if (lowestFreeform[0] != null && hosts.contains(host)) continue;
+            if (highestFreeform[0] != null && hosts.contains(host)) continue;
             rememberNativeHostNormalLayer(host, state);
             restoreNativeHostLayer(host, state, transaction);
             Object pending = XposedHelpers.callMethod(display, "getPendingTransaction");
@@ -3371,7 +3356,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             entries.remove();
             touchExclusionChanged = true;
         }
-        if (lowestFreeform[0] != null) {
+        if (highestFreeform[0] != null) {
             for (Object host : hosts) {
                 Object surface = XposedHelpers.callMethod(host, "getSurfaceControl");
                 if (surface == null || !Boolean.TRUE.equals(
@@ -3384,14 +3369,17 @@ public class HostEntry implements IXposedHookLoadPackage {
                 rememberNativeHostNormalLayer(host, state);
                 WindowManager.LayoutParams attrs = (WindowManager.LayoutParams)
                         XposedHelpers.getObjectField(host, "mAttrs");
+                // The final visible root in this bottom-up walk is the highest.
+                // Host wallpaper outside its main hole masks OEM drag overflow,
+                // while the transparent main hole preserves the real float.
                 int layer = attrs.type == WindowTypes.STATUS_BAR ? -5
-                        : "Clipboard".contentEquals(attrs.getTitle()) ? -1
-                        : "OneStepLiteTransition".contentEquals(attrs.getTitle()) ? -2
-                        : "OneStepLiteMirrorLayer".contentEquals(attrs.getTitle()) ? -3 : -4;
-                if (state.nativeAnchor != lowestFreeform[0]) touchExclusionChanged = true;
+                        : "Clipboard".contentEquals(attrs.getTitle()) ? 4
+                        : "OneStepLiteTransition".contentEquals(attrs.getTitle()) ? 3
+                        : "OneStepLiteMirrorLayer".contentEquals(attrs.getTitle()) ? 2 : 1;
+                if (state.nativeAnchor != highestFreeform[0]) touchExclusionChanged = true;
                 XposedHelpers.callMethod(host, "assignRelativeLayer", transaction,
-                        lowestFreeform[0], layer, true);
-                state.nativeAnchor = lowestFreeform[0];
+                        highestFreeform[0], layer, true);
+                state.nativeAnchor = highestFreeform[0];
                 state.nativeLayer = layer;
             }
         }
@@ -3401,6 +3389,27 @@ public class HostEntry implements IXposedHookLoadPackage {
                         "updateMiuiFreeformTouchExcludeRegion", display);
             } catch (Throwable error) { log("native touch exclusion refresh skipped: " + error); }
         }
+    }
+
+    /** Exact Host overlays and main status chrome; unrelated system windows retain their native order. */
+    private static java.util.List<Object> workspaceOverlayWindows(Object display) {
+        java.util.List<Object> hosts=new java.util.ArrayList<>();
+        Consumer<Object> pickHost = window -> {
+            WindowManager.LayoutParams attrs = (WindowManager.LayoutParams)
+                    XposedHelpers.getObjectField(window, "mAttrs");
+            String title = String.valueOf(attrs.getTitle());
+            boolean hostOverlay = ("WorkspaceHost".equals(title)
+                    || "OneStepLiteTransition".equals(title) || "OneStepLiteMirrorLayer".equals(title)
+                    || "Clipboard".equals(title))
+                    && attrs.type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+            // This status bar has been magnified into the main region. Keep it
+            // with main chrome, not above an OEM freeform crossing that region.
+            boolean mainStatusBar = sZoomed && attrs.type == WindowTypes.STATUS_BAR && "StatusBar".equals(title);
+            if (SYSTEMUI.equals(attrs.packageName) && (hostOverlay || mainStatusBar)
+                    && Boolean.TRUE.equals(XposedHelpers.callMethod(window, "isVisible"))) hosts.add(window);
+        };
+        XposedHelpers.callMethod(display, "forAllWindows", pickHost, false);
+        return hosts;
     }
 
     private static void rememberNativeHostNormalLayer(Object host, NativeHostLayer state) {
@@ -3756,7 +3765,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         // when only magnification changes. Reconcile at the zoom boundary too,
         // in the same WM transaction, so host input/chrome cannot cover it.
         if (previous != sZoomed || scale == 1f) {
-            placeHostBelowNativeFreeforms(dc,
+            layerWorkspaceWithNativeFreeforms(dc,
                     XposedHelpers.callMethod(dc, "getPendingTransaction"));
         }
         if (scale == 1f) {
@@ -4228,10 +4237,9 @@ public class HostEntry implements IXposedHookLoadPackage {
                         String reason = intent.getStringExtra("reason");
                         log("native system dialogs close reason=" + reason);
                         if (NavigationPolicy.shouldSuspend(reason)
-                                || "fs_gesture".equals(reason) || "recentapps".equals(reason))
+                                || "fs_gesture".equals(reason) || "gestureNav".equals(reason)
+                                || "recentapps".equals(reason))
                             WorkspaceHost.onSystemNavigation(reason);
-                        else if ("gestureNav".equals(reason) || "recentapps".equals(reason))
-                            log("native gesture navigation leaves OneStepLite active");
                         return;
                     }
                     if (android.content.Intent.ACTION_USER_PRESENT.equals(intent.getAction())) {
