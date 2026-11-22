@@ -10,6 +10,7 @@ captures/
 # IDE
 .idea/
 .vscode/
+/.codex/
 *.iml
 
 # Build output
@@ -41,4 +42,4 @@ keystore.properties
 *.gif
 *.db
 *.sqlite*
-*.dump
+*.dum
