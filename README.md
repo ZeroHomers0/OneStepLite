@@ -271,7 +271,7 @@ tools/                                                 102 个生产方法回放
 | [SmartisanTech / android](https://github.com/SmartisanTech/android) | 锤子科技官方开源入口；One Step 的交互思路是本项目的参考起点 |
 | [SangLuoCN / OneStep4](https://github.com/SangLuoCN/OneStep4) | 社区作品，促成本项目动手尝试 |
 | [Van Step](https://github.com/Xposed-Modules-Repo/com.hyper.sidebar) | 社区作品，促成本项目动手尝试 |
-| [NeXtep](https://github.com/ZeroHomers0/NeXtep) | 视频窗口接入、跨窗分享与壁纸快照的实现参考 |
+| [NeXtep](https://github.com/ZeroHomers0/NeXtep) | 视频窗口接入与壁纸快照的实现参考 |
 
 OneStepLite 是个人项目，不是小米、锤子科技或上述社区项目的官方产品。致谢表示体验与创作启发，不代表它们参与开发、背书或提供兼容保证。第三方组件与许可全文见 APK 内的 `assets/onesteplite/licenses/`。
 

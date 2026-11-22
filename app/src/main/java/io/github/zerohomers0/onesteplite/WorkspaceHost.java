@@ -2086,6 +2086,9 @@ public final class WorkspaceHost {
         topBar.applyOptions(workspaceOptions);
         refreshQuickApps();
         reassertSideTaskViews(retained ? "resume retained bindings" : "resume complete");
+        // Leaving the workspace tears the exit plate down with the scene; a retained
+        // upper task needs it back as soon as the scene is active again.
+        updateTopExitWindow();
         log((retained ? "host resumed with retained task bindings: "
                 : "host resumed from retained task identities: ") + describeTasks());
         finishPendingSuspend();
@@ -3524,6 +3527,10 @@ public final class WorkspaceHost {
         boolean riding = moving && mainSideAnimator == null && !layout.tabletLandscape;
         android.graphics.RectF top = moving && !riding ? workspaceTopHole() : null;
         android.graphics.RectF side = moving && !riding ? workspaceSideHole() : null;
+        // Placeholders never ride: they stay anchored to the wallpaper, so they
+        // keep a geometric cut even while the cells are translated. An unclipped
+        // page-colour backing washed the whole rail white on entry.
+        android.graphics.RectF backing = moving ? (riding ? workspaceMainHole() : side) : null;
         if (topBar != null) topBar.setWorkspaceMainHole(layout.tabletLandscape ? null : top);
         if (topLiveClip != null) {
             // The moving main is cut out in dispatchDraw. Keep the left/right
@@ -3534,7 +3541,7 @@ public final class WorkspaceHost {
         }
         for (int i = 1; i < SLOT_COUNT; i++) {
             int[] bounds = sideBackingBounds(i);
-            if (bounds != null) clipChromeBesideMain(sideBackingViews[i], bounds, side);
+            if (bounds != null) clipChromeBesideMain(sideBackingViews[i], bounds, backing);
             Slot slot = slots[i];
             if (slot != null && slot.index != SLOT_TOP && slot.hint != null && slot.rect != null)
                 clipChromeBesideMain(slot.hint,
@@ -3826,17 +3833,20 @@ public final class WorkspaceHost {
             // start of the shrink and at the end of the grow, gone once the window
             // settles. It reads as the card lifting off the page instead of the app
             // simply changing size, and the settled workspace keeps its clean edge.
-            // The main task is a separate window above this one, so only the part
-            // outside the window stays visible: draw a filled band and let the task
-            // cover its interior.
+            // Only the ring outside the window is painted: the interior belongs to
+            // the app, and filling it black flashed the whole screen whenever this
+            // overlay sat above a still-fullscreen main task.
             if (layout != null && workspaceAlpha < 1f && mainSideAnimator == null) {
                 float rim = HyperOsStyle.dp(ctx, 10f) * (1f - workspaceAlpha);
                 if (rim > 0.5f) {
                     android.graphics.RectF main = workspaceMainHole();
                     rimPaint.setStyle(android.graphics.Paint.Style.FILL);
                     rimPaint.setColor(0xFF000000);
+                    int rimSave = canvas.save();
+                    canvas.clipOutRect(main);
                     canvas.drawRect(main.left - rim, main.top - rim,
                             main.right + rim, main.bottom + rim, rimPaint);
+                    canvas.restoreToCount(rimSave);
                 }
             }
             if (layout == null || workspaceAlpha <= 0f || mainSideAnimator != null) return;
@@ -4163,7 +4173,7 @@ public final class WorkspaceHost {
                 // so a swapped main side needs no special case and nothing shifts.
                 // The main slot's surface rests at (0,0) with matrix=mainScale;
                 // its view carries the offset, so the fade must not add one.
-                prepared.fade(mainScale(),0f,0f);
+                prepared.fade();
                 prepared.setNativeRestore(()->setTopCollectionTranslucent(selected,false));
                 if(!executeOnShell(()->{
                     try {
@@ -4249,7 +4259,7 @@ public final class WorkspaceHost {
                         finishPendingSuspend();
                     },WorkspaceHost::log);
             if(intoTop)topTransition.collect(source,sourceCurrent,destination);
-            else topTransition.fade(mainScale(),0f,0f);
+            else topTransition.fade();
             topTransition.start();
             return true;
         } catch(Throwable error) {
@@ -4481,6 +4491,9 @@ public final class WorkspaceHost {
             topTaskPane.occupied(true);
             topTaskPane.setVisibility(View.VISIBLE);
             updateTopTaskGeometry();applyFullscreenBounds(slots[SLOT_TOP]);applySlotScale(slots[SLOT_TOP]);
+            // The strip's surface is shared with the main window during a cross-fade,
+            // so its alpha and crop must be re-staged for the new owner explicitly.
+            updateCellSurfaceVisibility(slots[SLOT_TOP]);
             publishDesktopSideTasks();
             root.requestLayout();
             log("upper task admitted task="+selected.key.taskId+" user="+selected.key.userId+" original="+(selected.source==null?"main":selected.source.index));
@@ -4940,11 +4953,11 @@ public final class WorkspaceHost {
             Object leash = getSurfaceField(slot.controller, "mTaskLeash");
             if (leash != null && leash != surface
                     && Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
-                // The leash is the surface the native exit animation moves. Crop it to the
-                // same cell so a task thrown off screen is clipped at the cell edge instead
-                // of flying across the workspace.
-                if (crop != null && !crop.isEmpty())
-                    XposedHelpers.callMethod(tx, "setWindowCrop", leash, crop);
+                // The leash carries the full-screen task buffer, so its crop must stay in
+                // logical screen coordinates. The cell-local crop above belongs to the
+                // TaskView parent, which is already cell sized; reusing it here showed
+                // only the buffer's top-left corner until the next scale pass.
+                XposedHelpers.callMethod(tx, "setWindowCrop", leash, logicalBounds(slot));
                 XposedHelpers.callMethod(tx, "setAlpha", leash, alpha);
             }
         }
@@ -8515,11 +8528,12 @@ public final class WorkspaceHost {
                 boolean liveCenterReveal=ticket.liveMainReveal && topTransition!=null;
                 ticket.liveMainReveal=liveCenterReveal;
                 // A cross-fade hands the task back at its resting workspace frame and
-                // only its alpha moves, so the window never jumps orientation.
+                // only its alpha moves, so the window never jumps orientation. The
+                // workspace scales the slot's own leash, so the canonical surface must
+                // stay at identity or the window would be scaled twice and shrink.
                 boolean fadeReveal=liveCenterReveal && topTransition.fadeMode();
-                float initialScale=fadeReveal
-                        ?mainScale()
-                        :liveCenterReveal?TopTaskReturnPolicy.CENTER_START_SCALE:1f;
+                float initialScale=liveCenterReveal && !fadeReveal
+                        ?TopTaskReturnPolicy.CENTER_START_SCALE:1f;
                 float initialX=liveCenterReveal && !fadeReveal
                         ?TopTaskReturnPolicy.centeredOffset(screenW,initialScale):0f;
                 float initialY=liveCenterReveal && !fadeReveal

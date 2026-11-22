@@ -70,6 +70,7 @@ public class WorkspaceRegression {
   sideLayouts++;
  }
  boolean mayWriteSideSurface(Slot s){return true;}boolean presentsSlot(Slot s){return true;}
+ Rect logicalBounds(Slot s){return new Rect(0,0,screenW,screenH);}
  static class CellMotion{void finish(){}}
  Queue main=new Queue();Object ctx=new Object();CellMotion cellMotion;StatusBar statusBar=new StatusBar();Promotion promotion;Bitmap mainBackdrop,wallpaperBackdrop=new Bitmap();
   boolean screenOn=true,zoomed=true,suspendRequested,landscapeSuspended,transferBusy,workspaceEntering,workspaceExiting,keyguardLocked;int scene=ACTIVE,zoomWrites,parks,returns,ready;long sceneEpoch=1,workspaceGeneration,zoomAnimUntil;String pendingSuspendReason;

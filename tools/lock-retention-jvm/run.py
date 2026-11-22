@@ -96,7 +96,7 @@ public class WorkspaceHost {
   void cancelMainSideSwitch(){} static void log(String s){}String describeTasks(){return "same live tasks";}
  void closeSwapPreview(){}void closeCellMovePreview(){}void publishDesktopSideTasks(){}void hideIme(){}
  void suspendSession(String reason){suspends++;scene=SUSPENDED;}
- void resumeSession(){}void updateTopBarState(){}void reapplyScale(Slot s){repairs++;}
+ void resumeSession(){}void updateTopBarState(){}void updateTopExitWindow(){}void reapplyScale(Slot s){repairs++;}
  void awaitRetainedWorkspaceFrame(long epoch){confirmRetainedResume(epoch,0);}
  void confirmRetainedResume(long epoch,int attempt){throw new AssertionError("ordinary hidden resume in lock fixture");}
  void scheduleSideVisibilityRepair(Slot s){}void setMirrorLayerVisible(boolean value){mirror=value;}

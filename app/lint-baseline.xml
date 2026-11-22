@@ -15,17 +15,6 @@
     <issue
         id="QueryPermissionsNeeded"
         message="Consider adding a `&lt;queries>` declaration to your manifest when calling this method; see https://g.co/dev/packagevisibility for details"
-        errorLine1="        List&lt;ResolveInfo> matches=context.getPackageManager().queryIntentActivities(intent,0);"
-        errorLine2="                                                              ~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/share/ContentShare.java"
-            line="184"
-            column="63"/>
-    </issue>
-
-    <issue
-        id="QueryPermissionsNeeded"
-        message="Consider adding a `&lt;queries>` declaration to your manifest when calling this method; see https://g.co/dev/packagevisibility for details"
         errorLine1="        List&lt;ResolveInfo> infos = pm.queryIntentActivities(main, 0);"
         errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~">
         <location
@@ -162,7 +151,7 @@
         errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/io/github/zerohomers0/onesteplite/WorkspaceHost.java"
-            line="3589"
+            line="3701"
             column="22"/>
     </issue>
 
@@ -184,7 +173,7 @@
         errorLine2="                 ^">
         <location
             file="src/main/java/io/github/zerohomers0/onesteplite/top/TopBar.java"
-            line="133"
+            line="139"
             column="18"/>
     </issue>
 
@@ -239,7 +228,7 @@
         errorLine2="            ~~~~~~">
         <location
             file="src/main/java/io/github/zerohomers0/onesteplite/HostEntry.java"
-            line="564"
+            line="560"
             column="13"/>
     </issue>
 
@@ -294,7 +283,7 @@
         errorLine2="^">
         <location
             file="src/main/res/drawable/ic_settings_onesteplite.xml"
-            line="2"
+            line="3"
             column="1"/>
     </issue>
 
@@ -316,19 +305,8 @@
         errorLine2="                                                      ~~~~~~~~~~">
         <location
             file="src/main/java/io/github/zerohomers0/onesteplite/top/TopBar.java"
-            line="151"
+            line="157"
             column="55"/>
-    </issue>
-
-    <issue
-        id="RtlHardcoded"
-        message="Use &quot;`Gravity.START`&quot; instead of &quot;`Gravity.LEFT`&quot; to ensure correct behavior in right-to-left locales"
-        errorLine1="        try{controlPopup.showAtLocation(this,Gravity.TOP|Gravity.LEFT,origin[0]+Math.max(dp(8),getWidth()-dp(108)),origin[1]+Math.max(dp(8),getHeight()-dp(56)));"
-        errorLine2="                                                                 ~~~~">
-        <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/video/VideoPane.java"
-            line="91"
-            column="66"/>
     </issue>
 
 </issues>

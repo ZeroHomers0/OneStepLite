@@ -285,11 +285,11 @@ host_body+='''public static void main(String[]args){
  check(h.translucent&&h.opacityWrites==1,"background is revealed only by the completed native preparation");
  check(android.animation.ValueAnimator.all.size()==1&&h.claimed==0,"production admission waits for source collapse");
  android.animation.ValueAnimator.all.get(0).end();check(h.claimed==1,"production admission claims exactly once after collapse");
- check(h.slots[4].view.alpha==0,"production handoff keeps target invisible while native admission waits");
- h.entry().info.mode=6;h.topTransition.reveal();
+ check(android.view.SurfaceControl.Transaction.last.alpha==0,"production handoff keeps the shared surface invisible while native admission waits");
+ h.entry().info.mode=6;h.topTransition.setLiveSurface(h.entry().leash);h.topTransition.reveal();
  check(android.animation.ValueAnimator.all.size()==2,"native admission restores the real destination expansion");
  android.animation.ValueAnimator.all.get(1).step(.5f);
- check(h.slots[4].view.alpha==.5f,"production reveal keeps the destination in step with the fade");
+ check(android.view.SurfaceControl.Transaction.last.alpha==.5f,"production reveal keeps the shared surface in step with the fade");
  android.animation.ValueAnimator.all.get(1).end();
  check(h.topTransition==null&&h.finished==1,"production completion releases its own transition");
  check(h.opacityWrites==1&&h.translucent,"new native TOP ownership keeps its own translucent policy");

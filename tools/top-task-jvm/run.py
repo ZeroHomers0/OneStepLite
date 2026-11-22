@@ -35,7 +35,7 @@ public final class TopAdmissionRegression {
  }
  void adoptExisting(Slot slot,Task task,Runnable success,Consumer<String> failure){restored++;success.run();}
  void releaseTopTask(boolean front,boolean dismiss,Runnable after){released++;}
- void updateTopTaskGeometry(){}void applyFullscreenBounds(Slot slot){}void applySlotScale(Slot slot){}
+ void updateTopTaskGeometry(){}void applyFullscreenBounds(Slot slot){}void applySlotScale(Slot slot){}void updateCellSurfaceVisibility(Slot slot){}
  void publishDesktopSideTasks(){}void preferMainAfterTopChange(){}void revealTopTaskTransition(){}void cancelTopTaskTransition(){}
  void restoreTabletCoveredMain(TopTaskState.Key key){}
  void finishPendingSuspend(){finished++;}static void log(String text){}

@@ -34,8 +34,6 @@ final class TopTaskTransition {
     private float collectionAlpha=1f;
     private float collectionFrameScale=-1f;
     private boolean fade;
-    private float fadeScale=1f;
-    private float fadeOffsetX, fadeOffsetY;
     private boolean fadeRevealed;
     private Runnable nativeRestore;
     private boolean liveSurfaceAtEnd;
@@ -82,6 +80,11 @@ final class TopTaskTransition {
 
     void setLiveSurface(Object surface) {
         liveSurface=surface;
+        // The canonical surface now belongs to the strip, not to the main task it
+        // was collected from. Keeping the source check would fail every later
+        // alpha write once the task's windowing mode changed, leaving the strip
+        // blank until some unrelated refresh showed it again.
+        collectionSourceCurrent=null;
     }
 
     void collect(Object surface,BooleanSupplier sourceCurrent,View destination) {
@@ -96,14 +99,10 @@ final class TopTaskTransition {
     /**
      * Cross-fade instead of moving surfaces: the main window fades out over the
      * strip's own clock and rail, and the admitted task fades in on top of them.
-     * Nothing changes size or position, so the window never jumps orientation.
+     * Only alpha moves. The workspace already sizes each window through its own
+     * view, so writing a matrix here would scale the window a second time.
      */
-    void fade(float scale,float offsetX,float offsetY) {
-        fade=true;
-        fadeScale=scale>0f?scale:1f;
-        fadeOffsetX=offsetX;
-        fadeOffsetY=offsetY;
-    }
+    void fade() {fade=true;}
 
     /** True while the transition cross-fades instead of zooming. */
     boolean fadeMode() {return fade;}
@@ -172,13 +171,26 @@ final class TopTaskTransition {
         if(closed || !collapsed || revealing)return;
         revealing=true;
         if(collectionView!=null) {
+            if(fade) {
+                // The canonical surface is shared: it faded out as the main window
+                // and must fade back in as the strip's task. Animating the view's
+                // alpha would leave the surface itself at zero, so the strip would
+                // stay blank until an unrelated refresh showed it again.
+                animate(0f,1f,200L,()->{
+                    applyFadeIn(1f);
+                    liveSurfaceAtEnd=true;
+                    fadeRevealed=true;
+                    log.accept("upper live task faded in");
+                    close();
+                });
+                return;
+            }
             // Shell now owns the task matrix; animate only its original SurfaceView parent.
-            animate(0f,1f,fade?200L:180L,()->{
+            animate(0f,1f,180L,()->{
                 // The task now belongs to the strip; the old main surface must not
                 // be moved again by close().
                 liveSurfaceAtEnd=true;
-                fadeRevealed=fade;
-                log.accept(fade?"upper live task faded in":"upper live collection expanded");
+                log.accept("upper live collection expanded");
                 close();
             });
             return;
@@ -188,7 +200,10 @@ final class TopTaskTransition {
             close();return;
         }
         animate(0f,1f,fade?200L:180L,()->{
-            applyFadeIn(1f);
+            // A fade only moves alpha; the zoom path must also restore the identity
+            // matrix, or the returning window stays shrunk around the display centre.
+            if(fade)applyFadeIn(1f);
+            else applyLiveScale(1f);
             fadeRevealed=fade;
             log.accept(fade?"upper live main faded in":"upper live main surface expanded");
             close();
@@ -237,12 +252,21 @@ final class TopTaskTransition {
         if(!liveSurfaceAtEnd) {
             if(fade)applyFadeOut(0f);
             else applyLiveScale(1f);
+        } else if(fade) {
+            // The fade left the surface at zero alpha because the same canonical
+            // surface now belongs to the strip. Hand it back fully opaque, or the
+            // strip stays blank until some unrelated refresh shows it again.
+            applyFadeIn(1f);
         }
         if(collectionView!=null) {
             collectionView.setPivotX(collectionPivotX);collectionView.setPivotY(collectionPivotY);
             collectionView.setScaleX(collectionScaleX);collectionView.setScaleY(collectionScaleY);
-            collectionView.setAlpha(collectionAlpha);
+            // The captured alpha was taken before admission, when the destination was
+            // still hidden. Restoring it after a fade would blank the task that just
+            // faded in, so a completed fade leaves the destination fully visible.
+            collectionView.setAlpha(fadeRevealed?1f:collectionAlpha);
         }
+
         Runnable restore=nativeRestore;nativeRestore=null;
         if(restore!=null)try {restore.run();}
         catch(Throwable error) {log.accept("upper live main state restore: "+error);}
@@ -268,8 +292,8 @@ final class TopTaskTransition {
     private void applyCollectionScale(float scale) {
         collectionFrameScale=scale;
         if(fade) {
-            // The admitted task fades in over the strip's own content.
-            collectionView.setAlpha(scale);
+            // A fade drives the shared surface alpha; touching the view alpha too
+            // would fade the task twice and leave it invisible.
             return;
         }
         collectionView.setPivotX(collectionView.getWidth()*.5f);
@@ -285,8 +309,9 @@ final class TopTaskTransition {
     private boolean applyFadeOut(float fraction) {
         float f=Math.max(0f,Math.min(1f,fraction));
         // The destination must stay invisible until native admission confirms it;
-        // a half-faded task peeking out of the strip reads as a glitch.
-        if(collectionView!=null && !revealing) {
+        // a half-faded task peeking out of the strip reads as a glitch. A fade
+        // hides it through the shared surface alpha instead of the view alpha.
+        if(collectionView!=null && !revealing && !fade) {
             collectionFrameScale=0f;
             collectionView.setAlpha(0f);
         }
@@ -295,12 +320,6 @@ final class TopTaskTransition {
         try {
             transaction=Class.forName("android.view.SurfaceControl$Transaction")
                     .getDeclaredConstructor().newInstance();
-            XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,
-                    fadeScale,0f,0f,fadeScale);
-            XposedHelpers.callMethod(transaction,"setPosition",liveSurface,
-                    fadeOffsetX,fadeOffsetY);
-            XposedHelpers.callMethod(transaction,"setWindowCrop",liveSurface,
-                    new Rect(0,0,width,height));
             XposedHelpers.callMethod(transaction,"setAlpha",liveSurface,1f-f);
             XposedHelpers.callMethod(transaction,"apply");
             liveSurfaceAtEnd=f>=1f;
@@ -320,18 +339,12 @@ final class TopTaskTransition {
      */
     private boolean applyFadeIn(float fraction) {
         float f=Math.max(0f,Math.min(1f,fraction));
-        if(collectionView==null) {
+        if(fade || collectionView==null) {
             if(!validLiveSurface())return false;
             Object transaction=null;
             try {
                 transaction=Class.forName("android.view.SurfaceControl$Transaction")
                         .getDeclaredConstructor().newInstance();
-                XposedHelpers.callMethod(transaction,"setMatrix",liveSurface,
-                        fadeScale,0f,0f,fadeScale);
-                XposedHelpers.callMethod(transaction,"setPosition",liveSurface,
-                        fadeOffsetX,fadeOffsetY);
-                XposedHelpers.callMethod(transaction,"setWindowCrop",liveSurface,
-                        new Rect(0,0,width,height));
                 XposedHelpers.callMethod(transaction,"setAlpha",liveSurface,f);
                 XposedHelpers.callMethod(transaction,"apply");
                 liveSurfaceAtEnd=f>=1f;

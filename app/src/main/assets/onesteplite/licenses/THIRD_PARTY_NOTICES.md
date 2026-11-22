@@ -24,12 +24,10 @@ OneStepLite 原创部分采用 OneStepLite 非商用共享源码许可 1.0（仓
 
 ## NeXtep 视频窗口接入参考
 
-`VideoDock.java`、`VideoPane.java` 的原生画中画/视频悬浮窗接入流程参考 [NeXtep](https://github.com/lujinxin/NeXtep) 的 `ControlAreaVideoController`、输入隔离与退出归还机制；本项目使用 Java 和 Xposed API 82 重新适配，没有引入其整任务置顶或商业授权代码。
+`VideoDock.java` 的原生画中画/视频悬浮窗接入流程参考 [NeXtep](https://github.com/lujinxin/NeXtep) 的 `ControlAreaVideoController`、输入隔离与退出归还机制；本项目使用 Java 和 Xposed API 82 重新适配，没有引入其整任务置顶或商业授权代码。
 
 上游采用 Apache License 2.0，许可原文随附于 `libs/licenses/NeXtep-LICENSE.txt`，并随构建打包。
 
-## NeXtep 跨窗分享与壁纸参考
-
-`ContentShare.java`、`DropPermissions.java` 参考 NeXtep 的 `SlotContentDragController`、`ContentDropShare`、`ContentDropPermissionContract` 和 `ContentDropPermissionHook`，以 Java / Xposed API 82 重新适配至本项目的原生任务注册表；目前仅接入同用户的定向分享。
+## NeXtep 壁纸参考
 
 `WallpaperSnapshot.java` 参考 `WorkspaceWallpaperBackdrop` 的仅捕获壁纸图层、锁屏保护与动态壁纸回退策略。上游 Apache License 2.0 原文已随附于 `libs/licenses/NeXtep-LICENSE.txt`，并随构建打包。

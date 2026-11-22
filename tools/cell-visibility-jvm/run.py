@@ -17,6 +17,7 @@ import android.view.SurfaceControl;import android.graphics.Rect;
 import de.robv.android.xposed.XposedHelpers;
 public class CellVisibilityRegression {
  Rect workspaceCellCrop(Slot slot){return null;}
+ Rect logicalBounds(Slot slot){return new Rect(0,0,1080,2460);}
  static int checks;static final int SLOT_TOP=4,CELL_SLOT_COUNT=4;boolean topFace,taskCellsCovered;
  static void check(boolean b,String why){checks++;if(!b)throw new AssertionError(why);}
  float workspaceAlpha=1f;Object cellMotion;Promotion promotion;boolean owns=true,sideScrolling,writable=true;
@@ -76,17 +77,20 @@ public class CellVisibilityRegression {
   surface.alpha=1;check(surface.child.alpha==0,"RenderThread parent rewrite cannot reveal zero-gated task leash");
   h.workspaceAlpha=.5f;s.frozen=true;surface.child.alpha=.37f;h.updateCellSurfaceVisibility(s);check(surface.child.alpha==.37f,"native-frozen task retains its own leash opacity");
   s.frozen=false;h.writable=false;h.updateCellSurfaceVisibility(s);check(surface.child.alpha==.37f,"external native task cannot be pulled back by entry opacity gate");
+  h.writable=true;h.workspaceAlpha=.5f;h.updateCellSurfaceVisibility(s);
+  check(surface.child.crop!=null&&surface.child.crop.left==0&&surface.child.crop.top==0&&surface.child.crop.right==1080&&surface.child.crop.bottom==2460,"task leash keeps the logical screen crop so the buffer is never cut to a cell corner");
   System.out.println("Actual Host cell visibility checks="+checks+" passed");
  }
 }
 '''.replace('__METHODS__','\n'.join(method(s) for s in ['    private boolean presentsSlot(', '    private boolean ownsCellPresentation(', '    private boolean cellPresentationVisible(', '    private void updateCellSurfaceVisibility(', '    private void prepareCellSurface(', '    private void stageCellPresentation(']))
 files={
-'android/graphics/Rect.java':'package android.graphics;public class Rect {public boolean isEmpty(){return false;}}',
+'android/graphics/Rect.java':'package android.graphics;public class Rect {public int left,top,right,bottom;public Rect(){}public Rect(int l,int t,int r,int b){left=l;top=t;right=r;bottom=b;}public boolean isEmpty(){return right<=left||bottom<=top;}}',
 'io/github/zerohomers0/onesteplite/CellVisibilityRegression.java':body,
-'android/view/SurfaceControl.java':r'''package android.view;import java.util.*;
-public class SurfaceControl {public SurfaceControl child;public boolean valid=true,shown;public float alpha;public boolean isValid(){return valid;}public static final List<String> ops=new ArrayList<>();
+'android/view/SurfaceControl.java':r'''package android.view;import java.util.*;import android.graphics.Rect;
+public class SurfaceControl {public SurfaceControl child;public boolean valid=true,shown;public float alpha;public Rect crop;public boolean isValid(){return valid;}public static final List<String> ops=new ArrayList<>();
  public static class Transaction implements AutoCloseable {
   public Transaction setAlpha(SurfaceControl s,float a){s.alpha=a;ops.add("alpha");return this;}
+  public Transaction setWindowCrop(SurfaceControl s,Rect r){s.crop=r;ops.add("crop");return this;}
   public Transaction show(SurfaceControl s){s.shown=true;ops.add("show");return this;}
   public Transaction hide(SurfaceControl s){s.shown=false;ops.add("hide");return this;}
   public void apply(){ops.add("apply");}public void close(){}
