@@ -3,6 +3,7 @@ package io.github.zerohomers0.onesteplite;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -11,9 +12,18 @@ import android.view.ViewConfiguration;
 import android.widget.OverScroller;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /** The horizontally scrolling rail of pinned and recently used applications. */
 final class QuickAppRail extends View {
+    private final Paint statusPaint=new Paint(Paint.ANTI_ALIAS_FLAG);
+    private Set<String> openedPackages=Collections.emptySet();
+
+    void setOpenedPackages(Set<String> packages) {
+        if(openedPackages.equals(packages))return;
+        openedPackages=new java.util.HashSet<>(packages);
+        invalidate();
+    }
     private RectF workspaceMain;
 
     void setWorkspaceMainHole(RectF hole) {
@@ -270,6 +280,14 @@ final class QuickAppRail extends View {
         app.icon.setAlpha(alpha);
         app.icon.draw(canvas);
         app.icon.setAlpha(255);
+        if(openedPackages.contains(app.component.getPackageName())) {
+            float density=getResources().getDisplayMetrics().density;
+            float radius=4f*density,x=half-radius*.35f,y=-half+radius*.35f;
+            statusPaint.setColor(0xe6ffffff);statusPaint.setAlpha(Math.round(alpha*.9f));
+            canvas.drawCircle(x,y,radius+density,statusPaint);
+            statusPaint.setColor(0xff34c759);statusPaint.setAlpha(alpha);
+            canvas.drawCircle(x,y,radius,statusPaint);
+        }
         canvas.restoreToCount(save);
     }
 

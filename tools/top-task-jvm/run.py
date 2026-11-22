@@ -243,3 +243,36 @@ public class TopReturnBridgeRegression {
 p=out/'io/github/zerohomers0/onesteplite/TopReturnBridgeRegression.java';p.write_text(returning,encoding='utf-8')
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-cp',str(out),'-d',str(out),str(p)],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.TopReturnBridgeRegression'],check=True)
+
+opened='''package io.github.zerohomers0.onesteplite;
+import java.util.*;
+public class OpenedAppRegression {
+ static final int ACTIVE=1,SLOT_TOP=4;int scene=ACTIVE;boolean screenOn=true,keyguardLocked,workspaceEntering,transferBusy,fail;
+ Object promotion;LiveTask current;static class LiveTask {String pkg;LiveTask(String p){pkg=p;}}
+ static class Slot {int index;String pkg;boolean occupied,closing,parked;Slot(int i){index=i;}}
+ Slot[] slots={new Slot(0),new Slot(1),new Slot(2),new Slot(3),new Slot(4)};
+ LiveTask findMainTask(){if(fail)throw new IllegalStateException();return current;}
+ static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
+''' + member('    private java.util.Set<String> openedQuickAppPackages(') + '''
+ public static void main(String[]args){
+  var h=new OpenedAppRegression();check(h.openedQuickAppPackages().isEmpty(),"desktop and empty cells have no markers");
+  h.current=new LiveTask("main");h.slots[1].occupied=true;h.slots[1].pkg="side";
+  h.slots[4].occupied=true;h.slots[4].pkg="top";h.slots[2].pkg="background";
+  check(h.openedQuickAppPackages().equals(Set.of("main","side")),"only main and occupied sides count, not TOP or background metadata");
+  h.slots[2].occupied=true;h.slots[2].pkg="side";
+  check(h.openedQuickAppPackages().size()==2,"multiple tasks of one app share one marker");
+  h.slots[1].closing=true;h.slots[2].parked=true;
+  check(h.openedQuickAppPackages().equals(Set.of("main")),"closing and parked apps lose side markers");
+  h.current=null;check(h.openedQuickAppPackages().isEmpty(),"return to desktop removes main marker");
+  for(int gate=0;gate<7;gate++){
+   h=new OpenedAppRegression();if(gate==0)h.scene=0;if(gate==1)h.screenOn=false;
+   if(gate==2)h.keyguardLocked=true;if(gate==3)h.workspaceEntering=true;
+   if(gate==4)h.promotion=new Object();if(gate==5)h.transferBusy=true;if(gate==6)h.fail=true;
+   check(h.openedQuickAppPackages()==null,"unstable or private scene preserves previous snapshot "+gate);
+  }
+  System.out.println("Production opened app marker checks="+checks+" passed");
+ }
+}'''
+p=out/'io/github/zerohomers0/onesteplite/OpenedAppRegression.java';p.write_text(opened,encoding='utf-8')
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-cp',str(out),'-d',str(out),str(p)],check=True)
+subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.OpenedAppRegression'],check=True)

@@ -3913,6 +3913,7 @@ public final class WorkspaceHost {
                 toggleVisibility();
             }
             @Override public void onLaunch(QuickApp entry) { launchQuick(entry); }
+            @Override public java.util.Set<String> openedAppPackages() { return openedQuickAppPackages(); }
             @Override public boolean canCustomizeApps() {
                 return scene == ACTIVE && screenOn && !keyguardLocked
                         && promotion == null && !transferBusy
@@ -5183,6 +5184,23 @@ public final class WorkspaceHost {
                 && sceneEpoch == readyEpoch && screenOn && !keyguardLocked)
                 readyBar.setQuickApps(apps);
         });
+    }
+
+    /** Only workspace main/side owners count; retained background tasks do not. */
+    private java.util.Set<String> openedQuickAppPackages() {
+        if(scene!=ACTIVE || !screenOn || keyguardLocked || workspaceEntering
+                || promotion!=null || transferBusy)return null;
+        java.util.Set<String> packages=new java.util.HashSet<>();
+        try {
+            LiveTask task=findMainTask();
+            if(task!=null && task.pkg!=null)packages.add(task.pkg);
+        } catch(Throwable unavailable) { return null; }
+        for(Slot slot:slots) {
+            if(slot.index==SLOT_TOP || !slot.occupied || slot.closing || slot.parked
+                    || slot.pkg==null)continue;
+            packages.add(slot.pkg);
+        }
+        return packages;
     }
 
     private void updateTopBarState() {

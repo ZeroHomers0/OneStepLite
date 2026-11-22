@@ -21,6 +21,7 @@ final class TopBar extends FrameLayout {
         /** Send the current main-window app up into the landscape task face. */
         default void onSendMainToTop() {}
         default void onTaskCellsCovered(boolean covered) {}
+        default java.util.Set<String> openedAppPackages() { return java.util.Collections.emptySet(); }
     }
     private final Listener listener;
     private final Header header;
@@ -34,6 +35,15 @@ final class TopBar extends FrameLayout {
     private boolean mainOnRight, tabletToolsExpanded;
     private RectF workspaceMain;
     private TopBarGeometry geometry;
+    private final Runnable refreshOpenedApps=new Runnable() {
+        @Override public void run() {
+            if(isShown()) {
+                java.util.Set<String> packages=listener.openedAppPackages();
+                if(packages!=null)quickRail.setOpenedPackages(packages);
+            }
+            postDelayed(this,750L);
+        }
+    };
 
     TopBar(Context context, WorkspaceLayout layout, List<QuickApp> apps, Listener listener) {
         super(context);
@@ -131,7 +141,12 @@ final class TopBar extends FrameLayout {
         super.onSizeChanged(w,h,ow,oh);renderTabletTools();
         if(ow>0&&(w!=ow||h!=oh))appPicker.close();
     }
-    @Override protected void onDetachedFromWindow() { appPicker.close();super.onDetachedFromWindow(); }
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();post(refreshOpenedApps);
+    }
+    @Override protected void onDetachedFromWindow() {
+        removeCallbacks(refreshOpenedApps);appPicker.close();super.onDetachedFromWindow();
+    }
     @Override protected void onVisibilityChanged(View view,int visibility) {
         super.onVisibilityChanged(view,visibility);if(appPicker!=null&&!isShown())appPicker.close();
     }
