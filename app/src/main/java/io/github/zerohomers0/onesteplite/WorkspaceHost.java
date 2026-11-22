@@ -77,14 +77,12 @@ public final class WorkspaceHost {
     private final Handler main = new Handler(Looper.getMainLooper());
 
     private volatile Slot[] slots = new Slot[SLOT_COUNT];
-    private final java.util.ArrayList<Slot> sideOrder = new java.util.ArrayList<>();
+    private final SideRowOrder<Slot> sideOrder=new SideRowOrder<>();
     private boolean sideScrolling, sideArmed, sideCaptured, creatingSideView;
     private float sideDownX, sideDownY, sideLastY, sideOffset, savedSideOffset;
     private final java.util.ArrayList<Slot> sideAttached = new java.util.ArrayList<>();
-    private android.animation.ValueAnimator sideScrollAnimator;
+    private final SideScrollMotion sideMotion=new SideScrollMotion();
     private android.view.VelocityTracker sideVelocity;
-    private android.widget.OverScroller sideFling;
-    private Runnable sideFlingFrame;
     private boolean sideCompacting, sideDesktopRevealing;
     private long sideRevealGeneration;
     private final java.util.IdentityHashMap<Slot, Float> sideCompactionShift = new java.util.IdentityHashMap<>();
@@ -103,7 +101,7 @@ public final class WorkspaceHost {
     private int geometryRefreshDeferrals;
     private boolean geometryRefreshAfterLive;
     private boolean zoomed;
-    private String lastBroadcastZoom;
+    private final ZoomTransport zoomTransport;
     private volatile int screenW = 1080;
     private volatile int screenH = 2460;
     private final Object taskUsersLock = new Object();
@@ -180,8 +178,7 @@ public final class WorkspaceHost {
     private boolean retainedWindowPrepared;
     private long retainedWindowGeneration;
     private volatile boolean keyguardWindowHidden;
-    private boolean keyguardWindowNotTouchable;
-    private float keyguardWindowAlpha;
+    private final WindowPrivacy windowPrivacy=new WindowPrivacy(WorkspaceHost::log);
     private int keyguardResumeIndex = -1;
     private volatile boolean retainedOnExit;
     private long retainedExitSourceEpoch = -1;
@@ -506,6 +503,9 @@ public final class WorkspaceHost {
                 .getDisplay(Display.DEFAULT_DISPLAY);
         this.ctx = ctx.createDisplayContext(display).createWindowContext(
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null);
+        zoomTransport=new ZoomTransport(this.ctx,WorkspaceHost::log);
+        zoomCommands=new WorkspaceZoomCommands(main::postDelayed,SystemClock::uptimeMillis,
+                ()->zoomed,this::writeZoomLine,WorkspaceHost::log);
         this.executor = executor;
         this.factory = factory;
         this.transitions = transitions;
@@ -657,7 +657,7 @@ public final class WorkspaceHost {
                                     && h.retainedForLock && EntryGuard.canOpen(h.ctx) && current.active()) {
                                 frameReady[0] = true;
                                 log("authenticated retained geometry and Host frame committed before reveal completion");
-                                current.finish();
+                                current.presented();
                             }
                         }));
                         h.root.invalidate();
@@ -2731,8 +2731,8 @@ public final class WorkspaceHost {
 
     private boolean returnTicketCurrent(Promotion ticket) {
         Slot slot = ticket.slot;
-        return isActive(slot) && sceneEpoch == ticket.sceneEpoch && slot.taskEpoch == ticket.bindingEpoch
-                && slot.taskId == ticket.taskId && ticket.token.equals(slot.taskToken);
+        return TaskHandoffPolicy.bindingCurrent(isActive(slot),sceneEpoch,ticket.sceneEpoch,
+                slot.taskEpoch,ticket.bindingEpoch,slot.taskId,ticket.taskId,slot.taskToken,ticket.token);
     }
 
     /** Root enumeration alone does not prove death: child/moved tasks remain in Shell. */
@@ -2747,64 +2747,41 @@ public final class WorkspaceHost {
         }
     }
 
-    private void checkReturned(Slot slot, Promotion ticket, int attempt, Runnable success, Consumer<String> failure) {
-        if (!returnTicketCurrent(ticket)) {
-            transferBusy = false;
-            failure.accept("stale return ticket; no new binding touched");
-            return;
-        }
-        if (!executeOnShell(() -> {
-            boolean ready = false, gone = false;
-            String detail;
-            try {
-                if (!returnTicketCurrent(ticket)) throw new IllegalStateException("stale return on Shell queue");
-                LiveTask identity = new LiveTask(ticket.taskId, ticket.token, slot.pkg);
-                Object core = rootInfo(identity);
-                if (core == null) {
-                    gone = absentFromShellAndController(slot, identity);
-                    ready = gone;
-                } else if (ordinaryRoot(core, 1)) {
+    private void checkReturned(Slot slot,Promotion ticket,int attempt,Runnable success,Consumer<String> failure) {
+        new TaskReturnCoordinator(new TaskReturnCoordinator.Host() {
+            @Override public boolean current() { return returnTicketCurrent(ticket); }
+            @Override public boolean executeOnShell(Runnable action) { return WorkspaceHost.this.executeOnShell(action); }
+            @Override public void post(Runnable action) { main.post(action); }
+            @Override public void later(Runnable action,long delay) { main.postDelayed(action,delay); }
+            @Override public boolean handoffAttempted() { return ticket.handoffAttempted; }
+            @Override public TaskReturnCoordinator.Result inspect() throws Throwable {
+                boolean ready=false,gone=false;
+                LiveTask identity=new LiveTask(ticket.taskId,ticket.token,slot.pkg);
+                Object core=rootInfo(identity);
+                if(core==null) { gone=absentFromShellAndController(slot,identity);ready=gone; }
+                else if(ordinaryRoot(core,1)) {
                     handoffPromotedTask(ticket);
-                    ready = ticket.handoffComplete
-                            && XposedHelpers.getObjectField(slot.controller, "mTaskToken") == null;
+                    ready=ticket.handoffComplete && XposedHelpers.getObjectField(slot.controller,"mTaskToken")==null;
                 }
-                detail = "native handback=" + ready + " gone=" + gone;
-            } catch (Throwable error) { detail = error.toString(); }
-            final boolean done = ready, removed = gone;
-            final String result = detail;
-            main.post(() -> {
-                if (!returnTicketCurrent(ticket)) {
-                    transferBusy = false;
-                    failure.accept("stale return completion; no new binding touched");
-                    return;
+                return new TaskReturnCoordinator.Result(ready,gone,"native handback="+ready+" gone="+gone);
+            }
+            @Override public void complete(boolean removed) {
+                ownedTasks.remove(ticket.token);
+                if(removed)clearSlot(slot);
+                else {
+                    slot.promoting=false;slot.frozen=false;slot.parked=true;slot.taskVisible=false;
+                    slot.scaleSurface=null;slot.scaleTaskId=Integer.MIN_VALUE;slot.scaleApplied=-1f;updateHint(slot);
                 }
-                if (done) {
-                    ownedTasks.remove(ticket.token);
-                    if (removed) clearSlot(slot);
-                    else {
-                        slot.promoting = false;
-                        slot.frozen = false;
-                        slot.parked = true;
-                        slot.taskVisible = false;
-                        slot.scaleSurface = null;
-                        slot.scaleTaskId = Integer.MIN_VALUE;
-                        slot.scaleApplied = -1f;
-                        updateHint(slot);
-                    }
-                    transferBusy = false;
-                    removeCellBackground(slot);
-                    log("returned task id=" + ticket.taskId + " gone=" + removed + " front=" + !ticket.background);
-                    success.run();
-                } else if (attempt < 2 && !ticket.handoffAttempted) {
-                    main.postDelayed(() -> checkReturned(slot, ticket, attempt + 1, success, failure), 500L);
-                } else {
-                    transferBusy = false;
-                    slot.frozen |= ticket.handoffAttempted;
-                    slot.promoting = slot.frozen;
-                    failure.accept(result);
-                }
-            });
-        })) { transferBusy = false; failure.accept("no Shell queue for handback"); }
+                transferBusy=false;removeCellBackground(slot);
+                log("returned task id="+ticket.taskId+" gone="+removed+" front="+!ticket.background);
+                success.run();
+            }
+            @Override public void fail(String detail,boolean freeze) {
+                transferBusy=false;
+                if(freeze) { slot.frozen|=ticket.handoffAttempted;slot.promoting=slot.frozen; }
+                failure.accept(detail);
+            }
+        }).observe(attempt);
     }
 
     private static final class RenderBinding {
@@ -3399,41 +3376,20 @@ public final class WorkspaceHost {
     }
     /** 动画期间宿主不得写普通稳态（会取消动画）；心跳按此时间窗跳过。 */
     private volatile long zoomAnimUntil;
-    private long zoomCommandGeneration;
+    private final WorkspaceZoomCommands zoomCommands;
 
     private String zoomOnCommand() {
         return layout.mainScale + " " + layout.mainOffsetY + " " + layout.mainOffsetX;
     }
 
     private void writeZoomAnimated(boolean on) {
-        final long generation = ++zoomCommandGeneration;
-        final String steady = on ? zoomOnCommand() : "1 0 0";
-        zoomAnimUntil = android.os.SystemClock.uptimeMillis() + ZOOM_ANIM_MS + 250L;
-        // Publish one monotonic start for both sides on every form factor. The Host
-        // fade and the WM zoom are driven by different processes; without a shared
-        // start the broadcast latency alone let the chrome lead the application by
-        // several frames, which is exactly the overlap seen during entry.
-        workspaceZoomStart = SystemClock.uptimeMillis() + WorkspaceMotionSpec.LEAD_MS;
-        writeZoomLine("anim " + steady + " " + ZOOM_ANIM_MS
-                + (workspaceZoomStart > 0 ? " at=" + workspaceZoomStart : ""));
-        // The steady rewrite must land after the published start, not after the
-        // moment this method happened to run; otherwise a late broadcast would let
-        // the plain tuple cancel the animation the WM has not begun yet.
-        final long steadyAt = Math.max(0L, workspaceZoomStart - SystemClock.uptimeMillis())
-                + ZOOM_ANIM_MS + 150L;
-        main.postDelayed(() -> {
-            if (!ZoomLifecyclePolicy.shouldApplyDelayedWrite(generation,
-                    zoomCommandGeneration, on, zoomed)) {
-                log("stale zoom animation completion ignored generation=" + generation);
-                return;
-            }
-            writeZoomLine(steady);
-        }, steadyAt);
+        zoomAnimUntil=SystemClock.uptimeMillis()+ZOOM_ANIM_MS+250L;
+        workspaceZoomStart=SystemClock.uptimeMillis()+WorkspaceMotionSpec.LEAD_MS;
+        zoomCommands.animated(on,on?zoomOnCommand():"1 0 0",workspaceZoomStart,ZOOM_ANIM_MS);
     }
 
     private void writeZoom(boolean on) {
-        zoomCommandGeneration++;
-        writeZoomLine(on ? zoomOnCommand() : "1 0 0");
+        zoomCommands.write(on?zoomOnCommand():"1 0 0");
     }
 
     private void writeZoomLine(String command) {
@@ -3441,67 +3397,10 @@ public final class WorkspaceHost {
     }
 
     private void writeZoomLine(String command, long issuedAt) {
-        if (keyguardLocked || !screenOn || lockExitPending) command = "1 0 0";
-        // Independent transport: a failed private-file write must not suppress zoom/restore.
-        broadcastZoom(command, issuedAt);
-        try {
-            java.io.File f = new java.io.File(ctx.getFilesDir(), "onesteplite-zoom");
-            android.util.AtomicFile file = new android.util.AtomicFile(f);
-            java.io.FileOutputStream stream = null;
-            try {
-                stream = file.startWrite();
-                stream.write(command.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                file.finishWrite(stream);
-                // system_server 需要读这个文件来应用单手模式缩放；AtomicFile 默认 0600，必须放开读权限。
-                if (!f.setReadable(true, false)) {
-                    log("writeZoom: setReadable(false) returned false");
-                }
-            } catch (java.io.IOException failure) {
-                if (stream != null) file.failWrite(stream);
-                throw failure;
-            }
-            log("zoom trigger written: " + command);
-        } catch (Throwable t) {
-            log("writeZoom failed: " + t);
-        }
+        if(keyguardLocked || !screenOn || lockExitPending)command="1 0 0";
+        zoomTransport.publish(command,issuedAt);
     }
 
-    /** 广播直投：绕过 system_server 读 SystemUI 私有文件的权限/SELinux 限制。 */
-    private void broadcastZoom(String command, long issuedAt) {
-        try {
-            String encoded = ZoomChannelState.encode(command, issuedAt);
-            String steady = command.trim();
-            if (steady.startsWith("anim")) {
-                String[] parts = steady.split("\\s+");
-                if (parts.length < 4) return;
-                steady = parts[1] + " " + parts[2] + " " + parts[3];
-            }
-            boolean changed = !command.equals(lastBroadcastZoom);
-            try {
-                // A heartbeat renews the timestamp too; rereading Settings must not renew it.
-                if (!android.provider.Settings.Global.putString(ctx.getContentResolver(), "onesteplite_zoom", encoded)) {
-                    log("zoom settings write returned false");
-                }
-            } catch (Throwable settingsError) {
-                log("zoom settings write failed: " + settingsError);
-            }
-            String[] parts = steady.split("\\s+");
-            float scale = Float.parseFloat(parts[0]);
-            float offsetY = Float.parseFloat(parts[1]);
-            float offsetX = Float.parseFloat(parts[2]);
-            android.content.Intent intent = new android.content.Intent(Actions.ZOOM);
-            intent.putExtra("request", encoded);
-            intent.putExtra("scale", scale);
-            intent.putExtra("offsetY", offsetY);
-            intent.putExtra("offsetX", offsetX);
-            intent.addFlags(android.content.Intent.FLAG_RECEIVER_REGISTERED_ONLY);
-            ctx.sendBroadcast(intent);
-            if (changed) log("zoom broadcast sent: " + command);
-            lastBroadcastZoom = command;
-        } catch (Throwable error) {
-            log("zoom broadcast failed: " + error);
-        }
-    }
     private void startInternal() {
         main.post(() -> {
             if (!EntryGuard.canOpen(ctx)) {
@@ -3586,6 +3485,10 @@ public final class WorkspaceHost {
             WorkspaceDividers.draw(canvas, layout, HyperOsStyle.dp(ctx, 1f), workspaceAlpha, divider);
             canvas.restoreToCount(saved);
 
+        }
+        @Override protected void onConfigurationChanged(android.content.res.Configuration configuration) {
+            super.onConfigurationChanged(configuration);
+            post(()->{if(root==this)applyWallpaperBackdrops();});
         }
         @Override public boolean dispatchTouchEvent(MotionEvent event) {
             if (transitionInput != null && transitionInput.consume(event.getActionMasked())) return true;
@@ -4976,28 +4879,15 @@ public final class WorkspaceHost {
         }
         if (hidden == keyguardWindowHidden) return true;
         if (root == null || wm == null || lp == null) return false;
-        float previousAlpha = lp.alpha;
-        int previousFlags = lp.flags;
-        if (hidden) {
-            keyguardWindowAlpha = lp.alpha;
-            keyguardWindowNotTouchable = (lp.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) != 0;
-            lp.alpha = 0f;
-            lp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        } else {
-            lp.alpha = keyguardWindowAlpha;
-            if (!keyguardWindowNotTouchable) lp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        }
-        try {
-            wm.updateViewLayout(root, lp);
-            keyguardWindowHidden = hidden;
-            root.requestLayout();
-            return true;
-        } catch (Throwable error) {
-            lp.alpha = previousAlpha;
-            lp.flags = previousFlags;
-            log("lock window update failed: " + error);
-            return false;
-        }
+        boolean updated=windowPrivacy.setHidden(new WindowPrivacy.Window() {
+            @Override public float alpha() { return lp.alpha; }
+            @Override public int flags() { return lp.flags; }
+            @Override public void attributes(float alpha,int flags) { lp.alpha=alpha;lp.flags=flags; }
+            @Override public void apply() { wm.updateViewLayout(root,lp); }
+            @Override public void requestLayout() { root.requestLayout(); }
+        },hidden,WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+        if(updated)keyguardWindowHidden=hidden;
+        return updated;
     }
 
     /** Physical fullscreen commit while the Host stays hidden; no workspace reveal frame. */
@@ -5686,10 +5576,9 @@ public final class WorkspaceHost {
     private boolean externalPromotionCurrent(Promotion ticket) {
         return promotion == ticket && !ticket.cancelled && !ticket.cancelRequested && scene == ACTIVE
                 && screenOn && !keyguardLocked
-                && sceneEpoch == ticket.sceneEpoch && isActive(ticket.slot)
-                && ticket.slot.taskEpoch == ticket.bindingEpoch
-                && ticket.slot.taskId == ticket.taskId
-                && ticket.token.equals(ticket.slot.taskToken);
+                && TaskHandoffPolicy.bindingCurrent(isActive(ticket.slot),sceneEpoch,ticket.sceneEpoch,
+                        ticket.slot.taskEpoch,ticket.bindingEpoch,ticket.slot.taskId,ticket.taskId,
+                        ticket.slot.taskToken,ticket.token);
     }
 
     private void afterExternalTransitionIdle(Promotion ticket) {
@@ -5948,16 +5837,7 @@ public final class WorkspaceHost {
     }
 
     private int maxSideOffset() {
-        int rows = WorkspaceLayout.CELL_COUNT;
-        for (int i = sideOrder.size() - 1; i >= 0; i--) {
-            Slot slot = sideOrder.get(i);
-            if (slot.occupied || slot.launching || slot.promoting) {
-                // Include one ready empty row after the final task.
-                rows = Math.max(rows, Math.min(sideOrder.size(), i + 2));
-                break;
-            }
-        }
-        return rows - WorkspaceLayout.CELL_COUNT;
+        return sideOrder.maxOffset(WorkspaceLayout.CELL_COUNT,slot->slot.occupied || slot.launching || slot.promoting);
     }
 
     private void setSideOffset(float offset) {
@@ -5968,14 +5848,7 @@ public final class WorkspaceHost {
     }
 
     private void cancelSideAnimator() {
-        android.animation.ValueAnimator animator = sideScrollAnimator;
-        sideScrollAnimator = null;
-        if (animator != null) animator.cancel();
-        if (sideFlingFrame != null) {
-            if (root != null) root.removeCallbacks(sideFlingFrame);
-            sideFlingFrame = null;
-            sideFling.forceFinished(true);
-        }
+        sideMotion.cancel();
         sideCompacting = false;
         sideCompactionShift.clear();
         if (sideDesktopRevealing) {
@@ -5985,7 +5858,7 @@ public final class WorkspaceHost {
     }
 
     private boolean isSideMotionRunning() {
-        return sideScrollAnimator != null || sideFlingFrame != null || sideDesktopRevealing;
+        return sideMotion.running() || sideDesktopRevealing;
     }
 
     private void recycleSideVelocity() {
@@ -6002,29 +5875,12 @@ public final class WorkspaceHost {
                 || (velocity > 0 && start >= end)
                 || !android.animation.ValueAnimator.areAnimatorsEnabled()) return false;
         cancelSideAnimator();
-        if (sideFling == null) sideFling = new android.widget.OverScroller(ctx);
-        sideFling.fling(0, start, 0, velocity, 0, 0, 0, end);
-        final FrameLayout host = root;
-        final long epoch = sceneEpoch;
-        sideFlingFrame = new Runnable() {
-            @Override public void run() {
-                if (sideFlingFrame != this) return;
-                if (root != host || sceneEpoch != epoch || !canMoveSideRows()) {
-                    finishSideScroll();
-                    return;
-                }
-                if (sideFling.computeScrollOffset()) {
-                    setSideOffset(sideFling.getCurrY() / sidePitch());
-                    host.postOnAnimation(this);
-                } else {
-                    sideFlingFrame = null;
-                    settleSideScroll();
-                }
-            }
-        };
-        log("side fling start offset=" + sideOffset + " velocity=" + velocity
-                + " projected=" + (sideFling.getFinalY() / sidePitch()));
-        host.postOnAnimation(sideFlingFrame);
+        final FrameLayout host=root;
+        final long epoch=sceneEpoch;
+        int projected=sideMotion.fling(host,start,end,velocity,
+                ()->root==host && sceneEpoch==epoch && canMoveSideRows(),
+                pixels->setSideOffset(pixels/sidePitch()),this::finishSideScroll,this::settleSideScroll);
+        log("side fling start offset="+sideOffset+" velocity="+velocity+" projected="+(projected/sidePitch()));
         return true;
     }
 
@@ -6043,22 +5899,8 @@ public final class WorkspaceHost {
             done.run();
             return;
         }
-        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(sideOffset, target);
-        sideScrollAnimator = animator;
-        animator.setDuration(duration);
-        animator.setInterpolator(new android.view.animation.DecelerateInterpolator());
-        animator.addUpdateListener(frame -> {
-            if (sideScrollAnimator == animator && canMoveSideRows())
-                setSideOffset((float) frame.getAnimatedValue());
-        });
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(android.animation.Animator animation) {
-                if (sideScrollAnimator != animator) return;
-                sideScrollAnimator = null;
-                done.run();
-            }
-        });
-        animator.start();
+        sideMotion.animate(sideOffset,target,duration,new android.view.animation.DecelerateInterpolator(),
+                this::canMoveSideRows,this::setSideOffset,done);
     }
 
     private void finishSideScroll() {
@@ -6135,21 +5977,10 @@ public final class WorkspaceHost {
      * settles do the visible owners take the three physical indices used by swaps.
      */
     private void mapSideSlots(int firstRow) {
-        Slot[] mapped = slots.clone();
-        int tail = SLOT_COUNT;
-        for (int i = 0; i < sideOrder.size(); i++) {
-            Slot owner = sideOrder.get(i);
-            owner.sideRow = i;
-            int viewportRow = i - firstRow;
-            int position = viewportRow >= 0 && viewportRow < WorkspaceLayout.CELL_COUNT
-                    ? 1 + viewportRow : tail++;
-            mapped[position] = owner;
-        }
-        for (int i = 1; i < mapped.length; i++) {
-            mapped[i].position(i);
-            syncSlotWindowState(mapped[i]);
-        }
-        slots = mapped;
+        slots=sideOrder.remap(slots,firstRow,WorkspaceLayout.CELL_COUNT,SLOT_COUNT,
+                (owner,row)->owner.sideRow=row,(owner,position)->{
+                    owner.position(position);syncSlotWindowState(owner);
+                });
     }
 
     private void layoutSideViewport(boolean all) {
@@ -6410,25 +6241,13 @@ public final class WorkspaceHost {
             applySideRow(row, sideOffset, sideScrolling);
             if (!row.occupied) updateHint(row);
         }
-        android.animation.ValueAnimator animation = android.animation.ValueAnimator.ofFloat(0f, 1f);
-        sideScrollAnimator = animation;
-        animation.setDuration(240L);
-        animation.setInterpolator(new android.view.animation.PathInterpolator(.4f, 0f, .2f, 1f));
-        animation.addUpdateListener(frame -> {
-            if (sideScrollAnimator != animation || root != host || sceneEpoch != epoch) return;
-            sideCompactionProgress = (float) frame.getAnimatedValue();
-            for (Slot slot : sideCompactionShift.keySet()) applySideRow(slot, sideOffset, sideScrolling);
-            host.invalidate();
-        });
-        animation.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(android.animation.Animator animator) {
-                if (sideScrollAnimator != animation) return;
-                finishSideScroll();
-                log("side compaction settled");
-            }
-        });
-        log("side compaction start moving=" + sideCompactionShift.size());
-        animation.start();
+        log("side compaction start moving="+sideCompactionShift.size());
+        sideMotion.animate(0f,1f,240L,new android.view.animation.PathInterpolator(.4f,0f,.2f,1f),
+                ()->root==host && sceneEpoch==epoch,progress->{
+                    sideCompactionProgress=progress;
+                    for(Slot slot:sideCompactionShift.keySet())applySideRow(slot,sideOffset,sideScrolling);
+                    host.invalidate();
+                },()->{finishSideScroll();log("side compaction settled");});
     }
 
     private void appendSideRow() {
@@ -7430,9 +7249,9 @@ public final class WorkspaceHost {
         ticket.previousLayout = geometry;
         ticket.targetLayout = target;
         ticket.targetMainOnRight = target.mainOnRight;
-        final LiveSwapZoom.Zoom oldZoom = new LiveSwapZoom.Zoom(++zoomCommandGeneration,
+        final LiveSwapZoom.Zoom oldZoom = new LiveSwapZoom.Zoom(zoomCommands.nextGeneration(),
                 geometry.mainScale, geometry.mainOffsetX, geometry.mainOffsetY);
-        final LiveSwapZoom.Zoom targetZoom = new LiveSwapZoom.Zoom(++zoomCommandGeneration,
+        final LiveSwapZoom.Zoom targetZoom = new LiveSwapZoom.Zoom(zoomCommands.nextGeneration(),
                 target.mainScale, target.mainOffsetX, target.mainOffsetY);
         ticket.slot.promoting = true;
         OwnedTask candidate = ownedTasks.computeIfAbsent(first.token, token -> new OwnedTask(first.id, token));
@@ -7571,7 +7390,7 @@ public final class WorkspaceHost {
         catch (Throwable error) { failPromotion(ticket, "live Home Host preparation: " + error); return; }
         LiveSwapGeometry.Task app = new LiveSwapGeometry.Task(ticket.taskId, ticket.token, width, height,
                 liveCellRect(geometry, ticket.slot.index), liveMainRect(geometry));
-        final LiveSwapZoom.Zoom zoom = new LiveSwapZoom.Zoom(++zoomCommandGeneration,
+        final LiveSwapZoom.Zoom zoom = new LiveSwapZoom.Zoom(zoomCommands.nextGeneration(),
                 geometry.mainScale, geometry.mainOffsetX, geometry.mainOffsetY);
         ticket.nativeSwap = true;
         ticket.nativeHome = true;
@@ -7671,9 +7490,10 @@ public final class WorkspaceHost {
 
     /** Recovery may run after screen-off, so this deliberately omits entry-only guards. */
     private boolean livePromotionBound(Promotion ticket) {
-        return promotion == ticket && !ticket.cancelled && isActive(ticket.slot)
-                && sceneEpoch == ticket.sceneEpoch && ticket.slot.taskEpoch == ticket.bindingEpoch
-                && ticket.slot.taskId == ticket.taskId && ticket.token.equals(ticket.slot.taskToken);
+        return promotion==ticket && !ticket.cancelled
+                && TaskHandoffPolicy.bindingCurrent(isActive(ticket.slot),sceneEpoch,ticket.sceneEpoch,
+                        ticket.slot.taskEpoch,ticket.bindingEpoch,ticket.slot.taskId,ticket.taskId,
+                        ticket.slot.taskToken,ticket.token);
     }
 
     private final class LiveZoomRequest implements Runnable {
@@ -7756,7 +7576,7 @@ public final class WorkspaceHost {
             }
             if (pendingLiveZoom != null) pendingLiveZoom.failed("live zoom superseded by recovery");
             pendingLiveZoom = request;
-            zoomCommandGeneration = Math.max(zoomCommandGeneration, target.generation);
+            zoomCommands.observeGeneration(target.generation);
             zoomAnimUntil = SystemClock.uptimeMillis() + LiveSwapZoomProtocol.REQUEST_TIMEOUT_MS;
             ticket.liveZoomGuardUntil = zoomAnimUntil;
             long issuedAt = System.currentTimeMillis();

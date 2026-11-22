@@ -78,7 +78,7 @@ OneStepLite 把屏幕分成**一个主窗**和**三个小窗**：主窗照常操
 
 ### 四、常用应用栏：常用的排前面
 
-标题栏下方是常用应用栏。固定过的应用排在最前，其余按最近七天的前台使用情况排列；读不到使用统计时按应用名称稳定排序。
+标题栏下方是常用应用栏。固定应用保持手动顺序；其余按近七天的近期使用分组，同组优先常用应用，再按最近使用时间排列。缓存最多保留一分钟，重新进入工作区时刷新；读不到使用统计时按应用名称稳定排序。
 
 应用已在主窗或小窗中打开时，图标右上角显示绿色小点；仅在后台运行的应用不显示。
 
@@ -196,7 +196,9 @@ OneStepLite 把屏幕分成**一个主窗**和**三个小窗**：主窗照常操
 - **在最近任务中隐藏小窗应用**：只在 OneStepLite 打开时生效，不会关闭应用。
 - **解锁后恢复工作区**：开启后解锁恢复原有窗口布局；关闭后解锁回到普通全屏界面。
 
-选择保存在本机，退出或重启后保留。
+选择保存在本机，退出或重启后保留。三组选择页统一使用下方大图卡片；手势保存后会通知 SystemUI 重新读取配置。
+
+顶栏与小窗底板跟随系统日夜模式：白天保留原壁纸模糊，夜间叠加深色遮罩，应用自身画面不受影响。
 
 ## 构建
 
@@ -233,7 +235,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./test.ps1
 | 作业 | 环境 | 内容 |
 | --- | --- | --- |
 | `apk` | `ubuntu-latest` | 装 `platforms;android-37.0`、`build-tools;36.0.0`、`ndk;28.2.13676358`，跑 `:app:lintRelease :app:stageRelease`，上传 APK 与 `SHA256SUMS.txt` |
-| `tests` | `windows-latest` | 跑 `test.ps1`，51 个策略单测与 102 个生产方法回放套件 |
+| `tests` | `windows-latest` | 跑 `test.ps1`，51 个策略单测与 105 个生产方法回放套件 |
 
 每次 `main` 构建成功后，`latest` 作业把产物刷新到 [`latest` 预发布](https://github.com/ZeroHomers0/OneStepLite/releases/tag/latest)——那里是普通文件、有固定直链，手机能直接下载；推 `v*` 标签时 `release` 作业另外发正式版。
 
@@ -263,12 +265,12 @@ Lint 也在 CI 里跑。`app/lint.xml` 关掉对 LSPosed 模块不适用的检�
 ## 项目结构
 
 ```
-app/src/main/java/io/github/zerohomers0/onesteplite/   190 个源文件，按功能分 17 个子目录
+app/src/main/java/io/github/zerohomers0/onesteplite/   199 个源文件，按功能分 17 个子目录
 app/src/main/cpp/                                      原生输入映射（ARM64）
 app/src/main/res/                                      图标与主题
 app/src/main/assets/                                   模块入口与许可文件
 tests/                                                 51 个策略单测
-tools/                                                 102 个生产方法回放套件
+tools/                                                 105 个生产方法回放套件
 ```
 
 目录职责、分层约定、命名与代码风格、改动时必须遵守的等价性约束，见[项目结构与代码规范](docs/项目结构与代码规范.md)。

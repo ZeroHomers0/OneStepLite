@@ -111,24 +111,24 @@ final class WorkspaceSettingsPage extends FrameLayout {
         WorkspaceOptions options = WorkspaceSettingsStore.read(activity);
         section("外观");
         LinearLayout appearance = card();
-        switchOption(appearance, "显示农历", "在顶部日期下方显示农历", options.showLunar,
+        switchOption(appearance, "显示农历", "日期下方显示农历", options.showLunar,
                 checked -> persist(WorkspaceSettingsStore.read(activity).withShowLunar(checked)));
         add(appearance, 0, 12);
 
         section("窗口与操作");
         LinearLayout interaction = card();
-        menu(interaction, "打开工作区的手势", gestureLabel(EntryGesturePolicy.effectiveMode(
-                options.entryGesture, EntryGestureSettings.lineHidden(activity))), () -> show(GESTURE, true));
+        menu(interaction, "打开工作区的手势", gestureLabel(options.entryGesture)
+                +(EntryGesturePolicy.canSelect(options.entryGesture,EntryGestureSettings.lineHidden(activity))?"":" · 暂用状态栏"), () -> show(GESTURE, true));
         divider(interaction);
-        menu(interaction, "主窗与小窗交换方式", WorkspaceOptions.modeLabel(options.swapMode), () -> show(SWAP, true));
+        menu(interaction, "主窗与小窗交换", WorkspaceOptions.modeLabel(options.swapMode), () -> show(SWAP, true));
         divider(interaction);
-        switchOption(interaction, "滚动浏览小窗", "上下滑动小窗区域，查看更多小窗", options.scrollSideTasks,
+        switchOption(interaction, "滚动浏览小窗", "上下滑动查看其他小窗", options.scrollSideTasks,
                 checked -> persist(WorkspaceSettingsStore.read(activity).withScrollSideTasks(checked)));
         divider(interaction);
-        switchOption(interaction, "在最近任务中隐藏小窗应用", "仅在 OneStepLite 打开时生效，不会关闭应用", options.hideSideRecents,
+        switchOption(interaction, "隐藏小窗最近任务", "仅在工作区内生效，不关闭应用", options.hideSideRecents,
                 checked -> persist(WorkspaceSettingsStore.read(activity).withHideSideRecents(checked)));
         divider(interaction);
-        switchOption(interaction, "切换应用时收纳原主窗", "点击常用应用栏打开其他应用时，将原主窗收入空小窗；没有空位时正常切换",
+        switchOption(interaction, "切换时收纳主窗", "打开其他应用时收纳原主窗，无空位则直接切换",
                 options.parkMainOnLaunch,
                 checked -> persist(WorkspaceSettingsStore.read(activity).withParkMainOnLaunch(checked)));
         add(interaction, 0, 12);
@@ -141,7 +141,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
 
         section("锁屏");
         LinearLayout lock = card();
-        switchOption(lock, "解锁后恢复工作区", "开启后，解锁恢复原有窗口布局；关闭后，解锁返回正常全屏界面", options.keepOnLock,
+        switchOption(lock, "解锁后恢复工作区", "保留窗口布局，解锁后继续使用", options.keepOnLock,
                 checked -> persist(WorkspaceSettingsStore.read(activity).withKeepOnLock(checked)));
         add(lock, 0, 0);
     }
@@ -149,7 +149,8 @@ final class WorkspaceSettingsPage extends FrameLayout {
     private void switchOption(LinearLayout group, String label, String detail, boolean checked,
             java.util.function.Predicate<Boolean> save) {
         LinearLayout item=row(), labels=optionLabels(label,detail);
-        item.addView(labels,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout.LayoutParams textBounds=new LinearLayout.LayoutParams(0,-2,1);
+        textBounds.rightMargin=dp(16);item.addView(labels,textBounds);
         Switch toggle=settingsSwitch(label,checked);
         item.addView(toggle,new LinearLayout.LayoutParams(-2,-2));
         final boolean[] reverting={false};
@@ -162,11 +163,11 @@ final class WorkspaceSettingsPage extends FrameLayout {
 
     private LinearLayout optionLabels(String label,String detail) {
         LinearLayout labels=new LinearLayout(activity);labels.setOrientation(LinearLayout.VERTICAL);
-        TextView title=text(label,17,primary);title.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        TextView title=text(label,16,primary);title.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         labels.addView(title);
         if(detail!=null) {
-            TextView description=text(detail,13,secondary);
-            LinearLayout.LayoutParams bounds=new LinearLayout.LayoutParams(-1,-2);bounds.topMargin=dp(5);
+            TextView description=text(detail,12,secondary);
+            LinearLayout.LayoutParams bounds=new LinearLayout.LayoutParams(-1,-2);bounds.topMargin=dp(4);
             labels.addView(description,bounds);
         }
         return labels;
@@ -174,12 +175,8 @@ final class WorkspaceSettingsPage extends FrameLayout {
 
     /** All selection pages share the system indicator, spacing, labels and click target. */
     private void choiceOption(LinearLayout group,String label,String detail,boolean checked,
-            boolean enabled,View diagram,Runnable select) {
+            boolean enabled,Runnable select) {
         LinearLayout item=row();
-        if(diagram!=null) {
-            LinearLayout.LayoutParams preview=new LinearLayout.LayoutParams(dp(56),dp(80));
-            preview.rightMargin=dp(12);item.addView(diagram,preview);
-        }
         LinearLayout labels=optionLabels(label,detail);
         LinearLayout.LayoutParams labelBounds=new LinearLayout.LayoutParams(0,-2,1);
         labelBounds.rightMargin=dp(8);item.addView(labels,labelBounds);
@@ -196,24 +193,31 @@ final class WorkspaceSettingsPage extends FrameLayout {
     }
 
     private void landscape() {
-        section("应用进入横屏全屏时");
-        LinearLayout group=card();
-        // Top playback is gone: a floating player is docked automatically, and a
-        // landscape app can be sent up by hand, so only these two remain.
         int[] modes={WorkspaceOptions.VIDEO_TURNED,WorkspaceOptions.VIDEO_FULLSCREEN};
-        String[] descriptions={"应用在主窗内横屏显示，小窗仍可使用。",
-                "退出 OneStepLite，使用应用原有的全屏界面。"};
+        String[] detail={"横屏显示在主窗，小窗保持可用","退出工作区，使用原生全屏"};
         int selected=WorkspaceSettingsStore.read(activity).landscapeVideo;
-        for(int index=0;index<modes.length;index++) {
-            final int choice=modes[index];if(index>0)divider(group);
-            choiceOption(group,WorkspaceOptions.landscapeLabel(choice),descriptions[index],choice==selected,true,
+        for(int i=0;i<modes.length;i++) {
+            final int choice=modes[i];
+            diagramOption(WorkspaceOptions.landscapeLabel(choice),detail[i],choice==selected,true,
                     new VideoModeDiagram(activity,choice,secondary,dark?0xff353840:0xffe9e9e9,BLUE),()->{
-                        if(persist(WorkspaceSettingsStore.read(activity).withLandscapeVideo(choice)))
-                            show(LANDSCAPE,false);
+                        if(persist(WorkspaceSettingsStore.read(activity).withLandscapeVideo(choice)))show(LANDSCAPE,false);
                     });
         }
+        previewNote("下次进入横屏时生效");
+    }
+
+    private void diagramOption(String title,String detail,boolean selected,boolean enabled,View diagram,Runnable select) {
+        LinearLayout group=card();
+        choiceOption(group,title,detail,selected,enabled,select);
+        LinearLayout.LayoutParams preview=new LinearLayout.LayoutParams(-1,dp(206));
+        preview.leftMargin=preview.rightMargin=dp(12);preview.bottomMargin=dp(12);
+        diagram.setAlpha(enabled?1f:.45f);group.addView(diagram,preview);
+        if(enabled) {group.setOnClickListener(v->select.run());diagram.setOnClickListener(v->select.run());}
         add(group,0,14);
-        TextView note=text("从下一次进入横屏全屏开始生效",13,secondary);
+    }
+
+    private void previewNote(String value) {
+        TextView note=text(value,12,secondary);
         note.setPadding(dp(16),dp(2),dp(16),0);add(note,0,0);
     }
 
@@ -270,21 +274,14 @@ final class WorkspaceSettingsPage extends FrameLayout {
     private void swap() {
         int selected=WorkspaceSettingsStore.read(activity).swapMode;
         for(int mode=0;mode<2;mode++) {
-            final int choice=mode;LinearLayout group=card();
-            Runnable select=()->{
-                if(persist(WorkspaceSettingsStore.read(activity).withSwapMode(choice)))show(SWAP,false);
-            };
-            choiceOption(group,WorkspaceOptions.modeLabel(mode),mode==WorkspaceOptions.FIXED_MAIN
-                    ?"主窗留在原侧：B 进入主窗，A 换到右侧小窗":"主窗跟随应用换边：B 在右侧放大，A 换到左侧小窗",mode==selected,true,null,select);
-            SwapModeDiagram diagram=new SwapModeDiagram(activity,mode,secondary,dark?0xff353840:0xffe9e9e9,BLUE);
-            LinearLayout.LayoutParams preview=new LinearLayout.LayoutParams(-1,dp(206));
-            preview.leftMargin=preview.rightMargin=dp(12);preview.bottomMargin=dp(12);
-            group.addView(diagram,preview);
-            group.setOnClickListener(v->select.run());
-            add(group,0,14);
+            final int choice=mode;
+            diagramOption(WorkspaceOptions.modeLabel(mode),mode==WorkspaceOptions.FIXED_MAIN
+                    ?"B 进入原主窗，A 收入右侧小窗":"B 在原侧放大，A 收入左侧小窗",mode==selected,true,
+                    new SwapModeDiagram(activity,mode,secondary,dark?0xff353840:0xffe9e9e9,BLUE),()->{
+                        if(persist(WorkspaceSettingsStore.read(activity).withSwapMode(choice)))show(SWAP,false);
+                    });
         }
-        TextView note=text("从下一次交换主窗与小窗开始生效",13,secondary);
-        note.setPadding(dp(16),dp(2),dp(16),0);add(note,0,0);
+        previewNote("下次交换主窗与小窗时生效");
     }
 
     private String gestureLabel(int mode) {
@@ -294,33 +291,24 @@ final class WorkspaceSettingsPage extends FrameLayout {
     private void gesture() {
         WorkspaceOptions options = WorkspaceSettingsStore.read(activity);
         boolean lineHidden = EntryGestureSettings.lineHidden(activity);
-        int selected = EntryGesturePolicy.effectiveMode(options.entryGesture, lineHidden);
-        section("选择打开工作区的手势");
-        LinearLayout group = card();
-        entryGestureOption(group, WorkspaceOptions.STATUS_BAR_INWARD,
+        int selected = options.entryGesture;
+        entryGestureOption(WorkspaceOptions.STATUS_BAR_INWARD,
                 "状态栏向内滑", "从状态栏左侧或右侧向屏幕中间滑动", selected, true);
-        divider(group);
         String detail = lineHidden ? "从屏幕底部任意位置向左或向右滑动"
                 : "需先在系统设置中关闭手势提示线";
-        entryGestureOption(group, WorkspaceOptions.BOTTOM_CENTER_OUTWARD,
+        entryGestureOption(WorkspaceOptions.BOTTOM_CENTER_OUTWARD,
                 "底部向外滑", detail, selected, lineHidden);
-        add(group, 0, 0);
+        previewNote("保存后生效");
     }
 
-    private void entryGestureOption(LinearLayout group, int mode, String label, String detail,
-            int selectedMode, boolean enabled) {
-        choiceOption(group,label,detail,selectedMode==mode,enabled,null,()->{
-            if(!EntryGesturePolicy.canSelect(mode,EntryGestureSettings.lineHidden(activity)))
-                Toast.makeText(activity,"请先在系统设置中关闭手势提示线",Toast.LENGTH_SHORT).show();
-            else persist(WorkspaceSettingsStore.read(activity).withEntryGesture(mode));
-            show(GESTURE,false);
-        });
-        EntryGestureDiagram diagram=new EntryGestureDiagram(activity,mode,secondary,
-                dark?0xff353840:0xffe9e9e9,BLUE);
-        diagram.setAlpha(enabled?1f:.38f);
-        LinearLayout.LayoutParams preview=new LinearLayout.LayoutParams(-1,dp(170));
-        preview.leftMargin=preview.rightMargin=dp(12);preview.bottomMargin=dp(12);
-        group.addView(diagram,preview);
+    private void entryGestureOption(int mode,String label,String detail,int selectedMode,boolean enabled) {
+        diagramOption(label,detail,selectedMode==mode,enabled,
+                new EntryGestureDiagram(activity,mode,secondary,dark?0xff353840:0xffe9e9e9,BLUE),()->{
+                    if(!EntryGesturePolicy.canSelect(mode,EntryGestureSettings.lineHidden(activity)))
+                        Toast.makeText(activity,"请先关闭系统手势提示线",Toast.LENGTH_SHORT).show();
+                    else persist(WorkspaceSettingsStore.read(activity).withEntryGesture(mode));
+                    show(GESTURE,false);
+                });
     }
 
     @Override protected void onAttachedToWindow() {
@@ -358,7 +346,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
         LinearLayout row = new LinearLayout(activity);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinimumHeight(activity.settingsDimension("miuix_preference_item_min_height", 56));
-        row.setPadding(dp(16), dp(14), dp(16), dp(14));
+        row.setPadding(dp(16), dp(12), dp(16), dp(12));
         row.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x18ffffff : 0x0b000000),
                 null, shape(0xffffffff, 0)));
         return row;
@@ -368,8 +356,8 @@ final class WorkspaceSettingsPage extends FrameLayout {
         LinearLayout row = row();
         LinearLayout labels = new LinearLayout(activity);
         labels.setOrientation(LinearLayout.VERTICAL);
-        labels.addView(text(title, 17, primary));
-        TextView detail = text(summary, 14, secondary);
+        labels.addView(text(title, 16, primary));
+        TextView detail = text(summary, 12, secondary);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.topMargin = dp(3); labels.addView(detail, lp);
         row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));

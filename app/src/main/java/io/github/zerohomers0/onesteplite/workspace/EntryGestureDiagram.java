@@ -21,28 +21,28 @@ final class EntryGestureDiagram extends View {
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        float scale=Math.min(getWidth()/280f,getHeight()/170f);
+        float scale=Math.min(getWidth()/280f,getHeight()/206f);
         int save=canvas.save();
-        canvas.translate((getWidth()-280*scale)/2,(getHeight()-170*scale)/2);
+        canvas.translate((getWidth()-280*scale)/2,(getHeight()-206*scale)/2);
         canvas.scale(scale,scale);
         paint.setStyle(Paint.Style.STROKE);paint.setColor(outline);paint.setStrokeWidth(1.2f);
-        rect.set(94,8,186,148);canvas.drawRoundRect(rect,7,7,paint);
+        rect.set(99,27,181,183);canvas.drawRoundRect(rect,7,7,paint);
         paint.setStyle(Paint.Style.FILL);paint.setColor(empty);
-        rect.set(99,13,181,143);canvas.drawRoundRect(rect,4,4,paint);
+        rect.set(103,31,177,179);canvas.drawRoundRect(rect,4,4,paint);
         paint.setColor(outline);paint.setStrokeWidth(1.5f);paint.setStrokeCap(Paint.Cap.ROUND);
-        canvas.drawLine(104,22,120,22,paint);canvas.drawLine(165,22,175,22,paint);
+        canvas.drawLine(109,39,125,39,paint);canvas.drawLine(161,39,171,39,paint);
         paint.setColor(accent);paint.setAlpha(35);
         boolean bottom=mode==WorkspaceOptions.BOTTOM_CENTER_OUTWARD;
-        rect.set(99,bottom?126:13,181,bottom?143:31);
+        rect.set(103,bottom?160:31,177,bottom?179:51);
         canvas.drawRoundRect(rect,4,4,paint);paint.setAlpha(255);
         if(bottom) {
-            swipe(canvas,136,135,106);swipe(canvas,144,135,174);
+            swipe(canvas,136,170,110);swipe(canvas,144,170,170);
         } else {
-            swipe(canvas,102,22,130);swipe(canvas,178,22,150);
+            swipe(canvas,106,41,132);swipe(canvas,174,41,148);
         }
         paint.setStyle(Paint.Style.FILL);paint.setColor(outline);paint.setTextSize(11);
         paint.setTextAlign(Paint.Align.CENTER);
-        canvas.drawText(bottom?"底部向左或向右滑":"状态栏两侧向中间滑",140,165,paint);
+        canvas.drawText(bottom?"底部向左或向右滑":"状态栏两侧向中间滑",140,201,paint);
         canvas.restoreToCount(save);
     }
 

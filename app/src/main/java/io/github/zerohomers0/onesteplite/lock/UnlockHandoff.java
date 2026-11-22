@@ -11,6 +11,7 @@ import java.util.function.Consumer;
 final class UnlockHandoff {
     static final String PHYSICAL_KEYGUARD = "retainedPhysicalKeyguard";
     static final String COMPLETED="retainedRevealCompleted";
+    static final String WORKSPACE="retainedWorkspaceGeometry";
     static final String RELEASE = Actions.UNLOCK_HANDOFF_RELEASE;
     private static long nextGeneration = System.currentTimeMillis();
     private final Context context;
@@ -19,7 +20,7 @@ final class UnlockHandoff {
     private final Consumer<LiveSwapZoom.Ack> ready;
     private final Runnable nativeHide;
     private BroadcastReceiver receiver;
-    private boolean completed, delivered;
+    private boolean completed, delivered, workspacePresented;
 
     UnlockHandoff(Context context, Handler main, float scale, float x, float y,
             Consumer<LiveSwapZoom.Ack> ready, Runnable nativeHide) {
@@ -72,6 +73,11 @@ final class UnlockHandoff {
         complete(true);
     }
 
+    void presented() {
+        workspacePresented=true;
+        finish();
+    }
+
     void cancel() { complete(false); }
 
     private void complete(boolean hide) {
@@ -86,6 +92,10 @@ final class UnlockHandoff {
             Intent release = new Intent(RELEASE).setPackage("android");
             release.putExtra(LiveSwapZoomProtocol.GENERATION, zoom.generation);
             release.putExtra(COMPLETED,hide);
+            release.putExtra(WORKSPACE,hide && workspacePresented && zoom.scale<1f);
+            release.putExtra(LiveSwapZoomProtocol.SCALE,Float.floatToIntBits(zoom.scale));
+            release.putExtra(LiveSwapZoomProtocol.X,Float.floatToIntBits(zoom.x));
+            release.putExtra(LiveSwapZoomProtocol.Y,Float.floatToIntBits(zoom.y));
             try { context.sendBroadcast(release, LiveSwapZoomProtocol.PERMISSION); }
             catch (RuntimeException ignored) {}
         }

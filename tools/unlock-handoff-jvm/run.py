@@ -51,7 +51,9 @@ public class UnlockHandoffRegression {
   check(ready==1&&hides==0&&current.active(),"WMS commit is not the existing Host hardware frame");
   check(received.transactionId==99&&received.committed&&replay.closes==1,"exact WM operations consumed and closed");
   ctx.deliver(ack(generation,true,.7f,new Transaction()));check(ready==1,"duplicate WM acknowledgement delivered twice");
-  current.finish();check(hides==1&&!current.active()&&ctx.unregistered==1,"Host frame releases native hide once");
+  current.presented();check(hides==1&&!current.active()&&ctx.unregistered==1,"Host frame releases native hide once");
+  check(ctx.sent.getBooleanExtra(UnlockHandoff.WORKSPACE,false),"committed Host frame carries retained workspace intent");
+  check(Float.intBitsToFloat(ctx.sent.getIntExtra(LiveSwapZoomProtocol.SCALE,0))==.7f,"release carries the exact committed main scale");
   check(ctx.events.get(ctx.events.size()-2).equals("NATIVE_HIDE")&&ctx.events.get(ctx.events.size()-1).equals(UnlockHandoff.RELEASE),"native hide precedes physical-shade release");check(ctx.sent.getBooleanExtra(UnlockHandoff.COMPLETED,false),"completed release carries native reveal permission");
   current.finish();handler.timeout();check(hides==1&&ctx.unregistered==1,"late watchdog repeats native hide");
   for(int failure=0;failure<5;failure++){
@@ -59,8 +61,10 @@ public class UnlockHandoffRegression {
    Intent response=ack(g,failure!=0,failure==1?.9f:.7f,failure==2?null:t);
    if(failure==4)response.putExtra(LiveSwapZoomProtocol.ERROR,"WM mismatch");ctx.deliver(response);
    check(ready==0&&hides==1&&!current.active(),"failed WM commit cannot reveal retained Host");
+   check(!ctx.sent.getBooleanExtra(UnlockHandoff.WORKSPACE,true),"failed WM commit must restore physical fullscreen");
   }
   fresh();current.start();handler.timeout();check(ready==0&&hides==1&&!current.active(),"missing WM acknowledgement must release native system");
+  check(!ctx.sent.getBooleanExtra(UnlockHandoff.WORKSPACE,true),"watchdog without Host frame cannot request retained zoom");
   fresh();current.start();ctx.deliver(ack(generation(),true,.7f,new Transaction()));handler.timeout();
   check(ready==1&&hides==1,"missing Host frame cannot leave native hide blocked forever");
   fresh();current.start();current.cancel();handler.timeout();check(hides==0&&!current.active()&&ctx.unregistered==1,"relock cancels stale native hide without revealing previous session");check(!ctx.sent.getBooleanExtra(UnlockHandoff.COMPLETED,true),"cancel does not authorize native main-surface reveal");

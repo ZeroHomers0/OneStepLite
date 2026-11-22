@@ -26,6 +26,20 @@ final class ZoomChannelState {
         return modified + "|" + command;
     }
 
+    synchronized boolean supersedes(long issued,String command) {
+        if(latest==null || latest.modified<=issued)return false;
+        if(latest.command.startsWith("anim"))return true;
+        try {
+            String[] a=latest.command.trim().split("\\s+"),b=command.trim().split("\\s+");
+            for(int i=0;i<3;i++) {
+                float first=i<a.length?Float.parseFloat(a[i]):0f;
+                float second=i<b.length?Float.parseFloat(b[i]):0f;
+                if(first!=second)return true;
+            }
+            return false;
+        } catch(NumberFormatException invalid) { return true; }
+    }
+
     synchronized boolean offerEncoded(String encoded, long now) {
         if (encoded == null) return false;
         int separator = encoded.indexOf('|');

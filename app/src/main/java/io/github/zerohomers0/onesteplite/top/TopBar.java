@@ -206,10 +206,10 @@ final class TopBar extends FrameLayout {
         }
         void updateColors() {
             int fallback=HyperOsStyle.textPrimary(getContext());
-            for(IconButton icon:icons)icon.setIconColor(HyperOsStyle.wallpaperTextColor(
+            for(IconButton icon:icons)icon.setIconColor(HyperOsStyle.dark(getContext())?0xffffffff:HyperOsStyle.wallpaperTextColor(
                     glassWallpaper,glassWidth,glassHeight,getLeft()+icon.getLeft(),getTop()+icon.getTop(),
                     icon.getWidth(),icon.getHeight(),fallback));
-            title.setTextColor(HyperOsStyle.wallpaperTextColor(glassWallpaper,glassWidth,glassHeight,
+            title.setTextColor(HyperOsStyle.dark(getContext())?0xffffffff:HyperOsStyle.wallpaperTextColor(glassWallpaper,glassWidth,glassHeight,
                     getLeft()+title.getLeft(),getTop()+title.getTop(),title.getWidth(),title.getHeight(),fallback));
         }
         private IconButton button(int icon,String text,Runnable action) {

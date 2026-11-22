@@ -85,10 +85,10 @@ public final class NativeFreeformLayerBridgeTest {
         Task child = new Task(5); child.root=low;
         display.tasks.addAll(List.of(main, side, child, low, high));
         apply(display, transaction);
-        check(host.calls==1 && host.anchor==high.surface && host.layer==1 && host.force);
-        check(bridge.calls==1 && bridge.anchor==high.surface && bridge.layer==3);
-        check(mirror.calls==1 && mirror.anchor==high.surface && mirror.layer==2);
-        check(clipboard.calls==1 && clipboard.anchor==high.surface && clipboard.layer==4);
+        check(host.calls==1 && host.anchor==high.surface && host.layer==1_000_001 && host.force);
+        check(bridge.calls==1 && bridge.anchor==high.surface && bridge.layer==1_000_003);
+        check(mirror.calls==1 && mirror.anchor==high.surface && mirror.layer==1_000_002);
+        check(clipboard.calls==1 && clipboard.anchor==high.surface && clipboard.layer==1_000_004);
         check(host.tx==transaction && bridge.tx==transaction
                 && mirror.tx==transaction && clipboard.tx==transaction);
         check(display.zoomReplays==1 && display.zoomTransaction==transaction);

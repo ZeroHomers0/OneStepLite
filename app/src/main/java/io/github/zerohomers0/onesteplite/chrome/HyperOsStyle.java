@@ -120,7 +120,7 @@ final class HyperOsStyle {
     }
 
     static int topWallpaperTint(Context context) {
-        return 0;
+        return dark(context)?0x99080a10:0;
     }
 
     static Bitmap blurredWallpaper(Context context, int i, int i2) throws Exception {

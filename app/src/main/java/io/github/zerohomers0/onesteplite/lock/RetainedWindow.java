@@ -216,9 +216,12 @@ final class RetainedWindow {
     interface PhysicalRestore {void apply() throws Throwable;}
     /** The same committed transaction must hold physical geometry before unmasking main. */
     void finishAuthenticatedRelease(Object display,Object transaction,boolean authenticated,
-            boolean completed,PhysicalRestore physical) throws Throwable {
+            boolean completed,boolean workspace,PhysicalRestore physical,PhysicalRestore retained) throws Throwable {
         if(!authenticated)return;
-        if(!completed||!hostPresented(display))physical.apply();
+        // A correlated Host frame is stronger than WindowState's lagging draw
+        // cache. Never turn a successful workspace reveal into physical fullscreen.
+        if(completed && workspace)retained.apply();
+        else physical.apply();
         if(completed)completeAuthenticatedReveal(display,transaction);
     }
 

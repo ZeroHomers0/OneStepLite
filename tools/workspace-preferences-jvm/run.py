@@ -19,8 +19,16 @@ while depth:
     depth += (style[end] == '{') - (style[end] == '}')
     end += 1
 
+def style_method(signature):
+    a=style.index(signature);b=style.index('{',a)+1;depth=1
+    while depth:
+        depth+=(style[b]=='{')-(style[b]=='}');b+=1
+    return style[a:b]
+night=style_method('    static boolean dark(')+'\n'+style_method('    static int topWallpaperTint(')
 files = {
-    'android/content/Context.java': 'package android.content; public class Context {public Object getContentResolver(){return this;}}',
+    'android/content/Context.java': 'package android.content; public class Context {public android.content.res.Resources resources=new android.content.res.Resources();public android.content.res.Resources getResources(){return resources;}public Object getContentResolver(){return this;}}',
+    'android/content/res/Resources.java':'package android.content.res;public class Resources {public Configuration config=new Configuration();public Configuration getConfiguration(){return config;}}',
+    'android/content/res/Configuration.java':'package android.content.res;public class Configuration {public int uiMode=16;}',
     'android/provider/Settings.java': 'package android.provider; public class Settings {public static class Secure {}}',
     'android/graphics/Bitmap.java': '''package android.graphics; public class Bitmap {
         public int left,right;public boolean recycled;public Bitmap(int a,int b){left=a;right=b;}
@@ -40,13 +48,18 @@ files = {
         class QuickApp {Component component;QuickApp(String key){component=new Component(key);}
         static class Component {String key;Component(String key){this.key=key;}String flattenToString(){return key;}}}
     ''',
-    'io/github/zerohomers0/onesteplite/HyperOsStyle.java': 'package io.github.zerohomers0.onesteplite;import android.graphics.Bitmap;class HyperOsStyle {\n' + style[start:end] + '\n}',
+    'io/github/zerohomers0/onesteplite/HyperOsStyle.java': 'package io.github.zerohomers0.onesteplite;import android.graphics.Bitmap;import android.content.Context;class HyperOsStyle {\n' + style[start:end] + '\n'+night+'\n}',
     'io/github/zerohomers0/onesteplite/PreferencesRegression.java': '''package io.github.zerohomers0.onesteplite;
         import java.util.List;import android.graphics.Bitmap;import de.robv.android.xposed.XposedHelpers;
         public class PreferencesRegression {
             static int checks;static void check(boolean v,String m){checks++;if(!v)throw new AssertionError(m);}
             public static void main(String[]args){
                 var ctx=new android.content.Context();String saved=XposedHelpers.saved;
+                check(HyperOsStyle.topWallpaperTint(ctx)==0,"day mode preserves wallpaper blur colours");
+                ctx.resources.config.uiMode=32;
+                check(HyperOsStyle.topWallpaperTint(ctx)==0x99080a10,"night mode uses a translucent dark wash over the same blur");
+                ctx.resources.config.uiMode=16;
+                check(HyperOsStyle.topWallpaperTint(ctx)==0,"switching back to day removes dark wash");
                 check(QuickAppPins.arrange(ctx,List.of()).isEmpty(),"cold cache renders empty");
                 check(saved.equals(XposedHelpers.saved)&&XposedHelpers.writes==0,"cold cache never deletes saved pins");
                 var a=new QuickApp("a/Activity");var b=new QuickApp("b/Activity");

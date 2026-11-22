@@ -53,7 +53,6 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     /** 试验方框的位置与尺寸（后面要换成自适应布局）。 */
 
-
     private static volatile Context sContext;
     private static volatile Object sTaskViewFactory;
     private static volatile Object sTaskViewTransitions;
@@ -630,6 +629,12 @@ public class HostEntry implements IXposedHookLoadPackage {
                         ZoomTarget target = sZoomTarget;
                         long generation = intent.getLongExtra(LiveSwapZoomProtocol.GENERATION, 0);
                         boolean completed=intent.getBooleanExtra(UnlockHandoff.COMPLETED,true);
+                        boolean workspace=intent.getBooleanExtra(UnlockHandoff.WORKSPACE,false);
+                        float retainedScale=Float.intBitsToFloat(intent.getIntExtra(LiveSwapZoomProtocol.SCALE,0));
+                        float retainedX=Float.intBitsToFloat(intent.getIntExtra(LiveSwapZoomProtocol.X,0));
+                        float retainedY=Float.intBitsToFloat(intent.getIntExtra(LiveSwapZoomProtocol.Y,0));
+                        if(workspace && (!Float.isFinite(retainedScale) || retainedScale<=0 || retainedScale>=1
+                                || !Float.isFinite(retainedX) || !Float.isFinite(retainedY)))return;
                         if (target != null) target.handler.post(() -> {
                             synchronized (target.globalLock) {
                                 if (target != sZoomTarget || generation == 0
@@ -640,8 +645,13 @@ public class HostEntry implements IXposedHookLoadPackage {
                                     boolean authenticated=!sKeyguardZoom.sleeping()&&EntryGuard.canOpen(context);
                                     // Failure/exit has no presented workspace. Restore physical
                                     // geometry before unmasking its main surface in the same tx.
-                                    sRetainedWindow.finishAuthenticatedRelease(target.display,tx,authenticated,completed,()->{
+                                    sRetainedWindow.finishAuthenticatedRelease(target.display,tx,authenticated,completed,workspace,()->{
                                         target.owner.applyDisplayZoomLocked(target,1f,0f,0f,null,true);
+                                        reapplyFinalMagnification(target.display,tx);
+                                    },()->{
+                                        String retained=retainedScale+" "+retainedY+" "+retainedX;
+                                        if(!sZoomChannels.supersedes(sLiveZoomIssued,retained))
+                                            target.owner.applyDisplayZoomLocked(target,retainedScale,retainedY,retainedX);
                                         reapplyFinalMagnification(target.display,tx);
                                     });
                                     reapplyFinalMagnification(target.display, tx);
@@ -3372,10 +3382,13 @@ public class HostEntry implements IXposedHookLoadPackage {
                 // The final visible root in this bottom-up walk is the highest.
                 // Host wallpaper outside its main hole masks OEM drag overflow,
                 // while the transparent main hole preserves the real float.
-                int layer = attrs.type == WindowTypes.STATUS_BAR ? -5
-                        : "Clipboard".contentEquals(attrs.getTitle()) ? 4
+                // A root-relative +1 can still sit below its positive-Z client
+                // children. Raise only our identified overlay group above that
+                // subtree, preserving the order of our own content/transition layers.
+                int layer = attrs.type == WindowTypes.STATUS_BAR ? -5 : 1_000_000 + (
+                        "Clipboard".contentEquals(attrs.getTitle()) ? 4
                         : "OneStepLiteTransition".contentEquals(attrs.getTitle()) ? 3
-                        : "OneStepLiteMirrorLayer".contentEquals(attrs.getTitle()) ? 2 : 1;
+                        : "OneStepLiteMirrorLayer".contentEquals(attrs.getTitle()) ? 2 : 1);
                 if (state.nativeAnchor != highestFreeform[0]) touchExclusionChanged = true;
                 XposedHelpers.callMethod(host, "assignRelativeLayer", transaction,
                         highestFreeform[0], layer, true);
@@ -3971,32 +3984,7 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private void hookBackGestureDiagnostics(ClassLoader cl) {
-        try {
-            Class<?> receiver = XposedHelpers.findClass(
-                    "com.android.systemui.navigationbar.gestural.DisplayBackGestureHandlerImpl$inputEventReceiver$1", cl);
-            XposedBridge.hookAllMethods(receiver, "onInputEvent", new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    if (p.args.length == 1 && p.args[0] instanceof android.view.MotionEvent)
-                        logBackEvent("DisplayBackGestureHandler", (android.view.MotionEvent) p.args[0]);
-                }
-            });
-            log("DisplayBackGestureHandler input diagnostics installed");
-        } catch (Throwable error) {
-            log("DisplayBackGestureHandler input diagnostics unavailable: " + error);
-        }
-        try {
-            Class<?> panel = XposedHelpers.findClass(
-                    "com.android.systemui.navigationbar.gestural.BackPanelController", cl);
-            XposedBridge.hookAllMethods(panel, "onMotionEvent", new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    if (p.args.length == 1 && p.args[0] instanceof android.view.MotionEvent)
-                        logBackEvent("BackPanelController", (android.view.MotionEvent) p.args[0]);
-                }
-            });
-            log("BackPanelController input diagnostics installed");
-        } catch (Throwable error) {
-            log("BackPanelController input diagnostics unavailable: " + error);
-        }
+        new BackGestureDiagnostics(()->sHostZoomed,HostEntry::log).install(cl);
     }
 
     /**
@@ -4005,68 +3993,11 @@ public class HostEntry implements IXposedHookLoadPackage {
      * normal full-screen launcher animation are left untouched.
      */
     private void hookTransitionBounds(ClassLoader cl) {
-        // Native windows now share the main parent coordinate system.
-        // Physical/main conversion and pre-return position suppression are unnecessary.
-        try {
-            Class<?> util = XposedHelpers.findClass(
-                    "com.android.wm.shell.common.transition.MiuiTransitionHandlerUtil", cl);
-            XposedBridge.hookAllMethods(util, "getAnimBounds", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
-                    Object result = param.getResult();
-                    Rect main = WorkspaceHost.activeMainBounds();
-                    if (!(result instanceof Rect) || main == null || param.args == null
-                            || param.args.length < 2
-                            || !WorkspaceHost.shouldClampAnimationBounds(
-                                    param.args[0], param.args[1])) return;
-                    Rect original = (Rect) result;
-                    Rect clipped = TransitionBounds.clamp(original, main);
-                    if (clipped == original || clipped.equals(original)) return;
-                    param.setResult(clipped);
-                    log("transition animation clipped " + original + " -> " + clipped
-                            + " main=" + main);
-                }
-            });
-            log("MIUI transition animation bounds clamped to active main pane");
-        } catch (Throwable error) {
-            log("transition animation clamp unavailable: " + error);
-        }
-
-    }
-
-    private static void logBackEvent(String source, android.view.MotionEvent event) {
-        int action = event.getActionMasked();
-        if (action != android.view.MotionEvent.ACTION_DOWN
-                && action != android.view.MotionEvent.ACTION_UP
-                && action != android.view.MotionEvent.ACTION_CANCEL) return;
-        int display = -1;
-        try { display = (Integer) XposedHelpers.callMethod(event, "getDisplayId"); }
-        catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-        log("back event source=" + source + " action=" + action + " display=" + display
-                + " local=" + event.getX() + "," + event.getY()
-                + " raw=" + event.getRawX() + "," + event.getRawY()
-                + " hostZoom=" + sHostZoomed);
+        new WorkspaceWindowHooks(HostEntry::log).hookTransitionBounds(cl);
     }
 
     private void hookRecentsWallpaper(ClassLoader cl) {
-        try {
-            Class<?> util = XposedHelpers.findClass("com.android.wm.shell.shared.TransitionUtil", cl);
-            XposedBridge.hookAllMethods(util, "newTarget", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (p.hasThrowable() || p.getResult() == null) return;
-                    int offset = RecentsWallpaper.argumentOffset(p.args);
-                    if (offset < 0) return;
-                    try {
-                        if (RecentsWallpaper.stage(p.args[2 + offset], p.args[0],
-                                XposedHelpers.getObjectField(p.getResult(), "leash"), p.args[3 + offset],
-                                WorkspaceHost.activeMainTransform(), WorkspaceHost.activeMainBounds(),
-                                (java.util.Map) p.args[4 + offset]))
-                            log("Recents wallpaper capture fill staged behind workspace wallpaper");
-                    } catch (Throwable error) {
-                        log("Recents wallpaper capture unchanged: " + error);
-                    }
-                }
-            });
-        } catch (Throwable error) { log("Recents wallpaper hook unavailable: " + error); }
+        new WorkspaceWindowHooks(HostEntry::log).hookRecentsWallpaper(cl);
     }
 
     private void hookShellProviders(ClassLoader cl) {
@@ -4229,41 +4160,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         } catch (Throwable t) {
             log("broadcast trigger failed: " + t);
         }
-        try {
-            android.content.BroadcastReceiver screenReceiver = new android.content.BroadcastReceiver() {
-                @Override
-                public void onReceive(android.content.Context context, android.content.Intent intent) {
-                    if (android.content.Intent.ACTION_CLOSE_SYSTEM_DIALOGS.equals(intent.getAction())) {
-                        String reason = intent.getStringExtra("reason");
-                        log("native system dialogs close reason=" + reason);
-                        if (NavigationPolicy.shouldSuspend(reason)
-                                || "fs_gesture".equals(reason) || "gestureNav".equals(reason)
-                                || "recentapps".equals(reason))
-                            WorkspaceHost.onSystemNavigation(reason);
-                        return;
-                    }
-                    if (android.content.Intent.ACTION_USER_PRESENT.equals(intent.getAction())) {
-                        log("user present -> clear keyguard privacy");
-                        WorkspaceHost.onUserPresent();
-                        return;
-                    }
-                    boolean on = android.content.Intent.ACTION_SCREEN_ON.equals(intent.getAction());
-                    if (!on || !EntryGuard.canOpen(sContext)) InputTrace.stop();
-                    log("screen " + (on ? "ON" : "OFF"));
-                    WorkspaceHost.onScreenState(on);
-                }
-            };
-            android.content.IntentFilter screenFilter = new android.content.IntentFilter();
-            screenFilter.addAction(android.content.Intent.ACTION_SCREEN_ON);
-            screenFilter.addAction(android.content.Intent.ACTION_SCREEN_OFF);
-            screenFilter.addAction(android.content.Intent.ACTION_USER_PRESENT);
-            screenFilter.addAction(android.content.Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
-            sContext.registerReceiver(screenReceiver, screenFilter,
-                    android.content.Context.RECEIVER_EXPORTED);
-            log("screen trigger armed");
-        } catch (Throwable t) {
-            log("screen trigger failed: " + t);
-        }
+        WorkspaceScreenObserver.install(sContext,HostEntry::log);
     }
 
     /**

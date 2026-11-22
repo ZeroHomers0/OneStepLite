@@ -20,6 +20,18 @@ public final class ZoomChannelStateTest {
 
     public static void main(String[] args) {
         ZoomChannelState state = new ZoomChannelState(1000);
+        ZoomChannelState release=new ZoomChannelState(1000);
+        check(!release.supersedes(2000,"0.7 600 0"),"empty channel cannot override retained release");
+        release.offer("0.7 600 0",2000,2000);
+        check(!release.supersedes(2000,"0.7 600 0"),"same unlock command may restore retained geometry");
+        release.offer("0.7 600 0",2100,2100);
+        check(!release.supersedes(2000,"0.7 600 0"),"same-state heartbeat does not invalidate retained release");
+        release.offer("0.7 600.0 0.0",2101,2101);
+        check(!release.supersedes(2000,"0.7 600 0"),"integer and float offset formatting describe the same geometry");
+        release.offer("1 0 0",2200,2200);
+        check(release.supersedes(2000,"0.7 600 0"),"new explicit exit prevents late unlock from restoring old zoom");
+        release.offer("anim 0.7 600 0 300",2300,2300);
+        check(release.supersedes(2000,"0.7 600 0"),"new animation cannot be cancelled by an old release even with the same destination");
         ArrayDeque<Runnable> queue = new ArrayDeque<>();
         List<Float> applied = new ArrayList<>();
         Object target = new Object();

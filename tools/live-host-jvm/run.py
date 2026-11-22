@@ -6,7 +6,8 @@ import subprocess
 import sys
 
 root = Path(__file__).resolve().parents[2]
-source = package_dir(root)/'WorkspaceHost.java'
+src = package_dir(root)
+source = src/'WorkspaceHost.java'
 out = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'build/tests/standalone'
 out.mkdir(parents=True, exist_ok=True)
 text = source.read_text(encoding='utf-8-sig')
@@ -235,5 +236,5 @@ sparse = out / 'android/util/SparseArray.java'
 sparse.parent.mkdir(parents=True, exist_ok=True)
 sparse.write_text('package android.util; public class SparseArray<T> {private final java.util.Map<Integer,T> map=new java.util.HashMap<>(); public T get(int k){return map.get(k);} public void put(int k,T v){map.put(k,v);}}',encoding='utf8')
 jdk = Path(os.environ["ONESTEPLITE_JAVA_BIN"])
-subprocess.run([str(jdk/'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(out), str(sparse), str(java)],check=True)
+subprocess.run([str(jdk/'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(out), str(sparse), str(src/'TaskHandoffPolicy.java'), str(src/'HandoffOwner.java'), str(java)],check=True)
 subprocess.run([str(jdk/'java.exe'), '-cp', str(out), 'io.github.zerohomers0.onesteplite.LiveHostRegression'],check=True)

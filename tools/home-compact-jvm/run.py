@@ -62,7 +62,7 @@ public class HomeCompactRegression {
  static class TopState {Object owner(){return null;}void release(Object key){}}
  TopState topTaskState=new TopState();Slot topOriginalSlot;boolean topPortrait;
  Promotion promotion;HomeTaskReturn coveredHome;CellMovePreview cellMovePreview;boolean compactPending;Slot launchCurrentSlot;Object cellMotion;
- final List<Slot> sideOrder=new ArrayList<>(),sideAttached=new ArrayList<>();
+ final SideRowOrder<Slot> sideOrder=new SideRowOrder<>();final List<Slot> sideAttached=new ArrayList<>();
  final Map<Slot,Float> sideCompactionShift=new IdentityHashMap<>();
  boolean sideArmed,sideCaptured,sideCompacting,sideScrolling,creatingSideView;Object sideScrollAnimator;
  float sideOffset,savedSideOffset;
@@ -244,5 +244,5 @@ public class HomeCompactRegression {
 """.replace('__METHODS__',methods)
 f=out/'HomeCompactRegression.java';f.write_text(body,encoding='utf8')
 jdk=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(src/'SlotPositions.java'),str(src/'SidePromotionPolicy.java'),str(f)],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(src/'SlotPositions.java'),str(src/'SidePromotionPolicy.java'),str(src/'TaskHandoffPolicy.java'),str(src/'HandoffOwner.java'),str(src/'SideRowOrder.java'),str(f)],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.HomeCompactRegression'],check=True)

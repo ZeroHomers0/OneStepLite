@@ -41,7 +41,13 @@ final class WorkspaceSettingsStore {
                 .putInt(LANDSCAPE_VIDEO, options.landscapeVideo)
                 .putBoolean(HIDE_RECENTS, options.hideSideRecents)
                 .putBoolean(PARK_MAIN, options.parkMainOnLaunch).remove("allow_secure_capture").remove("rounded_windows").commit();
-        if (saved) context.getContentResolver().notifyChange(URI, null);
+        if (saved) {
+            context.getContentResolver().notifyChange(URI, null);
+            // A wakeup only: receivers reread the authenticated provider, never extras.
+            try {
+                context.sendBroadcast(new android.content.Intent(Actions.SETTINGS_CHANGED).setPackage(Packages.SYSTEM_UI));
+            } catch(RuntimeException unavailable) { /* The provider observer remains the primary channel. */ }
+        }
         return saved;
     }
 

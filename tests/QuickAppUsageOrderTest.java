@@ -12,6 +12,9 @@ public final class QuickAppUsageOrderTest {
                 timeB, lastB, nameB, componentB);
     }
     public static void main(String[] args) {
+        check(compare(100,3*86400000L,"Z","z",60000,86400000L,"A","a")<0);
+        check(compare(60000,3*86400000L,"Z","z",100,3*86400000L+1000,"A","a")<0);
+        check(compare(0,4*86400000L,"A","a",100,86400000L,"B","b")>0);
         check(compare(60000, 1, "Z", "z", 100, 99, "A", "a") < 0);
         check(compare(100, 99, "Z", "z", 100, 1, "A", "a") < 0);
         check(compare(0, 99, "A", "a", 0, 1, "B", "b") < 0);

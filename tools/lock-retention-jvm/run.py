@@ -83,6 +83,7 @@ public class WorkspaceHost {
  static WorkspaceHost sInstance;
  Queue main=new Queue();View root=new View(),topBar=new View();
  WindowManager wm=new WindowManager();WindowManager.LayoutParams lp=new WindowManager.LayoutParams();
+ final WindowPrivacy windowPrivacy=new WindowPrivacy(WorkspaceHost::log);
  WorkspaceOptions workspaceOptions=WorkspaceOptions.DEFAULT;Context ctx;
  Slot[]slots=new Slot[SLOT_COUNT];StatusBar statusBar=new StatusBar();SwapTrace swapTrace;
  boolean lockExitPending;boolean screenOn=true,keyguardLocked,retainedForLock,keyguardWindowHidden,keyguardWindowNotTouchable,retainedOnExit;
@@ -104,6 +105,8 @@ public class WorkspaceHost {
  void setZoomState(boolean value){zoomed=value;}
  void writeZoom(boolean value){writeZoomLine(value?".75 620 0":"1 0 0",100);}
  void broadcastZoom(String command,long at){lastCommand=command;zooms++;}
+ class ZoomTransport {void publish(String command,long at){broadcastZoom(command,at);}}
+ final ZoomTransport zoomTransport=new ZoomTransport();
  void beginWorkspaceEntry(Runnable ready){entries++;entryReady=ready;}
  void refreshDisplayGeometry(){}void consumePendingMainSide(){}void setWorkspaceAlpha(float value){workspaceAlpha=value;}
  void collapseStatusBarPanels(){}void configureTabletTools(){}void requestCompaction(){}
@@ -215,6 +218,7 @@ for name, body in files.items():
     path.write_text(body.replace('__METHODS__', methods), encoding='utf-8')
     paths.append(str(path))
 paths.append(str(src / 'WorkspaceOptions.java'))
+paths.append(str(src / 'WindowPrivacy.java'))
 paths.append(str(src / 'NavigationPolicy.java'))
 jdk = Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17',

@@ -38,7 +38,7 @@ final class Warmup {
     private static final List<PendingApps> pendingApps = new ArrayList<>();
     private static List<QuickApp> apps = Collections.emptyList();
     private static boolean appsLoaded, wallpaperPrepared;
-    private static final long APPS_REFRESH_MILLIS = 10L * 60L * 1000L;
+    private static final long APPS_REFRESH_MILLIS = 60L * 1000L;
     private static long appsPreparedAt;
     private static int cacheUser = -1;
     private static long generation;

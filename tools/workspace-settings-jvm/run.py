@@ -10,6 +10,8 @@ src=package_dir(root)
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
 files = {
+'android/content/Intent.java':'package android.content;public class Intent {public Intent(String action){}public Intent setPackage(String p){return this;}}',
+
 'android/net/Uri.java': 'package android.net;public class Uri {public static Uri parse(String s){return new Uri();}}',
 'android/os/Bundle.java': '''package android.os;import java.util.*;public class Bundle {
  Map<String,Object> values=new HashMap<>();public void putInt(String k,int v){values.put(k,v);}
@@ -28,6 +30,7 @@ files = {
   public Editor putBoolean(String k,boolean v){pending.put(k,v);return this;}
   public boolean commit(){if(commit)for(var entry:pending.entrySet()){if(entry.getValue()==null)values.remove(entry.getKey());else values.put(entry.getKey(),entry.getValue());}return commit;}}}''',
 'android/content/Context.java': '''package android.content;public class Context {
+ public void sendBroadcast(Intent i){}
  public static final int MODE_PRIVATE=0;public SharedPreferences prefs=new SharedPreferences();
  public ContentResolver resolver=new ContentResolver();public Context createDeviceProtectedStorageContext(){return this;}
  public SharedPreferences getSharedPreferences(String name,int mode){return prefs;}
@@ -122,7 +125,7 @@ for name, body in files.items():
     paths.append(str(path))
 paths += [str(src / name) for name in [
     'WorkspaceOptions.java', 'WorkspaceSettingsStore.java', 'EntryGesturePolicy.java',
-    'EntryGestureSettings.java']]
+    'EntryGestureSettings.java', 'Actions.java', 'Packages.java']]
 jdk = Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(out), *paths], check=True)
 subprocess.run([str(jdk / 'java.exe'), '-cp', str(out), 'io.github.zerohomers0.onesteplite.SettingsRegression'], check=True)

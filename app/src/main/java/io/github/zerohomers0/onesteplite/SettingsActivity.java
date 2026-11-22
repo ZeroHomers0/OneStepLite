@@ -47,7 +47,7 @@ public final class SettingsActivity extends Activity {
         FrameLayout titleBar = new FrameLayout(this);
         titleBar.addView(toolbar, new FrameLayout.LayoutParams(-1, -1));
         pageTitle = new TextView(this);
-        pageTitle.setTextSize(17);
+        pageTitle.setTextSize(16);
         pageTitle.setTypeface(Typeface.create(pageTitle.getTypeface(), Typeface.BOLD));
         pageTitle.setTextColor(settingsColor("miuix_preference_primary_text_color_" + (dark ? "dark" : "light"),
                 dark ? 0xfff4f5f8 : 0xff000000));

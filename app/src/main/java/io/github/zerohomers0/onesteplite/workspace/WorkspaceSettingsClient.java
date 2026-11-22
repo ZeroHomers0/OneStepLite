@@ -13,6 +13,7 @@ final class WorkspaceSettingsClient {
     private final Consumer<WorkspaceOptions> changed;
     private boolean reportedFailure;
     private boolean observing;
+    private volatile long generation;
     private final ContentObserver observer;
     private final Runnable load = this::load;
 
@@ -26,10 +27,18 @@ final class WorkspaceSettingsClient {
         observer = new ContentObserver(main) {
             @Override public void onChange(boolean selfChange) { refresh(); }
         };
+        try {
+            context.registerReceiver(new android.content.BroadcastReceiver() {
+                @Override public void onReceive(Context ignored,android.content.Intent intent) { refresh(); }
+            },new android.content.IntentFilter(Actions.SETTINGS_CHANGED),null,main,Context.RECEIVER_EXPORTED);
+        } catch(RuntimeException unavailable) {
+            android.util.Log.w(Tags.PROBE,"settings wakeup receiver unavailable",unavailable);
+        }
         refresh();
     }
 
     void refresh() {
+        generation++;
         if (!observing) try {
             context.getContentResolver().registerContentObserver(WorkspaceSettingsStore.URI, false, observer);
             observing = true;
@@ -40,10 +49,11 @@ final class WorkspaceSettingsClient {
     }
 
     private void load() {
+        final long request=generation;
         try {
             WorkspaceOptions options = WorkspaceSettingsStore.decode(context.getContentResolver().call(
                     WorkspaceSettingsStore.URI, WorkspaceSettingsStore.READ, null, null));
-            main.post(() -> changed.accept(options));
+            main.post(() -> {if(request==generation)changed.accept(options);});
             reportedFailure = false;
         } catch (Exception error) {
             if (!reportedFailure) android.util.Log.w(Tags.PROBE, "workspace settings unavailable; keep last choices", error);
