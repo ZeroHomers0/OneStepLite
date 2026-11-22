@@ -24,7 +24,6 @@ final class Actions {
     static final String LANDSCAPE_MODE = "io.github.zerohomers0.onesteplite.LANDSCAPE_MODE";
     /** Top task controls and the edge-back gesture they own. */
     static final String TOP_TASK_STATE = "io.github.zerohomers0.onesteplite.TOP_TASK_STATE";
-    static final String TOP_EDGE_BACK = "io.github.zerohomers0.onesteplite.TOP_EDGE_BACK";
     /** Native video overlay docked into the workspace. */
     static final String VIDEO_HOST = "io.github.zerohomers0.onesteplite.VIDEO_HOST";
     static final String VIDEO_STATE = "io.github.zerohomers0.onesteplite.VIDEO_STATE";

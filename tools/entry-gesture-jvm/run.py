@@ -66,15 +66,8 @@ files = {
 final class WorkspaceSettingsClient {static WorkspaceOptions initial=WorkspaceOptions.DEFAULT;static Consumer<WorkspaceOptions> changed;
  WorkspaceSettingsClient(Object context,Object handler,Consumer<WorkspaceOptions> callback){changed=callback;callback.accept(initial);}}''',
 'io/github/zerohomers0/onesteplite/WorkspaceHost.java': '''package io.github.zerohomers0.onesteplite;final class WorkspaceHost {
- static boolean active,ready=true;static Object token;static int dismissed,dismissMoves,dismissEnds,dismissCancels;static float displacement;
- static Object topDismissToken(){return ready?token:null;}static boolean beginTopDismiss(float dx,Object t){dismissed++;return ready&&t==token;}
- static int backs;static void requestTopBack(Object token){backs++;}
- static void moveTopDismiss(float d){dismissMoves++;displacement=d;}static void endTopDismiss(boolean c){dismissEnds++;if(c)dismissCancels++;}
+ static boolean active,ready=true;static Object token;
  static Boolean pendingRight;static boolean hostSceneActive(){return active;}static void setPendingMainSide(boolean r){pendingRight=r;}
- static int topGestureHeight(){return ready?622:0;}
- static int[] bounds;static int direction;
- static int[] topGestureBounds(){return !ready?null:bounds!=null?bounds:new int[]{0,0,1080,622};}
- static int topGestureDirection(){return direction;}
  }''',
 'io/github/zerohomers0/onesteplite/EntryGestureRegression.java': r'''package io.github.zerohomers0.onesteplite;
 import android.content.Context;import android.os.*;import android.view.*;import com.android.systemui.shared.system.InputMonitorCompat;
@@ -101,7 +94,7 @@ public class EntryGestureRegression {
  static void reset(int rotation,int width,int height)throws Exception {
   Handler.drain();HotZoneGesture.suspend();HotZoneGesture.raiseAll(ctx);HotZoneGesture.setEntryGesture(0);
   android.provider.Settings.Global.hide=0;android.provider.Settings.Global.fail=false;
-  android.util.DisplayMetrics.defaultDensity=1;WorkspaceHost.active=false;WorkspaceHost.pendingRight=null;WorkspaceHost.token=null;WorkspaceHost.bounds=null;WorkspaceHost.direction=0;EntryGuard.open=true;DeviceProfile.tablet=false;
+  android.util.DisplayMetrics.defaultDensity=1;WorkspaceHost.active=false;WorkspaceHost.pendingRight=null;WorkspaceHost.token=null;EntryGuard.open=true;DeviceProfile.tablet=false;
   ctx.wm.display.rotation=rotation;ctx.wm.display.width=width;ctx.wm.display.height=height;
   fullscreen(false);transientBar(false,0,1);panel(false);bar(0,1,0);opened=0;InputMonitorCompat.latest.mInputMonitor.claims=0;
  }
@@ -186,30 +179,25 @@ public class EntryGestureRegression {
   reset(0,1080,2460);event(0,20,30);event(1,20,30);Handler.drain();untouched("ordinary tap");
   reset(0,1080,2460);EntryGuard.open=false;swipe(false);untouched("locked device");
   reset(0,1080,2460);WorkspaceHost.active=true;event(0,300,500);event(2,300,100);event(1,300,100);untouched("active single finger");
-  // A vertical two-finger drag is no longer a TOP gesture; only the horizontal
-  // dismissal is claimed, and it is covered by the horizontal cases below.
+  // The TOP face has no gesture any more: two fingers over the strip always
+  // stay with the app, in portrait and on a tablet alike.
   event(0,300,500);two(5,500);two(2,490);check(InputMonitorCompat.latest.mInputMonitor.claims==0,"two-finger jitter claimed");
   two(2,420);check(InputMonitorCompat.latest.mInputMonitor.claims==0,"vertical two-finger drag must stay with the app");
   reset(0,1080,2460);event(0,300,500);two(5,500);two(2,100);untouched("inactive top drag");
   reset(0,1080,2460);WorkspaceHost.active=true;WorkspaceHost.token=new Object();
   event(0,300,300);horizontal(5,300,600);horizontal(2,380,680);
-  check(InputMonitorCompat.latest.mInputMonitor.claims==1&&WorkspaceHost.dismissed==1,"horizontal TOP claims exactly once");
-  horizontal(2,700,1000);check(WorkspaceHost.displacement==400&&WorkspaceHost.dismissMoves==2,"horizontal tracks same stream");
-  horizontal(3,700,1000);check(WorkspaceHost.dismissCancels==1,"horizontal native CANCEL rebounds via correct axis");
-  reset(0,1080,2460);WorkspaceHost.active=true;WorkspaceHost.token=new Object();
-  event(0,300,300);horizontal(5,300,600);WorkspaceHost.token=new Object();horizontal(2,380,680);
-  check(InputMonitorCompat.latest.mInputMonitor.claims==0,"token changed after DOWN must not steal input");
+  check(InputMonitorCompat.latest.mInputMonitor.claims==0,"horizontal two-finger drag must stay with the app");
+  horizontal(2,700,1000);horizontal(3,700,1000);
+  check(InputMonitorCompat.latest.mInputMonitor.claims==0,"horizontal two-finger stream must never be claimed");
   for(boolean left:new boolean[]{true,false})for(int mode=0;mode<4;mode++) {
    reset(1,3048,2032);WorkspaceHost.active=true;WorkspaceHost.token=new Object();
-   WorkspaceHost.bounds=left?new int[]{0,606,904,2032}:new int[]{2144,606,3048,2032};
-   WorkspaceHost.direction=left?-1:1;
    float x=(left?0:2144)+300,y=1000;
    if(mode==2)x=left?1400:300;
    event(0,x,y);MotionEvent pair=new MotionEvent(5,x,y,time+=70);pair.count=2;pair.x1=x+150;pair.y1=y;
    InputMonitorCompat.latest.listener.onInputEvent(pair);
-   MotionEvent move=new MotionEvent(2,x+(mode==1?-1:1)*WorkspaceHost.direction*100,y+(mode==3?200:0),time+=70);
+   MotionEvent move=new MotionEvent(2,x+(mode==1?-1:1)*100,y+(mode==3?200:0),time+=70);
    move.count=2;move.x1=move.x+150;move.y1=move.y;InputMonitorCompat.latest.listener.onInputEvent(move);
-   check(InputMonitorCompat.latest.mInputMonitor.claims==(mode<=1?1:0),"portrait bounds horizontal main/background routing "+left+":"+mode);
+   check(InputMonitorCompat.latest.mInputMonitor.claims==0,"tablet two-finger drag must stay with the app "+left+":"+mode);
    if(mode==0){move.action=3;InputMonitorCompat.latest.listener.onInputEvent(move);}
   }
   for(boolean left:new boolean[]{true,false}) {
@@ -348,7 +336,7 @@ paths=[]
 for name, text in files.items():
     p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8');paths.append(str(p))
 paths += [str(src/n) for n in ['CornerSwipe.java','BottomCenterSwipe.java','WorkspaceOptions.java',
-          'EntryGesturePolicy.java','EntryGestureSettings.java','TopTaskSwipe.java','TopEdgeBackSwipe.java','HotZoneGesture.java','Actions.java','Tags.java']]
+          'EntryGesturePolicy.java','EntryGestureSettings.java','HotZoneGesture.java','Actions.java','Tags.java']]
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-cp',str(out),'-d',str(out),*paths],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.EntryGestureRegression'],check=True)
 subprocess.run([str(jdk/'java.exe'),'-Donesteplite.legacyReceiver=true','-cp',str(out),'io.github.zerohomers0.onesteplite.EntryGestureRegression'],check=True)

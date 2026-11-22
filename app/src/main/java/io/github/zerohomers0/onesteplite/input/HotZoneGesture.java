@@ -21,9 +21,6 @@ public final class HotZoneGesture {
     private final Runnable trigger;
     private final CornerSwipe swipe = new CornerSwipe();
     private final BottomCenterSwipe bottomSwipe = new BottomCenterSwipe();
-    private final TopTaskSwipe topSwipe = new TopTaskSwipe();
-    private final TopEdgeBackSwipe topBack = new TopEdgeBackSwipe();
-    private Object topTaskAtDown;
     private Object monitor, receiver;
     private WorkspaceSettingsClient entrySettings;
     private boolean enabled;
@@ -109,12 +106,8 @@ public final class HotZoneGesture {
             bottomSwipe.reset();
             bottomPilfered = false;
             restoreBatching();
-            onTopMotion(e,size);
             return;
         }
-        if(topSwipe.accepted())endTopMotion(true);
-        topSwipe.reset();
-        topBack.reset();
         if (action == MotionEvent.ACTION_DOWN) {
             reset();
             if (!EntryGuard.canOpen(context)) return;
@@ -269,55 +262,6 @@ public final class HotZoneGesture {
                 ? allowsEntry(size, admittedEntryGesture)
                 : StatusBar.keepsCornerGesture(entryContext);
     }
-    private void onTopMotion(MotionEvent e,Point size) {
-        int[] bounds=WorkspaceHost.topGestureBounds();
-        if(bounds==null) {
-            if(topSwipe.accepted())endTopMotion(true);
-            topSwipe.reset();topBack.reset();return;
-        }
-        if(e.getActionMasked()==MotionEvent.ACTION_DOWN)topTaskAtDown=WorkspaceHost.topDismissToken();
-        int count=e.getPointerCount();
-        Object owner = WorkspaceHost.topDismissToken();
-        int back = topBack.event(e.getActionMasked(), count, e.getPointerId(0),
-                e.getRawX()-bounds[0], e.getRawY()-bounds[1], e.getEventTime(),
-                bounds[2]-bounds[0], bounds[3]-bounds[1],
-                context.getResources().getDisplayMetrics().density,
-                WorkspaceHost.topGestureDirection(), owner);
-        if (back == TopEdgeBackSwipe.CLAIM && !pilferPointers()) topBack.reset();
-        if (back == TopEdgeBackSwipe.BACK && topTaskAtDown!=null
-                && java.util.Objects.equals(topTaskAtDown,owner)) WorkspaceHost.requestTopBack(topTaskAtDown);
-        if (topBack.claimed() || back == TopEdgeBackSwipe.BACK) { topSwipe.reset(); return; }
-        int result=topSwipe.event(e.getActionMasked(),count,e.getPointerId(0),count>1?e.getPointerId(1):-1,
-                e.getRawX()-bounds[0],e.getRawY()-bounds[1],
-                count>1?e.getRawX(1)-bounds[0]:0,count>1?e.getRawY(1)-bounds[1]:0,
-                e.getEventTime(),bounds[2]-bounds[0],bounds[3]-bounds[1],
-                context.getResources().getDisplayMetrics().density,true,
-                WorkspaceHost.topGestureDirection());
-        if(result==TopTaskSwipe.ACCEPT) {
-            if(!java.util.Objects.equals(topTaskAtDown,WorkspaceHost.topDismissToken())) {
-                topSwipe.reset();return;
-            }
-            if(!pilferPointers() || !WorkspaceHost.beginTopDismiss(topSwipe.displacement,topTaskAtDown)) {
-                topSwipe.reset();return;
-            }
-            moveTopMotion(topSwipe.displacement,e.getEventTime());
-            log("upper two-finger horizontal handoff accepted");
-        } else if(result==TopTaskSwipe.DRAG) {
-            moveTopMotion(topSwipe.displacement,e.getEventTime());
-        } else if(result==TopTaskSwipe.FINISH || result==TopTaskSwipe.CANCEL) {
-            endTopMotion(result==TopTaskSwipe.CANCEL);
-        }
-    }
-
-    private void moveTopMotion(float displacement,long time) {
-        WorkspaceHost.moveTopDismiss(displacement);
-    }
-
-    private void endTopMotion(boolean cancelled) {
-        WorkspaceHost.endTopDismiss(cancelled);
-        topTaskAtDown=null;
-    }
-
     private boolean pilferPointers() {
         try {
             Object platform = XposedHelpers.getObjectField(monitor, "mInputMonitor");
@@ -335,9 +279,6 @@ public final class HotZoneGesture {
         bottomSwipe.reset();
         bottomPilfered = false;
         restoreBatching();
-        if(topSwipe.accepted())endTopMotion(true);
-        topSwipe.reset();
-        topBack.reset();
     }
     public static boolean isAttached() {
         return instance != null && instance.enabled && instance.receiver != null;

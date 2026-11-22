@@ -70,7 +70,6 @@ def run(root, out, jdk, trace_source=None):
  void handoffPromotedTask(){}void checkPromotion(){}void finishPromotionFocus(){}}
  class HotZoneGesture {void onMotion(android.view.MotionEvent e){}}
  class StatusBar {static String cornerStateForTrace(){return "";}}
- class TopBack {static int requests;static void request(android.content.Context c,Object token){requests++;}static Runnable prepare(){return null;}}
  class TopTaskTransition {boolean closed,collapsed,revealing;void start(){}void collect(){}boolean collectionReady(){return true;}
  void handoff(){}void reveal(){revealing=true;}void animate(float a,float b,long c){}void close(){closed=true;}
  boolean applyLiveScale(float f){return true;}void applyCollectionScale(float f){}}
@@ -85,8 +84,6 @@ def run(root, out, jdk, trace_source=None):
  static int checks;static void check(boolean b,String why){checks++;if(!b)throw new AssertionError(why);}
  static Object call(String name,Class<?>[] types,Object...args)throws Exception{Method m=InputTrace.class.getDeclaredMethod(name,types);m.setAccessible(true);return m.invoke(null,args);}
  static String lines()throws Exception{Field f=InputTrace.class.getDeclaredField("LINES");f.setAccessible(true);return f.get(null).toString();}
- static Object edge(TopEdgeBackSwipe s,int action,float x,long at,Object owner)throws Exception{
- return XposedBridge.fire(s,"event",action,1,0,x,120f,at,1000,1000,1f,1,owner);}
  public static void main(String[] args)throws Exception {
  InputTrace.arm(new android.content.Context(),false,null);
  String arm=lines();for(String key:new String[]{"bootId=","pid=90","epochMillis=","elapsedRealtime=1000","generation=","duration=6000","maxLines=128"})check(arm.contains(key),"ARM identity missing "+key);
@@ -97,14 +94,6 @@ def run(root, out, jdk, trace_source=None):
  check(receiver.calls==1&&backPanel.calls==1&&nativeEvent.action==0,"native observers changed dispatch");
  check(lines().contains("observer=native-display-back-receiver installed=true")&&lines().contains("native-display-back-receiver source=monitor eventTime="),"ROM back receiver invisible");
  check(lines().contains("observer=native-edge-back-handle installed=false"),"missing AOSP observer hidden");
- var swipe=new TopEdgeBackSwipe();Object owner=new Object();
- check(edge(swipe,0,5,1000,owner).equals(0),"observer changed DOWN");
- check(edge(swipe,2,30,1040,owner).equals(1),"observer changed CLAIM");
- check(edge(swipe,1,85,1080,owner).equals(2),"observer changed BACK");
- String captured=lines();check(captured.contains("top-edge-before action=1")&&captured.contains("currentOwner=true"),"owner admission invisible");
- check(captured.contains("decision=1")&&captured.contains("decision=2"),"CLAIM/BACK invisible");
- edge(swipe,0,5,1100,owner);check(edge(swipe,1,85,1200,new Object()).equals(0),"observer altered owner rejection");
- check(lines().contains("currentOwner=false"),"owner rejection invisible");
  var host=new WorkspaceHost();check(XposedBridge.fire(host,"startTopTaskTransition",true).equals(true),"host result changed");
  check(lines().contains("top-host-phase=startTopTaskTransition:exit epoch=7 scene=1 task=81"),"host epoch/task invisible");
  var transition=new TopTaskTransition();XposedBridge.fire(transition,"animate",0f,1f,180L);XposedBridge.fire(transition,"reveal");
@@ -138,6 +127,6 @@ def run(root, out, jdk, trace_source=None):
     subprocess.run([str(jdk / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(folder),
                     *(str(folder / name) for name in files),
                     str(trace_source or production / 'InputTrace.java'),
-                    *(str(production / name) for name in ('InputTraceGate.java', 'TopTaskSwipe.java', 'TopEdgeBackSwipe.java', 'Actions.java', 'WindowTypes.java'))], check=True)
+                    *(str(production / name) for name in ('InputTraceGate.java', 'Actions.java', 'WindowTypes.java'))], check=True)
     subprocess.run([str(jdk / 'java.exe'), '-Dtrace.output=' + str(folder), '-cp', str(folder),
                     'io.github.zerohomers0.onesteplite.RuntimeTraceRegression'], check=True)

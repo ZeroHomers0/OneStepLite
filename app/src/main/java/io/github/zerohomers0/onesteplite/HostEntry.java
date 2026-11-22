@@ -297,7 +297,6 @@ public class HostEntry implements IXposedHookLoadPackage {
             return sZoomed && target != null && target.display == sDisplayContent
                     ? target.display : null;
         });
-        DropPermissions.install(cl, () -> sDisplayContent);
         installMagnificationSurfaceTracking(cl);
         try {
             KeyguardZoom.Reset resetForLock=() -> {
@@ -657,21 +656,6 @@ public class HostEntry implements IXposedHookLoadPackage {
                         return;
                     }
 
-                    if (TopBack.ACTION.equals(intent.getAction())) {
-                        ZoomTarget target=sZoomTarget;
-                        if(!sZoomed || target==null)return;
-                        target.handler.post(()->{
-                            if(!sZoomed || target!=sZoomTarget)return;
-                            try {
-                                Runnable dispatch;
-                                synchronized(target.globalLock) {
-                                    dispatch=TopBack.prepare(context,target.display,intent);
-                                }
-                                if(dispatch!=null) {dispatch.run();log("tablet inner-edge back dispatched");}
-                            } catch(Throwable error) {log("tablet inner-edge back rejected: "+error);}
-                        });
-                        return;
-                    }
                     if (WorkspaceBackdrop.ACTION.equals(intent.getAction())) {
                         ZoomTarget target=sZoomTarget;
                         if(target==null || target.display!=sDisplayContent)return;
@@ -773,7 +757,6 @@ public class HostEntry implements IXposedHookLoadPackage {
             filter.addAction(BottomReplayInput.ACTION);
             filter.addAction(DesktopLaunchBridge.ACTION);
             filter.addAction(DesktopLaunchBridge.PREPARE_TOP);
-            filter.addAction(TopBack.ACTION);
             filter.addAction(WorkspaceBackdrop.ACTION);
             // SystemUI / shell can send; ordinary apps cannot change display magnification.
             // minSdk is 34, so the exported-receiver flag is always available.

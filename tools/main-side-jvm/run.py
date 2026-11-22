@@ -30,7 +30,6 @@ public class SideSwitchRegression {
  static class WallpaperCropDrawable {WallpaperCropDrawable(Bitmap b,int w,int h,int x,int y,int tint){}} WallpaperCropDrawable mainSideBackdrop;
  static class HyperOsStyle {static int topWallpaperTint(Object c){return 0;}}
  void updateWorkspaceBackdropVisibility(){}
- static class Share{void cancel(){}}Share contentShare;
  ValueAnimator mainSideAnimator;long mainSideSwitchGeneration,sceneEpoch=1,workspaceZoomStart;int layouts,zoomWrites,saved,refreshes;boolean remembered;
  boolean isSideMotionRunning(){return motion;}boolean holdsLiveFlipZoom(){return flip;}
  Layout makeAdaptiveLayout(boolean right){return new Layout(right);}void applyMainLayout(Layout value){layout=value;mainOnRight=value.mainOnRight;layouts++;for(int i=1;i<=3;i++){slots[i].rect[0]=value.cellX;slots[i].view.setX(value.cellX);slots[i].hint.setX(value.cellX);sideBackingViews[i].relayout(value.cellX);updateTouchRegion(slots[i]);}}

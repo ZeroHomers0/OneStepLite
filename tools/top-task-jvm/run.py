@@ -21,7 +21,8 @@ public final class TopAdmissionRegression {
  static class Slot {int index;boolean occupied;Slot(int i){index=i;}}
  static class Task {int id=42;Object token=new Binder();}
  static class TopCandidate {Task task=new Task();TopTaskState.Key key=new TopTaskState.Key(42,0,"token");Slot source;boolean landscape=true;}
- static class Pane {boolean occupied;void occupied(boolean v){occupied=v;}void message(String s){}}
+ static class View {static final int VISIBLE=0,INVISIBLE=4;}
+ static class Pane {boolean occupied;void occupied(boolean v){occupied=v;}void message(String s){}void setVisibility(int v){}}
  static class Root {void requestLayout(){}}
  Root root=new Root();Pane topTaskPane=new Pane();Object promotion,cellMotion;
  boolean screenOn=true,keyguardLocked,transferBusy,workspaceEntering,suspendRequested,topFromMain,topPortrait;

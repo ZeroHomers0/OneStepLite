@@ -304,45 +304,6 @@ final class InputTrace {
 
     /** Observe existing decisions and live-Surface phases; never consumes or injects input. */
     private static void hookTopPhases() {
-        retain(XposedBridge.hookAllMethods(TopTaskSwipe.class, "event", new TraceHook() {
-            @Override protected void after(MethodHookParam p) {
-                if (!active() || p.hasThrowable() || p.args.length != 14) return;
-                int action = ((Number)p.args[0]).intValue();
-                int decision = ((Number)p.getResult()).intValue();
-                if (action == MotionEvent.ACTION_MOVE && decision != TopTaskSwipe.ACCEPT
-                        && decision != TopTaskSwipe.CANCEL) return;
-                line("top-two-finger action=" + action + " count=" + p.args[1] + " decision=" + decision
-                        + " displacement=" + XposedHelpers.getFloatField(p.thisObject, "displacement")
-                        + " horizontal=" + p.args[12] + " outward=" + p.args[13]);
-            }
-        }));
-        retain(XposedBridge.hookAllMethods(TopEdgeBackSwipe.class, "event", new TraceHook() {
-            @Override protected void before(MethodHookParam p) {
-                if (!active() || p.args.length != 11) return;
-                int action = ((Number)p.args[0]).intValue();
-                if (action != MotionEvent.ACTION_DOWN && action != MotionEvent.ACTION_UP
-                        && action != MotionEvent.ACTION_CANCEL) return;
-                Object owner = XposedHelpers.getObjectField(p.thisObject, "token");
-                line("top-edge-before action=" + action + " eventTime=" + p.args[5]
-                        + " bounds=" + p.args[6] + "," + p.args[7] + " density=" + p.args[8]
-                        + " claimed=" + XposedHelpers.getBooleanField(p.thisObject, "claimed")
-                        + " currentOwner=" + (owner != null && owner.equals(p.args[10])));
-            }
-            @Override protected void after(MethodHookParam p) {
-                if (!active() || p.hasThrowable() || p.args.length != 11) return;
-                int action = ((Number)p.args[0]).intValue();
-                int decision = ((Number)p.getResult()).intValue();
-                if (action == MotionEvent.ACTION_MOVE && decision == TopEdgeBackSwipe.NONE) return;
-                line("top-edge-back action=" + action + " count=" + p.args[1] + " decision=" + decision
-                        + " local=" + p.args[3] + "," + p.args[4] + " outward=" + p.args[9]
-                        + " owner=" + (p.args[10] != null));
-            }
-        }));
-        retain(XposedBridge.hookAllMethods(TopBack.class, "request", new TraceHook() {
-            @Override protected void before(MethodHookParam p) {
-                if (active()) line("top-back-request owner=" + (p.args.length > 1 && p.args[1] != null));
-            }
-        }));
         for (String method : new String[]{"startTopTaskTransition", "revealTopTaskTransition",
                 "cancelTopTaskTransition", "releaseTopTaskNow", "returnToSystem", "handoffPromotedTask",
                 "checkPromotion", "finishPromotionFocus"}) {
@@ -420,12 +381,6 @@ final class InputTrace {
     }
 
     private static void hookSystemServer(ClassLoader cl) {
-        retain(XposedBridge.hookAllMethods(TopBack.class, "prepare", new TraceHook() {
-            @Override protected void after(MethodHookParam p) {
-                if (active()) line("top-back-admission prepared=" + (p.getResult() != null)
-                        + " error=" + p.hasThrowable());
-            }
-        }));
         try {
             Set<XC_MethodHook.Unhook> hooks = XposedBridge.hookAllMethods(XposedHelpers.findClass(
                     "android.hardware.input.InputManager", cl), "injectInputEvent", new TraceHook() {

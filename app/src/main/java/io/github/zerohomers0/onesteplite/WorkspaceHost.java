@@ -126,9 +126,6 @@ public final class WorkspaceHost {
     private View mainGapBacking;
     private Bitmap wallpaperBackdrop;
     private Bitmap wellWallpaperBackdrop;
-    private ContentShare contentShare;
-    private final android.graphics.Paint contentSharePaint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-    private Rect contentShareHover;
     private boolean wallpaperBackdropRequested;
     private boolean wallpaperBackdropDirty;
     private long wallpaperLoadGeneration;
@@ -210,7 +207,6 @@ public final class WorkspaceHost {
     private CellMotion cellMotion;
     private SideDismiss sideDismiss;
     private Slot sideDismissSlot;
-    private float topDismissDx, topDismissDirection;
     private static final class CellMovePlan {
         final Slot slot;
         final Rect from;
@@ -3782,7 +3778,7 @@ public final class WorkspaceHost {
         log("layout: " + layout.describe()
                 + " mainScale=" + mainScale() + " cellScale=" + cellScale());
         createRootView();
-        createContentShare();
+        watchSideViewport();
         createHostWindow(w, h);
         createTopBar();
         root.post(this::updateTopBarState);
@@ -3843,14 +3839,6 @@ public final class WorkspaceHost {
                             main.right + rim, main.bottom + rim, rimPaint);
                 }
             }
-            if (contentShareHover != null) {
-                contentSharePaint.setStyle(android.graphics.Paint.Style.STROKE);
-                contentSharePaint.setStrokeWidth(HyperOsStyle.dp(ctx, 2f));
-                contentSharePaint.setColor(HyperOsStyle.CONTROL_ACCENT);
-                float inset=HyperOsStyle.dp(ctx, 3f);
-                canvas.drawRect(contentShareHover.left+inset,contentShareHover.top+inset,
-                        contentShareHover.right-inset,contentShareHover.bottom-inset,contentSharePaint);
-            }
             if (layout == null || workspaceAlpha <= 0f || mainSideAnimator != null) return;
             int saved = canvas.save();
             android.graphics.RectF main = workspaceMainHole();
@@ -3860,7 +3848,6 @@ public final class WorkspaceHost {
 
         }
         @Override public boolean dispatchTouchEvent(MotionEvent event) {
-            if (contentShare != null && contentShare.busy()) return true;
             if (transitionInput != null && transitionInput.consume(event.getActionMasked())) return true;
             boolean wasCaptured = sideCaptured;
             if (trackSideScroll(event)) {
@@ -3883,39 +3870,11 @@ public final class WorkspaceHost {
     root.setBackgroundColor(0x00000000);
     }
 
-    /** Cross-window drag and drop, wired to the main and side targets. */
-    private void createContentShare() {
-    contentShare = new ContentShare(ctx, new ContentShare.Host() {
-        public boolean available() { return canShareContent(); }
-        public ContentShare.Target main() { return shareMainTarget(); }
-        public ContentShare.Target slot(int index) { return shareSideTarget(index); }
-        public ContentShare.Target findSide(ContentShare.Target original) { return findShareSide(original); }
-        public ContentShare.Target at(float x,float y) {
-            if (layout==null || x<layout.cellX || x>=layout.cellX+layout.cellWidth || y<layout.topStrip) return null;
-            for (Slot slot:slots) if(slot!=null && slot.index>SLOT_MAIN && slot.index!=SLOT_TOP
-                    && presentsSlot(slot) && slot.rect!=null && x>=slot.rect[0] && x<slot.rect[2]
-                    && y>=slot.rect[1] && y<slot.rect[3])
-                return shareSideTarget(slot.index);
-            return null;
-        }
-        public void highlight(ContentShare.Target target) {
-            Slot slot=target==null?null:slots[target.slot];
-            contentShareHover=slot==null||slot.rect==null?null:new Rect(slot.rect[0],slot.rect[1],slot.rect[2],slot.rect[3]);
-            if(root!=null)root.invalidate();
-        }
-        public void exchange(ContentShare.Target source,ContentShare.Target target,Consumer<Boolean> complete) {
-            if(!canShareContent() || !source.same(shareMainTarget()) || !target.same(shareSideTarget(target.slot))) {
-                complete.accept(false);return;
-            }
-            final long epoch=sceneEpoch;
-            swapWithMain(target.slot);
-            awaitContentShareExchange(source,target,epoch,SystemClock.uptimeMillis()+6500L,complete);
-        }
-    });
-    root.setOnDragListener((view,event)->contentShare!=null && contentShare.onDrag(event));
+    /** Reparent the side viewport when ViewRootImpl replaces the native host surface. */
+    private void watchSideViewport() {
     root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
         @Override public void onViewAttachedToWindow(View view) { observeSideViewportRoot(view); }
-        @Override public void onViewDetachedFromWindow(View view) { if(contentShare!=null)contentShare.cancel(); }
+        @Override public void onViewDetachedFromWindow(View view) { }
     });
     installHostTouchRegion();
     }
@@ -4202,7 +4161,9 @@ public final class WorkspaceHost {
                 TopTaskTransition prepared=topTransition;
                 // The fade keeps the main surface exactly where the workspace put it,
                 // so a swapped main side needs no special case and nothing shifts.
-                prepared.fade(mainScale(),layout.mainOffsetX,layout.mainOffsetY);
+                // The main slot's surface rests at (0,0) with matrix=mainScale;
+                // its view carries the offset, so the fade must not add one.
+                prepared.fade(mainScale(),0f,0f);
                 prepared.setNativeRestore(()->setTopCollectionTranslucent(selected,false));
                 if(!executeOnShell(()->{
                     try {
@@ -4288,7 +4249,7 @@ public final class WorkspaceHost {
                         finishPendingSuspend();
                     },WorkspaceHost::log);
             if(intoTop)topTransition.collect(source,sourceCurrent,destination);
-            else topTransition.fade(mainScale(),layout.mainOffsetX,layout.mainOffsetY);
+            else topTransition.fade(mainScale(),0f,0f);
             topTransition.start();
             return true;
         } catch(Throwable error) {
@@ -4383,138 +4344,6 @@ public final class WorkspaceHost {
         // Paint the other live face after SurfaceView clears its transparent hole.
         // The projected faces meet at an edge, so this does not cover the live task.
         topBar.bringToFront();
-    }
-
-    static int topGestureHeight() {
-        int[] bounds=topGestureBounds();
-        return bounds==null?0:bounds[3]-bounds[1];
-    }
-
-    static int[] topGestureBounds() {
-        WorkspaceHost h=sInstance;
-        if(h==null || !hostSceneActive() || h.suspendRequested || h.topTransition!=null)return null;
-        boolean ready=h.topReady() || (h.sideDismiss!=null && h.sideDismissSlot==h.slots[SLOT_TOP]
-                && h.sideDismiss.isTracking());
-        if(!ready)return null;
-        if(h.layout.tabletLandscape) return h.slots[SLOT_TOP].rect;
-        return new int[]{0,0,h.screenW,h.layout.topStrip};
-    }
-
-    static int topGestureDirection() {
-        WorkspaceHost h=sInstance;
-        return h!=null && h.layout.tabletLandscape ? (h.layout.mainOnRight?-1:1) : 0;
-    }
-
-    static void requestTopBack(Object token) {
-        WorkspaceHost h=sInstance;
-        if(h==null || !h.layout.tabletLandscape || token==null
-                || !token.equals(topDismissToken()))return;
-        try { TopBack.request(h.ctx,token); log("tablet inner-edge back requested"); }
-        catch(Throwable error) {log("tablet inner-edge back unavailable: "+error);}
-    }
-
-    private static int topDismissWidth(WorkspaceHost h) {
-        int[] bounds=h.slots[SLOT_TOP].rect;
-        return h.layout.tabletLandscape && bounds!=null ? bounds[2]-bounds[0] : h.screenW;
-    }
-
-    static boolean topDismissDirectionAllowed(float dx) {
-        return Float.isFinite(dx) && dx!=0;
-    }
-
-    /* A visible real task lease remains authoritative throughout the gesture. */
-    static Object topDismissToken() {
-        WorkspaceHost h=sInstance;
-        if(h==null || !h.topReady() || h.suspendRequested || h.topTransition!=null
-                || !h.topFace || h.sideDismiss!=null)return null;
-        Slot upper=h.slots[SLOT_TOP];
-        TopTaskState.Key owner=h.topTaskState.owner();
-        if(!upper.occupied || upper.parked || upper.frozen || upper.promoting || upper.launching
-                || upper.closing || upper.view==null || upper.taskToken==null || owner==null
-                || owner.taskId!=upper.taskId || !owner.token.equals(upper.taskToken)
-                || !h.controllerOwns(upper,upper.taskId,upper.taskToken))return null;
-        for(Slot slot:h.slots)if(slot.launching || slot.promoting || slot.closing)return null;
-        return upper.taskToken;
-    }
-
-    static boolean beginTopDismiss(float dx,Object token) {
-        WorkspaceHost h=sInstance;
-        if(token==null || !token.equals(topDismissToken()) || !topDismissDirectionAllowed(dx))return false;
-        final Slot upper=h.slots[SLOT_TOP];
-        final long binding=upper.taskEpoch,epoch=h.sceneEpoch;
-        final int taskId=upper.taskId;
-        final View hostRoot=h.root;
-        final TopTaskState.Key key=h.topTaskState.owner();
-        final boolean intoMain=h.layout.tabletLandscape && dx*topGestureDirection()<0;
-        h.topDismissDx=dx;h.topDismissDirection=Math.signum(dx);
-        h.transferBusy=true;upper.promoting=true;
-        try {
-            final SideDismiss[] run=new SideDismiss[1];
-            Runnable release=()->{
-                run[0].close();
-                if(h.sideDismiss==run[0]) {h.sideDismiss=null;h.sideDismissSlot=null;}
-                if(h.root==hostRoot && h.sceneEpoch==epoch) {
-                    h.updateHint(upper);h.updateTouchRegion(upper);hostRoot.invalidate();
-                }
-                h.finishPendingSuspend();
-            };
-            run[0]=new SideDismiss(hostRoot,upper.view,
-                    h.topDismissDirection*(topDismissWidth(h)+HyperOsStyle.dp(h.ctx,8f)),
-                    ()->h.root==hostRoot && h.sceneEpoch==epoch && h.scene==ACTIVE && h.screenOn
-                            && !h.keyguardLocked && !h.suspendRequested && h.isActive(upper)
-                            && upper.taskEpoch==binding && upper.taskId==taskId && token.equals(upper.taskToken),
-                    reachedEdge->{
-                        if(!reachedEdge) {
-                            if(upper.taskEpoch==binding && upper.taskId==taskId)upper.promoting=upper.frozen;
-                            h.transferBusy=false;release.run();return;
-                        }
-                        final TopCandidate covered=intoMain?h.currentTopCandidate():null;
-                        Runnable handback=()->h.returnToSystem(upper,intoMain,
-                                intoMain && h.topTransition!=null,()->{
-                            h.topTaskState.release(key,true);
-                            if(upper.taskEpoch==binding && upper.taskId==taskId)h.clearSlot(upper);
-                            h.topOriginalSlot=null;h.topFromMain=false;
-                            if(intoMain) {
-                                h.tabletReturnedTop=key;
-                                h.tabletCoveredMain=covered!=null && !covered.key.equals(key)?covered:null;
-                            } else h.preferMainAfterTopChange();
-                            log("upper horizontal swipe handed back task="+taskId+" front="+intoMain);
-                            if(intoMain)h.revealTopTaskTransition();
-                            release.run();
-                        },error->{
-                            h.cancelTopTaskTransition();
-                            log("upper horizontal handback stopped; binding retained: "+error);release.run();
-                        });
-                        // Keep the real task small during native ownership transfer,
-                        // then expand that same canonical Surface in the main area.
-                        if(!intoMain || !h.startLiveMainRevealTransition(handback))handback.run();
-                    },WorkspaceHost::log);
-            h.sideDismiss=run[0];h.sideDismissSlot=upper;
-            Clipboard.get(h.ctx).close();
-            run[0].follow(dx);
-            return true;
-        } catch(Throwable error) {
-            if(h.sideDismiss!=null && h.sideDismissSlot==upper) {
-                h.sideDismiss.close();h.sideDismiss=null;h.sideDismissSlot=null;
-            }
-            h.transferBusy=false;upper.promoting=upper.frozen;
-            log("upper horizontal preparation stopped: "+error);h.finishPendingSuspend();return false;
-        }
-    }
-
-    static void moveTopDismiss(float dx) {
-        WorkspaceHost h=sInstance;
-        if(h!=null && h.sideDismiss!=null && h.sideDismissSlot==h.slots[SLOT_TOP]) {
-            h.topDismissDx=dx;h.sideDismiss.follow(dx);
-        }
-    }
-
-    static void endTopDismiss(boolean cancelled) {
-        WorkspaceHost h=sInstance;
-        if(h==null || h.sideDismiss==null || h.sideDismissSlot!=h.slots[SLOT_TOP])return;
-        boolean commit=!cancelled && Math.signum(h.topDismissDx)==h.topDismissDirection
-                && Math.abs(h.topDismissDx)>=Math.max(topDismissWidth(h)*.22f,HyperOsStyle.dp(h.ctx,72f));
-        h.sideDismiss.settle(commit);
     }
 
     private void settleTopFace(boolean taskFace) {
@@ -4650,6 +4479,7 @@ public final class WorkspaceHost {
             topOriginalSlot=selected.source;topFromMain=fromMain;
             topPortrait=!selected.landscape;
             topTaskPane.occupied(true);
+            topTaskPane.setVisibility(View.VISIBLE);
             updateTopTaskGeometry();applyFullscreenBounds(slots[SLOT_TOP]);applySlotScale(slots[SLOT_TOP]);
             publishDesktopSideTasks();
             root.requestLayout();
@@ -6276,58 +6106,6 @@ public final class WorkspaceHost {
         }
     }
 
-    private boolean canShareContent() {
-        // A drop that is already in flight waits out a transient animation instead of being refused.
-        return ContentShareAdmissionPolicy.admits(ContentShareAdmissionPolicy.evaluate(
-                root!=null, scene==ACTIVE, screenOn, keyguardLocked, suspendRequested,
-                workspaceEntering, liveSwapInputBlocked, taskCellsCovered, promotion!=null,
-                transferBusy, cellMotion!=null, sideDismiss!=null, isSideMotionRunning(),
-                mainSideAnimator!=null, sideCaptured, holdsLiveFlipZoom()));
-    }
-
-    private ContentShare.Target shareSideTarget(int index) {
-        if(index<=SLOT_MAIN || index>=slots.length || index==SLOT_TOP) return null;
-        Slot slot=slots[index];
-        if(slot==null || !slot.occupied || slot.parked || slot.frozen || slot.closing || slot.promoting
-                || slot.launching || slot.taskToken==null || slot.pkg==null || slot.controller==null || !presentsSlot(slot)) return null;
-        try {
-            Object info=XposedHelpers.getObjectField(slot.controller,"mTaskInfo");
-            if(!controllerOwns(slot,slot.taskId,slot.taskToken))return null;
-            return new ContentShare.Target(index,slot.taskId,XposedHelpers.getIntField(info,"userId"),
-                    (android.os.IBinder)XposedHelpers.callMethod(slot.taskToken,"asBinder"),slot.pkg);
-        } catch(Throwable stale){return null;}
-    }
-
-    private ContentShare.Target findShareSide(ContentShare.Target original) {
-        for(Slot slot:slots)if(slot!=null && slot.taskId==original.id) {
-            ContentShare.Target candidate=shareSideTarget(slot.index);
-            if(original.same(candidate))return candidate;
-        }
-        return null;
-    }
-
-    private ContentShare.Target shareMainTarget() {
-        try {
-            LiveTask task=findMainTask();if(task==null || task.pkg==null)return null;
-            for(Object info:rootInfos())if(task.matches(info))
-                return new ContentShare.Target(SLOT_MAIN,task.id,XposedHelpers.getIntField(info,"userId"),
-                        (android.os.IBinder)XposedHelpers.callMethod(task.token,"asBinder"),task.pkg);
-        } catch(Throwable stale){log("content share main changed: "+stale);}
-        return null;
-    }
-
-    private void awaitContentShareExchange(ContentShare.Target source,ContentShare.Target target,
-            long epoch,long deadline,Consumer<Boolean> complete) {
-        if(epoch!=sceneEpoch || scene!=ACTIVE || !screenOn || keyguardLocked || suspendRequested || root==null) {
-            complete.accept(false);return;
-        }
-        if(promotion==null && !transferBusy && cellMotion==null && !liveSwapInputBlocked) {
-            complete.accept(target.same(shareMainTarget()) && findShareSide(source)!=null);return;
-        }
-        if(SystemClock.uptimeMillis()>=deadline){complete.accept(false);return;}
-        main.postDelayed(()->awaitContentShareExchange(source,target,epoch,deadline,complete),64L);
-    }
-
     private void launchQuick(QuickApp entry) {
         if (entry == null || entry.component == null || scene != ACTIVE
                 || promotion != null || transferBusy) return;
@@ -7102,7 +6880,6 @@ public final class WorkspaceHost {
     }
 
     private void cancelMainSideSwitch() {
-        if(contentShare!=null)contentShare.cancel();
         mainSideSwitchGeneration++;
         android.animation.ValueAnimator previous=mainSideAnimator;mainSideAnimator=null;
         if(previous!=null){previous.cancel();settleMainSidePresentation();}
@@ -8743,12 +8520,10 @@ public final class WorkspaceHost {
                 float initialScale=fadeReveal
                         ?mainScale()
                         :liveCenterReveal?TopTaskReturnPolicy.CENTER_START_SCALE:1f;
-                float initialX=fadeReveal
-                        ?layout.mainOffsetX
-                        :liveCenterReveal?TopTaskReturnPolicy.centeredOffset(screenW,initialScale):0f;
-                float initialY=fadeReveal
-                        ?layout.mainOffsetY
-                        :liveCenterReveal?TopTaskReturnPolicy.centeredOffset(screenH,initialScale):0f;
+                float initialX=liveCenterReveal && !fadeReveal
+                        ?TopTaskReturnPolicy.centeredOffset(screenW,initialScale):0f;
+                float initialY=liveCenterReveal && !fadeReveal
+                        ?TopTaskReturnPolicy.centeredOffset(screenH,initialScale):0f;
                 // Prepare every surface operation before changing listener ownership.
                 XposedHelpers.callMethod(area, "reparentToDisplayArea", 0, canonical, tx);
                 XposedHelpers.callMethod(tx, "setMatrix", canonical,
