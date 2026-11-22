@@ -271,8 +271,11 @@ final class WorkspaceSettingsPage extends FrameLayout {
                 if(persist(WorkspaceSettingsStore.read(activity).withSwapMode(choice)))show(SWAP,false);
             };
             choiceOption(group,WorkspaceOptions.modeLabel(mode),mode==WorkspaceOptions.FIXED_MAIN
-                    ?"主窗保持在当前一侧，只交换主窗与小窗中的应用":"小窗中的应用在原侧放大，主窗随之切换位置",mode==selected,true,
-                    new SwapModeDiagram(activity,mode,secondary,dark?0xff353840:0xffe9e9e9,BLUE),select);
+                    ?"主窗留在原侧：B 进入主窗，A 换到右侧小窗":"主窗跟随应用换边：B 在右侧放大，A 换到左侧小窗",mode==selected,true,null,select);
+            SwapModeDiagram diagram=new SwapModeDiagram(activity,mode,secondary,dark?0xff353840:0xffe9e9e9,BLUE);
+            LinearLayout.LayoutParams preview=new LinearLayout.LayoutParams(-1,dp(206));
+            preview.leftMargin=preview.rightMargin=dp(12);preview.bottomMargin=dp(12);
+            group.addView(diagram,preview);
             group.setOnClickListener(v->select.run());
             add(group,0,14);
         }

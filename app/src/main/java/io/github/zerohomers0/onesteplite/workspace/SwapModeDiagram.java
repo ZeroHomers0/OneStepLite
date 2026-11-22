@@ -5,64 +5,82 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.view.View;
 
-/** Native, theme-aware equivalents of the two swap-mode diagrams, drawn like the video ones. */
+/** Before/after diagrams keep each app's colour while showing whether the main window changes sides. */
 final class SwapModeDiagram extends View {
+    private static final int APP_B=0xffc96521;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path arrow=new Path();
-    /** Scratch rectangles; the diagram paints once per frame. */
-    private final RectF frame=new RectF(),header=new RectF(),main=new RectF(),cell=new RectF();
+    private final RectF frame=new RectF(),header=new RectF(),pane=new RectF();
     private final int mode,outline,empty,accent;
+
     SwapModeDiagram(Context context,int mode,int outline,int empty,int accent) {
         super(context);this.mode=mode;this.outline=outline;this.empty=empty;this.accent=accent;
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
+
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        float scale=Math.min(getWidth()/56f,getHeight()/80f);
-        int save=canvas.save();canvas.translate((getWidth()-56*scale)/2,(getHeight()-80*scale)/2);
+        float scale=Math.min(getWidth()/280f,getHeight()/206f);
+        int save=canvas.save();
+        canvas.translate((getWidth()-280*scale)/2,(getHeight()-206*scale)/2);
         canvas.scale(scale,scale);
-        frame.set(11,3,45,77);
-        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(1.5f);paint.setColor(outline);
-        canvas.drawRoundRect(frame,4,4,paint);paint.setStyle(Paint.Style.FILL);
-        frame.inset(3,3);
-        header.set(frame.left,frame.top,frame.right,frame.top+frame.height()*.16f);
-        block(canvas,header,empty);
-        // The main window keeps its side unless the app grows in place, in which case it follows the cells.
-        boolean moved=mode==WorkspaceOptions.GROW_IN_PLACE;
-        float side=frame.right-frame.width()*.24f, gap=1.5f;
-        float mainLeft=moved?side+gap:frame.left, mainRight=moved?frame.right:side-gap;
-        main.set(mainLeft,header.bottom+gap,mainRight,frame.bottom);
-        block(canvas,main,accent);
-        float cellLeft=moved?frame.left:side, cellRight=moved?side-gap:frame.right;
-        float height=(main.height()-2*gap)/3f;
-        for(int i=0;i<3;i++) {
-            float top=main.top+i*(height+gap);
-            cell.set(cellLeft,top,cellRight,top+height);block(canvas,cell,empty);
-        }
-        if(!moved)swapMark(canvas,main);
+        label(canvas,"交换前",61,16,12,outline,false);
+        label(canvas,"交换后",219,16,12,outline,false);
+        phone(canvas,20,false);
+        phone(canvas,178,true);
+        label(canvas,"点击 B",140,94,12,outline,true);
+        paint.setColor(outline);paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(2f);paint.setStrokeCap(Paint.Cap.ROUND);paint.setStrokeJoin(Paint.Join.ROUND);
+        arrow.reset();arrow.moveTo(115,108);arrow.lineTo(165,108);
+        arrow.moveTo(159,102);arrow.lineTo(165,108);arrow.lineTo(159,114);
+        canvas.drawPath(arrow,paint);
+        label(canvas,"A 是主窗",61,201,11,outline,false);
+        label(canvas,mode==WorkspaceOptions.GROW_IN_PLACE?"主窗换到右侧":"主窗仍在左侧",219,201,11,outline,true);
         canvas.restoreToCount(save);
     }
-    /** The main window keeps its place, so mark the content exchange inside it with a two-way arrow. */
-    private void swapMark(Canvas canvas,RectF rect) {
-        float half=Math.min(rect.width(),rect.height())*.30f;
-        float x=rect.centerX(),y=rect.centerY(),gap=half*.5f;
-        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(1.4f);paint.setColor(0xffffffff);
-        paint.setStrokeCap(Paint.Cap.ROUND);paint.setStrokeJoin(Paint.Join.ROUND);
-        canvas.drawLine(x-half,y-gap,x+half,y-gap,paint);
-        canvas.drawLine(x+half,y+gap,x-half,y+gap,paint);
-        head(canvas,x+half,y-gap,1);
-        head(canvas,x-half,y+gap,-1);
-        paint.setStyle(Paint.Style.FILL);
+
+    private void phone(Canvas canvas,float x,boolean after) {
+        frame.set(x,27,x+82,183);
+        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(1.2f);paint.setColor(outline);
+        canvas.drawRoundRect(frame,7,7,paint);
+        header.set(x+4,31,x+78,61);
+        block(canvas,header,empty);
+        paint.setColor(outline);paint.setStrokeWidth(1.5f);paint.setStrokeCap(Paint.Cap.ROUND);
+        canvas.drawLine(x+10,39,x+27,39,paint);
+        canvas.drawLine(x+10,45,x+40,45,paint);
+        for(int i=0;i<5;i++)canvas.drawCircle(x+11+i*12,54,2,paint);
+        boolean changedSides=after && mode==WorkspaceOptions.GROW_IN_PLACE;
+        float mainLeft=changedSides?x+24:x+4,mainRight=changedSides?x+78:x+58;
+        float sideLeft=changedSides?x+4:x+60,sideRight=changedSides?x+22:x+78;
+        pane.set(mainLeft,64,mainRight,179);
+        block(canvas,pane,after?APP_B:accent);
+        label(canvas,after?"B":"A",pane.centerX(),116,19,0xffffffff,true);
+        label(canvas,"主窗",pane.centerX(),133,10,0xffffffff,false);
+        for(int i=0;i<3;i++) {
+            float top=64+i*39;
+            pane.set(sideLeft,top,sideRight,top+37);
+            block(canvas,pane,i==0?(after?accent:APP_B):empty);
+            if(i==0)label(canvas,after?"A":"B",pane.centerX(),top+23,12,0xffffffff,true);
+        }
+        if(!after) {
+            pane.set(sideLeft-2,62,sideRight+2,103);
+            paint.setStyle(Paint.Style.STROKE);paint.setColor(APP_B);paint.setStrokeWidth(1.6f);
+            canvas.drawRoundRect(pane,4,4,paint);
+        }
     }
-    private void head(Canvas canvas,float x,float y,int dx) {
-        float size=2.4f;
-        arrow.reset();
-        arrow.moveTo(x-dx*size,y-size);arrow.lineTo(x,y);arrow.lineTo(x-dx*size,y+size);
-        canvas.drawPath(arrow,paint);
+
+    private void label(Canvas canvas,String text,float x,float baseline,float size,int color,boolean bold) {
+        paint.setStyle(Paint.Style.FILL);paint.setColor(color);paint.setTextSize(size);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTypeface(bold?Typeface.DEFAULT_BOLD:Typeface.DEFAULT);
+        canvas.drawText(text,x,baseline,paint);
     }
+
     private void block(Canvas canvas,RectF rect,int color) {
-        paint.setColor(color);canvas.drawRoundRect(rect,1.5f,1.5f,paint);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(color);
+        canvas.drawRoundRect(rect,2,2,paint);
     }
 }
