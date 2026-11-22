@@ -213,7 +213,7 @@ public final class WorkspaceHost {
     private volatile boolean liveSwapInputBlocked;
     private TransitionInput transitionInput;
     private View transitionInputWindow;
-    private TopOverlayControls topControls;
+    private TopPresentationController topPresentation;
     private final android.os.IBinder desktopSceneOwner = new android.os.Binder();
     private volatile long desktopRegistrationSequence;
     private final FinishTransactions<RenderBinding> finishTransactions = new FinishTransactions<>(16);
@@ -879,93 +879,28 @@ public final class WorkspaceHost {
                 new Rect(x, y, x + w, y + h), Math.max(1000, holdMs), hideMode));
     }
 
-    private Object mirrorPocSurface;
-    private Object mirrorPocLeash;
-    private int mirrorPocHideMode;
+    private MirrorExperiment mirrorExperiment;
 
-    /** 镜像专用透明 overlay 窗口：位于宿主之上、不接收触摸，mirror 作为它的子层。 */
-    private FrameLayout mirrorLayerRoot;
-    private WindowManager mirrorLayerWm;
-    private WindowManager.LayoutParams mirrorLayerParams;
-
-    private void createMirrorLayer() {
-        if (mirrorLayerRoot != null) return;
-        try {
-            mirrorLayerRoot = new FrameLayout(ctx);
-            mirrorLayerRoot.setBackgroundColor(0x00000000);
-            mirrorLayerWm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
-            mirrorLayerParams = new WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                            | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-                    PixelFormat.TRANSLUCENT);
-            mirrorLayerParams.gravity = Gravity.TOP | Gravity.START;
-            mirrorLayerParams.setTitle("OneStepLiteMirrorLayer");
-            HostWindowPolicy.configure(mirrorLayerParams);
-            try { mirrorLayerParams.setFitInsetsTypes(0); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-            try {
-                mirrorLayerParams.layoutInDisplayCutoutMode =
-                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-            } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-            mirrorLayerWm.addView(mirrorLayerRoot, mirrorLayerParams);
-            log("mirror layer window added");
-        } catch (Throwable error) {
-            log("mirror layer window failed: " + error);
-            mirrorLayerRoot = null;
-        }
+    private MirrorExperiment mirrorExperiment() {
+        if(mirrorExperiment==null)mirrorExperiment=new MirrorExperiment(ctx,main,new MirrorExperiment.Host() {
+            @Override public int resolveTask(int requested) throws Throwable { return resolveMirrorTask(requested); }
+            @Override public Object leash(int task) throws Throwable { return mirrorLeash(task); }
+            @Override public View root() { return root; }
+            @Override public int width() { return screenW; }
+            @Override public int height() { return screenH; }
+            @Override public boolean direct(Object leash,Rect destination) { return applyDirectCarrier(leash,destination,true); }
+            @Override public void restoreDirect(Object leash) { restoreDirectCarrier(leash); }
+        },WorkspaceHost::log);
+        return mirrorExperiment;
     }
-
+    private void createMirrorLayer() { mirrorExperiment().createMirrorLayer(); }
     private void setMirrorLayerVisible(boolean visible) {
-        if (mirrorLayerRoot == null) return;
-        try {
-            if (mirrorLayerRoot.getVisibility() != (visible ? View.VISIBLE : View.GONE)) {
-                mirrorLayerRoot.setVisibility(visible ? View.VISIBLE : View.GONE);
-            }
-        } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
+        if(!visible && leashExperiment!=null)leashExperiment.close();
+        if(mirrorExperiment!=null)mirrorExperiment.setMirrorLayerVisible(visible);
     }
-
-    /** mirror 层窗口的 SurfaceControl；失败时返回 null。 */
-    private Object mirrorLayerSurface() {
-        try {
-            if (mirrorLayerRoot == null) return null;
-            Object viewRoot = XposedHelpers.callMethod(mirrorLayerRoot, "getViewRootImpl");
-            return viewRoot == null ? null
-                    : XposedHelpers.callMethod(viewRoot, "getSurfaceControl");
-        } catch (Throwable error) {
-            log("mirror layer surface unavailable: " + error);
-            return null;
-        }
+    private void startMirrorPoc(int task,Rect destination,int holdMs,int mode) {
+        mirrorExperiment().startMirrorPoc(task,destination,holdMs,mode);
     }
-
-    /**
-     * POC：从 ShellTaskOrganizer.getTaskLeash(taskId) 取真实任务 leash，
-     * SurfaceControl.mirrorSurface 生成实时镜像，父挂到宿主窗口层并按目标矩形缩放。
-     * hideMode 1/2/3/4 分别试验 alpha/移出屏幕/空 crop/hide 隐藏原任务，
-     * 目标是镜像仍然实时、而主区不再显示原任务；结束时恢复。
-     */
-    private void startMirrorPoc(int requestedTask, Rect dest, int holdMs, int hideMode) {
-        try {
-            stopMirrorPoc();
-            requestedTask = resolveMirrorTask(requestedTask);
-            if (requestedTask < 0) return;
-            Object leash = mirrorLeash(requestedTask);
-            if (leash == null) return;
-            if (hideMode == 5) {
-                showDirectCarrier(requestedTask, leash, dest, holdMs);
-                return;
-            }
-            if (!showMirrorSurface(requestedTask, leash, dest, hideMode)) return;
-            main.postDelayed(this::stopMirrorPoc, holdMs);
-        } catch (Throwable error) {
-            log("mirror POC failed: " + error);
-            XposedBridge.log(error);
-            stopMirrorPoc();
-        }
-    }
-
     /** The task to mirror: the requested one, or whatever currently owns the main cell. */
     private int resolveMirrorTask(int requestedTask) throws Throwable {
         if (requestedTask >= 0) return requestedTask;
@@ -998,107 +933,6 @@ public final class WorkspaceHost {
             return null;
         }
         return leash;
-    }
-
-    /** 免 mirror 承载：把原任务 leash 直接变换进格子（原任务窗口仍是满屏，只是显示变换成格子大小/位置）。 */
-    private void showDirectCarrier(int task, Object leash, Rect dest, int holdMs) throws Throwable {
-        if (!applyDirectCarrier(leash, dest, true)) return;
-        mirrorPocLeash = leash;
-        mirrorPocHideMode = 5;
-        log("direct carrier shown task=" + task + " dest=" + dest);
-        main.postDelayed(this::stopMirrorPoc, holdMs);
-    }
-
-    /** Mirror the leash into the host window and hide the source according to {@code hideMode}. */
-    private boolean showMirrorSurface(int task, Object leash, Rect dest, int hideMode) throws Throwable {
-        Object parent = mirrorLayerSurface();
-        if (parent == null) {
-            Object viewRoot = XposedHelpers.callMethod(root, "getViewRootImpl");
-            parent = viewRoot == null ? null
-                    : XposedHelpers.callMethod(viewRoot, "getSurfaceControl");
-        }
-        if (parent == null) {
-            log("mirror POC: host window SurfaceControl unavailable");
-            return false;
-        }
-        Class<?> scClass = Class.forName("android.view.SurfaceControl");
-        Object mirror = XposedHelpers.callStaticMethod(scClass, "mirrorSurface", leash);
-        float sx = dest.width() / (float) screenW;
-        float sy = dest.height() / (float) screenH;
-        Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                .getDeclaredConstructor().newInstance();
-        try {
-            hideMirrorSource(tx, leash, hideMode);
-            XposedHelpers.callMethod(tx, "reparent", mirror, parent);
-            XposedHelpers.callMethod(tx, "setLayer", mirror, 1000000);
-            XposedHelpers.callMethod(tx, "setPosition", mirror,
-                    (float) dest.left, (float) dest.top);
-            XposedHelpers.callMethod(tx, "setMatrix", mirror, sx, 0f, 0f, sy);
-            XposedHelpers.callMethod(tx, "setAlpha", mirror, 1f);
-            XposedHelpers.callMethod(tx, "show", mirror);
-            XposedHelpers.callMethod(tx, "apply");
-        } finally {
-            try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-        }
-        mirrorPocSurface = mirror;
-        mirrorPocLeash = leash;
-        mirrorPocHideMode = hideMode;
-        log("mirror POC shown task=" + task + " dest=" + dest
-                + " scale=" + sx + "x" + sy + " hideMode=" + hideMode
-                + " leash=" + leash + " parent=" + parent);
-        return true;
-    }
-
-    /**
-     * 试不同的“原任务隐藏”方式，目标是镜像仍然实时、而主区不再显示原任务：
-     * 0=不隐藏；1=alpha 0（已证会让镜像一起变空）；2=移出屏幕；3=空 crop；4=hide。
-     */
-    private void hideMirrorSource(Object tx, Object leash, int mode) {
-        try {
-            switch (mode) {
-                case 1:
-                    XposedHelpers.callMethod(tx, "setAlpha", leash, 0f);
-                    break;
-                case 2:
-                    XposedHelpers.callMethod(tx, "setPosition", leash, -4000f, -4000f);
-                    break;
-                case 3:
-                    XposedHelpers.callMethod(tx, "setCrop", leash, new Rect(0, 0, 0, 0));
-                    break;
-                case 4:
-                    XposedHelpers.callMethod(tx, "hide", leash);
-                    break;
-                default:
-                    break;
-            }
-        } catch (Throwable error) {
-            log("mirror hide mode " + mode + " failed: " + error);
-        }
-    }
-
-    private void restoreMirrorSource(Object tx, Object leash, int mode) {
-        try {
-            switch (mode) {
-                case 1:
-                    XposedHelpers.callMethod(tx, "setAlpha", leash, 1f);
-                    break;
-                case 2:
-                    XposedHelpers.callMethod(tx, "setPosition", leash, 0f, 0f);
-                    break;
-                case 3:
-                    XposedHelpers.callMethod(tx, "setCrop",
-                            new Class<?>[]{Class.forName("android.view.SurfaceControl"),
-                                    android.graphics.Rect.class}, leash, null);
-                    break;
-                case 4:
-                    XposedHelpers.callMethod(tx, "show", leash);
-                    break;
-                default:
-                    break;
-            }
-        } catch (Throwable error) {
-            log("mirror restore mode " + mode + " failed: " + error);
-        }
     }
 
     /**
@@ -1146,40 +980,6 @@ public final class WorkspaceHost {
             log("direct carrier restored task to main");
         } catch (Throwable error) {
             log("direct carrier restore failed: " + error);
-        }
-    }
-
-    private void stopMirrorPoc() {
-        Object mirror = mirrorPocSurface;
-        Object leash = mirrorPocLeash;
-        int hideMode = mirrorPocHideMode;
-        mirrorPocSurface = null;
-        mirrorPocLeash = null;
-        mirrorPocHideMode = 0;
-        if (hideMode == 5) {
-            if (leash != null && Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
-                restoreDirectCarrier(leash);
-            }
-            return;
-        }
-        if (mirror == null) return;
-        try {
-            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
-            try {
-                if (hideMode != 0 && leash != null
-                        && Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
-                    restoreMirrorSource(tx, leash, hideMode);
-                }
-                XposedHelpers.callMethod(tx, "remove", mirror);
-                XposedHelpers.callMethod(tx, "apply");
-            } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-            }
-            XposedHelpers.callMethod(mirror, "release");
-            log("mirror POC removed; restoredHideMode=" + hideMode);
-        } catch (Throwable error) {
-            log("mirror POC cleanup failed: " + error);
         }
     }
 
@@ -1348,7 +1148,7 @@ public final class WorkspaceHost {
         host.main.post(() -> host.runLeashAnimPoc(slotIndex, Math.max(150, durationMs), pkg));
     }
 
-    private volatile int leashAnimFrames;
+    private LeashExperiment leashExperiment;
     /** POC 期间该格的 SF 底板必须停止心跳重建，否则会盖住动画中的真实任务画面。 */
     private volatile int leashPocSlot = -1;
 
@@ -1398,39 +1198,14 @@ public final class WorkspaceHost {
         }
     }
 
-    private void animateLeashPoc(Object leash, int[] rect, int slotIndex, int taskId,
-            long durationMs) {
-        final Rect dest = new Rect(rect[0], rect[1], rect[2], rect[3]);
-        final float ratio = layout.mainScale;
-        final float endScaleX = dest.width() / (ratio * screenW);
-        final float endScaleY = dest.height() / (ratio * screenH);
-        final float endX = (dest.left - layout.mainOffsetX) / ratio;
-        final float endY = (dest.top - layout.mainOffsetY) / ratio;
-        leashAnimFrames = 0;
-        hideSlotChromeForPoc(slotIndex, true);
-        try {
-            ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f);
-            anim.setDuration(durationMs);
-            anim.setInterpolator(new PathInterpolator(0.34f, 0.69f, 0.1f, 1f));
-            anim.addUpdateListener(a -> {
-                float f = (float) a.getAnimatedValue();
-                applyLeashTransform(leash, endX * f, endY * f,
-                        1f + (endScaleX - 1f) * f, 1f + (endScaleY - 1f) * f);
-            });
-            anim.addListener(new AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(Animator a) {
-                    applyLeashTransform(leash, endX, endY, endScaleX, endScaleY);
-                    log("leash anim POC finished task=" + taskId + " dest=" + dest
-                            + " frames=" + leashAnimFrames);
-                    main.postDelayed(() -> reverseLeashPoc(leash, taskId, slotIndex), 1200L);
-                }
-            });
-            anim.start();
-            log("leash anim POC start task=" + taskId + " dest=" + dest
-                    + " duration=" + durationMs + " endScale=" + endScaleX + "x" + endScaleY);
-        } catch (Throwable error) {
-            log("leash anim POC failed: " + error);
-        }
+    private void animateLeashPoc(Object leash,int[] rect,int slotIndex,int taskId,long durationMs) {
+        final Rect dest=new Rect(rect[0],rect[1],rect[2],rect[3]);
+        final float ratio=layout.mainScale;
+        if(leashExperiment==null)leashExperiment=new LeashExperiment(main,this::applyLeashTransform,
+                this::hideSlotChromeForPoc,WorkspaceHost::log);
+        leashExperiment.start(leash,slotIndex,taskId,
+                (dest.left-layout.mainOffsetX)/ratio,(dest.top-layout.mainOffsetY)/ratio,
+                dest.width()/(ratio*screenW),dest.height()/(ratio*screenH),durationMs);
     }
 
     /** POC 期间隐藏目标格的宿主底板，让真实任务画面能在格子里可见（正式交换也会这么做）。 */
@@ -1460,13 +1235,6 @@ public final class WorkspaceHost {
         }
     }
 
-    private void reverseLeashPoc(Object leash, int taskId, int slotIndex) {
-        // POC 只验证“主窗 live 缩小”；hold 后直接回位，避免再引入一套反向动画。
-        applyLeashTransform(leash, 0f, 0f, 1f, 1f);
-        hideSlotChromeForPoc(slotIndex, false);
-        log("leash anim POC restored task=" + taskId);
-    }
-
     private static Object newSurfaceTransaction() throws Exception {
         java.lang.reflect.Constructor<?> cached = surfaceTransactionConstructor;
         if (cached == null) {
@@ -1483,7 +1251,6 @@ public final class WorkspaceHost {
                 XposedHelpers.callMethod(tx, "setPosition", leash, x, y);
                 XposedHelpers.callMethod(tx, "setMatrix", leash, sx, 0f, 0f, sy);
                 XposedHelpers.callMethod(tx, "apply");
-                leashAnimFrames++;
             } finally {
                 try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
             }
@@ -1617,7 +1384,7 @@ public final class WorkspaceHost {
         sceneEpoch++;
         scene = SUSPENDING;
         releaseTopExitWindow();
-        if(videoPane!=null)videoPane.releaseForPrivacy();
+        if(topPresentation!=null)topPresentation.releaseVideo();
         if (!keepBoundTasks) resetTopForSuspend();
         publishDesktopSideTasks();
         suspendRequested = false;
@@ -3498,7 +3265,7 @@ public final class WorkspaceHost {
             }
         }
         updateChromeClip();
-        if(videoPane!=null)videoPane.refresh();
+        if(topPresentation!=null)topPresentation.refreshVideo();
     }
 
     /**
@@ -3901,7 +3668,7 @@ public final class WorkspaceHost {
             quickApps = java.util.Collections.emptyList();
             log("top app strip unavailable: " + error);
         }
-        topBar = new TopBar(ctx, layout, quickApps, new TopBar.Listener() {
+        WorkspaceChrome chrome=new WorkspaceChrome(ctx,root,layout,quickApps,new TopBar.Listener() {
             @Override public void onOpenSettings() { openSettingsInMain(); }
             @Override public void onSetMainSide(boolean right) {
                 if (scene != ACTIVE || workspaceEntering || promotion != null || transferBusy
@@ -3922,48 +3689,17 @@ public final class WorkspaceHost {
 
             @Override public void onSendMainToTop() { sendMainToTop(); }
             @Override public void onTaskCellsCovered(boolean covered) { setTaskCellsCovered(covered); }
-        });
+        },()->layout!=null && !layout.tabletLandscape && workspaceAlpha<1f && mainSideAnimator!=null
+                ?workspaceTopHole():null);
+        topBar=chrome.bar;topStripBacking=chrome.backing;topLiveClip=chrome.clip;
         refreshQuickApps();
-        topStripBacking = new View(ctx);
-        topStripBacking.setBackgroundColor(0xFF1E2420);
-        root.addView(topStripBacking, new FrameLayout.LayoutParams(-1, layout.topStrip));
-        topLiveClip=new FrameLayout(ctx) {
-            @Override protected void dispatchDraw(android.graphics.Canvas canvas) {
-                int saved = canvas.save();
-                // The strip rides the main edge during the workspace fade, so it is
-                // already clear of the window and must not be cut a second time.
-                // Only the swap animation still needs the geometric exclusion.
-                if (layout != null && !layout.tabletLandscape && workspaceAlpha < 1f
-                        && mainSideAnimator != null)
-                    canvas.clipOutRect(workspaceTopHole());
-                super.dispatchDraw(canvas);
-                canvas.restoreToCount(saved);
-            }
-        };
-        topLiveClip.setClipChildren(true);
-        topLiveClip.setClipToPadding(true);
-        topLiveClip.setClipBounds(new Rect(0,0,screenW,layout.tabletLandscape?screenH:layout.topStrip));
-        root.addView(topLiveClip,new FrameLayout.LayoutParams(-1,layout.tabletLandscape?-1:layout.topStrip));
-        topLiveClip.addView(topBar, new FrameLayout.LayoutParams(-1, layout.topStrip));
-        videoPane=new VideoPane(ctx,main,()->scene==ACTIVE && screenOn && !keyguardLocked
-                && !workspaceEntering && workspaceAlpha>=1f && !slots[SLOT_TOP].occupied
-                && !topTaskState.busy() && topTransition==null && !topFace,
-                embedded->updateTopBarState());
+        createTopPresentation();
+        videoPane=topPresentation.video();
         topLiveClip.addView(videoPane,new FrameLayout.LayoutParams(-1,layout.topStrip));
         topBar.setStatusBarInset(DeviceProfile.statusBarHeightPx(ctx));
         main.post(this::applyWallpaperBackdrops);
-        for (int i = 1; i < CELL_SLOT_COUNT; i++) {
-            View backing = new View(ctx);
-            backing.setBackgroundColor(HyperOsStyle.page(ctx));
-            int[] cell=layout.cellBounds(i-1);
-            FrameLayout.LayoutParams rlp =
-                    new FrameLayout.LayoutParams(layout.tabletLandscape?cell[2]-cell[0]:layout.sideWidth, sideSegmentHeight(i));
-            rlp.leftMargin = layout.tabletLandscape?cell[0]:layout.mainOnRight ? 0 : layout.mainWidth;
-            rlp.topMargin = sideSegmentTop(i);
-            backing.setLayoutParams(rlp);
-            root.addView(backing);
-            sideBackingViews[i] = backing;
-        }
+        WorkspaceChrome.addSideBackings(ctx,root,layout,sideBackingViews,
+                this::sideSegmentTop,this::sideSegmentHeight);
         log("OneStepLite top bar ready shortcuts=" + quickApps.size());
     } catch (Throwable t) {
         log("top bar add failed: " + t);
@@ -4086,7 +3822,7 @@ public final class WorkspaceHost {
      */
     private void enterTopFaceForFade() {
         topFace=true;
-        if(videoPane!=null)videoPane.releaseForPrivacy();
+        if(topPresentation!=null)topPresentation.releaseVideo();
         updateTopTaskGeometry();
         // updateTopTaskGeometry renders the settled task face, which hides the bar;
         // the fade needs it visible underneath the incoming task.
@@ -4540,7 +4276,7 @@ public final class WorkspaceHost {
         final TopTaskTransition bridge=topTransition;
         final long binding=upper.taskEpoch;
         final Object token=upper.taskToken;
-        if(bridge!=null)bridge.followOpacity(topControls==null?null:topControls.view());
+        if(bridge!=null)bridge.followOpacity(topPresentation==null?null:topPresentation.controlsView());
         if(topBar!=null) {
             topBar.setPivotY(0f);
             topBar.setScaleY(1f);
@@ -5212,7 +4948,7 @@ public final class WorkspaceHost {
             topBar.setSendMainToTopEnabled(available && mainCanFillTop());
         }
         updateTopExitWindow();
-        if(videoPane!=null)videoPane.refresh();
+        if(topPresentation!=null)topPresentation.refreshVideo();
     }
 
     /**
@@ -5236,7 +4972,7 @@ public final class WorkspaceHost {
     private boolean setKeyguardWindowHidden(boolean hidden) {
         if(hidden) {
             releaseTopExitWindow();
-            if(videoPane!=null)videoPane.releaseForPrivacy();
+            if(topPresentation!=null)topPresentation.releaseVideo();
         }
         if (hidden == keyguardWindowHidden) return true;
         if (root == null || wm == null || lp == null) return false;
@@ -7577,18 +7313,32 @@ public final class WorkspaceHost {
      * sibling in Host's window and swallows their touches. The exit plate therefore
      * lives in its own overlay window, which the task surface cannot cover.
      */
+    private void createTopPresentation() {
+        topPresentation=new TopPresentationController(ctx,main,wm,new TopPresentationController.Host() {
+            @Override public boolean mayCaptureVideo() {
+                return scene==ACTIVE && screenOn && !keyguardLocked && !workspaceEntering
+                        && workspaceAlpha>=1f && !slots[SLOT_TOP].occupied
+                        && !topTaskState.busy() && topTransition==null && !topFace;
+            }
+            @Override public boolean mayShowTaskControls() {
+                return topFace && scene==ACTIVE && screenOn && !keyguardLocked
+                        && slots[SLOT_TOP].occupied && !slots[SLOT_TOP].parked
+                        && !slots[SLOT_TOP].promoting && layout!=null && !layout.tabletLandscape
+                        && topTransition==null && !workspaceEntering && workspaceAlpha>=1f;
+            }
+            @Override public int width() { return screenW; }
+            @Override public int height() { return layout.topStrip; }
+            @Override public void videoChanged() { updateTopBarState(); }
+            @Override public void exitTask() { releaseTopTask(true,true,null); }
+        });
+    }
+
     private void updateTopExitWindow() {
-        boolean wanted = topFace && scene == ACTIVE && screenOn && !keyguardLocked
-                && slots[SLOT_TOP].occupied && !slots[SLOT_TOP].parked
-                && !slots[SLOT_TOP].promoting && layout != null && !layout.tabletLandscape
-                && topTransition==null && !workspaceEntering && workspaceAlpha>=1f;
-        if (!wanted) { releaseTopExitWindow(); return; }
-        if(topControls==null)topControls=new TopOverlayControls(ctx,wm,()->releaseTopTask(true,true,null));
-        topControls.show(screenW,layout.topStrip);
+        if(topPresentation!=null)topPresentation.refreshControls();
     }
 
     private void releaseTopExitWindow() {
-        if(topControls!=null)topControls.close();
+        if(topPresentation!=null)topPresentation.hideControls();
     }
 
     private Object liveHostRootSurface() {

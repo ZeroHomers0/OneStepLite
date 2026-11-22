@@ -44,7 +44,7 @@ public class WorkspaceRegression {
  void cancelMainSideSwitch(){}boolean lockExitPending;
  int exitPlateReleases;void releaseTopExitWindow(){exitPlateReleases++;}
  void updateTopBarState(){}
- static class VideoPane {void refresh(){}void releaseForPrivacy(){}}VideoPane videoPane;
+ static class TopPresentationController {void refreshVideo(){}void releaseVideo(){}}TopPresentationController topPresentation;
  static class TopTaskTransition {boolean ownsTopOpacity(){return true;}boolean ownsTaskOpacity(){return true;}}TopTaskTransition topTransition;
  static class LiveSwapVisualLease {static void writeAlpha(View v,float a){v.setAlpha(a);}}
  static class SideDismiss {boolean isTracking(){return false;}void settle(boolean b){}}

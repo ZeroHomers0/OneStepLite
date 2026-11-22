@@ -233,7 +233,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./test.ps1
 | 作业 | 环境 | 内容 |
 | --- | --- | --- |
 | `apk` | `ubuntu-latest` | 装 `platforms;android-37.0`、`build-tools;36.0.0`、`ndk;28.2.13676358`，跑 `:app:lintRelease :app:stageRelease`，上传 APK 与 `SHA256SUMS.txt` |
-| `tests` | `windows-latest` | 跑 `test.ps1`，51 个策略单测与 101 个生产方法回放套件 |
+| `tests` | `windows-latest` | 跑 `test.ps1`，51 个策略单测与 102 个生产方法回放套件 |
 
 每次 `main` 构建成功后，`latest` 作业把产物刷新到 [`latest` 预发布](https://github.com/ZeroHomers0/OneStepLite/releases/tag/latest)——那里是普通文件、有固定直链，手机能直接下载；推 `v*` 标签时 `release` 作业另外发正式版。
 
@@ -263,12 +263,12 @@ Lint 也在 CI 里跑。`app/lint.xml` 关掉对 LSPosed 模块不适用的检�
 ## 项目结构
 
 ```
-app/src/main/java/io/github/zerohomers0/onesteplite/   186 个源文件，按功能分 17 个子目录
+app/src/main/java/io/github/zerohomers0/onesteplite/   190 个源文件，按功能分 17 个子目录
 app/src/main/cpp/                                      原生输入映射（ARM64）
 app/src/main/res/                                      图标与主题
 app/src/main/assets/                                   模块入口与许可文件
 tests/                                                 51 个策略单测
-tools/                                                 101 个生产方法回放套件
+tools/                                                 102 个生产方法回放套件
 ```
 
 目录职责、分层约定、命名与代码风格、改动时必须遵守的等价性约束，见[项目结构与代码规范](docs/项目结构与代码规范.md)。

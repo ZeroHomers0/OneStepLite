@@ -163,6 +163,7 @@ public class TopDirectionRegression {
  static final int ACTIVE=1,SLOT_TOP=4;int scene=ACTIVE;boolean screenOn=true,keyguardLocked,transferBusy;
  Object promotion,workspaceAnimator;float workspaceAlpha=1f;
  static class VideoPane {boolean embedded(){return false;}void refresh(){}}VideoPane videoPane;
+ static class TopPresentationController {void refreshVideo(){}}TopPresentationController topPresentation;
  static class Layout {boolean tabletLandscape;}Layout layout=new Layout();
  static class Slot {boolean occupied;}Slot[] slots={null,null,null,null,new Slot()};
  static class Bar {boolean enabled;void setAlpha(float a){}void setSendMainToTopEnabled(boolean b){enabled=b;}}Bar topBar=new Bar();
