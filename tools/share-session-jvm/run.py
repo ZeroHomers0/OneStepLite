@@ -49,7 +49,7 @@ static class Replay extends Base {
 BooleanSupplier ready=()->true;Object dispatch,bounds,hovered;Consumer<String> hint=value->{};ShareRailOverlay overlay;
 boolean dragging,dropped,deliveryPending,retainingDelivery,shareOnly;int generation,starts,ends,stops,drops;String lastTarget;
 Handler handler=new Handler();Runnable expire=()->{},deliverySettled=()->{};
-Counter pendingRead,delegatedRead;Counter panel=new Counter(),history=new Counter(),picker=new Counter(),capture=new Counter();
+Counter pendingRead,delegatedRead,catchment;Counter panel=new Counter(),history=new Counter(),picker=new Counter(),capture=new Counter(),portal=new Counter();Runnable afterDrag=()->{};
 Transition transition=new Transition();float alpha=1;
 Targets targets=new Targets();
 boolean accepts(Object description){return true;}boolean live(int token){return dragging&&ready.getAsBoolean();}
@@ -85,7 +85,8 @@ rail=new Replay();rail.shareOnly=true;rail.dragging=true;rail.dropped=true;rail.
 check(rail.alpha==0&&rail.transition.resets==1&&!rail.dragging,"share-only strip hides immediately when drag ends");
 check(rail.deliveryPending,"visual retirement leaves accepted payload delivery alive");
 check(!rail.targets.child.hovered,"drag end clears target magnification while preserving pending delivery");
-rail=new Replay();rail.onDetachedFromWindow();check(rail.panel.closes==1&&rail.capture.closes==1&&rail.history.stops==1,"ordinary detach releases all child state");
+rail=new Replay();rail.catchment=new Counter();Counter reach=rail.catchment;rail.onDetachedFromWindow();check(rail.panel.closes==1&&rail.capture.closes==1&&rail.history.stops==1,"ordinary detach releases all child state");
+check(reach.closes==1&&rail.catchment==null,"detach removes the temporary arrow hit region");
 check(rail.transition.resets==1,"ordinary detach clears cube animation");
 System.out.println("Production share session checks="+checks+" passed");
 }}

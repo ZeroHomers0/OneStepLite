@@ -63,12 +63,24 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
+        if (SystemExtractHooks.PACKAGE.equals(lpparam.packageName)) {
+            SystemExtractHooks.install(lpparam.classLoader);
+            return;
+        }
+        if (PortalWire.PACKAGE.equals(lpparam.packageName)) {
+            PortalHooks.install(lpparam.classLoader);
+            return;
+        }
         if (Packages.SETTINGS.equals(lpparam.packageName)) {
             SystemSettingsEntry.install(lpparam.classLoader);
             return;
         }
         if ("android".equals(lpparam.packageName)) {
             ContentPermissionBridge.install(lpparam.classLoader,()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
+            PortalDragInput.install(lpparam.classLoader,()->sDisplayContent,
+                    ()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
+            EditorPasteCompat.install(lpparam.classLoader,()->sDisplayContent,
+                    ()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
             NativeMultiWindowUnlock.install(lpparam.classLoader, true);
             hookSystemServer(lpparam.classLoader);
             return;

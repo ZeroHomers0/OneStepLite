@@ -37,7 +37,10 @@ public final class ContentInboxProvider extends ContentProvider {
     }
 
     @Override public Bundle call(String method,String arg,Bundle extras) {
+        if(method!=null && method.startsWith("portal_"))return PortalRelay.call(getContext(),method,extras);
+        if("paste_register".equals(method))return EditorPasteCompat.relay(getContext(),method,extras);
         enforceHost();
+        if(method!=null && method.startsWith("paste_"))return EditorPasteCompat.relay(getContext(),method,extras);
         if("capture_image".equals(method) || "discard_capture".equals(method)) {
             if(Binder.getCallingUid()/100000!=android.os.Process.myUid()/100000)throw new SecurityException("Different capture user");
             return "capture_image".equals(method)?CaptureInboxStore.store(getContext(),extras==null?null:extras.getByteArray("image"))

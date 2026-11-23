@@ -39,6 +39,8 @@ final class ContentPanel {
     private ScrollView scroll;
     private TextView selectionButton;
     private Dialog preview;
+    private ImageTextRequest recognition;
+    private ShareReadLease recognitionRead;
     private final ClipboardHistory history;
     private final ContentSelection selection = new ContentSelection();
     private final java.util.LinkedHashMap<String,ContentEntry> entries = new java.util.LinkedHashMap<>();
@@ -81,13 +83,13 @@ final class ContentPanel {
         ContentPanelLayout panel=shell;
         tabButtons.clear();tabButtons.addAll(shell.tabs);
         scroll=shell.scroll;grid=shell.grid;
-        panel.addView(actions(themed),new LinearLayout.LayoutParams(-1,dp(50)));
+        panel.addView(actions(themed),new LinearLayout.LayoutParams(-1,dp(44)));
         TextView extract=label("截取主窗图片");extract.setTextSize(12);
         extract.setOnClickListener(v->{
             if(dialog!=null && dialog.getWindow()!=null)dialog.getWindow().setWindowAnimations(0);
             close();capture.run();
         });
-        panel.addView(extract,new LinearLayout.LayoutParams(-1,dp(44)));
+        panel.addView(extract,new LinearLayout.LayoutParams(-1,dp(36)));
         dialog.setContentView(panel);
         final Dialog opened = dialog;
         dialog.setOnDismissListener(ignored -> {
@@ -100,6 +102,7 @@ final class ContentPanel {
         WindowManager.LayoutParams attrs = window.getAttributes();
         attrs.setTitle("OneStepLiteContentPanel");
         attrs.gravity = Gravity.TOP | Gravity.LEFT;
+        attrs.flags|=WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
         int[] location = new int[2];
         anchor.getLocationOnScreen(location);
         android.graphics.Rect main = bounds.get();
@@ -111,7 +114,7 @@ final class ContentPanel {
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setDecorFitsSystemWindows(false);
         dialog.show();
-        contentWidth=Math.max(1,WorkspacePopupStyle.width(themed)-dp(40));
+        contentWidth=Math.max(1,WorkspacePopupStyle.width(themed)-dp(28));
         imageSize = Math.max(1, (contentWidth - dp(12)) / 3);
         WorkspacePopupStyle.size(window,themed);
         island = new ModalIslandLease(panel);
@@ -164,7 +167,7 @@ final class ContentPanel {
     private TextView label(String text) {
         TextView view = new TextView(context);
         view.setText(text);
-        view.setTextSize(14);
+        view.setTextSize(12);
         view.setTextColor(HyperOsStyle.textPrimary(context));
         view.setGravity(Gravity.CENTER);
         view.setPadding(dp(6), dp(8), dp(6), dp(8));
@@ -251,7 +254,9 @@ final class ContentPanel {
         if(entries.isEmpty())grid.removeAllViews();
         entries.put(entry.key,entry);
         View view;
-        if(tab==1 && entry.uri!=null) {
+        if(tab==2) {
+            view=new ClipboardRow(context,entry);
+        } else if(tab==1 && entry.uri!=null) {
             view=new RecentFileRow(context,entry);
         } else if(entry.thumbnail!=null) {
             ImageView image=new ImageView(context);image.setImageBitmap(entry.thumbnail);
@@ -266,14 +271,17 @@ final class ContentPanel {
         view.setOnClickListener(v->{
             if(selecting) {
                 if(!selection.toggle(tab,entry.key))message("一次最多选择32项");refreshSelection();
-            } else if(tab!=1)preview(entry);
+            } else if(tab==2 && entry.text!=null && EditorPasteCompat.paste(context,entry.text))close();
+            else if(tab!=1)preview(entry);
         });
         view.setOnLongClickListener(v->beginEntry(v,entry));
         GridLayout.LayoutParams params=new GridLayout.LayoutParams(
                 GridLayout.spec(GridLayout.UNDEFINED),GridLayout.spec(GridLayout.UNDEFINED,entry.thumbnail==null?3:1));
-        params.width=entry.thumbnail==null || tab==1?contentWidth:imageSize;
-        params.height=entry.thumbnail==null || tab==1?-2:imageSize;
-        if(entry.thumbnail!=null && tab!=1)params.setMargins(dp(2),dp(2),dp(2),dp(2));
+        boolean list=tab!=0 || entry.thumbnail==null;
+        params.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,list?3:1);
+        params.width=list?contentWidth:imageSize;
+        params.height=list?ContentRowStyle.height(context):imageSize;
+        if(list)params.setMargins(0,0,0,dp(6));else params.setMargins(dp(2),dp(2),dp(2),dp(2));
         grid.addView(view,params);tiles.put(entry.key,view);refreshSelection();
     }
 
@@ -339,7 +347,13 @@ final class ContentPanel {
         if(entry.uri==null || !entry.mime.startsWith("image/")) {textPreview(entry);return;}
         ImageView image=new ImageView(context);image.setImageBitmap(entry.thumbnail);
         image.setAdjustViewBounds(true);image.setContentDescription("图片预览，长按拖曳分享");
-        image.setOnLongClickListener(v->beginEntry(v,entry));showPreview(image);
+        image.setOnLongClickListener(v->beginEntry(v,entry));
+        LinearLayout body=new LinearLayout(context);body.setOrientation(LinearLayout.VERTICAL);
+        WorkspacePopupStyle.decorate(body,null);body.addView(image,new LinearLayout.LayoutParams(-1,0,1));
+        TextView recognize=label("识别文字");recognize.setGravity(Gravity.CENTER);
+        recognize.setBackground(HyperOsStyle.controlButton(context,false,8));
+        recognize.setOnClickListener(v->recognize(entry,recognize));body.addView(recognize,new LinearLayout.LayoutParams(-1,dp(44)));
+        showPreview(body);
         final Dialog window=preview;
         final int token=generation;
         WORKER.execute(()->{
@@ -354,10 +368,8 @@ final class ContentPanel {
     }
 
     private void textPreview(ContentEntry entry) {
-        LinearLayout body=new LinearLayout(context);body.setOrientation(LinearLayout.VERTICAL);
-        TextView text=label(entry.text==null?entry.label:entry.text);
-        text.setTextIsSelectable(true);text.setOnLongClickListener(v->beginEntry(v,entry));
-        ScrollView reading=new ScrollView(context);reading.addView(text);body.addView(reading);
+        WordSelectionPane body=new WordSelectionPane(context,entry.text==null?entry.label:entry.text,
+                (view,text)->begin(view,ClipData.newPlainText("选中文字",text)));
         if(tab==2 && entry.text!=null) {
             TextView pin=label("固定／取消固定这条历史");
             pin.setOnClickListener(v->{history.pin(entry.text);closePreview();load();});body.addView(pin);
@@ -372,24 +384,38 @@ final class ContentPanel {
         if(dialog==null)return;
         preview=new Dialog(dialog.getContext());preview.setContentView(content);
         final Dialog opened = preview;
-        preview.setOnDismissListener(ignored -> { if (preview == opened) preview = null; });
+        preview.setOnDismissListener(ignored -> { if (preview == opened) closePreview(); });
         Window window=preview.getWindow();if(window==null){closePreview();return;}
         window.setType(WindowTypes.SYSTEM_UI_DIALOG);
         WindowManager.LayoutParams attrs=window.getAttributes();attrs.setTitle("OneStepLiteContentPanel");
-        HostWindowPolicy.configure(attrs);window.setAttributes(attrs);preview.show();
-        android.graphics.Rect main=bounds.get();
-        window.setLayout(Math.min(dp(420),main==null?dp(300):Math.max(dp(120),main.width()-dp(16))),-2);
-        if(main!=null) {
-            WindowManager.LayoutParams position=window.getAttributes();position.gravity=Gravity.TOP|Gravity.START;
-            int displayWidth=context.getResources().getDisplayMetrics().widthPixels;
-            boolean rtl=context.getResources().getConfiguration().getLayoutDirection()==View.LAYOUT_DIRECTION_RTL;
-            position.x=rtl?displayWidth-main.right+dp(8):main.left+dp(8);position.y=main.top+dp(8);
-            window.setAttributes(position);window.setLayout(Math.max(1,Math.min(dp(420),main.width()-dp(16))),
-                    Math.max(1,Math.min(dp(480),main.height()-dp(16))));
-        }
+        HostWindowPolicy.configure(attrs);window.setAttributes(attrs);
+        window.setBackgroundDrawableResource(android.R.color.transparent);preview.show();WorkspacePopupStyle.size(window,context);
     }
 
+    private void recognize(ContentEntry entry,TextView action) {
+        if(preview==null || recognition!=null || entry.uri==null)return;
+        Dialog opened=preview;int token=generation;action.setEnabled(false);action.setText("正在识别…");
+        recognition=new ImageTextRequest(context,entry.uri,(text,error)->{
+            recognition=null;
+            if(preview!=opened || token!=generation || !anchor.isShown())return;
+            action.setEnabled(true);action.setText("识别文字");
+            if(error!=null){message(error);return;}
+            textPreview(new ContentEntry("ocr",text,"text/plain",text,null,null));
+        });
+        recognition.start();
+    }
+
+    void recognizeImage(Uri uri,ShareReadLease read) {
+        if(dialog==null){read.close();return;}
+        ContentEntry entry=new ContentEntry("ocr-image","图片","image/*",null,uri,null);
+        preview(entry);recognitionRead=read;
+        TextView action=label("识别文字");recognize(entry,action);
+    }
+    void previewImage(Uri uri){preview(new ContentEntry("extracted-image","图片","image/jpeg",null,uri,null));}
+
     private void closePreview() {
+        if(recognition!=null){recognition.close();recognition=null;}
+        if(recognitionRead!=null){recognitionRead.close();recognitionRead=null;}
         Dialog old=preview;preview=null;
         if(old!=null) { old.setOnDismissListener(null);old.dismiss(); }
     }
@@ -428,7 +454,9 @@ final class ContentPanel {
         });
         final boolean started;
         try {
-            started = source.startDragAndDrop(clip, new ContentDragShadow(source,clip.getItemCount()), new SharePayload(clip),
+            ContentDragShadow shadow=new ContentDragShadow(source,clip.getItemCount(),clip.getItemCount()==1?clip.getItemAt(0).getText():null);
+            shadow.mark(clip);
+            started = source.startDragAndDrop(clip, shadow, new SharePayload(clip),
                     View.DRAG_FLAG_GLOBAL | View.DRAG_FLAG_GLOBAL_URI_READ);
         } catch (RuntimeException denied) {
             message("此内容暂时无法拖曳，请使用应用原有分享");

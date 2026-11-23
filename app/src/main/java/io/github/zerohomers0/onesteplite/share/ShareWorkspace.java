@@ -39,6 +39,7 @@ final class ShareWorkspace extends FrameLayout {
     private final IconButton content;
     private final ContentPanel panel;
     private final SourceCaptureController capture;
+    private final PortalSource portal;
     private final ClipboardHistory history;
     private final BooleanSupplier ready;
     private final BiConsumer<ComponentName, Runnable> dispatch;
@@ -64,6 +65,11 @@ final class ShareWorkspace extends FrameLayout {
     private ShareReadLease pendingRead;
     private DropPermissionContract delegatedRead;
     private final Runnable expire = this::cancel;
+    private static final ComponentName IMAGE_TEXT=new ComponentName(ContentInboxProvider.MODULE,"recognize_image_text");
+    private boolean imageDrag;
+    private Runnable afterDrag=()->{};
+    private ShareDragCatchment catchment;
+    private int tipOffset;
 
     ShareWorkspace(Context context, View normalRail, BooleanSupplier ready,
             BiConsumer<ComponentName, Runnable> dispatch, Consumer<String> hint,
@@ -83,6 +89,7 @@ final class ShareWorkspace extends FrameLayout {
         history=new ClipboardHistory(context);
         capture=new SourceCaptureController(this,()->ready.getAsBoolean() && !dragging,bounds);
         panel = new ContentPanel(this, bounds,history,()->capture.open());
+        portal=shareOnly?null:new PortalSource(this,()->ready.getAsBoolean() && !dragging,bounds,uri->{panel.open();panel.previewImage(uri);});
         content = new IconButton(context, IconButton.CONTENT, "内容：近期图片、文件和剪贴板");
         content.setTooltipText("近期图片、文件和剪贴板");
         content.setOnClickListener(v -> {
@@ -121,12 +128,17 @@ final class ShareWorkspace extends FrameLayout {
                 if(dragging)return true;
                 cancel();
                 dragging = true;
+                tipOffset=ContentDragShadow.offset(event.getClipDescription());
+                if(tipOffset>0) {
+                    catchment=new ShareDragCatchment(this,tipOffset,()->dragging && ready.getAsBoolean());catchment.start();
+                }
                 user = CurrentUser.id();
                 int token = generation;
                 SharePayload local=event.getLocalState() instanceof SharePayload
                         ?(SharePayload)event.getLocalState():null;
                 ClipDescription description = local==null?new ClipDescription(event.getClipDescription())
                         :new ClipDescription("内容",new String[]{local.mime});
+                imageDrag=description.hasMimeType("image/*");
                 int count=local==null?0:Math.max(1,local.uris.size());
                 handler.postDelayed(expire, 60_000L);
                 WORKER.execute(() -> {
@@ -139,13 +151,13 @@ final class ShareWorkspace extends FrameLayout {
                 });
                 return true;
             case DragEvent.ACTION_DRAG_LOCATION:
-                if (dragging) locate(event.getX(), event.getY());
+                if (dragging) locate(event.getX(), event.getY()-tipOffset);
                 return dragging;
             case DragEvent.ACTION_DRAG_EXITED:
                 stopEdge();hovered = null; clearTargetHover();hint.accept(null); return dragging;
             case DragEvent.ACTION_DROP:
                 if (!live(generation)) return false;
-                locate(event.getX(), event.getY());
+                locate(event.getX(), event.getY()-tipOffset);
                 if (hovered == null) return false;
                 return drop(event, hovered);
             case DragEvent.ACTION_DRAG_ENDED:
@@ -153,6 +165,7 @@ final class ShareWorkspace extends FrameLayout {
                 boolean consumed = event.getResult();
                 finishVisuals();
                 panel.dragEnded(consumed);
+                Runnable next=afterDrag;afterDrag=()->{};handler.post(next);
                 return true;
             default: return dragging;
         }
@@ -167,6 +180,8 @@ final class ShareWorkspace extends FrameLayout {
         }
         return supported;
     }
+
+    boolean onTipDrag(DragEvent event){return drag(event);}
 
     private boolean live(int token) {
         return dragging && token == generation && user == CurrentUser.id()
@@ -190,11 +205,15 @@ final class ShareWorkspace extends FrameLayout {
 
     private void showTargets(List<ShareTarget> entries) {
         targets.removeAllViews();
+        if(imageDrag && !shareOnly) {
+            ShareTarget recognize=new ShareTarget(IMAGE_TEXT,"识别文字",getContext().getDrawable(android.R.drawable.ic_menu_edit),true);
+            targets.addView(new ShareTargetButton(getContext(),recognize),new LinearLayout.LayoutParams(dp(50),-1));
+        }
         for (ShareTarget entry : entries) {
             ShareTargetButton icon = new ShareTargetButton(getContext(),entry);
             targets.addView(icon, new LinearLayout.LayoutParams(dp(50), -1));
         }
-        if (entries.isEmpty()) {
+        if (entries.isEmpty() && targets.getChildCount()==0) {
             TextView empty = new TextView(getContext());
             empty.setText("没有可用的分享入口");
             empty.setTextColor(HyperOsStyle.textPrimary(getContext()));
@@ -249,6 +268,7 @@ final class ShareWorkspace extends FrameLayout {
         ShareReadLease readLease = null;
         try {
             SharePayload payload = new SharePayload(event.getClipData());
+            if(IMAGE_TEXT.equals(target))return recognizeDrop(event,payload);
             Intent intent = payload.intent(target);
             if (getContext().getPackageManager().queryIntentActivities(intent, 0).isEmpty())
                 throw new IllegalArgumentException("Target does not accept this content count");
@@ -319,6 +339,19 @@ final class ShareWorkspace extends FrameLayout {
         });
     }
 
+    private boolean recognizeDrop(DragEvent event,SharePayload payload) {
+        if(payload.uris.size()!=1 || !payload.mime.startsWith("image/"))return false;
+        android.net.Uri uri=payload.uris.get(0);
+        ShareReadLease read=new ShareReadLease(ContentInboxProvider.AUTHORITY.equals(uri.getAuthority())?()->{}:ContentAccessCompat.take(event));
+        pendingRead=read;dropped=true;int token=generation,owner=user;
+        afterDrag=()->{
+            if(token!=generation || owner!=CurrentUser.id() || !isAttachedToWindow() || !ready.getAsBoolean()){read.close();return;}
+            try{panel.open();panel.recognizeImage(uri,read);if(pendingRead==read)pendingRead=null;}
+            catch(RuntimeException unavailable){read.close();panel.close();message("无法打开图片识字");}
+        };
+        return true;
+    }
+
     private void launchInbox(ComponentName target,Intent share,int token,int owner) {
         WORKER.execute(()->{
             try {
@@ -368,6 +401,7 @@ final class ShareWorkspace extends FrameLayout {
     }
 
     private void finishVisuals() {
+        if(catchment!=null){catchment.close();catchment=null;}
         dragging = false;
         hovered = null;
         clearTargetHover();
@@ -385,6 +419,7 @@ final class ShareWorkspace extends FrameLayout {
 
     void cancel() {
         generation++;
+        afterDrag=()->{};
         handler.removeCallbacks(expire);
         if (pendingRead != null) { pendingRead.close(); pendingRead = null; }
         if(delegatedRead!=null){delegatedRead.close();delegatedRead=null;}
@@ -399,10 +434,11 @@ final class ShareWorkspace extends FrameLayout {
         if(overlay!=null)overlay.close();
         cancel(); panel.close();history.stop();
         capture.close();
+        if(portal!=null)portal.close();
         picker.close();
     }
 
-    void setActive(boolean active) { if(active)history.start();else close(); }
+    void setActive(boolean active) { if(active){history.start();if(portal!=null)portal.start();}else close(); }
     void setCoveredSource(BooleanSupplier covered){this.covered=covered;}
 
     boolean retainDelivery(Runnable settled) {
@@ -417,7 +453,7 @@ final class ShareWorkspace extends FrameLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
-        if(retainingDelivery){stopEdge();panel.close();capture.close();history.stop();picker.close();}
+        if(retainingDelivery){stopEdge();panel.close();capture.close();if(portal!=null)portal.close();history.stop();picker.close();}
         else close();super.onDetachedFromWindow();
     }
     @Override protected void onSizeChanged(int w, int h, int oldW, int oldH) {

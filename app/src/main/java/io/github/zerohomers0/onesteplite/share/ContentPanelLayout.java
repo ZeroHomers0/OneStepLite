@@ -27,15 +27,15 @@ final class ContentPanelLayout extends LinearLayout {
         track.setCornerRadius(dp(10));header.setBackground(track);
         String[] names={"近期图片","最近文件","剪贴板"};
         for(int i=0;i<names.length;i++) {
-            final int index=i;TextView tab=new TextView(context);tab.setText(names[i]);tab.setTextSize(13);
-            tab.setMinHeight(dp(42));tab.setMaxLines(1);tab.setIncludeFontPadding(false);
+            final int index=i;TextView tab=new TextView(context);tab.setText(names[i]);tab.setTextSize(12);
+            tab.setMinHeight(dp(36));tab.setMaxLines(1);tab.setIncludeFontPadding(false);
             tab.setGravity(Gravity.CENTER);tab.setTextColor(HyperOsStyle.textPrimary(context));
             tab.setOnClickListener(v->select.accept(index));tabs.add(tab);
             LayoutParams cell=new LayoutParams(0,-2,1);header.addView(tab,cell);
         }
         addView(header);
         scroll=new ScrollView(context);scroll.setFillViewport(true);
-        scroll.setPadding(0,dp(12),0,0);scroll.setClipToPadding(false);
+        scroll.setPadding(0,dp(8),0,0);scroll.setClipToPadding(false);
         grid=new GridLayout(context);grid.setColumnCount(3);scroll.addView(grid);
         addView(scroll,new LayoutParams(-1,0,1));
     }

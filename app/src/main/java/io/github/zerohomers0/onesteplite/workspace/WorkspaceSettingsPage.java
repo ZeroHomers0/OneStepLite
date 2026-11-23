@@ -5,13 +5,9 @@ import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
-import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
-import android.graphics.drawable.ShapeDrawable;
-import android.graphics.drawable.StateListDrawable;
-import android.graphics.drawable.shapes.RoundRectShape;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -247,53 +243,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
     }
 
     private Switch settingsSwitch(String label, boolean checked) {
-        Switch toggle = new Switch(activity);
-        toggle.setShowText(false);
-        toggle.setText("");
-        toggle.setContentDescription(label);
-        toggle.setSwitchMinWidth(activity.settingsDimension("miuix_appcompat_sliding_button_width", 49));
-        toggle.setSplitTrack(false);
-        int thumbSize = activity.settingsDimension("miuix_appcompat_sliding_button_slider_size", 20);
-        int frameHeight = activity.settingsDimension("miuix_appcompat_sliding_button_height", 28);
-        toggle.setThumbDrawable(new Drawable() {
-            private final Paint knob = new Paint(Paint.ANTI_ALIAS_FLAG);
-            { knob.setColor(0xffffffff); }
-            @Override public void draw(Canvas canvas) {
-                Rect bounds = getBounds();
-                canvas.drawCircle(bounds.exactCenterX(), bounds.exactCenterY(),
-                        Math.min(bounds.width(), bounds.height()) / 2f, knob);
-            }
-            @Override public int getIntrinsicWidth() { return thumbSize; }
-            @Override public int getIntrinsicHeight() { return frameHeight; }
-            @Override public void setAlpha(int alpha) { knob.setAlpha(alpha); invalidateSelf(); }
-            @Override public void setColorFilter(ColorFilter filter) { knob.setColorFilter(filter); invalidateSelf(); }
-            @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
-        });
-        StateListDrawable track = new StateListDrawable();
-        Drawable on = switchTrack(activity.settingsColor("miuix_appcompat_sliding_button_bar_on_"
-                + (dark ? "dark" : "light"), BLUE));
-        Drawable off = switchTrack(activity.settingsColor(dark
-                ? "miuix_appcompat_sliding_button_bar_off_dark"
-                : "miuix_appcompat_sliding_button_bar_off_normal_color_light",
-                dark ? 0xff42454e : 0xffdedfe5));
-        track.addState(new int[]{android.R.attr.state_checked}, on);
-        track.addState(new int[]{}, off);
-        toggle.setTrackDrawable(track);
-        toggle.setThumbTintList(null); toggle.setTrackTintList(null);
-        toggle.setChecked(checked);
-        return toggle;
-    }
-
-    private Drawable switchTrack(int color) {
-        int inset = activity.settingsDimension("miuix_appcompat_sliding_button_slider_horizontal_padding", 4);
-        float radius = dp(14);
-        ShapeDrawable track = new ShapeDrawable(new RoundRectShape(new float[] {
-                radius, radius, radius, radius, radius, radius, radius, radius}, null, null));
-        track.getPaint().setColor(color);
-        track.setPadding(inset, 0, inset, 0);
-        track.setIntrinsicWidth(activity.settingsDimension("miuix_appcompat_sliding_button_width", 49));
-        track.setIntrinsicHeight(activity.settingsDimension("miuix_appcompat_sliding_button_height", 28));
-        return track;
+        return WorkspaceSwitch.create(activity,label,checked);
     }
 
     private void swap() {

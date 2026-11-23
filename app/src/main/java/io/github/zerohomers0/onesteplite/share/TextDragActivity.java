@@ -36,7 +36,8 @@ public final class TextDragActivity extends Activity {
         close.setOnClickListener(v->finish());body.addView(close,new LinearLayout.LayoutParams(-1,HyperOsStyle.dp(this,44)));
         text.setOnLongClickListener(v->{
             try {
-                dragging=v.startDragAndDrop(ClipData.newPlainText("选中文字",value),new ContentDragShadow(v,1),null,View.DRAG_FLAG_GLOBAL);
+                ClipData clip=ClipData.newPlainText("选中文字",value);ContentDragShadow shadow=new ContentDragShadow(v,1);shadow.mark(clip);
+                dragging=v.startDragAndDrop(clip,shadow,null,View.DRAG_FLAG_GLOBAL);
                 if(dragging){getWindow().getDecorView().setAlpha(0);getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);}
                 return dragging;
             } catch(RuntimeException unavailable){return false;}

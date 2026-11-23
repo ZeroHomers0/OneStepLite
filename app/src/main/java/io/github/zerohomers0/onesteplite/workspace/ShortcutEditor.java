@@ -10,7 +10,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
-import android.widget.CheckBox;
+import android.widget.Switch;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -54,7 +54,7 @@ final class ShortcutEditor extends LinearLayout {
         search.setPadding(dp(12),0,dp(12),0);search.setBackground(HyperOsStyle.controlButton(context,false,10));
         LayoutParams searchBounds=new LayoutParams(-1,dp(44));searchBounds.bottomMargin=dp(8);addView(search,searchBounds);
         List<ShareTarget> rows=new ArrayList<>(targets);ListView list=new ListView(context);list.setDivider(null);
-        BaseAdapter adapter=adapter(rows,editor);list.setAdapter(adapter);addView(list,new LayoutParams(-1,0,1));
+        BaseAdapter adapter=adapter(rows,editor);adapter.notifyDataSetChanged();list.setAdapter(adapter);addView(list,new LayoutParams(-1,0,1));
         search.addTextChangedListener(new TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int count,int after){}
             public void onTextChanged(CharSequence s,int start,int before,int count){
@@ -88,15 +88,18 @@ final class ShortcutEditor extends LinearLayout {
                 row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(2),dp(6),dp(2),dp(6));row.setMinimumHeight(dp(58));
                 ImageView icon=new ImageView(getContext());icon.setImageDrawable(target.icon);
                 row.addView(icon,new LayoutParams(dp(32),dp(32)));
-                CheckBox check=new CheckBox(getContext());check.setText(target.label);check.setTextSize(14);
-                check.setTextColor(HyperOsStyle.textPrimary(getContext()));check.setMinHeight(dp(46));
-                check.setButtonTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked},new int[]{}},
-                        new int[]{HyperOsStyle.CONTROL_ACCENT,HyperOsStyle.textSecondary(getContext())}));
-                check.setChecked(chosen.contains(target.key()));
-                LayoutParams text=new LayoutParams(0,-2,1);text.setMarginStart(dp(10));row.addView(check,text);
+                TextView name=label(target.label,14);name.setMaxLines(1);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                LayoutParams text=new LayoutParams(0,-2,1);text.setMarginStart(dp(10));text.setMarginEnd(dp(16));row.addView(name,text);
+                Switch check=WorkspaceSwitch.create(getContext(),target.label,chosen.contains(target.key()));row.addView(check,new LayoutParams(-2,dp(46)));
                 check.setOnCheckedChangeListener((button,enabled)->{
-                    if(enabled)chosen.add(target.key());else chosen.remove(target.key());editor.refresh();refreshCount();
+                    if(enabled)chosen.add(target.key());else chosen.remove(target.key());editor.refresh();refreshCount();notifyDataSetChanged();
                 });row.setOnClickListener(v->check.toggle());return row;
+            }
+            @Override public void notifyDataSetChanged(){
+                java.util.Map<String,Integer> order=new java.util.HashMap<>();int index=0;
+                for(String key:chosen)order.put(key,index++);
+                rows.sort(java.util.Comparator.comparingInt(target->order.getOrDefault(target.key(),Integer.MAX_VALUE)));
+                super.notifyDataSetChanged();
             }
         };
     }
