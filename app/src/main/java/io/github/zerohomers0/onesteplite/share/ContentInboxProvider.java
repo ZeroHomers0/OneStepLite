@@ -106,10 +106,14 @@ public final class ContentInboxProvider extends ContentProvider {
         try {
             JSONArray saved=new JSONArray(context.getSharedPreferences("content_inbox",Context.MODE_PRIVATE)
                     .getString("rows","[]"));
+            boolean cleanup=WorkspaceSettingsStore.read(context).deleteSharedImages;
             for(int i=0;i<saved.length();i++) {
                 JSONObject row=saved.getJSONObject(i);String id=row.getString("id");
                 if(!ContentInboxPolicy.validId(id))continue;
-                if(!row.has("document_uri") && System.currentTimeMillis()-row.getLong("time")>RETENTION) {
+                if(!cleanup)row.remove("delete_after");
+                if(!row.has("document_uri") && (System.currentTimeMillis()-row.getLong("time")>RETENTION
+                        || ContentCapturePolicy.sharedImageExpired(row.optBoolean("captured"),row.has("document_uri"),
+                                row.optLong("delete_after",0),System.currentTimeMillis()))) {
                     context.revokeUriPermission(uri(id),Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     File expired=file(context,id);
                     if(expired.exists() && !expired.delete())android.util.Log.w(Tags.PROBE,"inbox expiry deletion failed");

@@ -45,6 +45,21 @@ final class ContentAccessCompat {
         return () -> XposedHelpers.callMethod(permission, "release");
     }
 
+    static int arrowOffset(DragEvent event) {
+        int declared=ContentDragShadow.offset(event.getClipDescription());
+        if(declared==0)return 0;
+        android.os.PersistableBundle extras=event.getClipDescription().getExtras();
+        int touch=extras.getInt("onesteplite_shadow_touch_y",0);
+        if(touch<=0)return declared;
+        try {
+            float actual=((Number)XposedHelpers.callMethod(event,"getOffsetY")).floatValue();
+            if(Float.isFinite(actual) && actual>0 && actual<=4096) {
+                int scaled=Math.round(declared*actual/touch);if(scaled>0 && scaled<=2048)return scaled;
+            }
+        } catch(NoSuchMethodError | RuntimeException unavailable) { /* Older drag events retain the declared physical offset. */ }
+        return declared;
+    }
+
     static DropPermissionContract delegate(DragEvent event,android.content.ClipData clip) throws Exception {
         Object permissions=XposedHelpers.callMethod(event,"getDragAndDropPermissions");
         if(!(permissions instanceof android.os.IInterface))throw new SecurityException("Missing drop permissions");

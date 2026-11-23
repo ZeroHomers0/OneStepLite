@@ -42,7 +42,7 @@ final class Warmup {
     private static long appsPreparedAt;
     private static int cacheUser = -1;
     private static long generation;
-    private static Bitmap wallpaper;
+    private static Bitmap wallpaper,wellWallpaper;
     private static int wallpaperWidth, wallpaperHeight;
     private static boolean started, classesPrepared;
     private static ClassLoader loader;
@@ -126,19 +126,13 @@ final class Warmup {
         else schedule(context, 0L);
     }
 
-    /** Call only on the host's wallpaper worker. A hit transfers bitmap ownership to the host. */
-    static Bitmap wallpaper(Context context, int width, int height) throws Exception {
-        int user = currentUser();
-        if (user < 0) return null;
-        synchronized (LOCK) {
-            if (cacheUser == user && wallpaper != null && !wallpaper.isRecycled()
-                    && wallpaperWidth == width && wallpaperHeight == height) {
-                Bitmap ready = wallpaper;
-                wallpaper = null;
-                return ready;
-            }
+    /** Nonblocking ownership transfer: no capture, rendering or Binder calls on the opening frame. */
+    static Bitmap[] takePreparedWallpaper(int user,int width,int height) {
+        synchronized(LOCK) {
+            if(cacheUser!=user || wallpaper==null || wallpaper.isRecycled()
+                    || wallpaperWidth!=width || wallpaperHeight!=height)return null;
+            Bitmap[] ready={wallpaper,wellWallpaper};wallpaper=null;wellWallpaper=null;return ready;
         }
-        return HyperOsStyle.blurredWallpaper(userContext(context, user), width, height);
     }
 
     private static void schedule(Context context, long delayMillis) {
@@ -189,7 +183,7 @@ final class Warmup {
             // Shortcut delivery never waits for the heavier wallpaper blur.
             for (PendingApps pending : callbacks) deliver(base, pending, ready, request);
             prepareChrome(base,user,ready,request);
-            Bitmap blurred = null;
+            Bitmap blurred = null,well=null;
             int width = 0, height = 0;
             if (needWallpaper) {
                 WindowManager windows = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
@@ -199,7 +193,8 @@ final class Warmup {
                     width = size.x;
                     height = size.y;
                     if (width > 0 && height > 0 && (long) width * height <= 5000000L) {
-                        blurred = HyperOsStyle.blurredWallpaper(context, width, height);
+                        blurred = WorkspaceFrost.finish(HyperOsStyle.blurredWallpaper(context, width, height));
+                        if(blurred!=null)well=HyperOsStyle.blurredBitmap(blurred,Math.max(1,width/6),Math.max(1,height/6));
                     }
                 }
             }
@@ -207,11 +202,13 @@ final class Warmup {
             synchronized (LOCK) {
                 if (request != generation || user != observedUser) {
                     if (blurred != null && !blurred.isRecycled()) blurred.recycle();
+                    if(well!=null)well.recycle();
                     return;
                 }
                 if (blurred != null) {
                     if (wallpaper != null && !wallpaper.isRecycled()) wallpaper.recycle();
-                    wallpaper = blurred;
+                    if(wellWallpaper!=null && !wellWallpaper.isRecycled())wellWallpaper.recycle();
+                    wallpaper = blurred;wellWallpaper=well;
                     wallpaperPrepared = true;
                     wallpaperWidth = width;
                     wallpaperHeight = height;
@@ -276,6 +273,7 @@ final class Warmup {
             cacheUser = -1;
             if (wallpaper != null && !wallpaper.isRecycled()) wallpaper.recycle();
             wallpaper = null;
+            if(wellWallpaper!=null && !wellWallpaper.isRecycled())wellWallpaper.recycle();wellWallpaper=null;
             pendingApps.removeIf(pending -> pending.user != user);
         }
     }

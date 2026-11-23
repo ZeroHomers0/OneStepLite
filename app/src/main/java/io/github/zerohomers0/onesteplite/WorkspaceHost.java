@@ -1140,7 +1140,6 @@ public final class WorkspaceHost {
         int pending = pendingMainSide;
         if (pending < 0) return;
         pendingMainSide = -1;
-        if(ctx.createDeviceProtectedStorageContext().getSharedPreferences("workspace_position",0).contains("main_right"))return;
         boolean right = pending == 1;
         if (right != mainOnRight) {
             log("pending main side applied: " + (right ? "right" : "left"));
@@ -3517,7 +3516,7 @@ public final class WorkspaceHost {
     private void resolveMainSide() {
     android.content.SharedPreferences position=ctx.createDeviceProtectedStorageContext().getSharedPreferences("workspace_position",0);
     if(position.contains("main_right"))mainOnRight=position.getBoolean("main_right",false);
-    int pendingSide = position.contains("main_right")?-1:pendingMainSide;
+    int pendingSide = pendingMainSide;
     pendingMainSide=-1;
     if (pendingSide >= 0) {
         pendingMainSide = -1;
@@ -5149,13 +5148,15 @@ public final class WorkspaceHost {
         wallpaperBackdropRequested = true;
         final long request = ++wallpaperLoadGeneration;
         final int width = screenW, height = screenH;
-        final boolean refresh = wallpaperBackdropDirty;
+        if(!wallpaperBackdropDirty) {
+            Bitmap[] prepared=Warmup.takePreparedWallpaper(CurrentUser.id(),width,height);
+            if(prepared!=null){finishWallpaperLoad(request,width,height,prepared[0],prepared[1]);return;}
+        }
         Thread loader = new Thread(() -> {
             Bitmap ready = null;
             Bitmap wellReady = null;
             try {
-                ready = WorkspaceFrost.finish(refresh ? HyperOsStyle.blurredWallpaper(ctx, width, height)
-                        : Warmup.wallpaper(ctx, width, height));
+                ready = WorkspaceFrost.finish(HyperOsStyle.blurredWallpaper(ctx, width, height));
                 // A tiny, extra-blurred texture is shared by all circular wells.
                 // Prepare it off the UI thread; no blur or capture work per frame.
                 if (ready != null) wellReady = HyperOsStyle.blurredBitmap(ready,

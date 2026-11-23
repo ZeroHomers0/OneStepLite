@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Full settings page with a cancellable load and an explicit, shared shortcut draft. */
+/** Full settings page: cancel stale loads, serialize each selection's persistence without leaving. */
 final class ShortcutManagementPage extends FrameLayout {
     private static final ExecutorService WORKER=Executors.newSingleThreadExecutor();
     private final boolean applications;
@@ -22,7 +22,6 @@ final class ShortcutManagementPage extends FrameLayout {
     private final Runnable back;
     private LinkedHashSet<String> chosen;
     private int generation;
-    private boolean saving;
 
     ShortcutManagementPage(Context context,boolean applications,Bundle restored,Runnable back) {
         super(context);this.applications=applications;this.restored=restored;this.back=back;
@@ -63,21 +62,19 @@ final class ShortcutManagementPage extends FrameLayout {
     private void showEditor(List<ShareTarget> targets,LinkedHashSet<String> initial) {
         chosen=initial;removeAllViews();
         ShortcutEditor editor=new ShortcutEditor(getContext(),targets,chosen,back,this::persist,applications);
+        editor.saveImmediately(this::persist);
         int width=getResources().getDisplayMetrics().widthPixels;
         addView(editor,new LayoutParams(Math.min(width-dp(24),dp(680)),-1,Gravity.TOP|Gravity.CENTER_HORIZONTAL));
     }
 
     private void persist() {
-        if(saving || chosen==null)return;saving=true;
-        status("正在保存…");
+        if(chosen==null)return;
         String pins=QuickAppOrder.encode(chosen);int token=generation;
         WORKER.execute(()->{
             Boolean saved=ShortcutSettingsClient.write(getContext(),kind(),pins);
             post(()->{
-                if(token!=generation || !isAttachedToWindow())return;saving=false;
-                if(Boolean.TRUE.equals(saved)){Toast.makeText(getContext(),"已保存",Toast.LENGTH_SHORT).show();back.run();}
-                else {Toast.makeText(getContext(),"保存失败，请返回后重试",Toast.LENGTH_SHORT).show();
-                    status("保存失败，请返回后重试");}
+                if(token!=generation || !isAttachedToWindow())return;
+                if(!Boolean.TRUE.equals(saved))Toast.makeText(getContext(),"保存失败，请重新切换后重试",Toast.LENGTH_SHORT).show();
             });
         });
     }

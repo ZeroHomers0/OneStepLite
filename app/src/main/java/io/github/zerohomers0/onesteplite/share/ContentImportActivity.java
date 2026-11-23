@@ -58,7 +58,7 @@ public final class ContentImportActivity extends Activity {
         Intent share=pendingShare;pendingShare=null;
         getWindow().getDecorView().postDelayed(()->{
             if(isFinishing() || isDestroyed())return;
-            try{startActivity(share);}catch(RuntimeException error){message("无法打开分享入口");}
+            try{startActivity(share);CaptureInboxStore.shared(this,share);}catch(RuntimeException error){message("无法打开分享入口");}
             finish();
         },80L);
     }

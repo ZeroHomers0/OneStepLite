@@ -113,6 +113,13 @@ public class SettingsRegression {
   check(WorkspaceSettingsStore.decode(new Bundle()).entryGesture==0,"old provider snapshot retains corner");
   try {WorkspaceSettingsStore.decode(null);throw new AssertionError("missing snapshot accepted");}
   catch(IllegalArgumentException expected){checks++;}
+  c.prefs.commit=true;
+  check(!WorkspaceSettingsStore.read(c).deleteSharedImages,"new cleanup defaults off on existing installs");
+  check(WorkspaceSettingsStore.write(c,WorkspaceSettingsStore.read(c).withDeleteSharedImages(true)),"cleanup option saves");
+  check(WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(WorkspaceSettingsStore.read(c))).deleteSharedImages,"cleanup reaches provider clients");
+  check(!WorkspaceSettingsStore.decode(new Bundle()).deleteSharedImages,"old provider snapshots never enable cleanup");
+  check(WorkspaceSettingsStore.write(c,WorkspaceSettingsStore.read(c).withDeleteSharedImages(false)),"cleanup can be disabled");
+  check(!WorkspaceSettingsStore.read(c).deleteSharedImages,"disabled cleanup survives reload");
   System.out.println("production settings migration, lock preference and gesture gate checks="+checks+" passed");
  }
 }'''

@@ -17,12 +17,9 @@ final class ContentPanelActions extends LinearLayout {
     }
     void page(int page){history.setVisibility(page==2?View.VISIBLE:View.GONE);more.setVisibility(page==1?View.VISIBLE:View.GONE);}
     private TextView button(String text,Runnable action) {
-        TextView view=new TextView(getContext());view.setText(text);view.setTextSize(12);
-        view.setTextColor(HyperOsStyle.textPrimary(getContext()));view.setGravity(Gravity.CENTER);
-        view.setMinHeight(Math.round(HyperOsStyle.dp(getContext(),44)));view.setMaxLines(2);
-        view.setBackground(HyperOsStyle.controlButton(getContext(),false,8));
+        TextView view=WorkspacePopupStyle.action(getContext(),text,false,action);
         LayoutParams params=new LayoutParams(0,-1,1);
         int gap=Math.round(HyperOsStyle.dp(getContext(),3));params.setMargins(gap,gap,gap,gap);
-        view.setOnClickListener(v->action.run());addView(view,params);return view;
+        addView(view,params);return view;
     }
 }

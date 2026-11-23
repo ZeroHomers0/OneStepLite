@@ -24,14 +24,19 @@ final class ContentDragShadow extends View.DragShadowBuilder {
         this(view,count,null);
     }
     ContentDragShadow(String text,float density) {
-        super();count=1;unit=density;width=128*unit;height=92*unit;top=12*unit;
+        super();count=1;unit=density;width=100*unit;height=110*unit;top=12*unit;
         textContent=true;caption=text.replace('\n',' ');thumbnail=null;paint.setFilterBitmap(true);
     }
+    ContentDragShadow(Bitmap image,float density) {
+        super();count=1;unit=density;width=100*unit;height=110*unit;top=12*unit;
+        textContent=false;caption="图片";thumbnail=image;paint.setFilterBitmap(true);
+    }
+    void recycleThumbnail(){if(thumbnail!=null && !thumbnail.isRecycled())thumbnail.recycle();}
     ContentDragShadow(View view,int count,CharSequence selected) {
         super(view);this.count=count;unit=view.getResources().getDisplayMetrics().density;
         boolean image=view instanceof ImageView;
         textContent=selected!=null || view instanceof TextView;
-        width=(image?84:128)*unit;height=(image?96:92)*unit;top=12*unit;
+        width=(image||textContent?100:168)*unit;height=(image||textContent?110:58)*unit;top=12*unit;
         CharSequence text=selected!=null?selected:view instanceof TextView?((TextView)view).getText():view.getContentDescription();
         caption=text==null?"文件":text.toString().replace("，长按拖曳分享","").replace('\n',' ');
         paint.setFilterBitmap(true);thumbnail=image?snapshot(view):null;
@@ -54,17 +59,18 @@ final class ContentDragShadow extends View.DragShadowBuilder {
     void mark(android.content.ClipData clip) {
         android.os.PersistableBundle extras=clip.getDescription().getExtras();
         extras=extras==null?new android.os.PersistableBundle():new android.os.PersistableBundle(extras);
-        extras.putInt(TIP_OFFSET,Math.round(height-6*unit));clip.getDescription().setExtras(extras);
+        extras.putInt(TIP_OFFSET,Math.round(height-6*unit));
+        extras.putInt("onesteplite_shadow_touch_y",Math.round(height-3*unit));clip.getDescription().setExtras(extras);
     }
     static int offset(android.content.ClipDescription description) {
         android.os.PersistableBundle extras=description==null?null:description.getExtras();
         int value=extras==null?0:extras.getInt(TIP_OFFSET,0);return value>0 && value<=2048?value:0;
     }
     @Override public void onDrawShadow(Canvas canvas){
-        paint.setStyle(Paint.Style.FILL);paint.setColor(0xfffafbff);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(0xeef6faff);
         paint.setShadowLayer(4*unit,0,2*unit,0x55000000);
         RectF card=new RectF(4*unit,top,width-4*unit,height-6*unit);
-        float corner=3*unit;
+        float corner=12*unit;
         outline.reset();outline.moveTo(card.left+corner,card.top);
         outline.lineTo(width/2-9*unit,top);outline.lineTo(width/2,3*unit);outline.lineTo(width/2+9*unit,top);
         outline.lineTo(card.right-corner,card.top);outline.quadTo(card.right,card.top,card.right,card.top+corner);
@@ -74,8 +80,14 @@ final class ContentDragShadow extends View.DragShadowBuilder {
         canvas.drawPath(outline,paint);paint.clearShadowLayer();
         paint.setStyle(Paint.Style.STROKE);paint.setColor(0xffa7d8f5);paint.setStrokeWidth(1.1f*unit);
         canvas.drawPath(outline,paint);paint.setStyle(Paint.Style.FILL);
-        if(thumbnail!=null)canvas.drawBitmap(thumbnail,null,
-                new RectF(8*unit,top+4*unit,width-8*unit,height-10*unit),paint);
+        if(thumbnail!=null){
+            int save=canvas.save();Path mask=new Path();mask.addRoundRect(
+                    new RectF(8*unit,top+4*unit,width-8*unit,height-10*unit),9*unit,9*unit,Path.Direction.CW);
+            int side=Math.min(thumbnail.getWidth(),thumbnail.getHeight());
+            int left=(thumbnail.getWidth()-side)/2,y=(thumbnail.getHeight()-side)/2;
+            canvas.clipPath(mask);canvas.drawBitmap(thumbnail,new android.graphics.Rect(left,y,left+side,y+side),
+                    new RectF(8*unit,top+4*unit,width-8*unit,height-10*unit),paint);canvas.restoreToCount(save);
+        }
         else drawSummary(canvas);
         if(count>1){
             paint.setColor(0xff347ff4);canvas.drawCircle(width-14*unit,top+10*unit,10*unit,paint);
@@ -86,16 +98,21 @@ final class ContentDragShadow extends View.DragShadowBuilder {
     }
 
     private void drawSummary(Canvas canvas) {
-        paint.setColor(0xffedf3ff);canvas.drawRoundRect(8*unit,top+4*unit,width-8*unit,height-10*unit,2*unit,2*unit,paint);
+        paint.setColor(0xb8edf3ff);canvas.drawRoundRect(8*unit,top+4*unit,width-8*unit,height-10*unit,9*unit,9*unit,paint);
+        if(!textContent){
+            paint.setColor(0xff283345);paint.setTextSize(12*unit);paint.setTextAlign(Paint.Align.LEFT);
+            String name=android.text.TextUtils.ellipsize(caption,new android.text.TextPaint(paint),width-(count>1?52:28)*unit,
+                    android.text.TextUtils.TruncateAt.END).toString();canvas.drawText(name,14*unit,top+24*unit,paint);return;
+        }
         paint.setColor(0xff347ff4);paint.setTextSize(11*unit);paint.setTextAlign(Paint.Align.LEFT);
         canvas.drawText(textContent?"文字":"文件",14*unit,top+18*unit,paint);
         paint.setColor(0xff283345);paint.setTextSize(12*unit);
         int offset=0;
-        for(int line=0;line<2 && offset<caption.length();line++) {
+        for(int line=0;line<3 && offset<caption.length();line++) {
             int length=paint.breakText(caption,offset,caption.length(),true,width-28*unit,null);
             if(length==0)break;
             String text=caption.substring(offset,offset+length);offset+=length;
-            if(line==1 && offset<caption.length())text=android.text.TextUtils.ellipsize(
+            if(line==2 && offset<caption.length())text=android.text.TextUtils.ellipsize(
                     caption.substring(offset-length),new android.text.TextPaint(paint),width-28*unit,android.text.TextUtils.TruncateAt.END).toString();
             canvas.drawText(text,14*unit,top+(36+line*16)*unit,paint);
         }

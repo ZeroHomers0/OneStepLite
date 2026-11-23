@@ -34,14 +34,15 @@ final class WordSelectionPane extends LinearLayout {
         reset.setOnClickListener(v->{selected.clear();refresh();});
         split.setOnClickListener(v->{characters=!characters;split.setText(characters?"分词":"拆字");segment();});
         for(TextView action:new TextView[]{all,split,reset}) {
-            action.setTextSize(12);action.setBackground(HyperOsStyle.controlButton(context,false,8));
+            WorkspacePopupStyle.styleAction(action,false);
             LayoutParams cell=new LayoutParams(0,dp(44),1);cell.setMargins(dp(3),dp(3),dp(3),dp(3));actions.addView(action,cell);
         }
         addView(actions,new LayoutParams(-1,-2));
         ScrollView scroll=new ScrollView(context);scroll.setPadding(0,dp(12),0,0);scroll.setClipToPadding(false);
         words=new FlowPane(context);
         scroll.addView(words);addView(scroll,new LayoutParams(-1,0,1));
-        result=label(source);result.setMaxLines(3);result.setTextSize(12);
+        result=label(source);result.setMaxLines(2);result.setTextSize(12);
+        result.setEllipsize(android.text.TextUtils.TruncateAt.END);
         result.setOnLongClickListener(v->start(v));addView(result,new LayoutParams(-1,dp(84)));
         segment();
     }

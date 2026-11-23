@@ -94,15 +94,17 @@ final class TopBar extends FrameLayout {
         shareWorkspace = new ShareWorkspace(context, quickRail,
                 () -> workspaceActive && this.listener.canShareContent(),
                 (target, launch) -> this.listener.onContentShare(target, launch),
-                text -> header.title.setText(text == null ? "One Step" : text),
+                text -> {header.setHint(text);if(tabletHeader!=null)tabletHeader.setHint(text);},
                 () -> this.listener.contentBounds());
         addView(shareWorkspace, new LayoutParams(-1, 1));
+        shareWorkspace.setMainOnRight(mainOnRight);quickRail.setMainOnRight(mainOnRight);
         shareWorkspace.setCoveredSource(()->!isShown() || this.listener.contentRailCovered());
     }
 
     void applyOptions(WorkspaceOptions options) { clock.setShowLunar(options.showLunar); }
     void setMainOnRight(boolean right) {
         mainOnRight = right;
+        quickRail.setMainOnRight(right);shareWorkspace.setMainOnRight(right);
         header.updateActions();
         if (tabletHeader != null) tabletHeader.updateActions();
     }
@@ -195,7 +197,7 @@ final class TopBar extends FrameLayout {
         c.height=Math.max(1,geometry.blankBottom-geometry.blankTop);
         LayoutParams h=(LayoutParams)header.getLayoutParams();h.topMargin=geometry.headerTop;h.height=geometry.headerHeight;
         LayoutParams r=(LayoutParams)quickRail.getLayoutParams();r.topMargin=geometry.railTop;r.height=geometry.railHeight;
-        r.leftMargin=Math.round(50*getResources().getDisplayMetrics().density);r.rightMargin=0;
+        r.leftMargin=Math.round(56*getResources().getDisplayMetrics().density);r.rightMargin=0;
         LayoutParams share=(LayoutParams)shareWorkspace.getLayoutParams();
         share.topMargin=geometry.railTop;share.height=geometry.railHeight;
         super.onMeasure(ws,hs);
@@ -203,7 +205,7 @@ final class TopBar extends FrameLayout {
 
     private final class Header extends FrameLayout {
         final TextView title;
-        final IconButton left,right,topApp,settings,expand;
+        final IconButton left,right,topApp,settings,expand,capture;
         /** Scratch arrays: measure and layout run on every frame of a resize. */
         private final View[] buttons;
         private final IconButton[] icons;
@@ -221,8 +223,9 @@ final class TopBar extends FrameLayout {
             topApp=button(IconButton.TOP_APP,"把主窗应用放到顶栏",()->listener.onSendMainToTop());
             settings=button(IconButton.SETTINGS,"系统设置",()->listener.onOpenSettings());
             expand=button(IconButton.EXPAND_LEFT,"放大为全屏并退出工作区",()->listener.onExit());
-            buttons=new View[]{left,right,topApp,settings,expand};
-            icons=new IconButton[]{left,right,topApp,settings,expand};
+            capture=button(IconButton.CAPTURE,"截取主窗图片",()->{if(shareWorkspace!=null)shareWorkspace.captureMain();});
+            buttons=new View[]{left,right,topApp,settings,expand,capture};
+            icons=new IconButton[]{left,right,topApp,settings,expand,capture};
             updateActions();
         }
         /**
@@ -230,6 +233,22 @@ final class TopBar extends FrameLayout {
          * the side the small windows occupy and points that way; the switch that
          * would move them to the side they already occupy is greyed out.
          */
+        void setHint(String value) {
+            title.setText(value==null?"One Step":value);
+            title.setMarqueeRepeatLimit(-1);fitTitle(title.getWidth());
+        }
+        private void fitTitle(int available) {
+            if(available<=0)return;
+            float scaled=getResources().getDisplayMetrics().scaledDensity;
+            float old=title.getPaint().getTextSize();title.getPaint().setTextSize(19*scaled);
+            float measured=title.getPaint().measureText(title.getText().toString());title.getPaint().setTextSize(old);
+            float size=Math.max(11*scaled,Math.min(19*scaled,19*scaled*available/Math.max(1,measured)));
+            title.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,size);
+            boolean overflow=measured*size/(19*scaled)>available+1;
+            title.setHorizontallyScrolling(overflow);
+            title.setEllipsize(overflow?android.text.TextUtils.TruncateAt.MARQUEE:android.text.TextUtils.TruncateAt.END);
+            title.setSelected(overflow);
+        }
         void updateActions() {
             expand.setIcon(mainOnRight ? IconButton.EXPAND_LEFT : IconButton.EXPAND_RIGHT);
             left.setEnabled(!mainOnRight);
@@ -266,8 +285,9 @@ final class TopBar extends FrameLayout {
         @Override protected void onMeasure(int ws,int hs) {
             int w=MeasureSpec.getSize(ws),h=MeasureSpec.getSize(hs);
             int edge=Math.round(10*getResources().getDisplayMetrics().density);
-            int bw=Math.min(h,Math.max(1,(w-2*edge)/7));
-            title.measure(MeasureSpec.makeMeasureSpec(Math.max(1,w-2*edge-5*bw),MeasureSpec.EXACTLY),hs);
+            int bw=Math.min(h,Math.max(1,(w-2*edge)/8));
+            fitTitle(Math.max(1,w-2*edge-6*bw));
+            title.measure(MeasureSpec.makeMeasureSpec(Math.max(1,w-2*edge-6*bw),MeasureSpec.EXACTLY),hs);
             for(View v:buttons)v.measure(MeasureSpec.makeMeasureSpec(bw,MeasureSpec.EXACTLY),hs);
             setMeasuredDimension(w,h);
         }
@@ -277,14 +297,16 @@ final class TopBar extends FrameLayout {
                 // Small windows on the left: expand and settings lead, the top-face
                 // action and the two switches close the row on the right.
                 expand.layout(edge,0,edge+bw,h);settings.layout(edge+bw,0,edge+2*bw,h);
+                capture.layout(w-edge-4*bw,0,w-edge-3*bw,h);
                 topApp.layout(w-edge-3*bw,0,w-edge-2*bw,h);
                 left.layout(w-edge-2*bw,0,w-edge-bw,h);right.layout(w-edge-bw,0,w-edge,h);
-                title.layout(edge+2*bw,0,w-edge-3*bw,h);
+                title.layout(edge+2*bw,0,w-edge-4*bw,h);
             } else {
                 left.layout(edge,0,edge+bw,h);right.layout(edge+bw,0,edge+2*bw,h);
                 topApp.layout(edge+2*bw,0,edge+3*bw,h);
+                capture.layout(edge+3*bw,0,edge+4*bw,h);
                 settings.layout(w-edge-2*bw,0,w-edge-bw,h);expand.layout(w-edge-bw,0,w-edge,h);
-                title.layout(edge+3*bw,0,w-edge-2*bw,h);
+                title.layout(edge+4*bw,0,w-edge-2*bw,h);
             }
             updateColors();
             float size=Math.min(HyperOsStyle.dp(getContext(),26f),Math.min(bw,h)*.84f);

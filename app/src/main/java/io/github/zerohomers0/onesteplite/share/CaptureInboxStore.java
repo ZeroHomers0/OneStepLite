@@ -13,6 +13,28 @@ import org.json.JSONObject;
 /** Provider-side capture records use the existing bounded inbox and same-user read grants. */
 final class CaptureInboxStore {
     private CaptureInboxStore(){}
+    static void shared(Context context,Intent intent) {
+        java.util.List<android.net.Uri> delivered=new java.util.ArrayList<>(new SharePayload(intent.getClipData()).uris);
+        if(delivered.isEmpty())return;
+        new Thread(()->{
+            try {
+            if(!WorkspaceSettingsStore.read(context).deleteSharedImages)return;
+            synchronized(ContentInboxProvider.class) {
+                JSONArray rows=ContentInboxProvider.rows(context);boolean changed=false;
+                for(int i=0;i<rows.length();i++) {
+                    JSONObject row=rows.optJSONObject(i);
+                    if(row==null || !ContentCapturePolicy.cleanupAfterShare(true,row.optBoolean("captured"),
+                            row.has("document_uri"),row.optString("mime"))
+                            || !delivered.contains(ContentInboxProvider.uri(row.optString("id"))))continue;
+                    try{row.put("delete_after",System.currentTimeMillis()+10*60_000L);changed=true;}
+                    catch(org.json.JSONException invalid){android.util.Log.w(Tags.PROBE,"capture cleanup mark failed",invalid);}
+                }
+                if(changed)context.getSharedPreferences("content_inbox",Context.MODE_PRIVATE).edit()
+                        .putString("rows",rows.toString()).apply();
+            }
+            }catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"shared image cleanup deferred",unavailable);}
+        },"SharedImageRetention").start();
+    }
     static Bundle store(Context context,byte[] encoded) {
         if(encoded==null || encoded.length>ContentCapturePolicy.MAX_ENCODED)throw new IllegalArgumentException("Oversized capture");
         BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;

@@ -11,6 +11,8 @@ final class ShareTargetButton extends ImageView {
     private final Paint badge=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path arrow=new Path();
     private boolean dragHovered;
+    private boolean mainRight;
+    void setMainOnRight(boolean right){mainRight=right;invalidate();}
     ShareTargetButton(Context context,ShareTarget target) {
         super(context);setTag(target);setImageDrawable(target.icon);setScaleType(ScaleType.FIT_CENTER);
         setContentDescription(target.label+(target.enabled?"":"，不支持当前内容"));setTooltipText(target.label);
@@ -35,13 +37,14 @@ final class ShareTargetButton extends ImageView {
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         float unit=getResources().getDisplayMetrics().density,radius=6.5f*unit;
-        float x=getLayoutDirection()==LAYOUT_DIRECTION_RTL?getPaddingLeft()+2*unit:getWidth()-getPaddingRight()-2*unit;
+        float x=mainRight?getPaddingLeft()+2*unit:getWidth()-getPaddingRight()-2*unit;
         float y=getPaddingTop()+2*unit;
         badge.setStyle(Paint.Style.FILL);badge.setColor(HyperOsStyle.CONTROL_ACCENT);canvas.drawCircle(x,y,radius,badge);
         badge.setColor(android.graphics.Color.WHITE);badge.setStyle(Paint.Style.STROKE);
         badge.setStrokeWidth(1.3f*unit);badge.setStrokeCap(Paint.Cap.ROUND);badge.setStrokeJoin(Paint.Join.ROUND);
-        arrow.reset();arrow.moveTo(x+2.2f*unit,y-2.2f*unit);arrow.lineTo(x-2.2f*unit,y+2.2f*unit);
-        arrow.moveTo(x-2.2f*unit,y-1.4f*unit);arrow.lineTo(x-2.2f*unit,y+2.2f*unit);
-        arrow.lineTo(x+1.4f*unit,y+2.2f*unit);canvas.drawPath(arrow,badge);
+        float sign=mainRight?-1:1;
+        arrow.reset();arrow.moveTo(x+sign*2.2f*unit,y-2.2f*unit);arrow.lineTo(x-sign*2.2f*unit,y+2.2f*unit);
+        arrow.moveTo(x-sign*2.2f*unit,y-1.4f*unit);arrow.lineTo(x-sign*2.2f*unit,y+2.2f*unit);
+        arrow.lineTo(x+sign*1.4f*unit,y+2.2f*unit);canvas.drawPath(arrow,badge);
     }
 }

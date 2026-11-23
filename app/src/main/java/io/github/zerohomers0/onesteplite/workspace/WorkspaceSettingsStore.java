@@ -11,7 +11,7 @@ final class WorkspaceSettingsStore {
     static final String READ = "read", LUNAR = "show_lunar", SWAP = "swap_mode",
             ENTRY_GESTURE = "entry_gesture", KEEP_ON_LOCK = "keep_on_lock",
             SCROLL_SIDE_TASKS = "scroll_side_tasks", LANDSCAPE_VIDEO = "landscape_video",
-            HIDE_RECENTS = "hide_side_recents", PARK_MAIN = "park_main_on_launch";
+            HIDE_RECENTS = "hide_side_recents", PARK_MAIN = "park_main_on_launch", DELETE_SHARED_IMAGES = "delete_shared_images";
     private WorkspaceSettingsStore() {}
 
     private static SharedPreferences preferences(Context context) {
@@ -27,7 +27,7 @@ final class WorkspaceSettingsStore {
                 preferences.getBoolean(SCROLL_SIDE_TASKS, false), preferences.getBoolean(LUNAR, true),
                 preferences.getInt(LANDSCAPE_VIDEO, WorkspaceOptions.VIDEO_TURNED),
                 preferences.getBoolean(HIDE_RECENTS, false),
-                preferences.getBoolean(PARK_MAIN, false));
+                preferences.getBoolean(PARK_MAIN, false),preferences.getBoolean(DELETE_SHARED_IMAGES,false));
     }
 
     static boolean write(Context context, WorkspaceOptions options) {
@@ -40,7 +40,7 @@ final class WorkspaceSettingsStore {
                 .putBoolean(SCROLL_SIDE_TASKS, options.scrollSideTasks)
                 .putInt(LANDSCAPE_VIDEO, options.landscapeVideo)
                 .putBoolean(HIDE_RECENTS, options.hideSideRecents)
-                .putBoolean(PARK_MAIN, options.parkMainOnLaunch).remove("allow_secure_capture").remove("rounded_windows").commit();
+                .putBoolean(DELETE_SHARED_IMAGES,options.deleteSharedImages).putBoolean(PARK_MAIN, options.parkMainOnLaunch).remove("allow_secure_capture").remove("rounded_windows").commit();
         if (saved) {
             context.getContentResolver().notifyChange(URI, null);
             // A wakeup only: receivers reread the authenticated provider, never extras.
@@ -60,6 +60,7 @@ final class WorkspaceSettingsStore {
         result.putInt(LANDSCAPE_VIDEO, options.landscapeVideo);
         result.putBoolean(HIDE_RECENTS, options.hideSideRecents);
         result.putBoolean(PARK_MAIN, options.parkMainOnLaunch);
+        result.putBoolean(DELETE_SHARED_IMAGES,options.deleteSharedImages);
         return result;
     }
 
@@ -70,6 +71,6 @@ final class WorkspaceSettingsStore {
                 bundle.getBoolean(KEEP_ON_LOCK, false), bundle.getBoolean(SCROLL_SIDE_TASKS, false), bundle.getBoolean(LUNAR, true),
                 bundle.getInt(LANDSCAPE_VIDEO, WorkspaceOptions.VIDEO_TURNED),
                 bundle.getBoolean(HIDE_RECENTS, false),
-                bundle.getBoolean(PARK_MAIN, false));
+                bundle.getBoolean(PARK_MAIN, false),bundle.getBoolean(DELETE_SHARED_IMAGES,false));
     }
 }

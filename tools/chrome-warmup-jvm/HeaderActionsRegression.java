@@ -30,7 +30,7 @@ public final class HeaderActionsRegression {
         void setContentDescription(String text) {}
     }
     static class IconButton extends View {
-        static final int SIDE_LEFT=1,SIDE_RIGHT=2,TOP_APP=3,SETTINGS=4,EXPAND_LEFT=5;
+        static final int SIDE_LEFT=1,SIDE_RIGHT=2,TOP_APP=3,SETTINGS=4,EXPAND_LEFT=5,CAPTURE=6;
         IconButton(Context context,int icon,String text) {}
         void setTooltipText(String text) {}
     }
@@ -43,12 +43,14 @@ public final class HeaderActionsRegression {
         void onSetMainSide(boolean value) { if(value)left++;else right++; }
     }
     static class Bar {
+        static class Share {int captures;void captureMain(){captures++;}}
+        Share shareWorkspace;
         Owner listener;
         Bar(Owner owner) { listener=owner; }
         __BIND__
         final class Header extends FrameLayout {
             TextView title;
-            IconButton left,right,topApp,settings,expand;
+            IconButton left,right,topApp,settings,expand,capture;
             View[] buttons;
             IconButton[] icons;
             __CONSTRUCTOR__
@@ -61,6 +63,8 @@ public final class HeaderActionsRegression {
         Bar.Header prepared=bar.new Header(new Context(),null);
         for(int handoff=0;handoff<3;handoff++) {
             Owner current=new Owner();bar.bindListener(current);
+            bar.shareWorkspace=new Bar.Share();prepared.capture.performClick();
+            check(bar.shareWorkspace.captures==1,"capture uses the current workspace after cached-header handoff");
             prepared.left.performClick();prepared.right.performClick();
             prepared.topApp.performClick();prepared.settings.performClick();prepared.expand.performClick();
             check(current.left==1&&current.right==1,"both side buttons use current listener");

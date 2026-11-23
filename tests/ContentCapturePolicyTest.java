@@ -26,6 +26,15 @@ public final class ContentCapturePolicyTest {
         check(java.util.Arrays.equals(ContentCapturePolicy.fit(1,3200),new int[]{1,1600}),"thin image retains positive width");
         boolean rejected=false;try{ContentCapturePolicy.fit(0,50);}catch(IllegalArgumentException expected){rejected=true;}
         check(rejected,"invalid geometry rejected before bitmap allocation");
+        for(boolean enabled:new boolean[]{false,true})for(boolean captured:new boolean[]{false,true})
+            for(boolean document:new boolean[]{false,true})for(String mime:new String[]{null,"text/plain","image/jpeg"})
+                check(ContentCapturePolicy.cleanupAfterShare(enabled,captured,document,mime)
+                        ==(enabled && captured && !document && "image/jpeg".equals(mime)),"cleanup only covers opted-in generated images");
+        check(!ContentCapturePolicy.sharedImageExpired(true,false,600000,599999),"receiver retains its read grace period");
+        check(ContentCapturePolicy.sharedImageExpired(true,false,600000,600000),"generated image expires at its deadline");
+        check(!ContentCapturePolicy.sharedImageExpired(false,false,1,600000),"original and imported media never use generated-image expiry");
+        check(!ContentCapturePolicy.sharedImageExpired(true,true,1,600000),"document references never delete original files");
+        check(!ContentCapturePolicy.sharedImageExpired(true,false,0,600000),"unshared generated image keeps ordinary retention");
         System.out.println("ContentCapturePolicyTest checks="+checks+" passed");
     }
 }

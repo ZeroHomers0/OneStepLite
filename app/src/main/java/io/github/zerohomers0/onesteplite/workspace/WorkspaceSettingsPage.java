@@ -136,6 +136,12 @@ final class WorkspaceSettingsPage extends FrameLayout {
         menu(shortcuts,"管理分享入口","选择拖曳分享功能并调整顺序",()->show(SHARE,true));
         add(shortcuts,0,12);
 
+        section("内容分享");
+        LinearLayout sharing=card();
+        switchOption(sharing,"分享后清理临时图片","仅清理一步生成的图片，保留相册原图；交付后留出10分钟读取时间",options.deleteSharedImages,
+                checked->persist(WorkspaceSettingsStore.read(activity).withDeleteSharedImages(checked)));
+        add(sharing,0,12);
+
         section("窗口与操作");
         LinearLayout interaction = card();
         menu(interaction, "打开工作区的手势", gestureLabel(options.entryGesture)

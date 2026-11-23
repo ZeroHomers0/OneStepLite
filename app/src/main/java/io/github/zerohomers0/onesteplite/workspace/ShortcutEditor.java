@@ -22,6 +22,9 @@ import java.util.List;
 
 /** Shared app and share shortcut draft editor; callers own persistence and navigation. */
 final class ShortcutEditor extends LinearLayout {
+    private Runnable changed=()->{};
+    void saveImmediately(Runnable save){changed=save;getChildAt(getChildCount()-1).setVisibility(GONE);
+        ((TextView)description).setText("选择后自动保存 · 长按图标调整顺序");}
     private final TextView count;
     private final LinkedHashSet<String> chosen;
     private final View heading,description,selectedIcons,searchBox;
@@ -45,7 +48,7 @@ final class ShortcutEditor extends LinearLayout {
         this.applications=applications;refreshCount();
         List<QuickApp> apps=new ArrayList<>();
         for(ShareTarget target:targets)apps.add(QuickApp.shortcut(target.label,target.component,target.icon));
-        PinnedAppEditor editor=new PinnedAppEditor(context,apps,chosen,this::refreshCount);
+        PinnedAppEditor editor=new PinnedAppEditor(context,apps,chosen,()->{refreshCount();changed.run();});
         selectedIcons=editor;
         addView(editor,new LayoutParams(-1,dp(56)));
         EditText search=new EditText(context);search.setSingleLine();search.setTextSize(14);search.setHint(applications?"搜索应用":"搜索分享功能");
@@ -92,7 +95,7 @@ final class ShortcutEditor extends LinearLayout {
                 LayoutParams text=new LayoutParams(0,-2,1);text.setMarginStart(dp(10));text.setMarginEnd(dp(16));row.addView(name,text);
                 Switch check=WorkspaceSwitch.create(getContext(),target.label,chosen.contains(target.key()));row.addView(check,new LayoutParams(-2,dp(46)));
                 check.setOnCheckedChangeListener((button,enabled)->{
-                    if(enabled)chosen.add(target.key());else chosen.remove(target.key());editor.refresh();refreshCount();notifyDataSetChanged();
+                    if(enabled)chosen.add(target.key());else chosen.remove(target.key());editor.refresh();refreshCount();notifyDataSetChanged();changed.run();
                 });row.setOnClickListener(v->check.toggle());return row;
             }
             @Override public void notifyDataSetChanged(){

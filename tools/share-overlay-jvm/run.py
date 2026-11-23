@@ -51,7 +51,8 @@ class ModalIslandLease {static int active;boolean started;ModalIslandLease(andro
 void start(){if(!started){active++;started=true;}}void close(){if(started){active--;started=false;}}}''',
 'io/github/zerohomers0/onesteplite/ShareWorkspace.java':'''package io.github.zerohomers0.onesteplite;
 class ShareWorkspace extends android.view.View {
-static ShareWorkspace latest;static boolean accepts=true;boolean pending;int closes,events;String target;Runnable settled;
+static ShareWorkspace latest;static boolean accepts=true;boolean pending,mainRight;int closes,events;String target;Runnable settled;
+void setMainOnRight(boolean right){mainRight=right;}
 ShareWorkspace(android.content.Context c,android.view.View n,java.util.function.BooleanSupplier ready,
 java.util.function.BiConsumer<android.content.ComponentName,Runnable> dispatch,java.util.function.Consumer<String> hint,
 java.util.function.Supplier<android.graphics.Rect> bounds,boolean only){super(c);latest=this;if(!only)throw new AssertionError("share-only expected");}
@@ -77,6 +78,7 @@ ShareWorkspace first=ShareWorkspace.latest;check(context.windows.adds==1&&first.
 check(context.windows.last.y==250&&context.windows.last.height==50,"share rail occupies only strip immediately above main");
 check(context.windows.last.width==1080&&context.windows.last.type==2017,"strip uses physical display width and existing modal window type");
 check(HostWindowPolicy.checks==1&&ModalIslandLease.active==1,"window uses owned overlay and island lease");
+overlay.setMainOnRight(true);check(first.mainRight&&first.closes==0,"side change mirrors icons without cancelling live drag");
 overlay.onDrag(event(1),null);check(context.windows.adds==1,"duplicate start never creates a second window");
 overlay.onDrag(event(3),"target.pkg");check("target.pkg".equals(first.target),"occupied small-window share remains routed to same session");
 overlay.onDrag(event(4),null);check(!overlay.isOpen()&&context.windows.removes==1,"drag end immediately removes visual window");
@@ -84,7 +86,8 @@ check(first.closes==1&&ModalIslandLease.active==0,"ordinary cancel releases rail
 check(!overlay.onDrag(event(3),"late.pkg"),"late drop cannot recreate closed overlay");
 overlay.onDrag(event(1),null);ShareWorkspace pending=ShareWorkspace.latest;pending.pending=true;
 overlay.onDrag(event(4),null);check(!overlay.isOpen()&&pending.closes==0,"accepted async delivery survives visual window removal");
-check(ModalIslandLease.active==0,"pending delivery never keeps island hidden");pending.deliver();overlay.close();
+check(ModalIslandLease.active==0,"pending delivery never keeps island hidden");
+overlay.setMainOnRight(true);check(pending.mainRight&&pending.closes==0,"side change preserves accepted detached delivery");pending.deliver();overlay.close();
 check(pending.closes==0,"completed detached delivery is released without double cancellation");
 overlay.onDrag(event(1),null);ShareWorkspace stopped=ShareWorkspace.latest;stopped.pending=true;overlay.onDrag(event(4),null);overlay.close();
 check(stopped.closes==1,"host privacy close cancels pending detached delivery");

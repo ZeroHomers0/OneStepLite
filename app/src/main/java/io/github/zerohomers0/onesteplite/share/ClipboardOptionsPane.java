@@ -22,8 +22,7 @@ final class ClipboardOptionsPane extends LinearLayout {
         TextView detail=label("仅在工作区打开时记录；保留7天，最多64条。",12);
         detail.setTextColor(HyperOsStyle.textSecondary(context));addView(detail,new LayoutParams(-1,-2));
         android.view.View spacer=new android.view.View(context);addView(spacer,new LayoutParams(-1,0,1));
-        TextView done=label("完成",13);done.setGravity(Gravity.CENTER);
-        done.setBackground(HyperOsStyle.controlButton(context,false,8));done.setOnClickListener(view->close.run());
+        TextView done=WorkspacePopupStyle.action(context,"完成",false,close);
         addView(done,new LayoutParams(-1,HyperOsStyle.dp(context,44)));
     }
     private TextView label(String text,int size) {

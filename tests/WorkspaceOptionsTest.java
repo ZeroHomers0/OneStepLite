@@ -21,6 +21,13 @@ public final class WorkspaceOptionsTest {
                 "other settings must preserve main collection preference");
         check(!WorkspaceOptions.DEFAULT.withParkMainOnLaunch(true).withParkMainOnLaunch(false).parkMainOnLaunch,
                 "main collection can be disabled again");
+        check(!WorkspaceOptions.DEFAULT.deleteSharedImages,"temporary image cleanup is opt-in");
+        check(WorkspaceOptions.DEFAULT.withDeleteSharedImages(true).withSwapMode(1).withEntryGesture(1)
+                .withKeepOnLock(true).withScrollSideTasks(true).withShowLunar(false).withParkMainOnLaunch(true)
+                .withLandscapeVideo(WorkspaceOptions.VIDEO_FULLSCREEN).withHideSideRecents(true).deleteSharedImages,
+                "all other settings preserve temporary image cleanup preference");
+        check(!WorkspaceOptions.DEFAULT.withDeleteSharedImages(true).withDeleteSharedImages(false).deleteSharedImages,
+                "temporary image cleanup can be disabled");
         WorkspaceOptions defaults = WorkspaceOptions.DEFAULT;
         check(defaults.showLunar, "lunar date visible by default");
         check(!defaults.withShowLunar(false).withSwapMode(1).withEntryGesture(1).showLunar,

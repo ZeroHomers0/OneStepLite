@@ -39,6 +39,9 @@ final class PortalSource implements AutoCloseable {
     private int generation;
     private long issued;
     private boolean validGesture;
+    private Runnable pendingWords;
+    private int wordPointers;
+    private float wordX,wordY;
     private final IBinder endpoint=new Binder(){
         @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags) throws android.os.RemoteException {
             if(code!=PortalWire.STATUS && code!=PortalWire.OFFER)return super.onTransact(code,data,reply,flags);
@@ -65,6 +68,12 @@ final class PortalSource implements AutoCloseable {
     }
     private void motion(MotionEvent event) {
         if(window!=null)return;
+        if(pendingWords!=null && (event.getActionMasked()==MotionEvent.ACTION_UP
+                || event.getActionMasked()==MotionEvent.ACTION_CANCEL || event.getPointerCount()!=wordPointers
+                || Math.hypot(event.getRawX()-wordX,event.getRawY()-wordY)>
+                        android.view.ViewConfiguration.get(anchor.getContext()).getScaledTouchSlop())) {
+            main.removeCallbacks(pendingWords);pendingWords=null;
+        }
         if(pointer!=null){pointer.recycle();pointer=null;}
         if(event.getActionMasked()==MotionEvent.ACTION_DOWN)validGesture=event.getPointerCount()==1;
         if(event.getPointerCount()>2)validGesture=false;
@@ -105,7 +114,7 @@ final class PortalSource implements AutoCloseable {
         Context context=anchor.getContext();String uri=request.getString("uri"),text=request.getString("text");
         if(uri==null && (text==null || text.isEmpty() || text.length()>ContentSharePolicy.MAX_TEXT)){done.countDown();return;}
         if(uri==null) {
-            boolean accepted=openWords(text);Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);
+            boolean accepted=deferWords(text);Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);
             result[0]=reply;done.countDown();return;
         }
         if(pointer.getPointerCount()!=1) {
@@ -143,6 +152,19 @@ final class PortalSource implements AutoCloseable {
             });
         } catch(RuntimeException unavailable){clearWindow();done.countDown();}
     }
+    private boolean deferWords(String text) {
+        if(!live() || selection!=null)return false;
+        if(pendingWords!=null)return true;
+        long down=pointer.getDownTime();int token=generation;
+        wordX=pointer.getRawX();wordY=pointer.getRawY();wordPointers=pointer.getPointerCount();
+        // Two-finger extraction is explicit; ordinary long-press menus retain their original timing.
+        long wait=pointer.getPointerCount()==1?Math.max(0,3000-(android.os.SystemClock.uptimeMillis()-down)):0;
+        pendingWords=()->{
+            pendingWords=null;
+            if(token==generation && live() && pointer.getDownTime()==down)openWords(text);
+        };
+        main.postDelayed(pendingWords,wait);return true;
+    }
     private void clearWindow() {
         main.removeCallbacks(expire);
         if(window==null)return;FrameLayout old=window;window=null;
@@ -152,6 +174,7 @@ final class PortalSource implements AutoCloseable {
         catch(RuntimeException detached){android.util.Log.w(Tags.PROBE,"portal source detached",detached);}
     }
     @Override public void close() {
+        if(pendingWords!=null){main.removeCallbacks(pendingWords);pendingWords=null;}
         generation++;issued=0;validGesture=false;clearWindow();
         closeWords();
         if(pointer!=null){pointer.recycle();pointer=null;}
@@ -168,9 +191,10 @@ final class PortalSource implements AutoCloseable {
                 .createWindowContext(WindowTypes.SYSTEM_UI_DIALOG,null);
         Context themed=new android.view.ContextThemeWrapper(context,HyperOsStyle.dark(context)
                 ?android.R.style.Theme_Material_Dialog_Alert:android.R.style.Theme_Material_Light_Dialog_Alert);
-        android.app.Dialog opened=new android.app.Dialog(themed);selection=opened;
+        android.app.Dialog opened=new WorkspaceDialog(themed,this::closeWords);selection=opened;
         opened.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         WordSelectionPane pane=new WordSelectionPane(themed,text,this::beginWords);
+        WorkspacePopupStyle.heading(pane,"选词",this::closeWords);
         pane.setOnDragListener((view,event)->{
             if(event.getAction()==DragEvent.ACTION_DRAG_ENDED && selection==opened) {
                 selectingDrag=false;
@@ -184,8 +208,9 @@ final class PortalSource implements AutoCloseable {
         android.view.Window target=opened.getWindow();if(target==null){closeWords();return false;}
         target.setType(WindowTypes.SYSTEM_UI_DIALOG);target.setBackgroundDrawableResource(android.R.color.transparent);
         WindowManager.LayoutParams attrs=target.getAttributes();attrs.setTitle("OneStepLiteContentPanel");
+        attrs.flags|=WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
         HostWindowPolicy.configure(attrs);target.setAttributes(attrs);
-        try{opened.show();WorkspacePopupStyle.size(target,themed);island=new ModalIslandLease(pane);island.start();return true;}
+        try{opened.show();WorkspacePopupStyle.secondary(target,themed);island=new ModalIslandLease(pane);island.start();return true;}
         catch(RuntimeException unavailable){closeWords();return false;}
     }
     private boolean beginWords(View view,String text) {

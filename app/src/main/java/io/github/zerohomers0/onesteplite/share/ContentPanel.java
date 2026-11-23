@@ -84,12 +84,6 @@ final class ContentPanel {
         tabButtons.clear();tabButtons.addAll(shell.tabs);
         scroll=shell.scroll;grid=shell.grid;
         panel.addView(actions(themed),new LinearLayout.LayoutParams(-1,dp(44)));
-        TextView extract=label("截取主窗图片");extract.setTextSize(12);
-        extract.setOnClickListener(v->{
-            if(dialog!=null && dialog.getWindow()!=null)dialog.getWindow().setWindowAnimations(0);
-            close();capture.run();
-        });
-        panel.addView(extract,new LinearLayout.LayoutParams(-1,dp(36)));
         dialog.setContentView(panel);
         final Dialog opened = dialog;
         dialog.setOnDismissListener(ignored -> {
@@ -174,7 +168,7 @@ final class ContentPanel {
     private void load() {
         cancelQuery();
         shell.select(tab);panelActions.page(tab);
-        grid.removeAllViews();
+        shell.clearStatus();grid.removeAllViews();
         entries.clear();tiles.clear();refreshSelection();
         if (tab == 2) {
             clipboard();final int token=generation,user=CurrentUser.id();
@@ -187,7 +181,7 @@ final class ContentPanel {
         boolean files = tab == 1;
         final int page=tab;
         final java.util.Set<String> hidden=new java.util.HashSet<>(preferences().getStringSet("hidden_"+tab,java.util.Collections.emptySet()));
-        grid.addView(label(files ? "正在读取最近文件…" : "正在读取近期图片…"));
+        shell.status(files ? "正在读取最近文件…" : "正在读取近期图片…");
         WORKER.execute(() -> {if(files)files(token,user,signal,hidden);else {inbox(token,user,page);images(token,user,signal,hidden);}});
     }
 
@@ -198,12 +192,12 @@ final class ContentPanel {
                 if(!valid(token,user))return;
                 grid.removeAllViews();
                 for(ContentEntry row:rows)addEntry(row);
-                if(rows.isEmpty())grid.addView(label("暂无可访问的最近文件，可用“更多文件”补充"));
+                if(rows.isEmpty())shell.status("暂无可访问的最近文件，可用“更多文件”补充");
             });
             restorePosition(token,user);
         } catch(RuntimeException denied) {
             anchor.post(()->{if(valid(token,user)) {
-                grid.removeAllViews();grid.addView(label("无法读取系统最近文件，可用“更多文件”选择"));
+                grid.removeAllViews();shell.status("无法读取系统最近文件，可用“更多文件”选择");
             }});
         }
         inbox(token,user,1);
@@ -235,11 +229,11 @@ final class ContentPanel {
                 });
             }
             anchor.post(() -> { if (valid(token, user) && grid.getChildCount()==0)
-                grid.addView(label("没有可读取的近期图片")); });
+                shell.status("没有可读取的近期图片"); });
             restorePosition(token,user);
         } catch (Exception denied) {
             anchor.post(() -> { if (valid(token, user)) {
-                grid.removeAllViews(); grid.addView(label("无法读取相册，请检查系统媒体访问权限"));
+                grid.removeAllViews(); shell.status("无法读取相册，请检查系统媒体访问权限");
             }});
         }
     }
@@ -249,7 +243,7 @@ final class ContentPanel {
     }
 
     private void addEntry(ContentEntry entry) {
-        if(entries.isEmpty())grid.removeAllViews();
+        shell.clearStatus();if(entries.isEmpty())grid.removeAllViews();
         entries.put(entry.key,entry);
         View view;
         if(tab==2) {
@@ -348,8 +342,9 @@ final class ContentPanel {
         image.setOnLongClickListener(v->beginEntry(v,entry));
         LinearLayout body=new LinearLayout(context);body.setOrientation(LinearLayout.VERTICAL);
         WorkspacePopupStyle.decorate(body,null);body.addView(image,new LinearLayout.LayoutParams(-1,0,1));
+        WorkspacePopupStyle.heading(body,"图片预览",this::closePreview);
         TextView recognize=label("识别文字");recognize.setGravity(Gravity.CENTER);
-        recognize.setBackground(HyperOsStyle.controlButton(context,false,8));
+        WorkspacePopupStyle.styleAction(recognize,false);
         recognize.setOnClickListener(v->recognize(entry,recognize));body.addView(recognize,new LinearLayout.LayoutParams(-1,dp(44)));
         showPreview(body);
         final Dialog window=preview;
@@ -374,11 +369,13 @@ final class ContentPanel {
     private void textPreview(ContentEntry entry) {
         WordSelectionPane body=new WordSelectionPane(context,entry.text==null?entry.label:entry.text,
                 (view,text)->begin(view,ClipData.newPlainText("选中文字",text)));
+        WorkspacePopupStyle.heading(body,"选词",this::closePreview);
         if(tab==2 && entry.text!=null) {
-            TextView pin=label("固定／取消固定这条历史");
-            pin.setOnClickListener(v->{history.pin(entry.text);closePreview();load();});body.addView(pin);
-            TextView delete=label("删除这条历史记录");
-            delete.setOnClickListener(v->{history.remove(entry.text);closePreview();load();});body.addView(delete);
+            TextView pin=WorkspacePopupStyle.action(context,"固定／取消固定",false,()->{history.pin(entry.text);closePreview();load();});
+            LinearLayout actions=new LinearLayout(context);actions.addView(pin,new LinearLayout.LayoutParams(0,dp(44),1));
+            TextView delete=WorkspacePopupStyle.action(context,"删除记录",false,()->{history.remove(entry.text);closePreview();load();});
+            LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,dp(44),1);cell.setMarginStart(dp(6));
+            actions.addView(delete,cell);body.addView(actions);
         }
         showPreview(body);
     }
@@ -394,7 +391,8 @@ final class ContentPanel {
         WindowManager.LayoutParams attrs=window.getAttributes();attrs.setTitle("OneStepLiteContentPanel");
         attrs.flags|=WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
         HostWindowPolicy.configure(attrs);window.setAttributes(attrs);
-        window.setBackgroundDrawableResource(android.R.color.transparent);preview.show();WorkspacePopupStyle.size(window,context);
+        window.setBackgroundDrawableResource(android.R.color.transparent);preview.show();WorkspacePopupStyle.secondary(window,context);
+        if(shell!=null)shell.setAlpha(.55f);
     }
 
     private void recognize(ContentEntry entry,TextView action) {
@@ -419,6 +417,7 @@ final class ContentPanel {
     void previewImage(Uri uri){preview(new ContentEntry("extracted-image","图片","image/jpeg",null,uri,null));}
 
     private void closePreview() {
+        if(shell!=null)shell.setAlpha(1f);
         if(recognition!=null){recognition.close();recognition=null;}
         if(recognitionRead!=null){recognitionRead.close();recognitionRead=null;}
         Dialog old=preview;preview=null;
@@ -446,9 +445,9 @@ final class ContentPanel {
                 String key="text:"+record.text;if(entries.containsKey(key))continue;
                 addEntry(new ContentEntry(key,(record.pinned?"已固定 · ":"")+record.text,"text/plain",record.text,null,null));
             }
-            if(entries.isEmpty())grid.addView(label("暂无剪贴板内容"));
+            if(entries.isEmpty())shell.status("暂无剪贴板内容");
             restorePosition(generation,CurrentUser.id());
-        } catch (RuntimeException unavailable) { grid.addView(label("无法读取当前剪贴板")); }
+        } catch (RuntimeException unavailable) { shell.status("无法读取当前剪贴板"); }
     }
 
     private boolean begin(View source, ClipData clip) {

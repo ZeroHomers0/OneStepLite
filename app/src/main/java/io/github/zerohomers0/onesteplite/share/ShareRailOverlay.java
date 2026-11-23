@@ -32,6 +32,7 @@ final class ShareRailOverlay implements AutoCloseable {
     }
 
     boolean isOpen(){return plate!=null;}
+    void setMainOnRight(boolean right){if(rail!=null)rail.setMainOnRight(right);}
 
     boolean onDrag(DragEvent event,String targetPackage) {
         if(event.getAction()==DragEvent.ACTION_DRAG_STARTED && !isOpen()) {

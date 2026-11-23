@@ -19,7 +19,8 @@ public class WallpaperRefreshRegression {
  static class Handler {List<Runnable>queue=Collections.synchronizedList(new ArrayList<>());int retries;Runnable delayed;void post(Runnable r){queue.add(r);}void removeCallbacks(Runnable r){}void postDelayed(Runnable r,long d){retries++;delayed=r;}void drain(){while(!queue.isEmpty())queue.remove(0).run();}}
  static class HyperOsStyle {static boolean fail;static List<Bitmap>produced=Collections.synchronizedList(new ArrayList<>());static Bitmap blurredWallpaper(Context c,int w,int h){if(fail)return null;Bitmap b=new Bitmap();produced.add(b);return b;}static Bitmap blurredBitmap(Bitmap b,int w,int h){Bitmap next=new Bitmap();produced.add(next);return next;}}
  static class WorkspaceFrost {static Bitmap finish(Bitmap b){return b;}}
- static class Warmup {static Bitmap wallpaper(Context c,int w,int h){return HyperOsStyle.blurredWallpaper(c,w,h);}}
+ static class CurrentUser {static int id(){return 0;}}
+ static class Warmup {static Bitmap[] ready;static Bitmap[] takePreparedWallpaper(int u,int w,int h){Bitmap[] result=ready;ready=null;return result;}}
  static class WallpaperSnapshot {static boolean canCapture(Context c){return c.interactive;}}
  static class Clipboard {static Clipboard get(Context c){return new Clipboard();}void close(){}}
  Bitmap wallpaperBackdrop=new Bitmap(),wellWallpaperBackdrop=new Bitmap();boolean wallpaperBackdropDirty=true,wallpaperBackdropRequested;long wallpaperLoadGeneration;Object mainSideAnimator,workspaceAnimator,promotion,cellMotion;int screenW=1080,screenH=2400,applies;Object root=new Object();Context ctx=new Context();Handler main=new Handler();Runnable wallpaperRetry=()->{};
@@ -38,6 +39,9 @@ public class WallpaperRefreshRegression {
   h=new WallpaperRefreshRegression();old=h.wallpaperBackdrop;h.loadWallpaperBackdrop();waitQueued(h,1);h.root=null;h.main.drain();check(h.applies==0&&h.main.retries==0&&!old.recycled,"detached Host never publishes or retains a retry loop");
   h=new WallpaperRefreshRegression();old=h.wallpaperBackdrop;HyperOsStyle.fail=true;h.loadWallpaperBackdrop();waitQueued(h,1);h.main.drain();check(h.applies==0&&h.wallpaperBackdrop==old&&!old.recycled&&h.main.retries==1,"capture failure keeps the last texture instead of flashing blank");HyperOsStyle.fail=false;
   h=new WallpaperRefreshRegression();old=h.wallpaperBackdrop;h.mainSideAnimator=new Object();h.loadWallpaperBackdrop();waitQueued(h,1);h.main.drain();check(h.applies==0&&h.wallpaperBackdrop==old&&h.wallpaperBackdropRequested,"active side transition keeps a single wallpaper texture");h.mainSideAnimator=null;h.main.delayed.run();check(h.applies==1&&!h.wallpaperBackdropRequested,"deferred texture publishes after the motion owner releases");
+  h=new WallpaperRefreshRegression();h.wallpaperBackdrop=null;h.wallpaperBackdropDirty=false;Bitmap pre=new Bitmap(),preWell=new Bitmap();Warmup.ready=new Bitmap[]{pre,preWell};count=HyperOsStyle.produced.size();h.loadWallpaperBackdrop();
+  check(h.wallpaperBackdrop==pre&&h.wellWallpaperBackdrop==preWell&&h.applies==1,"boot glass is published synchronously before workspace entry");
+  check(HyperOsStyle.produced.size()==count&&h.main.queue.isEmpty()&&Warmup.ready==null,"warm cache is consumed once without capture, worker or heartbeat");
   System.out.println("Production async wallpaper refresh: "+checks+" checks passed");
  }
 }'''.replace('METHOD',method)

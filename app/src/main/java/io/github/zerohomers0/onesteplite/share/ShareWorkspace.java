@@ -70,6 +70,7 @@ final class ShareWorkspace extends FrameLayout {
     private Runnable afterDrag=()->{};
     private ShareDragCatchment catchment;
     private int tipOffset;
+    private boolean mainRight;
 
     ShareWorkspace(Context context, View normalRail, BooleanSupplier ready,
             BiConsumer<ComponentName, Runnable> dispatch, Consumer<String> hint,
@@ -82,6 +83,7 @@ final class ShareWorkspace extends FrameLayout {
             Supplier<android.graphics.Rect> bounds,boolean shareOnly) {
         super(context);
         this.bounds=bounds;this.shareOnly=shareOnly;
+        android.graphics.Rect initialBounds=bounds.get();mainRight=initialBounds!=null && initialBounds.left>0;
         this.normalRail = normalRail;
         this.ready = ready;
         this.dispatch = dispatch;
@@ -100,7 +102,7 @@ final class ShareWorkspace extends FrameLayout {
                 android.util.Log.w(Tags.PROBE, "content panel unavailable", unavailable);
             }
         });
-        addView(content, new LayoutParams(dp(50), -1));
+        LayoutParams contentBounds=new LayoutParams(dp(50),-1);contentBounds.leftMargin=dp(6);addView(content,contentBounds);
         shareFace=new FrameLayout(context);shareFace.setBackgroundColor(HyperOsStyle.shareRailFill(context));
         shareFace.setClipChildren(false);shareFace.setClipToPadding(false);
         addView(shareFace,new LayoutParams(-1,-1));
@@ -128,7 +130,7 @@ final class ShareWorkspace extends FrameLayout {
                 if(dragging)return true;
                 cancel();
                 dragging = true;
-                tipOffset=ContentDragShadow.offset(event.getClipDescription());
+                tipOffset=ContentAccessCompat.arrowOffset(event);
                 if(tipOffset>0) {
                     catchment=new ShareDragCatchment(this,tipOffset,()->dragging && ready.getAsBoolean());catchment.start();
                 }
@@ -183,6 +185,14 @@ final class ShareWorkspace extends FrameLayout {
 
     boolean onTipDrag(DragEvent event){return drag(event);}
 
+    void captureMain(){if(ready.getAsBoolean() && !dragging){panel.close();capture.open();}}
+    void setMainOnRight(boolean right){
+        mainRight=right;
+        for(int i=0;i<targets.getChildCount();i++)if(targets.getChildAt(i) instanceof ShareTargetButton)
+            ((ShareTargetButton)targets.getChildAt(i)).setMainOnRight(right);
+        if(overlay!=null)overlay.setMainOnRight(right);
+    }
+
     private boolean live(int token) {
         return dragging && token == generation && user == CurrentUser.id()
                 && isAttachedToWindow() && isShown() && ready.getAsBoolean();
@@ -207,10 +217,12 @@ final class ShareWorkspace extends FrameLayout {
         targets.removeAllViews();
         if(imageDrag && !shareOnly) {
             ShareTarget recognize=new ShareTarget(IMAGE_TEXT,"识别文字",getContext().getDrawable(android.R.drawable.ic_menu_edit),true);
-            targets.addView(new ShareTargetButton(getContext(),recognize),new LinearLayout.LayoutParams(dp(50),-1));
+            ShareTargetButton icon=new ShareTargetButton(getContext(),recognize);icon.setMainOnRight(mainRight);
+            targets.addView(icon,new LinearLayout.LayoutParams(dp(50),-1));
         }
         for (ShareTarget entry : entries) {
             ShareTargetButton icon = new ShareTargetButton(getContext(),entry);
+            icon.setMainOnRight(mainRight);
             targets.addView(icon, new LinearLayout.LayoutParams(dp(50), -1));
         }
         if (entries.isEmpty() && targets.getChildCount()==0) {
@@ -244,7 +256,9 @@ final class ShareWorkspace extends FrameLayout {
         for (int i = 0; i < targets.getChildCount(); i++) {
             View view = targets.getChildAt(i);
             ShareTarget target=view.getTag() instanceof ShareTarget?(ShareTarget)view.getTag():null;
-            boolean hit=target!=null && target.enabled && position>=view.getLeft() && position<view.getRight();
+            float inset=dp(6);
+            boolean hit=target!=null && target.enabled && position>=view.getLeft()+inset && position<view.getRight()-inset
+                    && pointer[1]>=inset && pointer[1]<scroll.getHeight()-inset;
             view.setAlpha(target!=null && !target.enabled?.3f:1f);
             if(view instanceof ShareTargetButton)((ShareTargetButton)view).setDragHovered(hit);
             if(hit){hovered=target.component;hint.accept(target.label);}

@@ -101,7 +101,7 @@ final class SourceCaptureController implements AutoCloseable {
         boolean rtl=context.getResources().getConfiguration().getLayoutDirection()==View.LAYOUT_DIRECTION_RTL;
         attrs.x=rtl?context.getResources().getDisplayMetrics().widthPixels-requested.right:requested.left;
         HostWindowPolicy.configure(attrs);window.setAttributes(attrs);window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        window.setDecorFitsSystemWindows(false);dialog.show();window.setLayout(requested.width(),requested.height());
+        window.setDecorFitsSystemWindows(false);dialog.show();WorkspacePopupStyle.glassWindow(window,themed);window.setLayout(requested.width(),requested.height());
         island=new ModalIslandLease(body);island.start();
     }
 
@@ -169,13 +169,13 @@ final class SourceCaptureController implements AutoCloseable {
 
     private LinearLayout body(Context themed,String title) {
         LinearLayout body=new LinearLayout(themed);body.setOrientation(LinearLayout.VERTICAL);body.setPadding(dp(8),dp(8),dp(8),dp(8));
-        body.setBackgroundColor(HyperOsStyle.page(themed));TextView text=new TextView(themed);text.setText(title);text.setTextSize(12);
+        WorkspacePopupStyle.decorate(body,null);WorkspacePopupStyle.heading(body,"主窗图片",this::close);
+        TextView text=new TextView(themed);text.setText(title);text.setTextSize(12);
         text.setTextColor(HyperOsStyle.textSecondary(themed));text.setPadding(dp(4),dp(4),dp(4),dp(8));body.addView(text);return body;
     }
 
     private void button(LinearLayout actions,String label,Runnable action) {
-        TextView button=new TextView(actions.getContext());button.setText(label);button.setTextSize(14);button.setGravity(Gravity.CENTER);
-        button.setTextColor(HyperOsStyle.textPrimary(actions.getContext()));button.setBackground(HyperOsStyle.controlButton(actions.getContext(),false,10));
+        TextView button=WorkspacePopupStyle.action(actions.getContext(),label,label.equals("使用选区"),action);
         button.setOnClickListener(v->action.run());LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,-1,1);
         params.setMargins(dp(3),dp(3),dp(3),dp(3));actions.addView(button,params);
     }

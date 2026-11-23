@@ -260,7 +260,7 @@ final class QuickAppRail extends View {
         app.icon.setAlpha(255);
         if(openedPackages.contains(app.component.getPackageName())) {
             float density=getResources().getDisplayMetrics().density;
-            float radius=4f*density,x=half-radius*.35f,y=-half+radius*.35f;
+            float radius=4f*density,x=(mainRight?-1:1)*(half-radius*.35f),y=-half+radius*.35f;
             statusPaint.setColor(0xe6ffffff);statusPaint.setAlpha(Math.round(alpha*.9f));
             canvas.drawCircle(x,y,radius+density,statusPaint);
             statusPaint.setColor(0xff34c759);statusPaint.setAlpha(alpha);
@@ -279,6 +279,8 @@ final class QuickAppRail extends View {
         activeIndex = -1;
         invalidate();
     }
+    private boolean mainRight;
+    void setMainOnRight(boolean right){mainRight=right;invalidate();}
 
     private int indexAt(float f) {
         if (this.apps.isEmpty() || f < 0 || f >= getWidth()) {
