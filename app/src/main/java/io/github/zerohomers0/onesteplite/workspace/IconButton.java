@@ -47,6 +47,7 @@ final class IconButton extends View {
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        if(icon==CONTENT) {drawContentIcon(canvas);return;}
         int save = canvas.save();
         float size = Math.min(HyperOsStyle.dp(getContext(), 26f), Math.min(getWidth(), getHeight()) * .84f);
         canvas.translate((getWidth() - size) / 2f, (getHeight() - size) / 2f);
@@ -112,6 +113,24 @@ final class IconButton extends View {
             canvas.drawPath(gear, paint);
             canvas.drawCircle(12, 12, 3.5f, paint);
         }
+        canvas.restoreToCount(save);
+    }
+
+    private void drawContentIcon(Canvas canvas) {
+        int save=canvas.save();
+        float size=Math.min(HyperOsStyle.dp(getContext(),38),Math.min(getWidth(),getHeight()));
+        canvas.translate((getWidth()-size)/2,(getHeight()-size)/2);canvas.scale(size/38,size/38);
+        paint.setStyle(Paint.Style.FILL);
+        paint.setShader(new android.graphics.LinearGradient(0,0,38,38,
+                new int[]{0xff62b9ff,0xff3869ec},null,android.graphics.Shader.TileMode.CLAMP));
+        canvas.drawRoundRect(0,0,38,38,10,10,paint);paint.setShader(null);
+        paint.setColor(0x70ffffff);canvas.drawRoundRect(12,7,30,25,3,3,paint);
+        paint.setColor(0xffffffff);canvas.drawRoundRect(7,12,26,31,3,3,paint);
+        paint.setColor(0xffb1dcff);canvas.drawRoundRect(9.5f,14.5f,23.5f,28.5f,1.5f,1.5f,paint);
+        paint.setColor(0xffffffff);canvas.drawCircle(19.5f,18,1.8f,paint);
+        glyph.reset();glyph.moveTo(9.5f,26);glyph.lineTo(14.5f,20.5f);glyph.lineTo(19,25);
+        glyph.lineTo(21,23);glyph.lineTo(23.5f,26);glyph.lineTo(23.5f,28.5f);
+        glyph.lineTo(9.5f,28.5f);glyph.close();canvas.drawPath(glyph,paint);
         canvas.restoreToCount(save);
     }
 

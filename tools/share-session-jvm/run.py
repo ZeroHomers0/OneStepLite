@@ -23,7 +23,7 @@ def member(signature):
     return source[start:end]
 
 methods = '\n'.join(member(signature) for signature in [
-    '    boolean onWindowDrag(', '    private void finishVisuals(', '    void cancel(',
+    '    boolean onWindowDrag(', '    private void finishVisuals(', '    private void clearTargetHover(', '    void cancel(',
     '    boolean retainDelivery(', '    private void finishDelivery(',
     '    @Override protected void onDetachedFromWindow()', '    void close()'])
 files = {
@@ -36,6 +36,9 @@ int action;DragEvent(int value){action=value;}int getAction(){return action;}Obj
 static final class ComponentName {String pkg;ComponentName(String p,String name){pkg=p;}}
 static final class Counter implements AutoCloseable {int closes,stops;public void close(){closes++;}void stop(){stops++;}}
 static class Base {int detaches;protected void onDetachedFromWindow(){detaches++;}}
+static class View {}
+static class ShareTargetButton extends View {boolean hovered=true;void setDragHovered(boolean value){hovered=value;}}
+static class Targets {ShareTargetButton child=new ShareTargetButton();int getChildCount(){return 1;}View getChildAt(int i){return child;}}
 static class Handler {int removals;void removeCallbacks(Runnable r){removals++;}}
 static class Transition {int resets,returns;void show(boolean value){if(!value)returns++;}void reset(){resets++;}}
 static class ShareRailOverlay {boolean open;int events,closes;String target;
@@ -48,6 +51,7 @@ boolean dragging,dropped,deliveryPending,retainingDelivery,shareOnly;int generat
 Handler handler=new Handler();Runnable expire=()->{},deliverySettled=()->{};
 Counter pendingRead,delegatedRead;Counter panel=new Counter(),history=new Counter(),picker=new Counter(),capture=new Counter();
 Transition transition=new Transition();float alpha=1;
+Targets targets=new Targets();
 boolean accepts(Object description){return true;}boolean live(int token){return dragging&&ready.getAsBoolean();}
 boolean drag(DragEvent event){if(event.action==1){starts++;dragging=true;}if(event.action==4){ends++;finishVisuals();}return true;}
 boolean drop(DragEvent event,ComponentName target){drops++;lastTarget=target.pkg;return true;}
@@ -80,6 +84,7 @@ int reset=rail.transition.resets;rail.finishDelivery(rail.generation-1);check(ra
 rail=new Replay();rail.shareOnly=true;rail.dragging=true;rail.dropped=true;rail.deliveryPending=true;rail.finishVisuals();
 check(rail.alpha==0&&rail.transition.resets==1&&!rail.dragging,"share-only strip hides immediately when drag ends");
 check(rail.deliveryPending,"visual retirement leaves accepted payload delivery alive");
+check(!rail.targets.child.hovered,"drag end clears target magnification while preserving pending delivery");
 rail=new Replay();rail.onDetachedFromWindow();check(rail.panel.closes==1&&rail.capture.closes==1&&rail.history.stops==1,"ordinary detach releases all child state");
 check(rail.transition.resets==1,"ordinary detach clears cube animation");
 System.out.println("Production share session checks="+checks+" passed");

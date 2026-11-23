@@ -34,8 +34,8 @@ final class ShareTargetPicker {
         window.setType(WindowTypes.SYSTEM_UI_DIALOG);window.setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
         WindowManager.LayoutParams attrs=window.getAttributes();attrs.setTitle("OneStepLiteContentPanel");
         HostWindowPolicy.configure(attrs);window.setAttributes(attrs);dialog.show();
-        window.setLayout(Math.min(dp(base,440),base.getResources().getDisplayMetrics().widthPixels-dp(base,24)),
-                Math.min(dp(base,560),base.getResources().getDisplayMetrics().heightPixels-dp(base,64)));
+        WorkspacePopupStyle.decorate(body,null);
+        WorkspacePopupStyle.size(window,context);
         island=new ModalIslandLease(body);island.start();
     }
 

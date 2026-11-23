@@ -21,9 +21,7 @@ final class ContentPanelLayout extends LinearLayout {
     final GridLayout grid;
     final TextView scope;
     ContentPanelLayout(Context context,IntConsumer select) {
-        super(context);setOrientation(VERTICAL);setPadding(dp(8),dp(10),dp(8),dp(8));
-        GradientDrawable background=new GradientDrawable();background.setColor(HyperOsStyle.page(context));
-        background.setCornerRadius(dp(16));setBackground(background);setClipToOutline(true);
+        super(context);setOrientation(VERTICAL);WorkspacePopupStyle.decorate(this,null);
         LinearLayout header=new LinearLayout(context);
         header.setPadding(dp(3),dp(3),dp(3),dp(3));
         GradientDrawable track=new GradientDrawable();track.setColor(HyperOsStyle.controlFill(context,false));

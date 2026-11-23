@@ -265,8 +265,7 @@ final class QuickAppPicker {
                 dialog = next;
                 content = panel;
                 island=new ModalIslandLease(panel);island.start();
-                window.setLayout(Math.min(dp(context, 420), base.getResources().getDisplayMetrics().widthPixels
-                        - dp(context, 32)), -2);
+                WorkspacePopupStyle.size(window,context);
                 panel.setAlpha(0f);
                 panel.setScaleX(.97f);
                 panel.setScaleY(.97f);
@@ -308,19 +307,10 @@ final class QuickAppPicker {
             setOrientation(VERTICAL);
             int padding = dp(context, 20);
             setPadding(padding, padding, padding, padding);
-            desiredHeight = Math.min(dp(context, 620), Math.round(context.getResources().getDisplayMetrics().heightPixels * .72f));
+            desiredHeight = WorkspacePopupStyle.height(context);
             wallpaper = bitmap == null || bitmap.isRecycled() ? null
                     : new WallpaperCropDrawable(bitmap, width, height, 0, 0, HyperOsStyle.topWallpaperTint(context));
-            Drawable sheet = HyperOsStyle.glassSheet(context, 28);
-            sheet.setAlpha(140);
-            setBackground(new LayerDrawable(new Drawable[]{wallpaper == null ? HyperOsStyle.topBackground(context) : wallpaper,
-                    HyperOsStyle.topWallpaperWash(context), sheet}));
-            setOutlineProvider(new ViewOutlineProvider() {
-                public void getOutline(View view, Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(context, 28));
-                }
-            });
-            setClipToOutline(true);
+            WorkspacePopupStyle.decorate(this,wallpaper);
             setFocusableInTouchMode(true);
         }
         @Override protected void onMeasure(int width, int height) {

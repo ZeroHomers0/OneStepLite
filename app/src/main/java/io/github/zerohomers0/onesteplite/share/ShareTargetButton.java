@@ -10,11 +10,26 @@ import android.widget.ImageView;
 final class ShareTargetButton extends ImageView {
     private final Paint badge=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path arrow=new Path();
+    private boolean dragHovered;
     ShareTargetButton(Context context,ShareTarget target) {
         super(context);setTag(target);setImageDrawable(target.icon);setScaleType(ScaleType.FIT_CENTER);
         setContentDescription(target.label+(target.enabled?"":"，不支持当前内容"));setTooltipText(target.label);
         setAlpha(target.enabled?1f:.3f);int inset=Math.round(HyperOsStyle.dp(context,6));
         setPadding(inset,inset,inset,inset);
+    }
+
+    void setDragHovered(boolean hovered) {
+        if(dragHovered==hovered)return;
+        dragHovered=hovered;animate().cancel();
+        animate().scaleX(hovered?1.14f:1f).scaleY(hovered?1.14f:1f)
+                .setDuration(hovered?260:160)
+                .setInterpolator(hovered?new android.view.animation.OvershootInterpolator(1.8f)
+                        :new android.view.animation.DecelerateInterpolator()).start();
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        animate().cancel();dragHovered=false;setScaleX(1);setScaleY(1);
+        super.onDetachedFromWindow();
     }
 
     @Override protected void onDraw(Canvas canvas) {

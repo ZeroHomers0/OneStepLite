@@ -114,10 +114,8 @@ final class ContentPanel {
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setDecorFitsSystemWindows(false);
         dialog.show();
-        int available = Math.max(1, main.bottom - attrs.y - dp(8));
-        int width = Math.max(1, Math.min(dp(380), main.width() - dp(16)));
-        imageSize = Math.max(1, (width - dp(16)) / 3);
-        window.setLayout(width, Math.min(dp(480), available));
+        imageSize = Math.max(1, (WorkspacePopupStyle.width(themed) - dp(40)) / 3);
+        WorkspacePopupStyle.size(window,themed);
         island = new ModalIslandLease(panel);
         island.start();
         load();

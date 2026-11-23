@@ -96,10 +96,12 @@ final class ShareWorkspace extends FrameLayout {
         });
         addView(content, new LayoutParams(dp(50), -1));
         shareFace=new FrameLayout(context);shareFace.setBackgroundColor(HyperOsStyle.shareRailFill(context));
+        shareFace.setClipChildren(false);shareFace.setClipToPadding(false);
         addView(shareFace,new LayoutParams(-1,-1));
         scroll = new HorizontalScrollView(context);
+        scroll.setClipChildren(false);scroll.setClipToPadding(false);
         scroll.setHorizontalScrollBarEnabled(false);
-        targets = new LinearLayout(context);
+        targets = new LinearLayout(context);targets.setClipChildren(false);targets.setClipToPadding(false);
         scroll.addView(targets, new FrameLayout.LayoutParams(-2, -1));
         LayoutParams row = new LayoutParams(-1, -1);
         shareFace.addView(scroll, row);
@@ -141,7 +143,7 @@ final class ShareWorkspace extends FrameLayout {
                 if (dragging) locate(event.getX(), event.getY());
                 return dragging;
             case DragEvent.ACTION_DRAG_EXITED:
-                stopEdge();hovered = null; hint.accept(null); return dragging;
+                stopEdge();hovered = null; clearTargetHover();hint.accept(null); return dragging;
             case DragEvent.ACTION_DROP:
                 if (!live(generation)) return false;
                 locate(event.getX(), event.getY());
@@ -215,17 +217,18 @@ final class ShareWorkspace extends FrameLayout {
     private void updateHovered(float x,float y) {
         ComponentName previous=hovered;
         hovered = null;
-        if (x < 0 || y < 0 || y > getHeight()) { hint.accept(null); return; }
+        if (x < 0 || y < 0 || y > getHeight()) { clearTargetHover();hint.accept(null); return; }
         pointer[0]=x-shareFace.getLeft();pointer[1]=y-shareFace.getTop();
-        if(!transition.mapSharePoint(pointer)){hint.accept(null);return;}
+        if(!transition.mapSharePoint(pointer)){clearTargetHover();hint.accept(null);return;}
         pointer[0]-=scroll.getLeft();pointer[1]-=scroll.getTop();
-        if(pointer[1]<0 || pointer[1]>=scroll.getHeight()){hint.accept(null);return;}
+        if(pointer[1]<0 || pointer[1]>=scroll.getHeight()){clearTargetHover();hint.accept(null);return;}
         float position=pointer[0]+scroll.getScrollX();
         for (int i = 0; i < targets.getChildCount(); i++) {
             View view = targets.getChildAt(i);
             ShareTarget target=view.getTag() instanceof ShareTarget?(ShareTarget)view.getTag():null;
             boolean hit=target!=null && target.enabled && position>=view.getLeft() && position<view.getRight();
-            view.setAlpha(target!=null && !target.enabled?.3f:hit?.65f:1f);
+            view.setAlpha(target!=null && !target.enabled?.3f:1f);
+            if(view instanceof ShareTargetButton)((ShareTargetButton)view).setDragHovered(hit);
             if(hit){hovered=target.component;hint.accept(target.label);}
         }
         if (hovered == null) hint.accept(null);
@@ -367,9 +370,17 @@ final class ShareWorkspace extends FrameLayout {
     private void finishVisuals() {
         dragging = false;
         hovered = null;
+        clearTargetHover();
         hint.accept(null);
         stopEdge();if(shareOnly){transition.reset();setAlpha(0);}else transition.show(false);
         if (!dropped) { handler.removeCallbacks(expire); generation++; }
+    }
+
+    private void clearTargetHover() {
+        for(int i=0;i<targets.getChildCount();i++) {
+            View view=targets.getChildAt(i);
+            if(view instanceof ShareTargetButton)((ShareTargetButton)view).setDragHovered(false);
+        }
     }
 
     void cancel() {
