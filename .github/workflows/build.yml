@@ -1,10 +1,9 @@
 name: Build and publish
 
-# Only a merge into main builds. Pull requests and manual runs are deliberately
-# not wired up, so a branch under review never spends runner minutes.
+# Validate the drag-share branch before device testing; publishing remains main/tag only.
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/drag-share']
     tags: ['v*']
 
 permissions:
@@ -154,3 +153,68 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/*/* --verify-tag \
             --title "OneStepLite $GITHUB_REF_NAME" \
             --generate-notes
+
+  notify:
+    name: Notify Beacon
+    if: ${{ always() }}
+    needs: [apk, tests, latest, release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Send workflow result
+        continue-on-error: true
+        env:
+          BEACON_PUSH_TOKEN: ${{ secrets.BEACON_PUSH_TOKEN }}
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          token = os.environ.get("BEACON_PUSH_TOKEN", "")
+          if not token:
+              print("::warning::Beacon notification skipped: BEACON_PUSH_TOKEN is not configured.")
+              sys.exit(0)
+          jobs = json.loads(os.environ["JOB_RESULTS"])
+          results = {name: job["result"] for name, job in jobs.items()}
+          if "failure" in results.values():
+              status, priority = "失败", 8
+          elif "cancelled" in results.values() or any(results[name] != "success" for name in ("apk", "tests")):
+              status, priority = "取消或未完成", 5
+          else:
+              status, priority = "通过", 5
+          run_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          details = "\n".join(f"- {name}: {result}" for name, result in results.items())
+          payload = {
+              "title": f"OneStepLite 流水线{status}",
+              "body": f"**流水线{status}**\n\n分支/标签：{os.environ['GITHUB_REF_NAME']}\n提交：{os.environ['GITHUB_SHA'][:7]}\n尝试：{os.environ['GITHUB_RUN_ATTEMPT']}\n\n{details}\n\n[查看结果与 APK 产物]({run_url})",
+              "priority": priority,
+              "group": "CI 构建",
+              "actions": [{"title": "查看结果", "url": run_url}],
+          }
+
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, request, response, code, message, headers, new_url):
+                  return None
+
+          request = urllib.request.Request(
+              "https://push.gzautobot.top/api/v1/push",
+              data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+              headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "User-Agent": "Beacon-CI/1.0"},
+              method="POST",
+          )
+          try:
+              with urllib.request.build_opener(NoRedirect()).open(request, timeout=15) as response:
+                  if not 200 <= response.status < 300:
+                      raise RuntimeError("Unexpected response status")
+              print("Beacon workflow notification queued.")
+          except urllib.error.HTTPError as error:
+              print(f"::warning title=Beacon notification failed::Push API returned HTTP {error.code}.")
+              sys.exit(1)
+          except Exception:
+              print("::warning title=Beacon notification failed::Network or response failure.")
+              sys.exit(1)
+          PY

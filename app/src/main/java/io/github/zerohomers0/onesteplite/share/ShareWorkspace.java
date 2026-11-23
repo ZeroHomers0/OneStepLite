@@ -122,9 +122,11 @@ final class ShareWorkspace extends FrameLayout {
                 dragging = true;
                 user = CurrentUser.id();
                 int token = generation;
-                ClipDescription description = new ClipDescription(event.getClipDescription());
-                int count=event.getLocalState() instanceof SharePayload
-                        ?((SharePayload)event.getLocalState()).clip.getItemCount():0;
+                SharePayload local=event.getLocalState() instanceof SharePayload
+                        ?(SharePayload)event.getLocalState():null;
+                ClipDescription description = local==null?new ClipDescription(event.getClipDescription())
+                        :new ClipDescription("内容",new String[]{local.mime});
+                int count=local==null?0:Math.max(1,local.uris.size());
                 handler.postDelayed(expire, 60_000L);
                 WORKER.execute(() -> {
                     try {

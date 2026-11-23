@@ -92,8 +92,9 @@ final class ContentPanel {
         edit.setOnClickListener(v -> { close(); configure.run(); });
         secondary.addView(edit,new LinearLayout.LayoutParams(0,dp(44),1));panel.addView(secondary);
         dialog.setContentView(panel);
+        final Dialog opened = dialog;
         dialog.setOnDismissListener(ignored -> {
-            selection.position(tab,scroll.getScrollY());cancelQuery();closePreview();releaseIsland();dialog=null;
+            if (dialog == opened) close();
         });
         Window window = dialog.getWindow();
         if (window == null) { close(); return; }
@@ -371,6 +372,8 @@ final class ContentPanel {
         closePreview();
         if(dialog==null)return;
         preview=new Dialog(dialog.getContext());preview.setContentView(content);
+        final Dialog opened = preview;
+        preview.setOnDismissListener(ignored -> { if (preview == opened) preview = null; });
         Window window=preview.getWindow();if(window==null){closePreview();return;}
         window.setType(WindowTypes.SYSTEM_UI_DIALOG);
         WindowManager.LayoutParams attrs=window.getAttributes();attrs.setTitle("OneStepLiteContentPanel");
@@ -388,7 +391,8 @@ final class ContentPanel {
     }
 
     private void closePreview() {
-        Dialog old=preview;preview=null;if(old!=null)old.dismiss();
+        Dialog old=preview;preview=null;
+        if(old!=null) { old.setOnDismissListener(null);old.dismiss(); }
     }
 
     private void clipboard() {
@@ -467,8 +471,11 @@ final class ContentPanel {
         dragging = false;
         Dialog old = dialog;
         dialog = null;
-        if (old != null) try { old.dismiss(); }
+        if (old != null) try { old.setOnDismissListener(null);old.dismiss(); }
         catch (RuntimeException unavailable) { android.util.Log.w(Tags.PROBE, "content popup already detached", unavailable); }
+        if(grid!=null)grid.removeAllViews();
+        entries.clear();tiles.clear();
+        shell=null;panelActions=null;grid=null;scroll=null;selectionButton=null;
         tabButtons.clear();
         releaseIsland();
     }
