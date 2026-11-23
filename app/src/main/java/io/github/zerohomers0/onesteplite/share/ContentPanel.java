@@ -47,7 +47,7 @@ final class ContentPanel {
     private int owner=-1;
     private int tab;
     private volatile int generation;
-    private int imageSize;
+    private int imageSize,contentWidth;
     private boolean dragging;
     private CancellationSignal query;
     private ModalIslandLease island;
@@ -111,7 +111,8 @@ final class ContentPanel {
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setDecorFitsSystemWindows(false);
         dialog.show();
-        imageSize = Math.max(1, (WorkspacePopupStyle.width(themed) - dp(40)) / 3);
+        contentWidth=Math.max(1,WorkspacePopupStyle.width(themed)-dp(40));
+        imageSize = Math.max(1, (contentWidth - dp(12)) / 3);
         WorkspacePopupStyle.size(window,themed);
         island = new ModalIslandLease(panel);
         island.start();
@@ -254,6 +255,9 @@ final class ContentPanel {
             view=new RecentFileRow(context,entry);
         } else if(entry.thumbnail!=null) {
             ImageView image=new ImageView(context);image.setImageBitmap(entry.thumbnail);
+            android.graphics.drawable.GradientDrawable shape=new android.graphics.drawable.GradientDrawable();
+            shape.setColor(HyperOsStyle.controlFill(context,false));shape.setCornerRadius(dp(8));
+            image.setBackground(shape);image.setClipToOutline(true);
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);view=image;
         } else {
             TextView text=label(entry.label);text.setMaxLines(tab==2?4:3);view=text;
@@ -267,8 +271,9 @@ final class ContentPanel {
         view.setOnLongClickListener(v->beginEntry(v,entry));
         GridLayout.LayoutParams params=new GridLayout.LayoutParams(
                 GridLayout.spec(GridLayout.UNDEFINED),GridLayout.spec(GridLayout.UNDEFINED,entry.thumbnail==null?3:1));
-        params.width=entry.thumbnail==null || tab==1?imageSize*3:imageSize;
+        params.width=entry.thumbnail==null || tab==1?contentWidth:imageSize;
         params.height=entry.thumbnail==null || tab==1?-2:imageSize;
+        if(entry.thumbnail!=null && tab!=1)params.setMargins(dp(2),dp(2),dp(2),dp(2));
         grid.addView(view,params);tiles.put(entry.key,view);refreshSelection();
     }
 
@@ -303,7 +308,7 @@ final class ContentPanel {
             android.graphics.drawable.GradientDrawable mark=null;
             if(selection.contains(tab,tile.getKey())) {
                 mark=new android.graphics.drawable.GradientDrawable();
-                mark.setStroke(dp(3),HyperOsStyle.CONTROL_ACCENT);mark.setCornerRadius(dp(6));
+                mark.setStroke(dp(3),HyperOsStyle.CONTROL_ACCENT);mark.setCornerRadius(dp(8));
             }
             tile.getValue().setForeground(mark);
             tile.getValue().setSelected(selection.contains(tab,tile.getKey()));
