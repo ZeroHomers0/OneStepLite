@@ -76,6 +76,14 @@ public final class InputMagnificationPolicyTest {
                 "other.app", "OneStepLiteNativeBiometricPrompt"), "foreign tagged dialog unchanged");
         check(!InputMagnificationPolicy.shouldExcludeFromMagnification(2017,
                 "com.android.systemui", "OneStepLiteNativeBiometricPrompt"), "wrong dialog type unchanged");
+        check(InputMagnificationPolicy.shouldForceMagnification(2026,0,
+                "com.miui.securitycenter","DockAssistantView"),"native sidebar animation inherits main magnification");
+        for(String pkg:new String[]{null,"another.app"})
+            check(!InputMagnificationPolicy.shouldForceMagnification(2026,0,pkg,"DockAssistantView"),"foreign sidebar title stays native");
+        for(String title:new String[]{null,"DockAssistantView-copy","other"})
+            check(!InputMagnificationPolicy.shouldForceMagnification(2026,0,"com.miui.securitycenter",title),"only the exact sidebar handle is admitted");
+        check(!InputMagnificationPolicy.shouldForceMagnification(2038,0,
+                "com.miui.securitycenter","DockAssistantView"),"other security overlays keep native magnification");
         System.out.println("InputMagnificationPolicy: " + checks + " checks passed");
     }
 

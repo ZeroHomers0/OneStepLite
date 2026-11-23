@@ -23,7 +23,7 @@ final class TopBar extends FrameLayout {
         default void onTaskCellsCovered(boolean covered) {}
         default java.util.Set<String> openedAppPackages() { return java.util.Collections.emptySet(); }
     }
-    private final Listener listener;
+    private Listener listener;
     private final Header header;
     private Header tabletHeader;
     private final WorkspaceClock clock;
@@ -56,6 +56,8 @@ final class TopBar extends FrameLayout {
         requestOpenedAppsRefresh();
     }
 
+    void bindListener(Listener owner) { listener = owner; }
+
     TopBar(Context context, WorkspaceLayout layout, List<QuickApp> apps, Listener listener) {
         super(context);
         this.listener = listener;
@@ -69,9 +71,9 @@ final class TopBar extends FrameLayout {
         addView(header, new LayoutParams(-1, 1));
         availableApps = new java.util.ArrayList<>(apps);
         quickRail = new QuickAppRail(context, QuickAppPins.arrange(context, availableApps), new QuickAppRail.Listener() {
-            public void onLaunch(QuickApp app) { listener.onLaunch(app); }
+            public void onLaunch(QuickApp app) { TopBar.this.listener.onLaunch(app); }
             public void onCustomize() {
-                if (!listener.canCustomizeApps()) return;
+                if (!TopBar.this.listener.canCustomizeApps()) return;
                 try {
                     appPicker.show(getContext(), availableApps, glassWallpaper, glassWidth, glassHeight,
                             () -> quickRail.setApps(QuickAppPins.arrange(getContext(), availableApps)));

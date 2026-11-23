@@ -48,7 +48,7 @@ public static class Activity {public boolean showWhenLocked;public Surface surfa
 public static class Surface {public float alpha=1;public boolean isValid(){return true;}}
 public static class Tx {public void setAlpha(Object s,float a){((Surface)s).alpha=a;}}
 public static class Session {public int mUid=1000;}
-public static class Window {public Session mSession=new Session();public int mOwnerUid=1000;public LayoutParams mAttrs=new LayoutParams();public Display dc;public Object mActivityRecord;public Surface surface=new Surface();public int mode=1;public int getWindowingMode(){return mode;}public Object getSurfaceControl(){return surface;}public Animator mWinAnimator=new Animator();public boolean onScreen;public Object getPendingTransaction(){return transaction;}public Object getDisplayContent(){return dc;}public boolean isOnScreen(){return onScreen;}}
+public static class Window {public Session mSession=new Session();public int mOwnerUid=1000;public LayoutParams mAttrs=new LayoutParams();public Display dc;public Object mActivityRecord;public Surface surface=new Surface(),clientSurface=new Surface();public int mode=1;public int getWindowingMode(){return mode;}public Object getSurfaceControl(){return surface;}public Animator mWinAnimator=new Animator();public boolean onScreen;public Object getPendingTransaction(){return transaction;}public Object getDisplayContent(){return dc;}public boolean isOnScreen(){return onScreen;}}
 public static class LegacyAnimator {public boolean mSurfaceShown=true;}
 public static class Animator {public boolean getShown(){return shown;}public Window mWin;public boolean shown=true;public int mDrawState=4;public float mAlpha=1;}
 static int checks,calls;static boolean authenticated;static RetainedWindow lease;static Window win;static Display dc;static Token token;static Animator anim;static Object transaction;
@@ -144,6 +144,16 @@ check(win.surface.alpha==0&&mirror.surface.alpha==0&&transition.surface.alpha==0
 final Window sleepingMain=main;
 synchronized(dc.mWmService.mGlobalLock){lease.finishAuthenticatedRelease(dc,transaction,true,true,true,()->{throw new AssertionError("workspace reveal became fullscreen");},()->{check(win.surface.alpha==0&&sleepingMain.surface.alpha==0,"geometry restoration must happen before group reveal");});}
 check(win.surface.alpha==1&&mirror.surface.alpha==1&&transition.surface.alpha==1&&main.surface.alpha==1,"wake reveals main and all own chrome in one transaction");
+// A privacy alpha belongs to the buffer child, never to WindowContainer's parent.
+for(int cycle=0;cycle<3;cycle++){
+ fresh();handler=new Handler();lease.setHandler(handler);lease.setGlobalLock(dc.mWmService.mGlobalLock);
+ synchronized(dc.mWmService.mGlobalLock){lease.holdOpeningMainForLock(dc);}
+ win.mAttrs.alpha=0;win.clientSurface.alpha=0;lease.retain(dc,request(100));authenticated=true;
+ synchronized(dc.mWmService.mGlobalLock){lease.finishAuthenticatedRelease(dc,transaction,true,true,false,()->{},()->{throw new AssertionError("hidden exit cannot reveal workspace");});}
+ check(win.surface.alpha==1&&win.clientSurface.alpha==0&&win.mAttrs.alpha==0,"hidden exit restores the parent without overriding client privacy alpha");
+ win.mAttrs.alpha=1;win.clientSurface.alpha=win.mAttrs.alpha;
+ check(win.surface.alpha*win.clientSurface.alpha==1,"reopening only updates the client buffer and must reveal the existing chrome parent");
+}
 for(int identity=0;identity<3;identity++){fresh();handler=new Handler();lease.setHandler(handler);lease.setGlobalLock(dc.mWmService.mGlobalLock);if(identity==0)win.mAttrs.packageName="foreign";if(identity==1)win.mOwnerUid=2000;if(identity==2)win.mAttrs.flags=524288;synchronized(dc.mWmService.mGlobalLock){lease.holdOpeningMainForLock(dc);}check(win.surface.alpha==1,"untrusted/showWhenLocked chrome must stay native");}
 fresh();Context c=new Context();final int[] ready={0};RetainedWindow.request(c,new Handler(),token,100,.7f,0,606,ok->{if(ok)ready[0]++;});check("android".equals(c.sent.pkg)&&"protected".equals(c.permission),"request not protected/scoped");c.receiver.code=-1;c.receiver.extras=new Bundle();c.receiver.extras.putLong("generation",99);c.receiver.onReceive(c,c.sent);check(ready[0]==0,"stale WM hidden acknowledgement warmed Host");c.receiver.extras.putLong("generation",100);c.receiver.onReceive(c,c.sent);check(ready[0]==1,"exact native hidden acknowledgement lost");
 System.out.println("Production retained native WindowState: "+checks+" checks passed");

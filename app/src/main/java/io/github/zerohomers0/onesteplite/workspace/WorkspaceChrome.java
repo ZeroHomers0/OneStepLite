@@ -18,7 +18,8 @@ final class WorkspaceChrome {
 
     WorkspaceChrome(Context context,FrameLayout root,WorkspaceLayout layout,List<QuickApp> apps,
             TopBar.Listener listener,Supplier<RectF> exclusion) {
-        bar=new TopBar(context,layout,apps,listener);
+        TopBar prepared=ChromeWarmup.take(context,layout,listener);
+        bar=prepared==null?new TopBar(context,layout,apps,listener):prepared;
         backing=new View(context);backing.setBackgroundColor(0xff1e2420);
         root.addView(backing,new FrameLayout.LayoutParams(-1,layout.topStrip));
         clip=new FrameLayout(context) {

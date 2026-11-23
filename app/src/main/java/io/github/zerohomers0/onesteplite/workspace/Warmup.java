@@ -71,6 +71,9 @@ final class Warmup {
                     if (USER_SWITCHED.equals(action) || Intent.ACTION_WALLPAPER_CHANGED.equals(action))
                         invalidate();
                     if (USER_SWITCHED.equals(action)) MAIN.post(TaskViewWarmup::userChanged);
+                    if (USER_SWITCHED.equals(action)) MAIN.post(() -> ChromeWarmup.invalidate(true));
+                    if (Intent.ACTION_CONFIGURATION_CHANGED.equals(action))
+                        MAIN.post(() -> ChromeWarmup.invalidate(false));
                     schedule(context, 800L);
                 }
             };
@@ -78,6 +81,7 @@ final class Warmup {
             userFilter.addAction(Intent.ACTION_USER_PRESENT);
             userFilter.addAction(USER_SWITCHED);
             userFilter.addAction(Intent.ACTION_WALLPAPER_CHANGED);
+            userFilter.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
             try {
                 context.registerReceiver(userEvents, userFilter, Context.RECEIVER_NOT_EXPORTED);
             } catch (Throwable error) { failed("user receiver", error); }
@@ -152,7 +156,7 @@ final class Warmup {
             Context context = userContext(base, user);
             UserManager userManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
             if (userManager == null || !userManager.isUserUnlocked()) return;
-            MAIN.post(TaskViewWarmup::prepare);
+            whenUiIdle(TaskViewWarmup::prepare);
             long request;
             boolean needApps, needWallpaper;
             synchronized (LOCK) {
@@ -184,6 +188,7 @@ final class Warmup {
             }
             // Shortcut delivery never waits for the heavier wallpaper blur.
             for (PendingApps pending : callbacks) deliver(base, pending, ready, request);
+            prepareChrome(base,user,ready,request);
             Bitmap blurred = null;
             int width = 0, height = 0;
             if (needWallpaper) {
@@ -215,6 +220,26 @@ final class Warmup {
         } catch (Throwable error) { failed("background cache", error); }
     }
 
+    private static void whenUiIdle(Runnable action) {
+        MAIN.post(() -> MAIN.getLooper().getQueue().addIdleHandler(() -> {
+            action.run();return false;
+        }));
+    }
+
+    private static void prepareChrome(Context context,int user,List<QuickApp> apps,long request) {
+        if(!ChromeWarmup.needsPreparation())return;
+        WorkspaceOptions options=WorkspaceOptions.DEFAULT;
+        try {
+            options=WorkspaceSettingsStore.decode(context.getContentResolver().call(
+                    WorkspaceSettingsStore.URI,WorkspaceSettingsStore.READ,null,null));
+        } catch(Throwable unavailable) { failed("header settings",unavailable); }
+        final WorkspaceOptions ready=options;
+        whenUiIdle(() -> {
+            synchronized(LOCK) { if(request!=generation)return; }
+            ChromeWarmup.prepare(context,user,apps,ready);
+        });
+    }
+
     private static void deliver(Context context, PendingApps pending, List<QuickApp> ready) {
         long request;
         synchronized (LOCK) { request = generation; }
@@ -240,6 +265,7 @@ final class Warmup {
     }
 
     private static void invalidate() {
+        MAIN.post(() -> ChromeWarmup.invalidate(false));
         int user = currentUser();
         synchronized (LOCK) {
             generation++;

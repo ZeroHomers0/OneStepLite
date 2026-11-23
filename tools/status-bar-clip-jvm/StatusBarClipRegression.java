@@ -144,6 +144,7 @@ public final class StatusBarClipRegression {
             for (double ox : new double[]{0,1200-1200*scale}) for (boolean right : new boolean[]{false,true}) {
                 Object display=new Object(); Window w=new Window(display);
                 w.mAttrs.type=2026;w.mAttrs.packageName="com.miui.securitycenter";w.mAttrs.title="DockAssistantView";
+                check(InputMagnificationPolicy.shouldForceMagnification(w.mAttrs.type,0,w.mAttrs.packageName,w.mAttrs.title),"token geometry requires a real main-magnification policy, not an assumed transform");
                 int width=rotation==0?1200:2608,height=rotation==0?2608:1200;
                 w.mToken.bounds=new Rect(0,0,width,height);
                 MainWindowClip owner=new MainWindowClip();owner.update(w,display,logs::add);

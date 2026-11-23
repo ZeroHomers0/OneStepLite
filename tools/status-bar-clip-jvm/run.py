@@ -29,6 +29,6 @@ public final class Rect {
 source = package_dir(ROOT)/'MainWindowClip.java'
 test = Path(__file__).with_name('StatusBarClipRegression.java')
 subprocess.run([str(JDK / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(OUT),
-                str(fake), str(rect), str(source), str(test), str(package_dir(ROOT)/'Packages.java'), str(package_dir(ROOT)/'WindowTypes.java')], check=True)
+                str(fake), str(rect), str(source), str(test), str(package_dir(ROOT)/'InputMagnificationPolicy.java'), str(package_dir(ROOT)/'Packages.java'), str(package_dir(ROOT)/'WindowTypes.java')], check=True)
 subprocess.run([str(JDK / 'java.exe'), '-cp', str(OUT),
                 'io.github.zerohomers0.onesteplite.StatusBarClipRegression'], check=True)

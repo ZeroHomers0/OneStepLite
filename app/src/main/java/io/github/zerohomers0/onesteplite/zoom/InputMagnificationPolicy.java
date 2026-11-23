@@ -16,6 +16,10 @@ final class InputMagnificationPolicy {
     static boolean shouldForceMagnification(int windowType, int privateFlags,
             String packageName, CharSequence title) {
         if (shouldExcludeFromMagnification(windowType, packageName, title)) return false;
+        // A DISPLAY_OVERLAY is normally outside magnification. Its native slide
+        // must share the main transform before the stationary token crop can work.
+        if (windowType == WindowTypes.DISPLAY_OVERLAY && Packages.SECURITY_CENTER.equals(packageName)
+                && title != null && "DockAssistantView".contentEquals(title)) return true;
         // OS4's real permission capsule, dot, RemoteViews and touch area share
         // this window. Admit the whole native window, without changing its state.
         if (windowType == WindowTypes.SYSTEM_UI_DIALOG && Packages.SYSTEM_UI.equals(packageName)

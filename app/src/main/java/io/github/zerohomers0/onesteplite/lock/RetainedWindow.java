@@ -340,8 +340,12 @@ final class RetainedWindow {
     private void releaseChrome(Object transaction) {
         for (java.util.Map.Entry<Object,Object> entry : heldChrome.entrySet()) {
             if (!Boolean.TRUE.equals(optionalCall(entry.getKey(),"isValid"))) continue;
-            WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(entry.getValue(),"mAttrs");
-            XposedHelpers.callMethod(transaction,"setAlpha",entry.getKey(),attrs.alpha);
+            // This is the WindowContainer parent, not the client buffer whose alpha
+            // WindowStateAnimator derives from LayoutParams. Copying privacy alpha=0
+            // here survives future relayouts: only the child buffer is updated by WM.
+            Object nativeAlpha=optionalField(entry.getValue(),"mLastSurfaceAlpha");
+            XposedHelpers.callMethod(transaction,"setAlpha",entry.getKey(),
+                    nativeAlpha instanceof Number?((Number)nativeAlpha).floatValue():1f);
         }
         heldChrome.clear();
     }
