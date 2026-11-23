@@ -83,7 +83,10 @@ final class ContentPanel {
         scroll=shell.scroll;grid=shell.grid;
         panel.addView(actions(themed),new LinearLayout.LayoutParams(-1,dp(50)));
         TextView extract=label("截取主窗图片");extract.setTextSize(12);
-        extract.setOnClickListener(v->{close();capture.run();});
+        extract.setOnClickListener(v->{
+            if(dialog!=null && dialog.getWindow()!=null)dialog.getWindow().setWindowAnimations(0);
+            close();capture.run();
+        });
         panel.addView(extract,new LinearLayout.LayoutParams(-1,dp(44)));
         dialog.setContentView(panel);
         final Dialog opened = dialog;

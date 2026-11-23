@@ -52,7 +52,6 @@ final class SourceCaptureController implements AutoCloseable {
         if(!ready.getAsBoolean() || mainBounds==null || mainBounds.isEmpty() || !ContentAccessCompat.currentProcessUser())return;
         if((long)mainBounds.width()*mainBounds.height()>ContentCapturePolicy.MAX_CAPTURE_PIXELS){message("主窗画面过大，暂时无法截取");return;}
         owner=CurrentUser.id();closed=false;consumed=false;requested=new Rect(mainBounds);int token=++generation;
-        message("正在截取主窗画面…");
         Rect region=new Rect(requested);
         anchor.postOnAnimation(()->anchor.postOnAnimation(()->WORKER.execute(()->capture(token,region))));
         main.postDelayed(()->{if(token==generation && dialog==null)close();},10_000L);
