@@ -88,3 +88,26 @@ for name,text in files.items():
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths,str(src/'ChromeWarmup.java'),str(src/'WorkspaceLayout.java'),str(src/'WorkspaceOptions.java')],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.ChromeWarmupRegression'],check=True)
+
+# The cache test above substitutes widgets. Also replay the REAL Header
+# constructor/button callbacks so a captured prewarm listener cannot pass it.
+header_source=(src/'TopBar.java').read_text(encoding='utf-8-sig')
+def header_member(signature):
+ start=header_source.index(signature);end=header_source.index('{',start)+1;depth=1
+ while depth:
+  depth+=(header_source[end]=='{')-(header_source[end]=='}');end+=1
+ return header_source[start:end]
+actions=Path(__file__).with_name('HeaderActionsRegression.java').read_text(encoding='utf-8')
+actions=actions.replace('__BIND__',header_member('    void bindListener(').replace('Listener owner','Owner owner'))
+actions=actions.replace('__CONSTRUCTOR__',header_member('        Header(Context context,Runnable tools)'))
+actions=actions.replace('__BUTTON__',header_member('        private IconButton button('))
+action_files={
+ 'HeaderActionsRegression.java':actions,
+ 'android/view/Gravity.java':'package android.view;public class Gravity {public static final int CENTER=17;}',
+ 'android/graphics/Typeface.java':'package android.graphics;public class Typeface {public static Object create(String name,int style){return null;}}',
+}
+action_paths=[]
+for name,text in action_files.items():
+ p=out/'actions'/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8');action_paths.append(str(p))
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out/'actions'),*action_paths],check=True)
+subprocess.run([str(jdk/'java.exe'),'-cp',str(out/'actions'),'io.github.zerohomers0.onesteplite.HeaderActionsRegression'],check=True)

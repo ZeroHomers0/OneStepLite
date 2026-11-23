@@ -199,9 +199,9 @@ final class TopBar extends FrameLayout {
             addView(title);
             left=button(IconButton.SIDE_LEFT,"小窗放在左侧",()->listener.onSetMainSide(true));
             right=button(IconButton.SIDE_RIGHT,"小窗放在右侧",()->listener.onSetMainSide(false));
-            topApp=button(IconButton.TOP_APP,"把主窗应用放到顶栏",listener::onSendMainToTop);
-            settings=button(IconButton.SETTINGS,"系统设置",listener::onOpenSettings);
-            expand=button(IconButton.EXPAND_LEFT,"放大为全屏并退出工作区",listener::onExit);
+            topApp=button(IconButton.TOP_APP,"把主窗应用放到顶栏",()->listener.onSendMainToTop());
+            settings=button(IconButton.SETTINGS,"系统设置",()->listener.onOpenSettings());
+            expand=button(IconButton.EXPAND_LEFT,"放大为全屏并退出工作区",()->listener.onExit());
             buttons=new View[]{left,right,topApp,settings,expand};
             icons=new IconButton[]{left,right,topApp,settings,expand};
             updateActions();

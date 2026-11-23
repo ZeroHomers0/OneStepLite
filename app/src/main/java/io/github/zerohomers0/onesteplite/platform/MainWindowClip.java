@@ -38,12 +38,16 @@ final class MainWindowClip {
             current = new Owned(display, surface);
             owned.put(token, current);
         }
-        if (crop.equals(current.crop)) return;
+        // The OEM hide animation may reset this crop without replacing the token.
+        // Reassert sidebar ownership after native prepareSurfaces, including exit
+        // frames whose client is no longer visible but whose surface still animates.
+        boolean changed = !crop.equals(current.crop);
+        if (!sidebar && !changed) return;
         // Remember ownership before writing so exit can also clean up a failed write.
         XposedHelpers.callMethod(XposedHelpers.callMethod(token, "getPendingTransaction"),
                 "setCrop", surface, crop);
         current.crop = crop;
-        log.accept((sidebar ? "main sidebar clip=" : "main status bar clip=") + crop);
+        if (changed) log.accept((sidebar ? "main sidebar clip=" : "main status bar clip=") + crop);
     }
 
     void clear(Consumer<String> log) {

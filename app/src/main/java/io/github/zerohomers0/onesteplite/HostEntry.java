@@ -1294,7 +1294,6 @@ public class HostEntry implements IXposedHookLoadPackage {
             sMainSystemUiRotation.update(window, sDisplayContent, app, HostEntry::log);
             Object imeApp = sInteractiveImeViewport.update(window, sDisplayContent,
                     DesktopLaunchBridge::ownsTopTask, HostEntry::log);
-            sMainWindowClip.update(window, sDisplayContent, HostEntry::log);
             sMainImeProcessConfiguration.update(window, sDisplayContent,
                     imeApp == null ? app : imeApp, HostEntry::log);
         } catch (Throwable error) {
@@ -1397,6 +1396,10 @@ public class HostEntry implements IXposedHookLoadPackage {
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     if (p.hasThrowable() || !sZoomed || sDisplayContent == null) return;
+                    try {
+                        if (sFullscreenRotationActive)
+                            sMainWindowClip.update(p.thisObject, sDisplayContent, HostEntry::log);
+                    } catch (Throwable error) { log("main window animation clip unavailable: " + error); }
                     refreshWideVideoSignal(p.thisObject);
                     try {
                         Object spec = XposedHelpers.getObjectField(sDisplayContent, "mMagnificationSpec");

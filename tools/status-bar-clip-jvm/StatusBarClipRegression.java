@@ -162,8 +162,14 @@ public final class StatusBarClipRegression {
                                 "native sidebar animation crossed into the workspace rail");
                     }
                 }
+                int logged=logs.size();
+                // Native hide can overwrite the crop on the SAME token. Cached
+                // dimensions must not suppress the repair while the client hides.
+                w.mToken.surface.crop=null;
                 owner.update(w,display,logs::add);
-                check(w.mToken.pending.writes==1,"stationary token crop must not restart the native animation each frame");
+                check(w.mToken.pending.writes==2&&w.mToken.surface.crop.equals(clip),
+                        "exit frame must repair a native crop reset on the unchanged token");
+                check(logs.size()==logged,"reasserting an unchanged crop must not log every animation frame");
                 owner.clear(logs::add);check(w.mToken.surface.crop==null,"workspace exit must restore the native sidebar canvas");
             }
         for (int gate=0;gate<4;gate++) {
