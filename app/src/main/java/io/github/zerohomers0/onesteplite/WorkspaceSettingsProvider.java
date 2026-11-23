@@ -8,7 +8,7 @@ import android.os.Binder;
 import android.os.Bundle;
 import android.os.Process;
 
-/** Serves the settings page and the host the same stored options across processes. */
+/** Authenticates shared options and shortcut configuration across module and SystemUI. */
 public final class WorkspaceSettingsProvider extends ContentProvider {
     @Override public boolean onCreate() { return true; }
 
@@ -21,6 +21,10 @@ public final class WorkspaceSettingsProvider extends ContentProvider {
                 if (Packages.SYSTEM_UI.equals(name)) allowed = true;
         }
         if (!allowed) throw new SecurityException("Settings snapshots are restricted to OneStepLite and SystemUI");
+        if("read_shortcuts".equals(method) || "write_shortcuts".equals(method)) {
+            if(uid/100000!=Process.myUid()/100000)throw new SecurityException("Different shortcut user");
+            return ShortcutSettingsStore.call(getContext(),method,arg,extras);
+        }
         if (!WorkspaceSettingsStore.READ.equals(method)) throw new UnsupportedOperationException("Read only");
         return WorkspaceSettingsStore.bundle(WorkspaceSettingsStore.read(getContext()));
     }

@@ -521,6 +521,7 @@ public final class WorkspaceHost {
         workspaceSettings = new WorkspaceSettingsClient(this.ctx, main, options -> {
             workspaceOptions = options;
             if (topBar != null) topBar.applyOptions(options);
+            if(scene==ACTIVE && screenOn && !keyguardLocked)refreshQuickApps();
             if (root != null) {
                 publishDesktopSideTasks();
             }
@@ -3648,6 +3649,20 @@ public final class WorkspaceHost {
                 toggleVisibility();
             }
             @Override public void onLaunch(QuickApp entry) { launchQuick(entry); }
+            @Override public void onContentShare(ComponentName target, Runnable launch) {
+                shareContentInMain(target, launch);
+            }
+            @Override public Rect contentBounds() {
+                if (layout == null) return null;
+                int[] bounds = layout.mainBounds();
+                return new Rect(bounds[0], bounds[1], bounds[2], bounds[3]);
+            }
+            @Override public boolean canShareContent() {
+                return scene==ACTIVE && screenOn && !keyguardLocked && promotion==null && !transferBusy && !taskCellsCovered;
+            }
+            @Override public boolean contentRailCovered() {
+                return topFace || videoPane!=null && videoPane.embedded();
+            }
             @Override public java.util.Set<String> openedAppPackages() { return openedQuickAppPackages(); }
             @Override public boolean canCustomizeApps() {
                 return scene == ACTIVE && screenOn && !keyguardLocked
@@ -3660,6 +3675,7 @@ public final class WorkspaceHost {
         },()->layout!=null && !layout.tabletLandscape && workspaceAlpha<1f && mainSideAnimator!=null
                 ?workspaceTopHole():null);
         topBar=chrome.bar;topStripBacking=chrome.backing;topLiveClip=chrome.clip;
+        root.setOnDragListener((view, event) -> onWindowContentDrag(event));
         refreshQuickApps();
         createTopPresentation();
         videoPane=topPresentation.video();
@@ -5736,6 +5752,42 @@ public final class WorkspaceHost {
         }
         if(parkMainForQuickLaunch(entry))return;
         launchQuickInMain(entry);
+    }
+
+    /** Reuse the existing confirmed same-task promotion before opening a share action. */
+    private void shareContentInMain(ComponentName target, Runnable launch) {
+        if (scene != ACTIVE || promotion != null || transferBusy || !screenOn || keyguardLocked) return;
+        final long epoch = sceneEpoch;
+        final int user = currentUserId();
+        Runnable guarded = () -> {
+            if (scene == ACTIVE && sceneEpoch == epoch && screenOn && !keyguardLocked
+                    && currentUserId() == user) launch.run();
+        };
+        for (Slot slot : slots) {
+            if (slot.index <= SLOT_MAIN || !slot.occupied || !target.getPackageName().equals(slot.pkg)) continue;
+            if (!promoteForNotification(target.getPackageName(), user, guarded))
+                android.widget.Toast.makeText(ctx, "目标小窗暂时无法交接", android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        guarded.run();
+    }
+
+    /** Only the Host-owned occupied side cells accept fallback content shares. */
+    private boolean onWindowContentDrag(android.view.DragEvent event) {
+        if(topBar!=null && event.getAction()==android.view.DragEvent.ACTION_DRAG_ENDED)
+            return topBar.onWindowContentDrag(event,null);
+        if (topBar == null || scene != ACTIVE || !screenOn || keyguardLocked
+                || promotion != null || transferBusy || taskCellsCovered) return false;
+        if (event.getAction() == android.view.DragEvent.ACTION_DRAG_STARTED)
+            return topBar.onWindowContentDrag(event, null);
+        for (int i = 1; i < CELL_SLOT_COUNT; i++) {
+            Slot slot = slots[i];
+            if (!slot.occupied || slot.parked || slot.frozen || slot.carrier || slot.rect == null) continue;
+            if (event.getX() >= slot.rect[0] && event.getX() < slot.rect[2]
+                    && event.getY() >= slot.rect[1] && event.getY() < slot.rect[3])
+                return topBar.onWindowContentDrag(event, slot.pkg);
+        }
+        return false;
     }
 
     private boolean parkMainForQuickLaunch(QuickApp entry) {

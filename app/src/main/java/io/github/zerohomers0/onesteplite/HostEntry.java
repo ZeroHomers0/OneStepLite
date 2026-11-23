@@ -68,6 +68,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             return;
         }
         if ("android".equals(lpparam.packageName)) {
+            ContentPermissionBridge.install(lpparam.classLoader,()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
             NativeMultiWindowUnlock.install(lpparam.classLoader, true);
             hookSystemServer(lpparam.classLoader);
             return;

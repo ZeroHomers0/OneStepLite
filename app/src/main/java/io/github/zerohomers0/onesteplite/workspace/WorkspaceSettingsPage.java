@@ -25,12 +25,14 @@ import android.widget.Toast;
 
 /** Settings use the installed system Settings resources and layout proportions. */
 final class WorkspaceSettingsPage extends FrameLayout {
-    private static final int HOME = 0, SWAP = 3, GESTURE = 5, LANDSCAPE = 6;
+    private static final int HOME = 0, SWAP = 3, GESTURE = 5, LANDSCAPE = 6, APPS = 7, SHARE = 8;
     private static final int BLUE = HyperOsStyle.CONTROL_ACCENT;
     private final SettingsActivity activity;
     private final boolean dark;
     private final int primary, secondary, surface;
-    private final int[] scrollPositions = new int[LANDSCAPE + 1];
+    private final int[] scrollPositions = new int[SHARE + 1];
+    private ShortcutManagementPage shortcutPage;
+    private Bundle shortcutDraft;
     private final android.database.ContentObserver gestureObserver =
             new android.database.ContentObserver(new android.os.Handler(android.os.Looper.getMainLooper())) {
         @Override public void onChange(boolean selfChange) {
@@ -56,11 +58,14 @@ final class WorkspaceSettingsPage extends FrameLayout {
                 System.arraycopy(saved, 0, scrollPositions, 0, Math.min(saved.length, scrollPositions.length));
         }
         int restored = state == null ? HOME : state.getInt("settings_page", HOME);
-        show(restored == SWAP || restored == GESTURE || restored == LANDSCAPE ? restored : HOME, false);
+        shortcutDraft=state==null?null:state.getBundle("shortcuts");
+        show(restored == SWAP || restored == GESTURE || restored == LANDSCAPE
+                || restored == APPS || restored == SHARE ? restored : HOME, false);
     }
 
     void save(Bundle state) {
-        scrollPositions[screen] = scroll.getScrollY();
+        if(scroll!=null)scrollPositions[screen] = scroll.getScrollY();
+        if(shortcutPage!=null){Bundle draft=new Bundle();shortcutPage.saveDraft(draft);state.putBundle("shortcuts",draft);}
         state.putInt("settings_page", screen);
         state.putIntArray("settings_scroll", scrollPositions);
     }
@@ -77,8 +82,15 @@ final class WorkspaceSettingsPage extends FrameLayout {
 
     private void show(int next, boolean animate) {
         if (scroll != null) scrollPositions[screen] = scroll.getScrollY();
+        if(shortcutPage!=null) {
+            shortcutDraft=new Bundle();if(next==screen)shortcutPage.saveDraft(shortcutDraft);
+            shortcutPage=null;
+        }
         screen = next;
         removeAllViews();
+        scroll=null;
+        if(next==APPS || next==SHARE){showShortcuts(next);return;}
+        shortcutDraft=null;
         scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
@@ -107,6 +119,12 @@ final class WorkspaceSettingsPage extends FrameLayout {
         }
     }
 
+    private void showShortcuts(int next) {
+        activity.setPageTitle(next==APPS?"管理快捷应用":"管理分享入口");
+        shortcutPage=new ShortcutManagementPage(activity,next==APPS,shortcutDraft,()->show(HOME,true));
+        addView(shortcutPage,new FrameLayout.LayoutParams(-1,-1));
+    }
+
     private void home() {
         WorkspaceOptions options = WorkspaceSettingsStore.read(activity);
         section("外观");
@@ -114,6 +132,13 @@ final class WorkspaceSettingsPage extends FrameLayout {
         switchOption(appearance, "显示农历", "日期下方显示农历", options.showLunar,
                 checked -> persist(WorkspaceSettingsStore.read(activity).withShowLunar(checked)));
         add(appearance, 0, 12);
+
+        section("顶栏");
+        LinearLayout shortcuts=card();
+        menu(shortcuts,"管理快捷应用","选择常用应用并调整顺序",()->show(APPS,true));
+        divider(shortcuts);
+        menu(shortcuts,"管理分享入口","选择拖曳分享功能并调整顺序",()->show(SHARE,true));
+        add(shortcuts,0,12);
 
         section("窗口与操作");
         LinearLayout interaction = card();

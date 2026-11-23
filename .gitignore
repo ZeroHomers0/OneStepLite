@@ -17,6 +17,7 @@ captures/
 /dist/
 /artifacts/
 /.local/
+/docs/plans/
 
 # Python tooling
 __pycache__/

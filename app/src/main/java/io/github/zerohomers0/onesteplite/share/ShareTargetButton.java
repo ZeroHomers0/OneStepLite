@@ -1,0 +1,32 @@
+package io.github.zerohomers0.onesteplite;
+
+import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.widget.ImageView;
+
+/** Original share icon with a small One Step-style action badge in its upper corner. */
+final class ShareTargetButton extends ImageView {
+    private final Paint badge=new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path arrow=new Path();
+    ShareTargetButton(Context context,ShareTarget target) {
+        super(context);setTag(target);setImageDrawable(target.icon);setScaleType(ScaleType.FIT_CENTER);
+        setContentDescription(target.label+(target.enabled?"":"，不支持当前内容"));setTooltipText(target.label);
+        setAlpha(target.enabled?1f:.3f);int inset=Math.round(HyperOsStyle.dp(context,6));
+        setPadding(inset,inset,inset,inset);
+    }
+
+    @Override protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        float unit=getResources().getDisplayMetrics().density,radius=6.5f*unit;
+        float x=getLayoutDirection()==LAYOUT_DIRECTION_RTL?getPaddingLeft()+2*unit:getWidth()-getPaddingRight()-2*unit;
+        float y=getPaddingTop()+2*unit;
+        badge.setStyle(Paint.Style.FILL);badge.setColor(HyperOsStyle.CONTROL_ACCENT);canvas.drawCircle(x,y,radius,badge);
+        badge.setColor(android.graphics.Color.WHITE);badge.setStyle(Paint.Style.STROKE);
+        badge.setStrokeWidth(1.3f*unit);badge.setStrokeCap(Paint.Cap.ROUND);badge.setStrokeJoin(Paint.Join.ROUND);
+        arrow.reset();arrow.moveTo(x+2.2f*unit,y-2.2f*unit);arrow.lineTo(x-2.2f*unit,y+2.2f*unit);
+        arrow.moveTo(x-2.2f*unit,y-1.4f*unit);arrow.lineTo(x-2.2f*unit,y+2.2f*unit);
+        arrow.lineTo(x+1.4f*unit,y+2.2f*unit);canvas.drawPath(arrow,badge);
+    }
+}

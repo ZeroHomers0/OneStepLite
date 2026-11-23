@@ -41,6 +41,7 @@ public class ModalLayersRegression {
  static void apply(){layers.reconcile(dc,tx);}
  public static void main(String[]args){
   fresh();apply();check(modal.mLastRelativeToLayer==shot.surface&&modal.mLastLayer==1,"own picker must sit above screenshot anchor");
+  fresh();modal.mAttrs.title="OneStepLiteContentPanel";apply();check(modal.mLastRelativeToLayer==shot.surface,"owned content panel shares the screenshot-safe modal lease");
   check(shot.assigns==0&&shot.restores==0&&shot.mLastLayer==900&&other.assigns==0,"native screenshot/permission windows must not be mutated");
   apply();shot.visible=false;apply();check(modal.mLastLayer==77&&modal.mLastRelativeToLayer==null&&modal.restores==1,"preview expiry restores original native layer after repeated reconciliation");
   fresh();Object normal=new Object();modal.mLastRelativeToLayer=normal;modal.mLastLayer=23;apply();modal.visible=false;apply();check(modal.mLastRelativeToLayer==normal&&modal.mLastLayer==23,"picker dismissal restores prior relative layer");

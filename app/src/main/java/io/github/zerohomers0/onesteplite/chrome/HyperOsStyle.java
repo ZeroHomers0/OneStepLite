@@ -28,6 +28,10 @@ final class HyperOsStyle {
         return selected ? CONTROL_ACCENT : dark(context) ? 0xff363940 : 0xffe5e8ee;
     }
 
+    static int shareRailFill(Context context) {
+        return blend(controlFill(context,false),CONTROL_ACCENT,dark(context)?.20f:.13f);
+    }
+
     /** Shared tonal surface and bounded ripple for workspace and settings actions. */
     static Drawable controlButton(Context context, boolean selected, float radius) {
         GradientDrawable base = new GradientDrawable();

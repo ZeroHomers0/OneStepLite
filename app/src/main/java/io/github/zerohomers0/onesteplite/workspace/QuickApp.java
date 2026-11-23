@@ -28,6 +28,10 @@ final class QuickApp {
         this.icon = icon;
     }
 
+    static QuickApp shortcut(String label,ComponentName component,Drawable icon) {
+        return new QuickApp(label,component,icon);
+    }
+
     static List<QuickApp> load(Context ctx) {
         PackageManager pm = ctx.getPackageManager();
         Intent main = new Intent(Intent.ACTION_MAIN);

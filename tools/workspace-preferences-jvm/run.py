@@ -44,6 +44,11 @@ files = {
             throw new AssertionError(name);}}
     ''',
     'io/github/zerohomers0/onesteplite/CurrentUser.java': 'package io.github.zerohomers0.onesteplite;class CurrentUser {static int id(){return 0;}}',
+    'io/github/zerohomers0/onesteplite/ShortcutSettingsClient.java': '''package io.github.zerohomers0.onesteplite;
+        class ShortcutSettingsClient {static final String APPS="apps",LEGACY_APPS="onesteplite_quick_app_pins_v1";
+        static String override;static boolean available;
+        static String readForUser(android.content.Context c,String k,int user){return override;}
+        static Boolean writeForUser(android.content.Context c,String k,String value,int user){if(!available)return null;override=value;return true;}}''',
     'io/github/zerohomers0/onesteplite/QuickApp.java': '''package io.github.zerohomers0.onesteplite;
         class QuickApp {Component component;QuickApp(String key){component=new Component(key);}
         static class Component {String key;Component(String key){this.key=key;}String flattenToString(){return key;}}}
@@ -68,6 +73,11 @@ files = {
                 check(!QuickAppPins.save(ctx,10,List.of()),"another user cannot overwrite pins");
                 check(QuickAppPins.save(ctx,0,List.of("a/Activity"))&&XposedHelpers.writes==1,"explicit selection persists");
                 check(QuickAppPins.read(ctx,0).equals(List.of("a/Activity")),"explicit selection round trips");
+                ShortcutSettingsClient.available=true;ShortcutSettingsClient.override="b/Activity";
+                check(QuickAppPins.read(ctx,0).equals(List.of("b/Activity")),"module preferences override legacy secure pins");
+                check(QuickAppPins.save(ctx,0,List.of("a/Activity","b/Activity")),"workspace writes the same provider used by settings");
+                check(QuickAppPins.read(ctx,0).equals(List.of("a/Activity","b/Activity")),"shared order round trips");
+                check(XposedHelpers.writes==1,"provider save never rewrites the legacy secure value");
                 int black=0xff000000,white=0xffffffff;
                 for(int background:new int[]{black,white,0xff202020,0xffeeeeee}) {
                     int expected=(background==black||background==0xff202020)?white:black;

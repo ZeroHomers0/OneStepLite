@@ -22,12 +22,17 @@ final class TopBar extends FrameLayout {
         default void onSendMainToTop() {}
         default void onTaskCellsCovered(boolean covered) {}
         default java.util.Set<String> openedAppPackages() { return java.util.Collections.emptySet(); }
+        default void onContentShare(android.content.ComponentName target, Runnable launch) { launch.run(); }
+        default Rect contentBounds() { return null; }
+        default boolean canShareContent(){return canCustomizeApps();}
+        default boolean contentRailCovered(){return false;}
     }
     private Listener listener;
     private final Header header;
     private Header tabletHeader;
     private final WorkspaceClock clock;
     private final QuickAppRail quickRail;
+    private ShareWorkspace shareWorkspace;
     private final QuickAppPicker appPicker = new QuickAppPicker();
     private List<QuickApp> availableApps;
     private Bitmap glassWallpaper;
@@ -53,6 +58,7 @@ final class TopBar extends FrameLayout {
     }
     void setWorkspaceActive(boolean active) {
         workspaceActive = active;
+        if(shareWorkspace!=null)shareWorkspace.setActive(active);
         requestOpenedAppsRefresh();
     }
 
@@ -85,6 +91,13 @@ final class TopBar extends FrameLayout {
             }
         });
         addView(quickRail, new LayoutParams(-1, 1));
+        shareWorkspace = new ShareWorkspace(context, quickRail,
+                () -> workspaceActive && this.listener.canShareContent(),
+                (target, launch) -> this.listener.onContentShare(target, launch),
+                text -> header.title.setText(text == null ? "One Step" : text),
+                () -> this.listener.contentBounds());
+        addView(shareWorkspace, new LayoutParams(-1, 1));
+        shareWorkspace.setCoveredSource(()->!isShown() || this.listener.contentRailCovered());
     }
 
     void applyOptions(WorkspaceOptions options) { clock.setShowLunar(options.showLunar); }
@@ -121,7 +134,11 @@ final class TopBar extends FrameLayout {
         availableApps = new java.util.ArrayList<>(apps);
         quickRail.setApps(QuickAppPins.arrange(getContext(), availableApps));
     }
-    void closeQuickAppPicker() { appPicker.close(); }
+    void closeQuickAppPicker() { appPicker.close(); if (shareWorkspace != null) shareWorkspace.close(); }
+    boolean onWindowContentDrag(android.view.DragEvent event, String targetPackage) {
+        return shareWorkspace != null && shareWorkspace.onWindowDrag(event, targetPackage,
+                !isShown() || listener.contentRailCovered());
+    }
     void setStatusBarInset(int inset) { statusBarInset=Math.max(0,inset);requestLayout(); }
     void setWallpaperBackdrop(Bitmap bitmap,int width,int height) {
         glassWallpaper=bitmap;glassWidth=width;glassHeight=height;setBackground(null);
@@ -178,7 +195,9 @@ final class TopBar extends FrameLayout {
         c.height=Math.max(1,geometry.blankBottom-geometry.blankTop);
         LayoutParams h=(LayoutParams)header.getLayoutParams();h.topMargin=geometry.headerTop;h.height=geometry.headerHeight;
         LayoutParams r=(LayoutParams)quickRail.getLayoutParams();r.topMargin=geometry.railTop;r.height=geometry.railHeight;
-        r.leftMargin=r.rightMargin=0;
+        r.leftMargin=Math.round(50*getResources().getDisplayMetrics().density);r.rightMargin=0;
+        LayoutParams share=(LayoutParams)shareWorkspace.getLayoutParams();
+        share.topMargin=geometry.railTop;share.height=geometry.railHeight;
         super.onMeasure(ws,hs);
     }
 

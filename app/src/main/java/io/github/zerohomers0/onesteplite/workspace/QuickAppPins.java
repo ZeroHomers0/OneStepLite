@@ -5,21 +5,27 @@ import android.provider.Settings;
 import java.util.List;
 import de.robv.android.xposed.XposedHelpers;
 
-/** SystemUI-owned per-user preferences; never stored in a process-wide app cache. */
+/** Shared module-owned pins with a read fallback for existing per-user secure settings. */
 final class QuickAppPins {
-    private static final String KEY = "onesteplite_quick_app_pins_v1";
+    private static final String KEY = ShortcutSettingsClient.LEGACY_APPS;
     private QuickAppPins() {}
 
     static int user() { return CurrentUser.id(); }
 
     static List<String> read(Context context, int user) {
-        if (user < 0) throw new IllegalStateException("current user unavailable");
+        if (user < 0 || user!=user()) throw new IllegalStateException("current user unavailable");
+        try {
+            String pins=ShortcutSettingsClient.readForUser(context,ShortcutSettingsClient.APPS,user);
+            if(pins!=null)return QuickAppOrder.decode(pins);
+        } catch(RuntimeException unavailable) { /* Keep legacy pins until the provider is available. */ }
         return QuickAppOrder.decode((String) XposedHelpers.callStaticMethod(Settings.Secure.class,
                 "getStringForUser", context.getContentResolver(), KEY, user));
     }
 
     static boolean save(Context context, int user, Iterable<String> keys) {
         if (user < 0 || user != user()) return false;
+        Boolean saved=ShortcutSettingsClient.writeForUser(context,ShortcutSettingsClient.APPS,QuickAppOrder.encode(keys),user);
+        if(saved!=null)return saved;
         try {
             return Boolean.TRUE.equals(XposedHelpers.callStaticMethod(Settings.Secure.class,
                     "putStringForUser", context.getContentResolver(), KEY, QuickAppOrder.encode(keys), user));

@@ -42,6 +42,8 @@ public class PowerRefreshRegression {
   class Listener {Set<String> openedAppPackages(){reads++;return Set.of("main");}}
   class QuickRail {void setOpenedPackages(Set<String> p){updates++;}}
   class Picker {void close(){closes++;}}
+  class ShareSurface {boolean active;void setActive(boolean value){active=value;}}
+  ShareSurface shareWorkspace=new ShareSurface();
   Listener listener=new Listener();QuickRail quickRail=new QuickRail();Picker appPicker=new Picker();
 __RAIL__
  }
@@ -67,6 +69,7 @@ __HOST__
   r.onVisibilityChanged(r,8);check(r.pending.isEmpty(),"hidden rail has no timer");
   r.onVisibilityChanged(r,0);check(r.pending.size()==1,"showing rail schedules a current snapshot");
   r.setWorkspaceActive(false);r.requestOpenedAppsRefresh();check(r.pending.isEmpty(),"locked workspace has no rail timer");
+  check(!r.shareWorkspace.active,"locking also stops content subscriptions");
   r.setWorkspaceActive(true);r.onWindowVisibilityChanged(8);check(r.pending.isEmpty(),"native hidden window cancels rail work");
   r.onWindowVisibilityChanged(0);r.onDetachedFromWindow();check(r.pending.isEmpty(),"detaching removes the queued runnable");
   r.onAttachedToWindow();check(r.pending.size()==1,"reattach restarts exactly once");
