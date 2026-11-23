@@ -37,7 +37,6 @@ final class QuickAppRail extends View {
     private float downY;
     private final float iconSize;
     private final Listener listener;
-    private final Runnable longPress;
     private final float padding;
     private float scrollOffset;
     private final OverScroller scroller;
@@ -66,12 +65,6 @@ final class QuickAppRail extends View {
 
     QuickAppRail(Context context, List<QuickApp> list, Listener listener) {
         super(context);
-        this.longPress = new Runnable() { // from class: io.github.zerohomers0.onesteplite.QuickAppRail.2
-            @Override // java.lang.Runnable
-            public final void run() {
-                QuickAppRail.this.openAppPicker();
-            }
-        };
         this.activeIndex = -1;
         this.apps = list == null ? Collections.emptyList() : Collections.unmodifiableList(new java.util.ArrayList<>(list));
         this.listener = listener;
@@ -90,18 +83,12 @@ final class QuickAppRail extends View {
         setElevation(0f);
         setClickable(true);
         setFocusable(true);
-        setContentDescription("快捷应用栏，点击打开，长按图标自定义应用");
-        setOnLongClickListener(view -> {
-            if (this.listener == null) return false;
-            this.listener.onCustomize();
-            return true;
-        });
+        setContentDescription("快捷应用栏，点击打开应用");
     }
 
     void setApps(List<QuickApp> next) {
         ++stackGeneration;
         if (stackAnimator != null) stackAnimator.cancel();
-        removeCallbacks(longPress);
         resetTouch();
         apps = next == null ? Collections.emptyList()
                 : Collections.unmodifiableList(new java.util.ArrayList<>(next));
@@ -165,7 +152,6 @@ final class QuickAppRail extends View {
                 velocity.addMovement(event);
                 if (!moved) {
                     activeIndex = indexAt(downX);
-                    if (activeIndex >= 0) postDelayed(longPress, ViewConfiguration.getLongPressTimeout());
                 }
                 invalidate();
                 return true;
@@ -204,7 +190,6 @@ final class QuickAppRail extends View {
     private void followFinger(float x, float y) {
         float dx = x - downX, dy = y - downY;
         if (!scrolling && Math.max(Math.abs(dx), Math.abs(dy)) > touchSlop && activeIndex >= 0) {
-            removeCallbacks(longPress);
             activeIndex = -1;
             invalidate();
         }
@@ -244,13 +229,6 @@ final class QuickAppRail extends View {
         setOffset(scrollOffset);
     }
 
-    private void openAppPicker() {
-        if (!this.down || this.scrolling || this.editing || this.activeIndex < 0) return;
-        this.editing = true;
-        this.activeIndex = -1;
-        performLongClick();
-        invalidate();
-    }
 
     private void launchActive() {
         if (this.activeIndex >= 0 && this.activeIndex < this.apps.size() && this.listener != null) {
@@ -292,7 +270,6 @@ final class QuickAppRail extends View {
     }
 
     private void resetTouch() {
-        removeCallbacks(longPress);
         if (scrolling && getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
         if (velocity != null) {
             velocity.recycle();
@@ -312,7 +289,6 @@ final class QuickAppRail extends View {
     }
 
     @Override protected void onDetachedFromWindow() {
-        removeCallbacks(longPress);
         ++stackGeneration;
         if (stackAnimator != null) stackAnimator.cancel();
         resetTouch();

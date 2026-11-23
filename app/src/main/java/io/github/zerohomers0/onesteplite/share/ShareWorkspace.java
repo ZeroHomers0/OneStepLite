@@ -82,10 +82,9 @@ final class ShareWorkspace extends FrameLayout {
         this.hint = hint;
         history=new ClipboardHistory(context);
         capture=new SourceCaptureController(this,()->ready.getAsBoolean() && !dragging,bounds);
-        panel = new ContentPanel(this, this::editTargets, bounds,history,()->capture.open());
+        panel = new ContentPanel(this, bounds,history,()->capture.open());
         content = new IconButton(context, IconButton.CONTENT, "内容：近期图片、文件和剪贴板");
         content.setTooltipText("近期图片、文件和剪贴板");
-        content.setOnLongClickListener(v->{if(!ready.getAsBoolean() || dragging)return false;editTargets();return true;});
         content.setOnClickListener(v -> {
             if (!ready.getAsBoolean() || dragging) return;
             try { panel.open(); }

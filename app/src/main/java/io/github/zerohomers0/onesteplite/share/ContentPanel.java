@@ -29,7 +29,6 @@ import java.util.concurrent.Executors;
 final class ContentPanel {
     private final Context context;
     private final View anchor;
-    private final Runnable configure;
     private final Runnable capture;
     private final java.util.function.Supplier<android.graphics.Rect> bounds;
     private static final ExecutorService WORKER = Executors.newSingleThreadExecutor();
@@ -54,11 +53,10 @@ final class ContentPanel {
     private ModalIslandLease island;
     private final java.util.ArrayList<TextView> tabButtons = new java.util.ArrayList<>();
 
-    ContentPanel(View anchor, Runnable configure, java.util.function.Supplier<android.graphics.Rect> bounds,
+    ContentPanel(View anchor, java.util.function.Supplier<android.graphics.Rect> bounds,
             ClipboardHistory history,Runnable capture) {
         this.anchor = anchor;
         context = anchor.getContext();
-        this.configure = configure;
         this.capture=capture;
         this.bounds = bounds;
         this.history = history;
@@ -84,13 +82,9 @@ final class ContentPanel {
         tabButtons.clear();tabButtons.addAll(shell.tabs);
         scroll=shell.scroll;grid=shell.grid;
         panel.addView(actions(themed),new LinearLayout.LayoutParams(-1,dp(50)));
-        LinearLayout secondary=new LinearLayout(themed);
         TextView extract=label("截取主窗图片");extract.setTextSize(12);
-        extract.setOnClickListener(v->{close();capture.run();});secondary.addView(extract,new LinearLayout.LayoutParams(0,dp(44),1));
-        TextView edit = label("管理分享入口  ›");edit.setTextSize(12);
-        edit.setTextColor(HyperOsStyle.textSecondary(themed));
-        edit.setOnClickListener(v -> { close(); configure.run(); });
-        secondary.addView(edit,new LinearLayout.LayoutParams(0,dp(44),1));panel.addView(secondary);
+        extract.setOnClickListener(v->{close();capture.run();});
+        panel.addView(extract,new LinearLayout.LayoutParams(-1,dp(44)));
         dialog.setContentView(panel);
         final Dialog opened = dialog;
         dialog.setOnDismissListener(ignored -> {
@@ -265,8 +259,7 @@ final class ContentPanel {
         view.setOnClickListener(v->{
             if(selecting) {
                 if(!selection.toggle(tab,entry.key))message("一次最多选择32项");refreshSelection();
-            } else if(tab==1)message("长按文件拖曳分享，可点“多选”批量选择");
-            else preview(entry);
+            } else if(tab!=1)preview(entry);
         });
         view.setOnLongClickListener(v->beginEntry(v,entry));
         GridLayout.LayoutParams params=new GridLayout.LayoutParams(
@@ -414,7 +407,7 @@ final class ContentPanel {
                 String key="text:"+record.text;if(entries.containsKey(key))continue;
                 addEntry(new ContentEntry(key,(record.pinned?"已固定 · ":"")+record.text,"text/plain",record.text,null,null));
             }
-            if(entries.isEmpty())grid.addView(label("当前剪贴板为空、敏感或不可读取；历史仅在启用后记录"));
+            if(entries.isEmpty())grid.addView(label("暂无剪贴板内容"));
             restorePosition(generation,CurrentUser.id());
         } catch (RuntimeException unavailable) { grid.addView(label("无法读取当前剪贴板")); }
     }

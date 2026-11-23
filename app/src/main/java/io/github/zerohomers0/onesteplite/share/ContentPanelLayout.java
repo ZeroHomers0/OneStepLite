@@ -19,7 +19,6 @@ final class ContentPanelLayout extends LinearLayout {
     final List<TextView> tabs=new ArrayList<>();
     final ScrollView scroll;
     final GridLayout grid;
-    final TextView scope;
     ContentPanelLayout(Context context,IntConsumer select) {
         super(context);setOrientation(VERTICAL);WorkspacePopupStyle.decorate(this,null);
         LinearLayout header=new LinearLayout(context);
@@ -35,9 +34,8 @@ final class ContentPanelLayout extends LinearLayout {
             LayoutParams cell=new LayoutParams(0,-2,1);header.addView(tab,cell);
         }
         addView(header);
-        scope=new TextView(context);scope.setTextSize(11);scope.setTextColor(HyperOsStyle.textSecondary(context));
-        scope.setPadding(dp(4),dp(10),dp(4),dp(10));addView(scope);
         scroll=new ScrollView(context);scroll.setFillViewport(true);
+        scroll.setPadding(0,dp(12),0,0);scroll.setClipToPadding(false);
         grid=new GridLayout(context);grid.setColumnCount(3);scroll.addView(grid);
         addView(scroll,new LayoutParams(-1,0,1));
     }
@@ -52,7 +50,6 @@ final class ContentPanelLayout extends LinearLayout {
             tabs.get(i).setTypeface(Typeface.DEFAULT,i==page?Typeface.BOLD:Typeface.NORMAL);
             tabs.get(i).setTextColor(i==page?HyperOsStyle.CONTROL_ACCENT:HyperOsStyle.textSecondary(getContext()));
         }
-        scope.setText(page==1?"最近添加 · 长按拖曳，可多选":"点击预览 · 长按拖曳到应用或分享入口");
     }
     private int dp(int value){return Math.round(HyperOsStyle.dp(getContext(),value));}
 }
