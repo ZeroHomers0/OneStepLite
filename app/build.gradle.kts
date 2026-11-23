@@ -7,12 +7,22 @@ plugins {
 
 // version.json stays the single source of truth: build.ps1 reads it, and the
 // runtime marker asserted by both build paths lives there too.
-val versionFile = rootProject.file("version.json")
-val versionInfo = JsonSlurper().parse(versionFile) as Map<*, *>
+val versionFile = rootProject.layout.projectDirectory.file("version.json")
+val versionInfo = JsonSlurper().parseText(providers.fileContents(versionFile).asText.get()) as Map<*, *>
 val appVersionName = versionInfo["name"] as String
 val appVersionCode = (versionInfo["code"] as Number).toInt()
+val identitySources = layout.buildDirectory.dir("generated/buildIdentity")
+val generateBuildIdentity by tasks.registering(Exec::class) {
+    inputs.file(versionFile)
+    inputs.file(rootProject.file("tools/generate_build_identity.py"))
+    outputs.dir(identitySources)
+    val python = if (System.getProperty("os.name").lowercase().contains("windows")) "python" else "python3"
+    commandLine(python, rootProject.file("tools/generate_build_identity.py").absolutePath,
+        "--version", versionFile.asFile.absolutePath, "--output", identitySources.get().asFile.absolutePath)
+}
 
 android {
+    sourceSets.getByName("main").java.srcDir(identitySources.get().asFile)
     namespace = "io.github.zerohomers0.onesteplite"
     compileSdk = 37
 
@@ -81,6 +91,8 @@ android {
         }
     }
 }
+
+tasks.named("preBuild") { dependsOn(generateBuildIdentity) }
 
 dependencies {
     // Provided by the Xposed framework at runtime; never packaged into the APK.

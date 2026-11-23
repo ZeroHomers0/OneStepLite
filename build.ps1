@@ -2,7 +2,7 @@ param(
     [string]$SdkPath = $env:ANDROID_HOME,
     [string]$JavaHome = $env:JAVA_HOME,
     [string]$NdkVersion = '28.2.13676358',
-    [string]$BuildToolsVersion = '37.0.0',
+    [string]$BuildToolsVersion = '36.0.0',
     [string]$KeyStore = $env:ONESTEPLITE_KEYSTORE,
     [string]$KeyAlias = $env:ONESTEPLITE_KEY_ALIAS,
     [string]$Python = 'python',
@@ -16,7 +16,7 @@ if (-not $SdkPath) { $SdkPath = $env:ANDROID_SDK_ROOT }
 if (-not $SdkPath -or -not $JavaHome) { throw 'Set ANDROID_HOME and JAVA_HOME, or pass -SdkPath and -JavaHome.' }
 $javaBin = Join-Path $JavaHome 'bin'
 $bt = Join-Path $SdkPath "build-tools\$BuildToolsVersion"
-$android = Join-Path $SdkPath 'platforms\android-34\android.jar'
+$android = Join-Path $SdkPath 'platforms\android-37.0\android.jar'
 $xposed = Join-Path $root 'libs\xposed-api-82.jar'
 $version = Get-Content -LiteralPath (Join-Path $root 'version.json') -Raw | ConvertFrom-Json
 $out = Join-Path $root 'build'
@@ -46,9 +46,9 @@ if ($recommendedScope.Count -ne 1 -or
     $recommendedScope[0].GetAttribute('value',$ns) -cne 'android;com.android.systemui;com.android.settings') {
     throw 'Recommended scope must contain system framework, SystemUI and the Settings entry host.'
 }
-$entry = Get-Content -LiteralPath (Join-Path $src 'java\io\github\zerohomers0\onesteplite\HostEntry.java') -Raw
-# The marker is declared once as RUNTIME_MARKER and referenced by the three attach logs.
-if ([regex]::Matches($entry,[regex]::Escape($version.runtimeMarker)).Count -ne 1) { throw 'Runtime markers mismatch.' }
+$identitySources = Join-Path $out 'generated\buildIdentity'
+& $Python -X utf8 (Join-Path $root 'tools\generate_build_identity.py') --version (Join-Path $root 'version.json') --output $identitySources
+if ($LASTEXITCODE -ne 0) { throw 'Build identity generation failed.' }
 # Deleted source classes must never survive in the next APK.
 $classOutput = [IO.Path]::GetFullPath((Join-Path $out 'classes'))
 $expectedClassOutput = [IO.Path]::GetFullPath((Join-Path $root 'build\classes'))
@@ -61,6 +61,7 @@ $env:ONESTEPLITE_ANDROID_JAR = $android
 $env:ONESTEPLITE_CLASSES = Join-Path $out 'classes'
 foreach ($tool in @('java','javac','javap','jar')) { Set-Item -Path "env:ONESTEPLITE_$($tool.ToUpperInvariant())" -Value (Join-Path $javaBin "$tool.exe") }
 $sources = @(Get-ChildItem -LiteralPath (Join-Path $src 'java') -Recurse -Filter '*.java' | ForEach-Object FullName)
+$sources += Join-Path $identitySources 'io\github\zerohomers0\onesteplite\BuildIdentity.java'
 & (Join-Path $javaBin 'javac.exe') -encoding UTF-8 -nowarn --release 17 -classpath "$android;$xposed" -d $env:ONESTEPLITE_CLASSES @sources
 if ($LASTEXITCODE -ne 0) { throw 'Full Java source compilation failed.' }
 $clang = Join-Path $SdkPath "ndk\$NdkVersion\toolchains\llvm\prebuilt\windows-x86_64\bin\clang++.exe"
@@ -77,7 +78,7 @@ $base = Join-Path $out 'base.apk'
 # The licence bundle ships inside app/src/main/assets and reaches the APK through
 # aapt2 -A, so nothing is staged here; staging a second copy would put duplicate
 # entries in the archive.
-& (Join-Path $bt 'aapt2.exe') link -o 'build\base.apk' -I $android --manifest 'app\src\main\AndroidManifest.xml' -A 'app\src\main\assets' --min-sdk-version 34 --target-sdk-version 37 'build\resources.zip'
+& (Join-Path $bt 'aapt2.exe') link -o 'build\base.apk' -I $android --manifest 'app\src\main\AndroidManifest.xml' -A 'app\src\main\assets' --min-sdk-version 34 --target-sdk-version 37 --version-code $version.code --version-name $version.name 'build\resources.zip'
 if ($LASTEXITCODE -ne 0) { throw 'Resource linking failed.' }
 $jar = Join-Path $out 'classes.jar'
 & (Join-Path $javaBin 'jar.exe') --create --file $jar -C $env:ONESTEPLITE_CLASSES .

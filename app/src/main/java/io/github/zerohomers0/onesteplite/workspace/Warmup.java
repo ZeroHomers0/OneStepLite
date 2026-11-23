@@ -51,6 +51,11 @@ final class Warmup {
 
     private Warmup() {}
 
+    static void prepareTaskViews(Context context, java.util.concurrent.Executor executor, Object factory) {
+        TaskViewWarmup.configure(context, executor, factory);
+        schedule(context, 800L);
+    }
+
     /** Install at SystemUIService.onCreate; first work waits 12s and for user unlock. */
     static void start(Context context, ClassLoader classLoader) {
         if (context == null) return;
@@ -65,6 +70,7 @@ final class Warmup {
                     String action = intent.getAction();
                     if (USER_SWITCHED.equals(action) || Intent.ACTION_WALLPAPER_CHANGED.equals(action))
                         invalidate();
+                    if (USER_SWITCHED.equals(action)) MAIN.post(TaskViewWarmup::userChanged);
                     schedule(context, 800L);
                 }
             };
@@ -146,6 +152,7 @@ final class Warmup {
             Context context = userContext(base, user);
             UserManager userManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
             if (userManager == null || !userManager.isUserUnlocked()) return;
+            MAIN.post(TaskViewWarmup::prepare);
             long request;
             boolean needApps, needWallpaper;
             synchronized (LOCK) {

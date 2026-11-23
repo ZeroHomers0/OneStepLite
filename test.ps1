@@ -15,6 +15,10 @@ foreach($tool in @('java','javac','javap','jar')) { Set-Item -Path "env:ONESTEPL
 $out=Join-Path $root 'build\tests'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $production=@(Get-ChildItem -LiteralPath $sources -Recurse -Filter '*.java' | ForEach-Object FullName)
+$identitySources=Join-Path $root 'build\generated\buildIdentity'
+& $Python -X utf8 (Join-Path $root 'tools\generate_build_identity.py') --version (Join-Path $root 'version.json') --output $identitySources
+if($LASTEXITCODE -ne 0){throw 'Build identity generation failed.'}
+$production += Join-Path $identitySources 'io\github\zerohomers0\onesteplite\BuildIdentity.java'
 New-Item -ItemType Directory -Force -Path $classes | Out-Null
 & (Join-Path $jdk 'javac.exe') -encoding UTF-8 -nowarn --release 17 -cp "$android;$(Join-Path $root 'libs\xposed-api-82.jar')" -d $classes @production
 if($LASTEXITCODE -ne 0){throw 'Production compilation failed.'}

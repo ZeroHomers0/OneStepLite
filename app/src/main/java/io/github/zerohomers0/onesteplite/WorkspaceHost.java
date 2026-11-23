@@ -4375,6 +4375,11 @@ public final class WorkspaceHost {
             return;
         }
         Slot owner = slots[index];
+        Object prepared = TaskViewWarmup.take(ctx, factory);
+        if (prepared != null) {
+            main.post(() -> onTaskViewCreated(owner, prepared, true));
+            return;
+        }
         ShellCompat.createTaskView(factory, ctx, executor, taskView ->
                 main.post(() -> onTaskViewCreated(owner, taskView, true)));
     }

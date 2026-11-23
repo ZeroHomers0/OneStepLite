@@ -45,8 +45,8 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     private static final String TAG = Tags.PROBE;
 
-    /** Build identity logged by every injected process; build.ps1 asserts it appears once. */
-    private static final String RUNTIME_MARKER = "build=1.0.4 one-step-header-v2 fixed-layout-actions-v1 rounded-workspace-v1 no-media-v1 lock-entry-hold-v2 unlock-commit-gate-v2 opaque-cell-entry-v2 wide-video-modes-v1 workspace-style-recents-v1 square-overlay-video-v2 video-only-dock-v1 theme-clock-v2 side-memory-v1 unlock-single-owner-v3 side-landscape-v3-wct-snapshot side-switch-origin-v2 clock-fit-v3 video-frost-controls-v2 sleep-parent-hold-v4 lock-deferred-exit-v5 ===";
+    /** Generated from version.json by both build paths. */
+    private static final String RUNTIME_MARKER = BuildIdentity.RUNTIME_MARKER;
     private static final String SYSTEMUI = Packages.SYSTEM_UI;
     private static final String DESKTOP_ICON_LAUNCH_ACTION = Actions.DESKTOP_ICON_LAUNCH;
     private static final long LAUNCH_DELAY_MS = 12_000L;   // 等开机稳定
@@ -4115,6 +4115,7 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     /** v0.7.0：角部热区 + 广播触发；首次触发再启动宿主，之后切换显示。 */
     private void installTriggers() {
+        Warmup.prepareTaskViews(sContext, sShellExecutor, sTaskViewFactory);
         final Runnable toggle = new Runnable() {
             @Override
             public void run() {
