@@ -75,7 +75,7 @@ final class ContentPanel {
                 .createWindowContext(WindowTypes.SYSTEM_UI_DIALOG, null);
         Context themed=new android.view.ContextThemeWrapper(windowContext,HyperOsStyle.dark(context)
                 ?android.R.style.Theme_Material_Dialog_Alert:android.R.style.Theme_Material_Light_Dialog_Alert);
-        dialog = new Dialog(themed);
+        dialog = new WorkspaceDialog(themed,this::close);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         shell=new ContentPanelLayout(themed,selected->{
             selection.position(tab,scroll.getScrollY());tab=selected;load();
@@ -102,7 +102,8 @@ final class ContentPanel {
         WindowManager.LayoutParams attrs = window.getAttributes();
         attrs.setTitle("OneStepLiteContentPanel");
         attrs.gravity = Gravity.TOP | Gravity.LEFT;
-        attrs.flags|=WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+        attrs.flags|=WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                |WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
         int[] location = new int[2];
         anchor.getLocationOnScreen(location);
         android.graphics.Rect main = bounds.get();
@@ -156,11 +157,7 @@ final class ContentPanel {
     // Injected SystemUI widgets use the project's Chinese-only workspace copy.
     @android.annotation.SuppressLint("SetTextI18n")
     private void historyOptions() {
-        android.widget.Switch toggle=new android.widget.Switch(context);
-        toggle.setText("记录工作区内复制的文字（保留7天，最多64条）");
-        toggle.setTextColor(HyperOsStyle.textPrimary(context));toggle.setChecked(history.enabled());
-        toggle.setOnCheckedChangeListener((button,enabled)->history.enable(enabled));
-        showPreview(toggle);
+        showPreview(new ClipboardOptionsPane(context,history.enabled(),history::enable,this::closePreview));
     }
 
 
@@ -229,7 +226,8 @@ final class ContentPanel {
                 String mime = cursor.getString(1);
                 if(hidden.contains(uri.toString()))continue;
                 Bitmap thumbnail;
-                try { thumbnail = context.getContentResolver().loadThumbnail(uri, new Size(160,160), signal); }
+                try {int side=Math.max(160,Math.min(512,imageSize));
+                    thumbnail = context.getContentResolver().loadThumbnail(uri, new Size(side,side), signal); }
                 catch (Exception unavailable) { continue; }
                 anchor.post(() -> {
                     if (!valid(token, user)) { thumbnail.recycle(); return; }
@@ -358,7 +356,13 @@ final class ContentPanel {
         final int token=generation;
         WORKER.execute(()->{
             try {
-                Bitmap bitmap=context.getContentResolver().loadThumbnail(entry.uri,new Size(1024,1024),null);
+                Bitmap bitmap=android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(
+                        context.getContentResolver(),entry.uri),(decoder,info,input)->{
+                    int width=info.getSize().getWidth(),height=info.getSize().getHeight();
+                    float scale=Math.min(1f,2048f/Math.max(width,height));
+                    decoder.setTargetSize(Math.max(1,Math.round(width*scale)),Math.max(1,Math.round(height*scale)));
+                    decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE);
+                });
                 anchor.post(()->{
                     if(preview==window && token==generation && window!=null && window.isShowing())image.setImageBitmap(bitmap);
                     else bitmap.recycle();
@@ -382,12 +386,13 @@ final class ContentPanel {
     private void showPreview(View content) {
         closePreview();
         if(dialog==null)return;
-        preview=new Dialog(dialog.getContext());preview.setContentView(content);
+        preview=new WorkspaceDialog(dialog.getContext(),this::close);preview.setContentView(content);
         final Dialog opened = preview;
         preview.setOnDismissListener(ignored -> { if (preview == opened) closePreview(); });
         Window window=preview.getWindow();if(window==null){closePreview();return;}
         window.setType(WindowTypes.SYSTEM_UI_DIALOG);
         WindowManager.LayoutParams attrs=window.getAttributes();attrs.setTitle("OneStepLiteContentPanel");
+        attrs.flags|=WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
         HostWindowPolicy.configure(attrs);window.setAttributes(attrs);
         window.setBackgroundDrawableResource(android.R.color.transparent);preview.show();WorkspacePopupStyle.size(window,context);
     }

@@ -81,6 +81,8 @@ public class HostEntry implements IXposedHookLoadPackage {
                     ()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
             EditorPasteCompat.install(lpparam.classLoader,()->sDisplayContent,
                     ()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
+            NativeTextDragCard.install(lpparam.classLoader,()->sDisplayContent,
+                    ()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
             NativeMultiWindowUnlock.install(lpparam.classLoader, true);
             hookSystemServer(lpparam.classLoader);
             return;

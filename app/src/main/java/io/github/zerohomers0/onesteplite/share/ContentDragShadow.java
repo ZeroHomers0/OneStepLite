@@ -23,6 +23,10 @@ final class ContentDragShadow extends View.DragShadowBuilder {
     ContentDragShadow(View view,int count) {
         this(view,count,null);
     }
+    ContentDragShadow(String text,float density) {
+        super();count=1;unit=density;width=128*unit;height=92*unit;top=12*unit;
+        textContent=true;caption=text.replace('\n',' ');thumbnail=null;paint.setFilterBitmap(true);
+    }
     ContentDragShadow(View view,int count,CharSequence selected) {
         super(view);this.count=count;unit=view.getResources().getDisplayMetrics().density;
         boolean image=view instanceof ImageView;

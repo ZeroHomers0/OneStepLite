@@ -148,8 +148,9 @@ final class SourceCaptureController implements AutoCloseable {
         LinearLayout actions=new LinearLayout(dialog.getContext());button(actions,"关闭",this::close);body.addView(actions,new LinearLayout.LayoutParams(-1,dp(48)));
         image.setOnLongClickListener(view->{
             try {
-                dragging=view.startDragAndDrop(new ClipData("主窗图片",new String[]{"image/jpeg"},new ClipData.Item(uri)),
-                        new ContentDragShadow(view,1),null,View.DRAG_FLAG_GLOBAL|View.DRAG_FLAG_GLOBAL_URI_READ);
+                ClipData clip=new ClipData("主窗图片",new String[]{"image/jpeg"},new ClipData.Item(uri));
+                ContentDragShadow shadow=new ContentDragShadow(view,1);shadow.mark(clip);
+                dragging=view.startDragAndDrop(clip,shadow,null,View.DRAG_FLAG_GLOBAL|View.DRAG_FLAG_GLOBAL_URI_READ);
                 if(dragging && dialog!=null && dialog.getWindow()!=null){dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
                     dialog.getWindow().getDecorView().setAlpha(0);}return dragging;
             } catch(RuntimeException unavailable){message("图片暂时无法拖曳");return false;}
