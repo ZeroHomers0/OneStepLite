@@ -313,6 +313,7 @@ final class ShareWorkspace extends FrameLayout {
                     });}catch(RuntimeException rejected){grant.close();finishDelivery(token);message("目标窗口暂时无法分享");}
                 });
             } catch(RuntimeException failure) {
+                android.util.Log.w(Tags.PROBE,"external drop preparation failed",failure);
                 grant.close();handler.post(()->{if(token==generation)message("外部内容权限交接失败");finishDelivery(token);});
             }
         });

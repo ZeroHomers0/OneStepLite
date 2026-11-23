@@ -23,7 +23,8 @@ final class RecentFilesSource {
         args.putStringArray(ContentResolver.QUERY_ARG_SORT_COLUMNS,new String[]{MediaStore.Files.FileColumns.DATE_ADDED,MediaStore.Files.FileColumns._ID});
         args.putInt(ContentResolver.QUERY_ARG_SORT_DIRECTION,ContentResolver.QUERY_SORT_DIRECTION_DESCENDING);
         args.putString(ContentResolver.QUERY_ARG_SQL_SELECTION,
-                "is_pending=0 AND is_trashed=0 AND media_type<>1");
+                "is_pending=0 AND is_trashed=0 AND media_type<>1 AND format<>12289");
+        args.putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER,"date_added DESC, _id DESC");
         args.putInt(ContentResolver.QUERY_ARG_LIMIT,RecentFilePolicy.LIMIT);
         List<ContentEntry> result=new ArrayList<>();
         try(Cursor cursor=context.getContentResolver().query(collection,columns,args,signal)) {

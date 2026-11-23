@@ -8,7 +8,10 @@
   </queries>
   <application android:hasCode="true" android:extractNativeLibs="false" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:label="OneStepLite">
     <provider android:name=".WorkspaceSettingsProvider" android:authorities="io.github.zerohomers0.onesteplite.settings" android:directBootAware="true" android:exported="true" />
-    <provider android:name=".ContentInboxProvider" android:authorities="io.github.zerohomers0.onesteplite.content" android:exported="true" android:grantUriPermissions="true" android:readPermission="io.github.zerohomers0.onesteplite.CONTENT_ACCESS" android:writePermission="io.github.zerohomers0.onesteplite.CONTENT_ACCESS" />
+    <provider android:name=".ContentInboxProvider" android:authorities="io.github.zerohomers0.onesteplite.content" android:exported="true" android:grantUriPermissions="true">
+      <!-- Allow acquiring the provider for UID-checked call(); file access still requires a URI grant. -->
+      <path-permission android:pathPrefix="/" android:readPermission="io.github.zerohomers0.onesteplite.CONTENT_ACCESS" android:writePermission="io.github.zerohomers0.onesteplite.CONTENT_ACCESS" />
+    </provider>
     <activity android:name=".ContentImportActivity" android:exported="true" android:label="分享到一步" android:theme="@android:style/Theme.Material.Light.NoActionBar">
       <intent-filter>
         <action android:name="android.intent.action.SEND" />
