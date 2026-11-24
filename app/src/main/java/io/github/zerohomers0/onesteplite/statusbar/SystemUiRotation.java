@@ -42,8 +42,6 @@ final class SystemUiRotation {
         int type = XposedHelpers.getIntField(attrs, "type");
         if (type == 2011 || type == 2012 || imeWindow(window)) return true;
         if (!Packages.SYSTEM_UI.equals(XposedHelpers.getObjectField(attrs, "packageName"))) return false;
-        if (type == WindowTypes.SYSTEM_UI_DIALOG && "OneStepLiteQuickAppPicker".contentEquals(
-                (CharSequence) XposedHelpers.callMethod(attrs, "getTitle"))) return false;
         return type == WindowTypes.STATUS_BAR || type == WindowTypes.GESTURE_NAVIGATION
                 || type == WindowTypes.NOTIFICATION_SHADE || type == WindowTypes.SYSTEM_DIALOG
                 || type == WindowTypes.KEYGUARD_SCRIM || type == WindowTypes.SYSTEM_UI_DIALOG

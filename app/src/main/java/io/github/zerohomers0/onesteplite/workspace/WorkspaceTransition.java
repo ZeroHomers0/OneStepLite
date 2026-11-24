@@ -11,11 +11,17 @@ import java.util.function.Consumer;
 final class WorkspaceTransition {
     private final TransitionSession session;
     private final ValueAnimator animator;
+    private long startTime;
 
     WorkspaceTransition(float from,float to,BooleanSupplier current,Consumer<Float> frame,Runnable complete) {
         session=new TransitionSession(current);
         animator=ValueAnimator.ofFloat(from,to);
-        animator.addUpdateListener(value->{if(session.active())frame.accept((Float)value.getAnimatedValue());});
+        animator.addUpdateListener(value->{
+            if(session.active()) {
+                float progress=WorkspaceMotionSpec.frameProgress(startTime,WorkspaceMotionSpec.DURATION_MS,value.getAnimatedFraction());
+                frame.accept(from+(to-from)*progress);
+            }
+        });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationCancel(Animator animation) {session.retire();}
             @Override public void onAnimationEnd(Animator animation) {
@@ -26,7 +32,7 @@ final class WorkspaceTransition {
     }
 
     ValueAnimator animator() {return animator;}
-    void start(long start) {WorkspaceMotionSpec.start(animator,start,WorkspaceMotionSpec.DURATION_MS);}
+    void start(long start) {startTime=start;WorkspaceMotionSpec.start(animator,start,WorkspaceMotionSpec.DURATION_MS);}
 
     static RectF mainHole(float progress,int width,int height,float targetScale,
             float targetX,float targetY,float movingX,RectF out) {
@@ -35,7 +41,9 @@ final class WorkspaceTransition {
         out.set(x,y,x+width*scale,y+height*scale);return out;
     }
 
-    static float sideOffset(boolean mainOnRight,float targetX,float targetWidth,float left,float right) {
-        return mainOnRight?left-targetX:right-(targetX+targetWidth);
+    static float sideOffset(boolean mainOnRight,float targetX,float targetWidth,float left,float right,
+            float remainingGap,float progress) {
+        float inset=remainingGap*(1f-progress);
+        return mainOnRight?left-targetX+inset:right-(targetX+targetWidth)-inset;
     }
 }

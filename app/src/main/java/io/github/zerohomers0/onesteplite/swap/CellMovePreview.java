@@ -39,7 +39,6 @@ final class CellMovePreview {
     private final List<ImageView> moving = new ArrayList<>();
     private final List<Move> moves;
     private ValueAnimator animator;
-    private Runnable onClosed;
     private boolean closed;
 
     CellMovePreview(FrameLayout parent, Bitmap snapshot, Rect snapshotRect,
@@ -112,11 +111,6 @@ final class CellMovePreview {
         overlay.postOnAnimation(animator::start);
     }
 
-    void setOnClosed(Runnable callback) {
-        onClosed = callback;
-        if (closed && onClosed != null) onClosed.run();
-    }
-
     private void reveal() {
         // Keep the settled captured frame visible while the real task Surface catches up.
         overlay.postOnAnimation(() -> overlay.postOnAnimation(() -> {
@@ -148,6 +142,5 @@ final class CellMovePreview {
             for (ImageView image : moving) image.setImageDrawable(null);
             if (!snapshot.isRecycled()) snapshot.recycle();
         }, 120L);
-        if (onClosed != null) onClosed.run();
     }
 }

@@ -42,7 +42,6 @@ final class CornerSwipe {
         reset();
         return true;
     }
-    boolean isCandidate() { return candidate; }
     void reset() { candidate = false; }
     /** 起始角：1=左角，-1=右角（用于决定打开一步时主区在哪边）。 */
     int sign() { return sign; }

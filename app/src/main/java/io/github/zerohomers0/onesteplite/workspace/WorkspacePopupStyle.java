@@ -11,6 +11,7 @@ import android.view.Window;
 
 /** Shared dimensions and material for workspace content and shortcut dialogs. */
 final class WorkspacePopupStyle {
+    static final int TITLE_SP=16, BODY_SP=14, SUPPORT_SP=12, META_SP=11;
     private static final int ACTION_HEIGHT_DP=44;
     private static final int ACTION_RADIUS_DP=10;
     private WorkspacePopupStyle() {}
@@ -71,11 +72,18 @@ final class WorkspacePopupStyle {
         button.setOnClickListener(v->action.run());return button;
     }
     static void styleAction(android.widget.TextView button,boolean primary) {
-        Context context=button.getContext();button.setTextSize(12);button.setGravity(Gravity.CENTER);
+        Context context=button.getContext();button.setTextSize(BODY_SP);button.setGravity(Gravity.CENTER);
         button.setSingleLine(true);button.setIncludeFontPadding(false);button.setEllipsize(android.text.TextUtils.TruncateAt.END);
         button.setTextColor(primary?android.graphics.Color.WHITE:HyperOsStyle.textPrimary(context));
         button.setBackground(HyperOsStyle.controlButton(context,primary,ACTION_RADIUS_DP));
         button.setMinHeight(dp(context,ACTION_HEIGHT_DP));button.setPadding(dp(context,8),0,dp(context,8),0);
+    }
+
+    static void styleSearch(android.widget.EditText search) {
+        Context context=search.getContext();
+        search.setTextSize(BODY_SP);search.setSingleLine();
+        search.setTextColor(HyperOsStyle.textPrimary(context));
+        search.setHintTextColor(HyperOsStyle.textSecondary(context));
     }
 
     static android.widget.LinearLayout.LayoutParams actionCell(Context context) {
@@ -88,8 +96,9 @@ final class WorkspacePopupStyle {
         row.setGravity(Gravity.CENTER_VERTICAL);
         android.widget.TextView previous=action(context,"‹",false,back);previous.setTextSize(24);
         previous.setContentDescription("返回");row.addView(previous,new android.widget.LinearLayout.LayoutParams(dp(context,ACTION_HEIGHT_DP),dp(context,ACTION_HEIGHT_DP)));
-        android.widget.TextView label=new android.widget.TextView(context);label.setText(title);label.setTextSize(15);
+        android.widget.TextView label=new android.widget.TextView(context);label.setText(title);label.setTextSize(TITLE_SP);
         label.setTypeface(android.graphics.Typeface.DEFAULT,android.graphics.Typeface.BOLD);label.setTextColor(HyperOsStyle.textPrimary(context));
+        label.setSingleLine(true);label.setEllipsize(android.text.TextUtils.TruncateAt.END);label.setAccessibilityHeading(true);
         label.setPadding(dp(context,12),0,0,0);row.addView(label,new android.widget.LinearLayout.LayoutParams(0,-2,1));
         android.widget.LinearLayout.LayoutParams bounds=new android.widget.LinearLayout.LayoutParams(-1,dp(context,44));
         bounds.bottomMargin=dp(context,8);body.addView(row,0,bounds);

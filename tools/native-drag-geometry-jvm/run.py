@@ -34,7 +34,7 @@ class Tags{static final String PROBE="test";}
 public class NativeGeometryRegression{
 public static class State{public Object mLocalWin=new Object();public SurfaceControl mSurfaceControl=new SurfaceControl();public float mThumbOffsetY=107,mCurrentX=500,mCurrentY=870;public Set<Object> mNotifiedWindows=new HashSet<>();public Wm mService=new Wm();public android.content.ClipData mData;public int mFlags,ended;public void endDragLocked(boolean consumed,boolean relinquish){if(consumed||relinquish)throw new AssertionError("cancel must not report success");ended++;}}
 public static class RomState extends State{public float mCurrentDisplayX=500,mCurrentDisplayY=870;}
-public static class Wm{public Map<Object,Object> mWindowMap=new HashMap<>();public Object mGlobalLock=new Object();public Handler mH=new Handler();public android.content.Context mContext=new android.content.Context();}
+public static class Wm{public Map<Object,Object> mWindowMap=new HashMap<>(),mInputToWindowMap=new HashMap<>();public Object mGlobalLock=new Object();public Handler mH=new Handler();public android.content.Context mContext=new android.content.Context();}
 public static class Target{public Object mInputChannelToken=new Object();public int mOwnerUid=12345;public String pkg="com.tencent.mobileqq";public String getOwningPackage(){return pkg;}public float translateToWindowX(float x){return x*.75f-20;}public float translateToWindowY(float y){return y*.75f-200;}}
 public static class Display{public Wm mWmService=new Wm();public Object mInputMethodWindow;public Target target=new Target();public Display(){target.pkg="other";}public Object getTouchableWinAtPointLocked(float x,float y){return y>=940&&y<1000?target:null;}}
 public static class Controller{public State mDragState=new State();}
@@ -85,6 +85,15 @@ state.mFlags=256;second.mOwnerUid=source.mOwnerUid;second.pkg="other";
 same=event(state,second.mInputChannelToken,0f,0f,500f,850f);
 XposedBridge.hooks.get("reportDropWindowLock").fire(same);
 check(same.result==null&&state.ended==2,"another package still receives its drag");
+second.pkg=source.pkg;state.mNotifiedWindows.clear();
+state.mService.mInputToWindowMap.put(second.mInputChannelToken,second);state.mData.mime="custom";
+same=event(state,second.mInputChannelToken,0f,0f,500f,850f);
+XposedBridge.hooks.get("reportDropWindowLockInner").fire(same);
+check(Boolean.FALSE.equals(same.result)&&state.ended==3,"HyperOS direct drop cancels QQ custom content in the same app");
+state.mData=null;
+same=event(state,second.mInputChannelToken,0f,0f,500f,850f);
+XposedBridge.hooks.get("reportDropWindowLockInner").fire(same);
+check(Boolean.FALSE.equals(same.result)&&state.ended==4,"QQ same-source native drag can carry private local state only");
 System.out.println("Production native drag geometry checks="+checks+" passed (WM doubles; device pending)");}}
 '''
 }

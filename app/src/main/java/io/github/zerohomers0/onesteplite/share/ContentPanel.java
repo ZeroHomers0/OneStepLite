@@ -266,11 +266,12 @@ final class ContentPanel {
         java.util.Set<String> hidden=new java.util.HashSet<>(preferences()
                 .getStringSet("hidden_"+page,java.util.Collections.emptySet()));
         if(!refresh)shell.status(page==1?"正在读取最近文件…":"正在读取近期图片…");
-        WORKER.execute(()->readMedia(token,user,page,signal,hidden,refresh));
+        boolean earlyImages=page==0 && !refresh && selection.position(page)==0;
+        WORKER.execute(()->readMedia(token,user,page,signal,hidden,refresh,earlyImages));
     }
 
     private void readMedia(int token,int user,int page,CancellationSignal signal,
-            java.util.Set<String> hidden,boolean refresh) {
+            java.util.Set<String> hidden,boolean refresh,boolean earlyImages) {
         java.util.List<ContentEntry> rows=new java.util.ArrayList<>();
         boolean unavailable=false;
         if(page==0)rows.addAll(inboxRows(token,page,hidden,signal));
@@ -281,10 +282,53 @@ final class ContentPanel {
         if(page==1 && !signal.isCanceled())rows.addAll(inboxRows(token,page,hidden,signal));
         if(signal.isCanceled()){releaseRows(rows);return;}
         rows.sort(java.util.Comparator.comparingLong((ContentEntry row)->row.addedAt).reversed());
+        if(earlyImages && !rows.isEmpty()){
+            publishImagePages(token,user,rows,signal,unavailable);return;
+        }
         deduplicateRows(rows,page==0,signal);
+        if(page==0)loadImageThumbnails(rows,signal);
         if(signal.isCanceled()){releaseRows(rows);return;}
         boolean denied=unavailable;
         if(!anchor.post(()->applyMedia(token,user,page,rows,refresh,denied)))releaseRows(rows);
+    }
+
+    private void publishImagePages(int token,int user,java.util.List<ContentEntry> rows,
+            CancellationSignal signal,boolean unavailable) {
+        java.util.Set<Uri> uris=new java.util.HashSet<>();
+        java.util.Set<String> digests=new java.util.HashSet<>();
+        int[] remaining={32*1024*1024};byte[] buffer=new byte[32*1024];
+        java.util.List<ContentEntry> batch=new java.util.ArrayList<>(12);
+        boolean first=true;
+        for(ContentEntry entry:rows){
+            if(signal.isCanceled())return;
+            if(!uniqueFile(entry,uris,digests,buffer,remaining,signal))continue;
+            batch.add(entry);
+            if(batch.size()<12)continue;
+            if(!publishImagePage(token,user,batch,signal,unavailable,first))return;
+            first=false;batch=new java.util.ArrayList<>(12);
+        }
+        if(first || !batch.isEmpty())publishImagePage(token,user,batch,signal,unavailable,first);
+    }
+
+    private boolean publishImagePage(int token,int user,java.util.List<ContentEntry> batch,
+            CancellationSignal signal,boolean unavailable,boolean first) {
+        loadImageThumbnails(batch,signal);
+        if(signal.isCanceled()){releaseRows(batch);return false;}
+        boolean posted=anchor.post(()->{
+            if(first)applyMedia(token,user,0,batch,false,unavailable);
+            else if(valid(token,user))for(ContentEntry entry:batch)addEntry(entry);
+            else releaseRows(batch);
+        });
+        if(!posted)releaseRows(batch);
+        return posted;
+    }
+
+    private void loadImageThumbnails(java.util.List<ContentEntry> rows,CancellationSignal signal) {
+        for(int i=0;i<rows.size() && !signal.isCanceled();i++){
+            ContentEntry entry=rows.get(i);
+            rows.set(i,new ContentEntry(entry.key,entry.label,entry.mime,entry.text,entry.uri,
+                    thumbnail(entry.uri,signal),entry.bytes,entry.addedAt,entry.originalUri));
+        }
     }
 
     private void applyMedia(int token,int user,int page,java.util.List<ContentEntry> rows,
@@ -320,9 +364,8 @@ final class ContentPanel {
                 Uri uri=ContentUris.withAppendedId(collection,cursor.getLong(0));
                 if(hidden.contains(uri.toString()))continue;
                 String mime=cursor.getString(1);
-                Bitmap thumbnail=thumbnail(uri,signal);
-                if(thumbnail!=null)rows.add(new ContentEntry(uri.toString(),"近期图片",mime==null?"image/*":mime,
-                        null,uri,thumbnail,cursor.isNull(3)?-1:cursor.getLong(3),cursor.getLong(2)*1000L));
+                rows.add(new ContentEntry(uri.toString(),"近期图片",mime==null?"image/*":mime,
+                        null,uri,null,cursor.isNull(3)?-1:cursor.getLong(3),cursor.getLong(2)*1000L));
             }
         }
     }
@@ -346,14 +389,17 @@ final class ContentPanel {
             if(signal!=null && signal.isCanceled())return;
             ContentEntry entry=iterator.next();
             boolean duplicate=entry.text!=null && !texts.add(entry.text);
-            if(entry.originalUri!=null && !duplicate)duplicate=!uris.add(mediaIdentity(entry.originalUri));
-            if(!duplicate && compareCopies && entry.bytes<8*1024*1024
-                    && entry.uri!=null && entry.uri.equals(entry.originalUri)) {
-                String digest=contentDigest(entry.uri,buffer,remaining,signal);
-                duplicate=digest!=null && !digests.add(digest);
-            }
+            if(!duplicate)duplicate=!uniqueFile(entry,uris,digests,buffer,remaining,signal);
             if(duplicate){iterator.remove();if(entry.thumbnail!=null)entry.thumbnail.recycle();}
         }
+    }
+
+    private boolean uniqueFile(ContentEntry entry,java.util.Set<Uri> uris,java.util.Set<String> digests,
+            byte[] buffer,int[] remaining,CancellationSignal signal) {
+        if(entry.originalUri!=null && !uris.add(mediaIdentity(entry.originalUri)))return false;
+        if(buffer==null || entry.bytes>=8*1024*1024 || entry.uri==null || !entry.uri.equals(entry.originalUri))return true;
+        String digest=contentDigest(entry.uri,buffer,remaining,signal);
+        return digest==null || digests.add(digest);
     }
 
     private Uri mediaIdentity(Uri uri) {
@@ -471,7 +517,7 @@ final class ContentPanel {
                 String key=text?"inbox:"+id:uri.toString();
                 if(hidden.contains(key))continue;
                 String label=text?row.getString("text"):row.optString("name","导入内容");
-                entries.add(new ContentEntry(key,label,mime,text?label:null,uri,image?thumbnail(uri,signal):null,
+                entries.add(new ContentEntry(key,label,mime,text?label:null,uri,null,
                         -1,row.optLong("time"),row.has("document_uri")?Uri.parse(row.getString("document_uri")):uri));
             }
         } catch(Exception unavailable) { /* The module inbox may not yet be installed on the device. */ }

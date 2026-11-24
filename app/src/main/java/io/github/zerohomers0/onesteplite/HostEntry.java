@@ -3893,7 +3893,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         animator.setInterpolator(zoomAnimInterpolator);
         animator.addUpdateListener(animation -> {
             if (sZoomAnimator != animator || sZoomTarget != target) return;
-            float fraction = (Float) animation.getAnimatedValue();
+            float fraction = WorkspaceMotionSpec.frameProgress(plan.startUptimeMs,plan.durationMs,animation.getAnimatedFraction());
             float[] state = ZoomAnimCommand.stateAt(fromScale, fromY, fromX, plan, fraction);
             sZoomFrameApply = true;
             try {

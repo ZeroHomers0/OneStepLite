@@ -55,7 +55,7 @@ public class HomeCompactRegression {
  static class Layout{boolean tabletLandscape;int[]cellBounds(int i){return new int[]{0,100+i*100,100,200+i*100};}}
  static class CellMovePreview {
   static class Move{Move(Rect a,Rect b,View c){}}
-  CellMovePreview(Root r,Bitmap b,Rect x,List<Move>m){}void close(){}void setOnClosed(Runnable r){}
+  CellMovePreview(Root r,Bitmap b,Rect x,List<Move>m){}void close(){}
  }
  static class Main{List<Runnable>queue=new ArrayList<>();void postDelayed(Runnable r,long d){queue.add(r);}void post(Runnable r){queue.add(r);}}
  int SLOT_COUNT=4,CELL_SLOT_COUNT=4,SLOT_TOP=4;final int SLOT_MAIN=0;Slot[]slots=new Slot[4];Root root=new Root();Layout layout=new Layout();

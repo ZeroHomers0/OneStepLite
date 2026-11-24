@@ -23,6 +23,7 @@ public final class WorkspaceSettingsProvider extends ContentProvider {
         if (!allowed) throw new SecurityException("Settings snapshots are restricted to OneStepLite and SystemUI");
         if("read_shortcuts".equals(method) || "write_shortcuts".equals(method)) {
             if(uid/100000!=Process.myUid()/100000)throw new SecurityException("Different shortcut user");
+            if("write_shortcuts".equals(method) && uid!=Process.myUid())throw new SecurityException("Only module settings can save shortcuts");
             return ShortcutSettingsStore.call(getContext(),method,arg,extras);
         }
         if (!WorkspaceSettingsStore.READ.equals(method)) throw new UnsupportedOperationException("Read only");

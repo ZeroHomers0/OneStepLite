@@ -199,10 +199,10 @@ final class WorkspaceSettingsPage extends FrameLayout {
 
     private LinearLayout optionLabels(String label,String detail) {
         LinearLayout labels=new LinearLayout(activity);labels.setOrientation(LinearLayout.VERTICAL);
-        TextView title=text(label,16,primary);title.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        TextView title=text(label,WorkspacePopupStyle.TITLE_SP,primary);title.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         labels.addView(title);
         if(detail!=null) {
-            TextView description=text(detail,12,secondary);
+            TextView description=text(detail,WorkspacePopupStyle.SUPPORT_SP,secondary);
             LinearLayout.LayoutParams bounds=new LinearLayout.LayoutParams(-1,-2);bounds.topMargin=dp(4);
             labels.addView(description,bounds);
         }
@@ -380,12 +380,25 @@ final class WorkspaceSettingsPage extends FrameLayout {
     }
 
     private void chooseTheme(int current) {
-        new android.app.AlertDialog.Builder(activity).setTitle("主题模式")
-                .setSingleChoiceItems(new String[]{"跟随系统","浅色","深色"},current,(dialog,choice)->{
-                    dialog.dismiss();
-                    if(choice!=current && persist(WorkspaceSettingsStore.read(activity).withThemeMode(choice)))
-                        activity.recreate();
-                }).setNegativeButton("取消",null).show();
+        android.app.Dialog dialog=new android.app.Dialog(activity);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        LinearLayout body=new LinearLayout(activity);body.setOrientation(LinearLayout.VERTICAL);
+        WorkspacePopupStyle.decorate(body,null);
+        WorkspacePopupStyle.heading(body,"主题模式",dialog::dismiss);
+        LinearLayout choices=card();
+        for(int mode=WorkspaceOptions.THEME_SYSTEM;mode<=WorkspaceOptions.THEME_DARK;mode++){
+            int choice=mode;
+            if(mode!=WorkspaceOptions.THEME_SYSTEM)divider(choices);
+            choiceOption(choices,WorkspaceOptions.themeLabel(mode),null,current==mode,true,()->{
+                dialog.dismiss();
+                if(choice!=current && persist(WorkspaceSettingsStore.read(activity).withThemeMode(choice)))
+                    activity.recreate();
+            });
+        }
+        body.addView(choices,new LinearLayout.LayoutParams(-1,-2));
+        dialog.setContentView(body);dialog.show();
+        android.view.Window window=dialog.getWindow();
+        if(window!=null){WorkspacePopupStyle.size(window,activity);window.setLayout(WorkspacePopupStyle.width(activity),-2);}
     }
 
     private void appDragDiagram() {

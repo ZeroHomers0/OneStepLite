@@ -30,7 +30,8 @@ public final class TextDragActivity extends Activity {
         LinearLayout body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);
         WorkspacePopupStyle.decorate(body,null);WorkspacePopupStyle.heading(body,"拖曳到一步",this::finish);
         int inset=HyperOsStyle.dp(this,8);
-        TextView text=new TextView(this);text.setText(value);text.setTextSize(14);text.setPadding(inset,inset,inset,inset);
+        TextView text=new TextView(this);text.setText(value);text.setTextSize(WorkspacePopupStyle.BODY_SP);
+        text.setPadding(inset,inset,inset,inset);
         text.setTextColor(HyperOsStyle.textPrimary(this));text.setContentDescription("选中文字，长按拖曳分享");
         text.setOnTouchListener((view,event)->{
             int action=event.getActionMasked();

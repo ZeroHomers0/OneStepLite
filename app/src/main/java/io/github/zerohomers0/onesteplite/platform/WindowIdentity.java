@@ -30,8 +30,7 @@ final class WindowIdentity {
                     || (attrs.flags & WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED) != 0) return false;
             String title = String.valueOf(attrs.getTitle());
             if (scope==2) {
-                if (!"OneStepLiteQuickAppPicker".equals(title)
-                        && !"OneStepLiteContentPanel".equals(title)
+                if (!"OneStepLiteContentPanel".equals(title)
                         && !"OneStepLitePortalSource".equals(title)) return false;
             } else if (!"WorkspaceHost".equals(title) && (scope!=1
                     || (!"OneStepLiteMirrorLayer".equals(title) && !"OneStepLiteTransition".equals(title)))) return false;

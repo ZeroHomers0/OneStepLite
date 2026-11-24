@@ -17,14 +17,13 @@ final class TopBar extends FrameLayout {
         void onSetMainSide(boolean right);
         void onExit();
         void onLaunch(QuickApp app);
-        boolean canCustomizeApps();
         /** Send the current main-window app up into the landscape task face. */
         default void onSendMainToTop() {}
         default void onTaskCellsCovered(boolean covered) {}
         default java.util.Set<String> openedAppPackages() { return java.util.Collections.emptySet(); }
         default void onContentShare(android.content.ComponentName target, Runnable launch) { launch.run(); }
         default Rect contentBounds() { return null; }
-        default boolean canShareContent(){return canCustomizeApps();}
+        default boolean canShareContent(){return false;}
         default boolean contentRailCovered(){return false;}
         default String contentHoverKey(String packageName){return null;}
         default void onContentHover(String key){}
@@ -35,7 +34,6 @@ final class TopBar extends FrameLayout {
     private final WorkspaceClock clock;
     private final QuickAppRail quickRail;
     private ShareWorkspace shareWorkspace;
-    private final QuickAppPicker appPicker = new QuickAppPicker();
     private List<QuickApp> availableApps;
     private Bitmap glassWallpaper;
     private int glassWidth, glassHeight, statusBarInset, tabletHeaderHeight;
@@ -79,20 +77,8 @@ final class TopBar extends FrameLayout {
         header.setSendMainToTopEnabled(false);
         addView(header, new LayoutParams(-1, 1));
         availableApps = new java.util.ArrayList<>(apps);
-        quickRail = new QuickAppRail(context, QuickAppPins.arrange(context, availableApps), new QuickAppRail.Listener() {
-            public void onLaunch(QuickApp app) { TopBar.this.listener.onLaunch(app); }
-            public void onCustomize() {
-                if (!TopBar.this.listener.canCustomizeApps()) return;
-                try {
-                    appPicker.show(getContext(), availableApps, glassWallpaper, glassWidth, glassHeight,
-                            () -> quickRail.setApps(QuickAppPins.arrange(getContext(), availableApps)));
-                } catch (RuntimeException unavailable) {
-                    appPicker.close();
-                    android.widget.Toast.makeText(getContext(), "暂时无法打开应用选择框",
-                            android.widget.Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
+        quickRail=new QuickAppRail(context,QuickAppPins.arrange(context,availableApps),
+                app->this.listener.onLaunch(app));
         addView(quickRail, new LayoutParams(-1, 1));
         shareWorkspace = new ShareWorkspace(context, quickRail,
                 () -> workspaceActive && this.listener.canShareContent(),
@@ -151,7 +137,7 @@ final class TopBar extends FrameLayout {
         availableApps = new java.util.ArrayList<>(apps);
         quickRail.setApps(QuickAppPins.arrange(getContext(), availableApps));
     }
-    void closeQuickAppPicker() { appPicker.close(); if (shareWorkspace != null) shareWorkspace.close(); }
+    void closeContentUi() { if (shareWorkspace != null) shareWorkspace.close(); }
     boolean onWindowContentDrag(android.view.DragEvent event, String targetPackage) {
         return shareWorkspace != null && shareWorkspace.onWindowDrag(event, targetPackage,
                 !isShown() || listener.contentRailCovered());
@@ -187,18 +173,16 @@ final class TopBar extends FrameLayout {
 
     @Override protected void onSizeChanged(int w,int h,int ow,int oh) {
         super.onSizeChanged(w,h,ow,oh);renderTabletTools();
-        if(ow>0&&(w!=ow||h!=oh))appPicker.close();
     }
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();requestOpenedAppsRefresh();
     }
     @Override protected void onDetachedFromWindow() {
-        removeCallbacks(refreshOpenedApps);appPicker.close();super.onDetachedFromWindow();
+        removeCallbacks(refreshOpenedApps);super.onDetachedFromWindow();
     }
     @Override protected void onVisibilityChanged(View view,int visibility) {
         super.onVisibilityChanged(view,visibility);
         if (refreshOpenedApps != null) requestOpenedAppsRefresh();
-        if(appPicker!=null&&!isShown())appPicker.close();
     }
     @Override protected void onWindowVisibilityChanged(int visibility) {
         super.onWindowVisibilityChanged(visibility);

@@ -21,6 +21,8 @@ final class WordSelectionPane extends LinearLayout {
     private final BitSet selected=new BitSet();
     private final FlowPane words;
     private final ScrollView scroll;
+    private final android.widget.FrameLayout content;
+    private View actionLayer;
     private final TextView all,mode,copy,status;
     private final LinearLayout statusBar;
     private final BitSet beforeSlide=new BitSet();
@@ -33,15 +35,19 @@ final class WordSelectionPane extends LinearLayout {
     WordSelectionPane(Context context,String source,BiPredicate<View,String> drag) {
         super(context);this.source=source;this.drag=drag;setOrientation(VERTICAL);
         WorkspacePopupStyle.decorate(this,null);
-        status=label("");status.setTextSize(12);status.setGravity(android.view.Gravity.START);
+        status=label("");status.setTextSize(WorkspacePopupStyle.SUPPORT_SP);status.setGravity(android.view.Gravity.START);
         status.setTextColor(HyperOsStyle.textSecondary(context));
         statusBar=new LinearLayout(context);statusBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
         statusBar.addView(status,new LayoutParams(0,-2,1));
         addView(statusBar,new LayoutParams(-1,-2));
+        content=new android.widget.FrameLayout(context);
+        addView(content,new LayoutParams(-1,0,1));
+        LinearLayout body=new LinearLayout(context);body.setOrientation(VERTICAL);
+        content.addView(body,new android.widget.FrameLayout.LayoutParams(-1,-1));
         scroll=new WordScroll(context);scroll.setPadding(0,dp(6),0,dp(6));scroll.setClipToPadding(false);
         scroll.setVerticalScrollBarEnabled(false);
         words=new FlowPane(context);
-        scroll.addView(words);addView(scroll,new LayoutParams(-1,0,1));
+        scroll.addView(words);body.addView(scroll,new LayoutParams(-1,0,1));
 
         LinearLayout actions=new LinearLayout(context);
         all=WorkspacePopupStyle.action(context,"全选",false,()->{
@@ -52,24 +58,28 @@ final class WordSelectionPane extends LinearLayout {
         copy=WorkspacePopupStyle.action(context,"复制",true,this::copySelection);
         for(TextView action:new TextView[]{all,mode,copy})
             actions.addView(action,WorkspacePopupStyle.actionCell(context));
-        addView(actions,new LayoutParams(-1,-2));
+        body.addView(actions,new LayoutParams(-1,-2));
         segment();
     }
 
     void addHistoryActions(Runnable pin,Runnable delete) {
-        IconButton more=new IconButton(getContext(),IconButton.MORE,"剪贴板记录操作");
+        IconButton more=new IconButton(getContext(),IconButton.MORE_VERTICAL,"剪贴板记录操作");
         more.setTooltipText("剪贴板记录操作");
-        statusBar.addView(more,new LayoutParams(dp(44),dp(44)));
+        LayoutParams size=new LayoutParams(dp(36),dp(44));size.setMarginStart(dp(2));
+        statusBar.addView(more,size);
         more.setOnClickListener(v->{
-            android.widget.PopupMenu menu=new android.widget.PopupMenu(getContext(),more,android.view.Gravity.END);
-            menu.getMenu().add(0,1,0,"固定／取消固定");
-            menu.getMenu().add(0,2,1,"删除记录");
-            menu.setOnMenuItemClickListener(item->{
-                if(item.getItemId()==1)pin.run();else delete.run();
-                return true;
-            });
-            menu.show();
+            if(closeActionMenu())return;
+            LinearLayout menu=ContentPanelActions.createMenu(getContext());
+            ContentPanelActions.addAction(menu,"固定／取消固定",this::closeActionMenu,pin);
+            ContentPanelActions.addAction(menu,"删除记录",this::closeActionMenu,delete);
+            actionLayer=ContentPanelLayout.actionOverlay(menu,this::closeActionMenu);
+            content.addView(actionLayer,new android.widget.FrameLayout.LayoutParams(-1,-1));
         });
+    }
+
+    boolean closeActionMenu() {
+        if(actionLayer==null)return false;
+        content.removeView(actionLayer);actionLayer=null;return true;
     }
 
     private void copySelection() {
@@ -108,7 +118,7 @@ final class WordSelectionPane extends LinearLayout {
             chip.setTextColor(new android.content.res.ColorStateList(
                     new int[][]{new int[]{android.R.attr.state_selected},new int[]{}},
                     new int[]{HyperOsStyle.CONTROL_ACCENT,HyperOsStyle.textPrimary(getContext())}));
-            chip.setTextSize(14);chip.setMaxLines(2);chip.setEllipsize(android.text.TextUtils.TruncateAt.END);chip.setOnClickListener(v->{selected.flip(index);refresh();});
+            chip.setMaxLines(2);chip.setEllipsize(android.text.TextUtils.TruncateAt.END);chip.setOnClickListener(v->{selected.flip(index);refresh();});
             chip.setOnLongClickListener(v->{
                 BitSet previous=(BitSet)selected.clone();
                 if(!selected.get(index)){selected.clear();selected.set(index);}
@@ -194,7 +204,7 @@ final class WordSelectionPane extends LinearLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
-        stopSlide();super.onDetachedFromWindow();
+        closeActionMenu();stopSlide();super.onDetachedFromWindow();
     }
 
     @android.annotation.SuppressLint("SetTextI18n")
@@ -214,7 +224,7 @@ final class WordSelectionPane extends LinearLayout {
         return new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x183482ff),fill,null);
     }
     private TextView label(String text) {
-        TextView view=new TextView(getContext());view.setText(text);view.setTextSize(15);
+        TextView view=new TextView(getContext());view.setText(text);view.setTextSize(WorkspacePopupStyle.BODY_SP);
         view.setTextColor(HyperOsStyle.textPrimary(getContext()));view.setGravity(android.view.Gravity.CENTER);
         view.setPadding(dp(6),dp(4),dp(6),dp(4));return view;
     }

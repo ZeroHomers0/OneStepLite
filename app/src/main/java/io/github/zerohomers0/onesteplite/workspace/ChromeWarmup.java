@@ -23,7 +23,6 @@ final class ChromeWarmup {
         public void onSetMainSide(boolean right) {}
         public void onExit() {}
         public void onLaunch(QuickApp app) {}
-        public boolean canCustomizeApps() { return false; }
     };
     private ChromeWarmup() {}
 

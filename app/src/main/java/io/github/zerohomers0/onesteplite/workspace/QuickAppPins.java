@@ -22,16 +22,6 @@ final class QuickAppPins {
                 "getStringForUser", context.getContentResolver(), KEY, user));
     }
 
-    static boolean save(Context context, int user, Iterable<String> keys) {
-        if (user < 0 || user != user()) return false;
-        Boolean saved=ShortcutSettingsClient.writeForUser(context,ShortcutSettingsClient.APPS,QuickAppOrder.encode(keys),user);
-        if(saved!=null)return saved;
-        try {
-            return Boolean.TRUE.equals(XposedHelpers.callStaticMethod(Settings.Secure.class,
-                    "putStringForUser", context.getContentResolver(), KEY, QuickAppOrder.encode(keys), user));
-        } catch (Throwable unavailable) { return false; }
-    }
-
     static List<QuickApp> arrange(Context context, List<QuickApp> apps) {
         try {
             int user = user();

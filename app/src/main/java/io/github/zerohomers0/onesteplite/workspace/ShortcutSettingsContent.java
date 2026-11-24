@@ -40,11 +40,12 @@ final class ShortcutSettingsContent extends LinearLayout {
         List<QuickApp> apps=new ArrayList<>();for(ShareTarget target:targets)apps.add(QuickApp.shortcut(target.label,target.component,target.icon));
         pinned=new PinnedAppEditor(context,apps,chosen,this::changed);pinned.setPadding(dp(8),dp(4),dp(8),dp(4));pinned.setBackground(card());
         addView(pinned,new LayoutParams(-1,dp(64)));updateCount();
-        EditText search=new EditText(context);search.setTextSize(16);search.setSingleLine();search.setTextColor(primary);
-        search.setHintTextColor(secondary);search.setHint(applications?"搜索应用":"搜索分享入口");search.setPadding(dp(20),0,dp(20),0);
+        EditText search=new EditText(context);WorkspacePopupStyle.styleSearch(search);
+        search.setHint(applications?"搜索应用":"搜索分享入口");search.setPadding(dp(20),0,dp(20),0);
         search.setBackground(card());LayoutParams searchBounds=new LayoutParams(-1,dp(52));searchBounds.topMargin=dp(16);addView(search,searchBounds);
         TextView section=text(applications?"全部应用":"全部分享入口",13,secondary);section.setPadding(dp(16),dp(20),dp(16),dp(8));addView(section);
         ListView list=new ListView(context);list.setDivider(null);list.setBackground(card());list.setClipToOutline(true);
+        list.setVerticalScrollBarEnabled(false);
         adapter=createAdapter();adapter.notifyDataSetChanged();list.setAdapter(adapter);addView(list,new LayoutParams(-1,0,1));
         search.addTextChangedListener(new TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int before,int after){}

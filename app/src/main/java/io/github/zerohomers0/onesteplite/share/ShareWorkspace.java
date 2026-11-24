@@ -52,7 +52,6 @@ final class ShareWorkspace extends FrameLayout {
     private boolean deliveryPending,retainingDelivery;
     private Runnable deliverySettled=()->{};
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ShareTargetPicker picker=new ShareTargetPicker();
     private final ShareEdgePolicy edge=new ShareEdgePolicy();
     private final ShareRailTransition transition;
     private final float[] pointer=new float[2],physicalAim=new float[2];
@@ -434,29 +433,6 @@ final class ShareWorkspace extends FrameLayout {
         return true;
     }
 
-    void editTargets() {
-        if (!ready.getAsBoolean()) return;
-        final int owner = CurrentUser.id();
-        final int token = generation;
-        ClipDescription types = new ClipDescription("分享", new String[]{"text/plain", "image/*", "*/*"});
-        WORKER.execute(() -> {
-            try {
-                List<ShareTarget> entries=ShareTargetCatalog.load(getContext(),types,0,true);
-                post(() -> {
-                    if (token != generation || owner != CurrentUser.id()
-                            || !ready.getAsBoolean() || !isShown() || picker.isOpen()) return;
-                    try { picker.show(this,entries,owner); }
-                    catch (RuntimeException unavailable) {
-                        picker.close();
-                        message("无法打开分享入口选择框");
-                    }
-                });
-            } catch (RuntimeException unavailable) {
-                post(() -> { if (token == generation && isShown()) message("无法查询分享入口"); });
-            }
-        });
-    }
-
     private void finishVisuals() {
         if(catchment!=null){catchment.close();catchment=null;}
         windowHover.close();
@@ -497,7 +473,6 @@ final class ShareWorkspace extends FrameLayout {
         cancel(); panel.close();history.stop();
         capture.close();
         if(portal!=null)portal.close();
-        picker.close();
     }
 
     void setActive(boolean active) { if(active){history.start();if(portal!=null)portal.start();}else close(); }
@@ -517,7 +492,7 @@ final class ShareWorkspace extends FrameLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
-        if(retainingDelivery){finishVisuals();transition.reset();panel.close();capture.close();if(portal!=null)portal.close();history.stop();picker.close();}
+        if(retainingDelivery){finishVisuals();transition.reset();panel.close();capture.close();if(portal!=null)portal.close();history.stop();}
         else close();super.onDetachedFromWindow();
     }
     @Override protected void onSizeChanged(int w, int h, int oldW, int oldH) {

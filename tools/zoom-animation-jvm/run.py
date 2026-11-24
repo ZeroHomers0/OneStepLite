@@ -39,13 +39,16 @@ public class ValueAnimator extends Animator {
  public void setDuration(long d){duration=d;}public void setStartDelay(long d){delay=d;}
  public void setInterpolator(Object o){}public void addUpdateListener(Consumer<ValueAnimator> u){updates.add(u);}
  public void addListener(AnimatorListenerAdapter l){listeners.add(l);}public Object getAnimatedValue(){return value;}
+ public static boolean areAnimatorsEnabled(){return true;}public static float durationScale;public static float getDurationScale(){return durationScale;}
+ public float getAnimatedFraction(){return value;}
  public void tick(float p){value=p;updates.forEach(u->u.accept(this));}public void start(){tick(0);}
  public void setCurrentPlayTime(long t){seek=t;tick((float)t/duration);}
  public void cancel(){listeners.forEach(l->l.onAnimationEnd(this));}
  public void end(){tick(1);listeners.forEach(l->l.onAnimationEnd(this));}
 }''',
-    'android/view/animation/PathInterpolator.java': '''package android.view.animation;
-public class PathInterpolator {public PathInterpolator(float a,float b,float c,float d){}}''',
+    'android/view/animation/AnimationUtils.java':'package android.view.animation;public class AnimationUtils{public static long currentAnimationTimeMillis(){return android.os.SystemClock.uptimeMillis();}}',
+'android/view/animation/PathInterpolator.java': '''package android.view.animation;
+public class PathInterpolator {public PathInterpolator(float a,float b,float c,float d){}public float getInterpolation(float p){return p;}}''',
     'io/github/zerohomers0/onesteplite/ZoomAnimationRegression.java': r'''package io.github.zerohomers0.onesteplite;
 import android.animation.*;import android.view.animation.PathInterpolator;import android.os.SystemClock;
 public class ZoomAnimationRegression {
@@ -80,6 +83,13 @@ public class ZoomAnimationRegression {
   check(sZoomAnimator.delay==0&&sZoomAnimator.seek==0,"old phone command retains its original start behavior");
   t=fresh();h.startZoomAnimation(t,new ZoomAnimCommand.Plan(.7f,606,0,300,1),"late");
   check(sZoomAnimator.seek==300&&Math.abs(sZoomScale-.7f)<.001,"stale queue delivery cannot restart a full-duration animation");
+  ValueAnimator.durationScale=1;SystemClock.now=1182;
+  check(WorkspaceMotionSpec.frameProgress(1032,300,.2f)==.5f
+      && WorkspaceMotionSpec.frameProgress(1032,300,.8f)==.5f,"native and Host ignore different animator phases on the same display frame");
+  SystemClock.now=1016;
+  check(WorkspaceMotionSpec.frameProgress(1032,300,.8f)==0f,"frame before the shared start remains full size");
+  SystemClock.now=1400;
+  check(WorkspaceMotionSpec.frameProgress(1032,300,.2f)==1f,"late frame reaches the same settled edge");
   System.out.println("Actual WM animation shared-start/stale-callback checks="+checks+" passed");
  }
 }'''.replace('__METHODS__', methods),

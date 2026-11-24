@@ -38,8 +38,6 @@ public class Os3ShellRegression {
  public static class Display {Object mMagnificationSpec,replayed,spec;int pendingApplied;public void applyMagnificationSpec(Object transaction,Object value){replayed=transaction;spec=value;}public void reapplyMagnificationSpec(){pendingApplied++;}}
  public static class NativeDisplay extends Display {int nativeCalls;public void reapplyMagnificationSpec(Object transaction){nativeCalls++;}}
  public static class NativeTransitions {int type,calls;Object wct;public Object startTransition(int t,Object w,Object handler){type=t;wct=w;calls++;return null;}}
- public static class OldConstraints {Object context;int xml;public void load(int xml,Object context){this.context=context;this.xml=xml;}}
- public static class NewConstraints {Object context;int xml;public void load(Object context,int xml){this.context=context;this.xml=xml;}}
  public static class Area {Table mLeashes=new Table();}
  public static class LegacyOrganizer extends Os3Organizer {public void addListenerForTaskId(Object owner,int id){throw new IllegalStateException("native refused");}}
  public static class BooleanViews {public boolean prepareOpenAnimation(Object...ignored){return false;}public boolean prepareOpenAnimation(Object a,boolean b,Object c,Object d,Object e,Object f,Object g){return false;}}
@@ -76,7 +74,6 @@ public class Os3ShellRegression {
   views.hidden=false;c.mSurfaceCreated=true;ShellCompat.call(views,"startRootTask",c,a,aa.leash,wct);
   check(views.mTransitions.calls==1&&views.mTransitions.type==6&&views.mTransitions.wct==wct&&state.mVisible,"resume did not bind existing task before native CHANGE");
   check(android.view.SurfaceControl.Transaction.applies==1&&android.view.SurfaceControl.Transaction.closes==1,"resume did not commit and close only its owned transaction");
-  Object ctx=new Object();OldConstraints oldConstraints=new OldConstraints();NewConstraints newConstraints=new NewConstraints();ShellCompat.loadConstraints(oldConstraints,ctx,42);ShellCompat.loadConstraints(newConstraints,ctx,43);check(oldConstraints.context==ctx&&oldConstraints.xml==42&&newConstraints.context==ctx&&newConstraints.xml==43,"constraint XML loader changed resources or argument order");
   // Run the actual two-task ownership implementation with absent organizer APIs and void native open.
   o=new Os3Organizer();a=new Info(11,"A",1);b=new Info(12,"B",6);aa=new Appeared(a);bb=new Appeared(b);o.mTasks.put(11,aa);o.mTasks.put(12,bb);o.mTaskListeners.put(-2,o.fullscreen);c=new Controller();c.mTaskOrganizer=o;c.mTaskInfo=b;c.mTaskToken=b.token;c.mTaskLeash=new Surface(12);o.mTaskListeners.put(12,c);
   Os3PairViews pairViews=new Os3PairViews();LiveTaskPair pair=new LiveTaskPair(o,pairViews,c,11,"A",12,"B",0,new Surface(1),c.mSurfaceControl,new Rect(0,0,1200,2608),s->{});

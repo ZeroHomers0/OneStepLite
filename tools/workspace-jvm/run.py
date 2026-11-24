@@ -25,10 +25,12 @@ import java.util.*;import java.util.function.*;public class ValueAnimator extend
  float from,to,value;List<Consumer<ValueAnimator>>updates=new ArrayList<>();List<AnimatorListenerAdapter>listeners=new ArrayList<>();
  public static ValueAnimator ofFloat(float...f){ValueAnimator v=new ValueAnimator();v.from=f[0];v.to=f[1];v.value=v.from;return v;}
  public long delay;public void setStartDelay(long d){delay=d;}public void setCurrentPlayTime(long t){tick(t/300f);}public void setDuration(long d){}public void setInterpolator(Object i){}public void addUpdateListener(Consumer<ValueAnimator>u){updates.add(u);}public void addListener(AnimatorListenerAdapter l){listeners.add(l);}
- public Object getAnimatedValue(){return value;}public void tick(float p){value=from+(to-from)*p;for(var u:updates)u.accept(this);}public void start(){tick(0f);}
+ private float fraction;public static boolean areAnimatorsEnabled(){return true;}public static float getDurationScale(){return 0;}
+ public Object getAnimatedValue(){return value;}public float getAnimatedFraction(){return fraction;}public void tick(float p){fraction=p;value=from+(to-from)*p;for(var u:updates)u.accept(this);}public void start(){tick(0f);}
  public void cancel(){for(var l:listeners)l.onAnimationCancel(this);for(var l:listeners)l.onAnimationEnd(this);}public void end(){tick(1f);for(var l:listeners)l.onAnimationEnd(this);}
 }''',
-'android/view/animation/PathInterpolator.java':'package android.view.animation;public class PathInterpolator {public PathInterpolator(float a,float b,float c,float d){}}',
+'android/view/animation/AnimationUtils.java':'package android.view.animation;public class AnimationUtils{public static long currentAnimationTimeMillis(){return android.os.SystemClock.uptimeMillis();}}',
+'android/view/animation/PathInterpolator.java':'package android.view.animation;public class PathInterpolator {public PathInterpolator(float a,float b,float c,float d){}public float getInterpolation(float p){return p;}}',
 'android/view/ViewGroup.java':'package android.view;public class ViewGroup {public static class LayoutParams {public int width,height;}}',
 'android/graphics/RectF.java':'package android.graphics;public class RectF {public float left,top,right,bottom;public RectF(){}public RectF(float a,float b,float c,float d){left=a;top=b;right=c;bottom=d;}public void set(float a,float b,float c,float d){left=a;top=b;right=c;bottom=d;}}',
 'android/graphics/Rect.java':'package android.graphics;public class Rect {public int left,top,right,bottom;public Rect(int a,int b,int c,int d){left=a;top=b;right=c;bottom=d;}public boolean isEmpty(){return right<=left||bottom<=top;}public String toString(){return left+","+top+","+right+","+bottom;}}',
@@ -52,7 +54,7 @@ public class WorkspaceRegression {
  static int checks;static void check(boolean b,String m){checks++;if(!b)throw new AssertionError(m);}
  static class Drawable {int alpha=255;void setAlpha(int a){alpha=a;}}
  static class WallpaperCropDrawable extends Drawable {android.graphics.RectF hole;void setMainHole(android.graphics.RectF r){hole=r==null?null:new android.graphics.RectF(r.left,r.top,r.right,r.bottom);}}
- static class View {interface OnAttachStateChangeListener {void onViewAttachedToWindow(View v);void onViewDetachedFromWindow(View v);}OnAttachStateChangeListener listener;void addOnAttachStateChangeListener(OnAttachStateChangeListener l){listener=l;}void removeOnAttachStateChangeListener(OnAttachStateChangeListener l){if(listener==l)listener=null;}android.view.ViewGroup.LayoutParams params=new android.view.ViewGroup.LayoutParams();android.view.ViewGroup.LayoutParams getLayoutParams(){return params;}void setLayoutParams(android.view.ViewGroup.LayoutParams p){params=p;}Object getWindowToken(){return this;}static final int VISIBLE=0,GONE=8;float alpha=1,x,y,translationY;int pickerCloses;Drawable background=new WallpaperCropDrawable();android.graphics.Rect clip;Drawable getBackground(){return background;}void setAlpha(float v){alpha=v;}void setX(float v){x=v;}void setY(float v){y=v;}void setTranslationY(float v){translationY=v;}void setClipBounds(android.graphics.Rect r){clip=r;}void invalidate(){}void setWorkspaceMainHole(android.graphics.RectF r){if(background instanceof WallpaperCropDrawable)((WallpaperCropDrawable)background).setMainHole(r);}void closeQuickAppPicker(){pickerCloses++;}}
+ static class View {interface OnAttachStateChangeListener {void onViewAttachedToWindow(View v);void onViewDetachedFromWindow(View v);}OnAttachStateChangeListener listener;void addOnAttachStateChangeListener(OnAttachStateChangeListener l){listener=l;}void removeOnAttachStateChangeListener(OnAttachStateChangeListener l){if(listener==l)listener=null;}android.view.ViewGroup.LayoutParams params=new android.view.ViewGroup.LayoutParams();android.view.ViewGroup.LayoutParams getLayoutParams(){return params;}void setLayoutParams(android.view.ViewGroup.LayoutParams p){params=p;}Object getWindowToken(){return this;}static final int VISIBLE=0,GONE=8;float alpha=1,x,y,translationY;int contentCloses;Drawable background=new WallpaperCropDrawable();android.graphics.Rect clip;Drawable getBackground(){return background;}void setAlpha(float v){alpha=v;}void setX(float v){x=v;}void setY(float v){y=v;}void setTranslationY(float v){translationY=v;}void setClipBounds(android.graphics.Rect r){clip=r;}void invalidate(){}void setWorkspaceMainHole(android.graphics.RectF r){if(background instanceof WallpaperCropDrawable)((WallpaperCropDrawable)background).setMainHole(r);}void closeContentUi(){contentCloses++;}}
  static class Observer {Runnable frame;void registerFrameCommitCallback(Runnable r){frame=r;}}
  static class FrameLayout extends View {Observer observer=new Observer();boolean attached=true,hardware=true;int invalidates;
   boolean isAttachedToWindow(){return attached;}boolean isHardwareAccelerated(){return hardware;}Observer getViewTreeObserver(){return observer;}void invalidate(){invalidates++;}void draw(){Runnable r=observer.frame;observer.frame=null;if(r!=null)r.run();}}
@@ -80,7 +82,7 @@ public class WorkspaceRegression {
  static class CellMotion{void finish(){}}
  Queue main=new Queue();Object ctx=this;CellMotion cellMotion;StatusBar statusBar=new StatusBar();Promotion promotion;Bitmap mainBackdrop,wallpaperBackdrop=new Bitmap();
   boolean screenOn=true,zoomed=true,suspendRequested,landscapeSuspended,transferBusy,workspaceEntering,workspaceExiting,keyguardLocked;int scene=ACTIVE,zoomWrites,parks,returns,ready;long sceneEpoch=1,workspaceGeneration,zoomAnimUntil;String pendingSuspendReason;
- static class Layout {boolean tabletLandscape,mainOnRight;float mainScale=.7017717f;int mainOffsetX,mainOffsetY=606;int mainWidth=2286,sideWidth=762,topStrip=508,mainDispWidth=2139;
+ static class Layout {boolean tabletLandscape,mainOnRight;float mainScale=.7017717f;int mainOffsetX,mainOffsetY=606;int mainWidth=2286,sideWidth=762,topStrip=508,mainDispWidth=2139,gap=8;
   int[] cellBounds(int i){return new int[]{0,topStrip+i*400,762,topStrip+(i+1)*400};}}
  Layout layout=new Layout();int screenW=3048,screenH=2032;long workspaceZoomStart=10032;
  final android.graphics.RectF workspaceHole=new android.graphics.RectF();
@@ -130,7 +132,7 @@ public class WorkspaceRegression {
   h=new WorkspaceRegression();h.beginWorkspaceEntry(null);h.keyguardLocked=true;h.root.draw();h.main.flush();check(h.zoomWrites==0,"late entry frame cannot magnify keyguard");
   h=new WorkspaceRegression();h.wallpaperBackdrop=null;h.beginWorkspaceEntry(null);check(h.root.observer.frame==null&&!h.main.q.isEmpty(),"entry waits for wallpaper instead of showing a black surround");h.wallpaperBackdrop=new Bitmap();h.main.flush();check(h.root.observer.frame!=null,"wallpaper readiness schedules real frame gate");
   h=new WorkspaceRegression();h.suspendSession("test");check(h.scene==SUSPENDING&&h.zoomWrites==1&&h.returns==0,"exit does not hand tasks back during real zoom");
-  check(h.topBar.pickerCloses==1,"exit closes the shortcut editor before task handback");
+  check(h.topBar.contentCloses==1,"exit closes content UI before task handback");
   Object owner=h.slots[1].taskToken;h.workspaceAnimator.tick(.5f);check((h.slots[1].controller.surface.alpha==0f||h.slots[1].controller.surface.alpha==1f)&&h.slots[1].taskToken==owner,"exit fades real content without changing owner");
   check(h.tabletTools.alpha==.5f,"permanent tablet title follows exit opacity instead of remaining visible");
   h.workspaceAnimator.end();check(h.returns==1&&h.parks==1&&h.workspaceAlpha==0,"task handback starts only after fade finishes");
@@ -202,7 +204,8 @@ public class WorkspaceRegression {
    for(float p:new float[]{0f,.25f,.5f,.75f,1f}) {
     h.slots[1].sideRow=0;h.setWorkspaceAlpha(p);
     check(Math.abs(h.topLiveClip.translationY-(606*p-606))<.01,"top strip rides the main edge");
-    float expected=mainRight?(835*p-835):(3048*(1+(.7017717f-1)*p)-2139);
+    float gap=8*(1-p);
+    float expected=mainRight?(835*p-835)+gap:(3048*(1+(.7017717f-1)*p)-2139)-gap;
     check(Math.abs(h.slots[1].view.x-expected)<.01,"side cells ride the main edge");
     check(h.slots[1].view.clip!=null&&h.slots[1].view.clip.left==0&&h.slots[1].view.clip.right==762,"riding cells keep their full crop");
     check(h.slots[1].hint.x==expected,"side placeholders ride with their cells");

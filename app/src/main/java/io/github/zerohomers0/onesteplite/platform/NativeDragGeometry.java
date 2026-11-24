@@ -16,7 +16,7 @@ final class NativeDragGeometry {
     static boolean install(ClassLoader loader,BooleanSupplier active){
         try{
             Class<?> type=XposedHelpers.findClass("com.android.server.wm.DragState",loader);
-            if(XposedBridge.hookAllMethods(type,"reportDropWindowLock",new XC_MethodHook(){
+            XC_MethodHook dropGuard=new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam call){
                     if(call.args.length!=3 && call.args.length!=5)return;
                     if(active.getAsBoolean() && sameSourceContentDrop(call.thisObject,call.args[0])){
@@ -26,7 +26,10 @@ final class NativeDragGeometry {
                     if(value instanceof Session)try{((Session)value).drop(call);}
                     catch(Throwable unavailable){reject(call);}
                 }
-            }).isEmpty())return false;
+            };
+            boolean publicRoute=!XposedBridge.hookAllMethods(type,"reportDropWindowLock",dropGuard).isEmpty();
+            boolean directRoute=!XposedBridge.hookAllMethods(type,"reportDropWindowLockInner",dropGuard).isEmpty();
+            if(!publicRoute && !directRoute)return false;
             XposedBridge.hookAllMethods(type,"closeLocked",new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam call){
                     Object value=XposedHelpers.getAdditionalInstanceField(call.thisObject,KEY);
@@ -39,22 +42,32 @@ final class NativeDragGeometry {
     private static boolean sameSourceContentDrop(Object state,Object inputToken) {
         if(inputToken==null)return false;
         try{
-            Object payload=XposedHelpers.getObjectField(state,"mData");
-            if(!(payload instanceof ClipData clip) || !clip.getDescription().hasMimeType("text/*")
-                    && !clip.getDescription().hasMimeType("image/*"))return false;
             Object wm=XposedHelpers.getObjectField(state,"mService");
             Object origin=((java.util.Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap"))
                     .get(XposedHelpers.getObjectField(state,"mLocalWin"));
             if(origin==null)return false;
-            if((XposedHelpers.getIntField(state,"mFlags")&android.view.View.DRAG_FLAG_GLOBAL)==0
-                    && !"com.tencent.mobileqq".equals(XposedHelpers.callMethod(origin,"getOwningPackage")))return false;
-            if(inputToken.equals(XposedHelpers.getObjectField(origin,"mInputChannelToken")))return true;
-            for(Object target:(java.util.Collection<?>)XposedHelpers.getObjectField(state,"mNotifiedWindows")) {
-                if(inputToken.equals(XposedHelpers.getObjectField(target,"mInputChannelToken")))
-                    return sameOrigin(origin,target);
+            boolean qq="com.tencent.mobileqq".equals(XposedHelpers.callMethod(origin,"getOwningPackage"));
+            if(!qq) {
+                Object payload=XposedHelpers.getObjectField(state,"mData");
+                if(!(payload instanceof ClipData clip)
+                        || (XposedHelpers.getIntField(state,"mFlags")&android.view.View.DRAG_FLAG_GLOBAL)==0
+                        || !clip.getDescription().hasMimeType("text/*") && !clip.getDescription().hasMimeType("image/*"))return false;
             }
+            if(inputToken.equals(XposedHelpers.getObjectField(origin,"mInputChannelToken")))return true;
+            return sameOrigin(origin,dropWindow(state,wm,inputToken));
         }catch(RuntimeException unavailable){/* Keep the supported shadow-session fallback. */}
         return false;
+    }
+
+    private static Object dropWindow(Object state,Object wm,Object token) {
+        try{
+            Object window=XposedHelpers.callMethod(XposedHelpers.getObjectField(wm,"mInputToWindowMap"),"get",token);
+            if(window!=null)return window;
+        }catch(RuntimeException unavailable){/* Older releases only expose their notified windows. */}
+        Object notified=XposedHelpers.getObjectField(state,"mNotifiedWindows");
+        if(notified instanceof java.util.Collection<?> windows)for(Object target:windows)
+            if(token.equals(XposedHelpers.getObjectField(target,"mInputChannelToken")))return target;
+        return null;
     }
 
     private static boolean sameOrigin(Object origin,Object target) {

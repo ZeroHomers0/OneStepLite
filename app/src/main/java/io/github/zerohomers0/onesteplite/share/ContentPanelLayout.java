@@ -74,7 +74,7 @@ final class ContentPanelLayout extends LinearLayout {
         scroll.setPadding(0,dp(8),0,0);scroll.setClipToPadding(false);
         grid=new GridLayout(context);grid.setColumnCount(3);scroll.addView(grid);
         pages=new PageSwipeArea(context);pages.addView(scroll,new android.widget.FrameLayout.LayoutParams(-1,-1));
-        empty=new TextView(context);empty.setTextSize(12);empty.setTextColor(HyperOsStyle.textSecondary(context));
+        empty=new TextView(context);empty.setTextSize(WorkspacePopupStyle.SUPPORT_SP);empty.setTextColor(HyperOsStyle.textSecondary(context));
         empty.setGravity(Gravity.CENTER);empty.setPadding(dp(16),dp(12),dp(16),dp(12));empty.setVisibility(GONE);
         pages.addView(empty,new android.widget.FrameLayout.LayoutParams(-1,-1));addView(pages,new LayoutParams(-1,0,1));
     }
@@ -147,6 +147,7 @@ final class ContentPanelLayout extends LinearLayout {
     }
 
     boolean closeActionMenu(){
+        if(detail instanceof WordSelectionPane words && words.closeActionMenu())return true;
         if(actionLayer==null)return false;
         pages.removeView(actionLayer);actionLayer=null;return true;
     }
@@ -154,20 +155,26 @@ final class ContentPanelLayout extends LinearLayout {
     private void setActionMenu(android.view.View menu) {
         boolean wasOpen=closeActionMenu();
         if(menu==null || wasOpen)return;
-        android.widget.FrameLayout overlay=new android.widget.FrameLayout(getContext());
-        overlay.setOnClickListener(ignored->setActionMenu(null));
+        actionLayer=actionOverlay(menu,()->setActionMenu(null));
+        pages.addView(actionLayer,new android.widget.FrameLayout.LayoutParams(-1,-1));
+    }
+
+    static android.widget.FrameLayout actionOverlay(android.view.View menu,Runnable dismiss) {
+        Context context=menu.getContext();
+        android.widget.FrameLayout overlay=new android.widget.FrameLayout(context);
+        overlay.setOnClickListener(ignored->dismiss.run());
         android.widget.FrameLayout.LayoutParams position=new android.widget.FrameLayout.LayoutParams(
-                dp(160),-2,Gravity.TOP|Gravity.END);
-        position.topMargin=dp(4);
-        overlay.addView(menu,position);pages.addView(overlay,new android.widget.FrameLayout.LayoutParams(-1,-1));
-        actionLayer=overlay;
+                HyperOsStyle.dp(context,160),-2,Gravity.TOP|Gravity.END);
+        position.topMargin=HyperOsStyle.dp(context,4);
+        overlay.addView(menu,position);
+        return overlay;
     }
 
     void heading(String title,int width) {
         TextView label=new TextView(getContext());label.setText(title);
         label.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
         label.setPaddingRelative(dp(6),0,0,0);
-        label.setTextSize(12);label.setTypeface(null,Typeface.BOLD);
+        label.setTextSize(WorkspacePopupStyle.SUPPORT_SP);label.setTypeface(null,Typeface.BOLD);
         label.setTextColor(HyperOsStyle.textSecondary(getContext()));
         GridLayout.LayoutParams row=new GridLayout.LayoutParams(GridLayout.spec(GridLayout.UNDEFINED),
                 GridLayout.spec(0,3));

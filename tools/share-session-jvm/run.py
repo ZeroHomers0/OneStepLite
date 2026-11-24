@@ -53,7 +53,7 @@ String sourcePackage;Set<String> windowPackages;
 static class Hover extends Counter {void move(String value){}}Hover windowHover=new Hover();
 boolean dragging,dropped,deliveryPending,retainingDelivery,shareOnly;int generation,starts,ends,stops,drops;String lastTarget;
 Handler handler=new Handler();Runnable expire=()->{},deliverySettled=()->{};
-Counter pendingRead,delegatedRead,catchment;Counter panel=new Counter(),history=new Counter(),picker=new Counter(),capture=new Counter(),portal=new Counter();Runnable afterDrag=()->{};
+Counter pendingRead,delegatedRead,catchment;Counter panel=new Counter(),history=new Counter(),capture=new Counter(),portal=new Counter();Runnable afterDrag=()->{};
 Transition transition=new Transition();float alpha=1;
 Targets targets=new Targets();
 boolean accepts(Object description){return true;}boolean live(int token){return dragging&&ready.getAsBoolean();}
@@ -78,7 +78,7 @@ rail.onWindowDrag(new DragEvent(3),"notes.pkg",false);check("notes.pkg".equals(r
 rail.onWindowDrag(new DragEvent(4),null,false);check(!rail.overlay.open,"root drag end reaches overlay after coverage changes");
 rail=new Replay();rail.dragging=true;rail.dropped=true;rail.deliveryPending=true;int[] done={0};
 check(rail.retainDelivery(()->done[0]++),"pending delivery can outlive drag window");
-rail.onDetachedFromWindow();check(rail.panel.closes==1&&rail.capture.closes==1&&rail.history.stops==1&&rail.picker.closes==1,"detach closes all UI and listeners while retaining delivery");
+rail.onDetachedFromWindow();check(rail.panel.closes==1&&rail.capture.closes==1&&rail.history.stops==1,"detach closes all UI and listeners while retaining delivery");
 check(rail.deliveryPending&&rail.retainingDelivery&&rail.detaches==1,"detach does not cancel accepted async delivery");
 check(rail.transition.resets==1&&!rail.dragging,"retained delivery cannot retain cube animation");
 rail.delegatedRead=new Counter();Counter grant=rail.delegatedRead;rail.finishDelivery(rail.generation);

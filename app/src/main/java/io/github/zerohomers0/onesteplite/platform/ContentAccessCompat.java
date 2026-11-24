@@ -30,14 +30,6 @@ final class ContentAccessCompat {
         return Settings.Secure.getString(context.getContentResolver(), KEY);
     }
 
-    static boolean savePins(Context context, String value) {
-        try {
-            if(!currentProcessUser())return false;
-            Boolean saved=ShortcutSettingsClient.write(context,ShortcutSettingsClient.SHARE,value);
-            return saved!=null?saved:Settings.Secure.putString(context.getContentResolver(), KEY, value);
-        } catch (RuntimeException unavailable) { return false; }
-    }
-
     static Closeable take(DragEvent event) {
         Object permission = XposedHelpers.callMethod(event, "getDragAndDropPermissions");
         if (permission == null) throw new IllegalStateException("Missing content permission");

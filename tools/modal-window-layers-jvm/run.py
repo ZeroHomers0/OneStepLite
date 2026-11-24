@@ -11,7 +11,7 @@ files={
  public PM getPackageManager(){return new PM();}
 }''',
 'android/view/WindowManager.java':r'''package android.view;public class WindowManager {public static class LayoutParams {
- public static final int FLAG_SHOW_WHEN_LOCKED=524288;public int type=2017,flags;public String packageName="com.android.systemui",title="OneStepLiteQuickAppPicker";
+ public static final int FLAG_SHOW_WHEN_LOCKED=524288;public int type=2017,flags;public String packageName="com.android.systemui",title="OneStepLiteContentPanel";
  public CharSequence getTitle(){return title;}
 }}''',
 'de/robv/android/xposed/XposedHelpers.java':r'''package de.robv.android.xposed;public class XposedHelpers {

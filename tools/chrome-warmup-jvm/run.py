@@ -22,7 +22,7 @@ files.update({
 'io/github/zerohomers0/onesteplite/QuickApp.java':'package io.github.zerohomers0.onesteplite;class QuickApp {}',
 'io/github/zerohomers0/onesteplite/DeviceProfile.java':'package io.github.zerohomers0.onesteplite;class DeviceProfile {static boolean isTablet(Object c){return false;}static int statusBarHeightPx(Object c){return 40;}}',
 'io/github/zerohomers0/onesteplite/TopBar.java':'''package io.github.zerohomers0.onesteplite;
-class TopBar {interface Listener {void onOpenSettings();void onSetMainSide(boolean b);void onExit();void onLaunch(QuickApp a);boolean canCustomizeApps();}
+class TopBar {interface Listener {void onOpenSettings();void onSetMainSide(boolean b);void onExit();void onLaunch(QuickApp a);}
 static int creates,draws;static boolean failDraw;static TopBar last;android.content.Context context;Listener listener;boolean active=true,right;int apps;WorkspaceOptions options;
 TopBar(android.content.Context c,WorkspaceLayout l,java.util.List<QuickApp>a,Listener owner){last=this;context=c;creates++;listener=owner;apps=a.size();}
 void setWorkspaceActive(boolean b){active=b;}void applyOptions(WorkspaceOptions o){options=o;}void setStatusBarInset(int n){}
@@ -35,7 +35,7 @@ public class ChromeWarmupRegression {
 static int checks,exits;static void check(boolean b,String why){checks++;if(!b)throw new AssertionError(why);}
 static List<QuickApp> apps=List.of(new QuickApp(),new QuickApp());
 static WorkspaceLayout layout(boolean right){return WorkspaceLayout.of(1220,2656,right,3,false);}
-static final TopBar.Listener OWNER=new TopBar.Listener(){public void onOpenSettings(){}public void onSetMainSide(boolean b){}public void onExit(){exits++;}public void onLaunch(QuickApp a){}public boolean canCustomizeApps(){return true;}};
+static final TopBar.Listener OWNER=new TopBar.Listener(){public void onOpenSettings(){}public void onSetMainSide(boolean b){}public void onExit(){exits++;}public void onLaunch(QuickApp a){}};
 static Context fresh(){ChromeWarmup.invalidate(true);EntryGuard.open=true;CurrentUser.user=0;return new Context();}
 static void prepare(Context c){ChromeWarmup.prepare(c,0,apps,WorkspaceOptions.DEFAULT);}
 public static void main(String[]args){

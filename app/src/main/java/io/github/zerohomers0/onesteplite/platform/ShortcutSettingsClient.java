@@ -4,7 +4,7 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.Bundle;
 
-/** Authenticated module-owned shortcut preferences, shared with SystemUI editors. */
+/** Module-owned shortcut preferences with read access for SystemUI. */
 final class ShortcutSettingsClient {
     static final Uri URI=Uri.parse("content://io.github.zerohomers0.onesteplite.settings/shortcuts");
     static final String APPS="apps",SHARE="share";
@@ -13,10 +13,6 @@ final class ShortcutSettingsClient {
 
     static String readForUser(Context context,String kind,int user) {
         return user==android.os.Process.myUid()/100000?read(context,kind):null;
-    }
-
-    static Boolean writeForUser(Context context,String kind,String pins,int user) {
-        return user==android.os.Process.myUid()/100000?write(context,kind,pins):null;
     }
 
     static String read(Context context,String kind) {

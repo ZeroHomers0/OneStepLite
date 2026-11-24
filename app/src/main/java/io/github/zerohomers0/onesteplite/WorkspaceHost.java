@@ -1355,7 +1355,7 @@ public final class WorkspaceHost {
     /** Transfer live tasks first. Removing a SurfaceView while still bound hides its task. */
     private void suspendSession(String reason) {
         cancelMainSideSwitch();
-        if (topBar != null) topBar.closeQuickAppPicker();
+        if (topBar != null) topBar.closeContentUi();
         if (!"native-landscape".equals(reason)) landscapeSuspended = false;
         statusBar.restore(); // Includes a deferred exit while native ownership is changing.
         if (root == null) return;
@@ -3264,6 +3264,7 @@ public final class WorkspaceHost {
         if (topBar != null) topBar.setAlpha(layout == null ? workspaceAlpha : 1f);
         if (tabletTools != null) tabletTools.setAlpha(workspaceAlpha);
         boolean movingBackdrop = layout != null;
+        boolean riding=layout!=null && !layout.tabletLandscape && mainSideAnimator==null;
         android.graphics.RectF hole = movingBackdrop ? workspaceMainHole() : null;
         android.graphics.RectF sideHole = movingBackdrop ? workspaceSideHole() : null;
         android.graphics.RectF topHole = movingBackdrop ? workspaceTopHole() : null;
@@ -3282,7 +3283,7 @@ public final class WorkspaceHost {
                                 : movingBackdrop ? 1f : workspaceAlpha);
                 if (slot.hint != null && slot.hint.getBackground() instanceof WallpaperCropDrawable)
                     ((WallpaperCropDrawable) slot.hint.getBackground())
-                            .setMainHole(slot.index == SLOT_TOP ? topHole : sideHole);
+                            .setMainHole(riding ? null : slot.index == SLOT_TOP ? topHole : sideHole);
                 if (slot.hint != null && slot.hint.getBackground()!=null)
                     slot.hint.getBackground().setAlpha(255);
                 if (!ownsCellPresentation(slot)) continue;
@@ -3292,14 +3293,12 @@ public final class WorkspaceHost {
             if (tx != null) XposedHelpers.callMethod(tx, "apply");
         } catch (Throwable error) { log("workspace surface fade: " + error); }
         finally { closeSurfaceObject(tx, "close"); }
-        // The bar and the rail ride the main edge: their inner edges keep a fixed
-        // distance to the shrinking window, so the chrome reads as being pushed out
-        // of the way instead of fading in at a fixed position. Both offsets are
-        // zero at rest, which leaves the settled layout untouched.
-        if (layout != null && !layout.tabletLandscape && mainSideAnimator == null) {
+        // Move visual edges with the main. The side gap grows back into its normal
+        // size as the layout settles.
+        if (riding) {
             if (topLiveClip != null) topLiveClip.setTranslationY(hole.top - layout.mainOffsetY);
             float sideOffset = WorkspaceTransition.sideOffset(layout.mainOnRight,layout.mainOffsetX,
-                    layout.mainDispWidth,hole.left,hole.right);
+                    layout.mainDispWidth,hole.left,hole.right,layout.gap,workspaceAlpha);
             for (Slot slot : slots) {
                 if (slot == null || slot.index <= SLOT_MAIN || slot.index == SLOT_TOP) continue;
                 if (slot.rect == null) continue;
@@ -3308,6 +3307,7 @@ public final class WorkspaceHost {
             }
         }
         updateChromeClip();
+        if(root!=null && (workspaceAlpha==0f || workspaceAlpha==1f))root.invalidate();
         if(topPresentation!=null)topPresentation.refreshVideo();
     }
 
@@ -3544,7 +3544,7 @@ public final class WorkspaceHost {
                 canvas.restoreToCount(backdropSave);
             }
             super.dispatchDraw(canvas);
-            if (layout == null || workspaceAlpha <= 0f || mainSideAnimator != null) return;
+            if (layout == null || workspaceAlpha < 1f || workspaceAnimator != null || mainSideAnimator != null) return;
             int saved = canvas.save();
             android.graphics.RectF main = workspaceMainHole();
             canvas.clipOutRect(main);
@@ -3666,12 +3666,6 @@ public final class WorkspaceHost {
                 return topFace || videoPane!=null && videoPane.embedded();
             }
             @Override public java.util.Set<String> openedAppPackages() { return openedQuickAppPackages(); }
-            @Override public boolean canCustomizeApps() {
-                return scene == ACTIVE && screenOn && !keyguardLocked
-                        && promotion == null && !transferBusy
-                        && (!topFace || layout.tabletLandscape && tabletToolsOpen);
-            }
-
             @Override public void onSendMainToTop() { sendMainToTop(); }
             @Override public void onTaskCellsCovered(boolean covered) { setTaskCellsCovered(covered); }
         },()->layout!=null && !layout.tabletLandscape && workspaceAlpha<1f && mainSideAnimator!=null
@@ -3762,7 +3756,7 @@ public final class WorkspaceHost {
         if (!layout.tabletLandscape || topBar==null || tabletTools==null) return;
         tabletToolsOpen=open;
         if (!open) {
-            topBar.closeQuickAppPicker();
+            topBar.closeContentUi();
 
         }
         topBar.setTabletToolsExpanded(open,true);
@@ -5033,7 +5027,7 @@ public final class WorkspaceHost {
         android.animation.ValueAnimator previous = workspaceAnimator;
         workspaceAnimator = null;
         if (previous != null) previous.cancel();
-        if (topBar != null) topBar.closeQuickAppPicker();
+        if (topBar != null) topBar.closeContentUi();
         publishDesktopSideTasks();
         statusBar.restore();
         // Hide native overlay/input before publishing physical fullscreen geometry.
@@ -5984,10 +5978,6 @@ public final class WorkspaceHost {
         return Math.max(1, bottom - top);
     }
 
-    private int dp(float value) {
-        return Math.round(ctx.getResources().getDisplayMetrics().density * value);
-    }
-
     private boolean presentsSlot(Slot slot) {
         if (slot.index == SLOT_TOP) return true;
         return slot.sideRow >= 0 ? slot.sideShown : slot.index < CELL_SLOT_COUNT;
@@ -6405,7 +6395,7 @@ public final class WorkspaceHost {
         if(layout!=null && !layout.tabletLandscape && workspaceAlpha<1f && mainSideAnimator==null) {
             android.graphics.RectF edge=workspaceMainHole();
             offset=WorkspaceTransition.sideOffset(layout.mainOnRight,layout.mainOffsetX,
-                    layout.mainDispWidth,edge.left,edge.right);
+                    layout.mainDispWidth,edge.left,edge.right,layout.gap,workspaceAlpha);
         }
         view.setX(rect[0]+offset);
         view.setY(rect[1]);
@@ -8104,14 +8094,6 @@ public final class WorkspaceHost {
         }
         ticket.compactSnapshot = null;
         ticket.compactSnapshotRect = null;
-    }
-
-    private void finishSwapPreview() {
-        finishSwapPreview(0L);
-    }
-
-    private void finishSwapPreview(long settleMs) {
-        finishSwapPreview(null, settleMs);
     }
 
     private void finishSwapPreview(Object statusOwner, long settleMs) {

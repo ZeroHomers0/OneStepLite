@@ -209,16 +209,6 @@ final class RetainedWindow {
         }, LOCK_HOLD_MS);
     }
 
-    boolean hostPresented(Object display){
-        if(window==null||!owns(window,display))return false;
-        try{
-            WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(window,"mAttrs");
-            Object animator=XposedHelpers.getObjectField(window,"mWinAnimator");
-            return attrs.alpha>0f&&surfaceShown(animator)&&XposedHelpers.getIntField(animator,"mDrawState")==4
-                    &&Boolean.TRUE.equals(XposedHelpers.callMethod(window,"isOnScreen"));
-        }catch(Throwable absent){return false;}
-    }
-
     interface PhysicalRestore {void apply() throws Throwable;}
     /** The same committed transaction must hold physical geometry before unmasking main. */
     void finishAuthenticatedRelease(Object display,Object transaction,boolean authenticated,

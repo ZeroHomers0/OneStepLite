@@ -219,7 +219,7 @@ final class PortalSource implements AutoCloseable {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,android.graphics.PixelFormat.TRANSLUCENT);
         attrs.setTitle(PortalDragInput.TITLE);attrs.gravity=android.view.Gravity.TOP|android.view.Gravity.LEFT;
         try{PortalInputCompat.bindSource(attrs,request.getString("source"));}
-        catch(RuntimeException unavailable){clearWindow();done.countDown();return;}
+        catch(RuntimeException unavailable){finishRejectedLift(uri,!expired.get() && live());done.countDown();return;}
         HostWindowPolicy.configure(attrs);window.setAlpha(0f);
         window.setOnDragListener((view,event)->{
             if(event.getAction()==DragEvent.ACTION_DRAG_ENDED)main.post(this::clearWindow);
@@ -236,13 +236,16 @@ final class PortalSource implements AutoCloseable {
                 Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);result[0]=reply;
                 ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,accepted?ShareDiagnostics.Code.STARTED:ShareDiagnostics.Code.FAILED);
                 if(!accepted) {
-                    boolean offerPreview=current && uri!=null && token==generation && live();
-                    clearWindow();
-                    if(offerPreview && ready.getAsBoolean())imagePreview.accept(android.net.Uri.parse(uri));
+                    finishRejectedLift(uri,current && token==generation && live());
                 } else main.postDelayed(expire,60_000L);
                 done.countDown();
             });
-        } catch(RuntimeException unavailable){clearWindow();done.countDown();}
+        } catch(RuntimeException unavailable){finishRejectedLift(uri,!expired.get() && live());done.countDown();}
+    }
+
+    private void finishRejectedLift(String uri,boolean current) {
+        clearWindow();
+        if(current && uri!=null && ready.getAsBoolean())imagePreview.accept(android.net.Uri.parse(uri));
     }
     private void prepareLiftPreview(Bundle candidate,android.net.Uri uri) {
         android.content.ContentResolver resolver=anchor.getContext().getContentResolver();

@@ -69,7 +69,6 @@ final class QuickAppRail extends View {
 
     interface Listener {
         void onLaunch(QuickApp quickApp);
-        void onCustomize();
     }
 
     QuickAppRail(Context context, List<QuickApp> list, Listener listener) {

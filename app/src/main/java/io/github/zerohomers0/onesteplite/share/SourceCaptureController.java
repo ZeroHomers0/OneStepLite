@@ -187,7 +187,7 @@ final class SourceCaptureController implements AutoCloseable {
     private LinearLayout body(Context themed,String title) {
         LinearLayout body=new LinearLayout(themed);body.setOrientation(LinearLayout.VERTICAL);body.setPadding(dp(8),dp(8),dp(8),dp(8));
         WorkspacePopupStyle.decorate(body,null);WorkspacePopupStyle.heading(body,"主窗图片",this::close);
-        TextView text=new TextView(themed);text.setText(title);text.setTextSize(12);
+        TextView text=new TextView(themed);text.setText(title);text.setTextSize(WorkspacePopupStyle.SUPPORT_SP);
         text.setTextColor(HyperOsStyle.textSecondary(themed));text.setPadding(dp(4),dp(4),dp(4),dp(8));body.addView(text);return body;
     }
 

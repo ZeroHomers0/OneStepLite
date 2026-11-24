@@ -48,7 +48,7 @@ public class WorkspaceHost {
  static int checks;
  static void check(boolean ok,String m){checks++;if(!ok)throw new AssertionError(m);}
  static class View {static final int VISIBLE=0,GONE=8;int layouts;void requestLayout(){layouts++;}
-  Object getWindowToken(){return this;}void setVisibility(int v){}void closeQuickAppPicker(){}void applyOptions(WorkspaceOptions o){}}
+  Object getWindowToken(){return this;}void setVisibility(int v){}void closeContentUi(){}void applyOptions(WorkspaceOptions o){}}
  static class WindowManager {
   static class LayoutParams {static final int FLAG_NOT_TOUCHABLE=16;float alpha=.8f;int flags=64;}
   int updates;boolean fail;void updateViewLayout(View root,LayoutParams params){

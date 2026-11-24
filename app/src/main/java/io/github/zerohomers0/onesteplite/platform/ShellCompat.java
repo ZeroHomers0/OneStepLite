@@ -30,17 +30,6 @@ final class ShellCompat {
         return false;
     }
 
-    static void loadConstraints(Object set, Object context, int xml) {
-        Object[] args = {context, xml};
-        Method load = method(set, "load", args);
-        if (load == null) {
-            args = new Object[]{xml, context};
-            load = method(set, "load", args);
-        }
-        if (load == null) throw new IllegalStateException("Native constraint loader unavailable");
-        invoke(load, set, args);
-    }
-
     private static Class<?> boxed(Class<?> type) {
         if (type == int.class) return Integer.class;
         if (type == boolean.class) return Boolean.class;

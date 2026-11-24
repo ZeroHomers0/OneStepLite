@@ -125,20 +125,10 @@ final class HyperOsStyle {
         return dark(context) ? FALLBACK_ACCENT_DARK : FALLBACK_ACCENT_LIGHT;
     }
 
-    static int accentSoft(Context context, int i) {
-        return withAlpha(accent(context), i);
-    }
-
     static Drawable topBackground(Context context) {
         boolean zDark = dark(context);
         int i = zDark ? -15263716 : -394500;
         return new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{blend(i, zDark ? -12371120 : -729880, zDark ? 0.07f : 0.1f), blend(i, accent(context), zDark ? 0.12f : 0.085f), blend(i, zDark ? -14857392 : -2493713, zDark ? 0.06f : 0.1f)});
-    }
-
-    static Drawable topWallpaperWash(Context context) {
-        boolean zDark = dark(context);
-        int i = zDark ? -652600544 : -956564739;
-        return new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{withAlpha(blend(i, zDark ? -12371120 : -729880, zDark ? 0.07f : 0.1f), 168), withAlpha(blend(i, accent(context), zDark ? 0.12f : 0.085f), 168), withAlpha(blend(i, zDark ? -14857392 : -2493713, zDark ? 0.06f : 0.1f), 168)});
     }
 
     static int topWallpaperTint(Context context) {
@@ -218,45 +208,11 @@ final class HyperOsStyle {
         return iArr3;
     }
 
-    static Drawable glassPill(Context context, float f) {
-        return glassPill(context, f, false);
-    }
-
-    static Drawable glassPill(Context context, float f, boolean z) {
-        int i;
-        int i2;
-        if (dark(context)) {
-            i = z ? -650887862 : -651481806;
-            i2 = z ? -1037355966 : -1038213083;
-        } else {
-            i = z ? -219220481 : -218103809;
-            i2 = z ? -572264449 : -571608844;
-        }
-        GradientDrawable gradientDrawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{i, i2});
-        gradientDrawable.setCornerRadius(dp(context, f));
-        gradientDrawable.setStroke(Math.max(1, dp(context, 0.75f)), stroke(context));
-        return gradientDrawable;
-    }
-
     static Drawable glassSheet(Context context, float f) {
         GradientDrawable gradientDrawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{dark(context) ? -265934803 : -117440513, dark(context) ? -317187554 : -353176329});
         gradientDrawable.setCornerRadius(dp(context, f));
         gradientDrawable.setStroke(Math.max(1, dp(context, 0.75f)), stroke(context));
         return gradientDrawable;
-    }
-
-    static Drawable glassButton(Context context, float f, boolean z) {
-        return controlButton(context, z, f);
-    }
-
-    static Drawable pressableItem(Context context, float f) {
-        GradientDrawable gradientDrawable = new GradientDrawable();
-        gradientDrawable.setCornerRadius(dp(context, f));
-        gradientDrawable.setColor(dark(context) ? 268435455 : 16777215);
-        GradientDrawable gradientDrawable2 = new GradientDrawable();
-        gradientDrawable2.setCornerRadius(dp(context, f));
-        gradientDrawable2.setColor(-1);
-        return new RippleDrawable(ColorStateList.valueOf(accentSoft(context, dark(context) ? 102 : 56)), gradientDrawable, gradientDrawable2);
     }
 
     static Drawable emptyCell(Context context) {
@@ -275,10 +231,6 @@ final class HyperOsStyle {
 
     static int dp(Context context, float f) {
         return Math.round(f * context.getResources().getDisplayMetrics().density);
-    }
-
-    private static int withAlpha(int i, int i2) {
-        return (i & 16777215) | ((i2 & 255) << 24);
     }
 
     private static int blend(int i, int i2, float f) {
