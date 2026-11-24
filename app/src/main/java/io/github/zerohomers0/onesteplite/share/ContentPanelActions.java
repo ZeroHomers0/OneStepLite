@@ -19,8 +19,6 @@ final class ContentPanelActions extends LinearLayout {
         clear.setText(page==3?"移除暂存":"清除记录");}
     private TextView button(String text,Runnable action) {
         TextView view=WorkspacePopupStyle.action(getContext(),text,false,action);
-        LayoutParams params=new LayoutParams(0,-1,1);
-        int gap=Math.round(HyperOsStyle.dp(getContext(),3));params.setMargins(gap,gap,gap,gap);
-        addView(view,params);return view;
+        addView(view,WorkspacePopupStyle.actionCell(getContext()));return view;
     }
 }

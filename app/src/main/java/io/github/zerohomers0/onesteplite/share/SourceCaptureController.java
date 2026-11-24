@@ -98,7 +98,7 @@ final class SourceCaptureController implements AutoCloseable {
         LinearLayout body=body(themed,"框选主窗画面 · 截取结果为图片");
         crop=new CaptureCropView(themed,snapshot);body.addView(crop,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout actions=new LinearLayout(themed);button(actions,"取消",this::close);button(actions,"使用选区",this::prepare);
-        body.addView(actions,new LinearLayout.LayoutParams(-1,dp(48)));dialog.setContentView(body);
+        body.addView(actions,new LinearLayout.LayoutParams(-1,-2));dialog.setContentView(body);
         dialog.setOnDismissListener(d->close());Window window=dialog.getWindow();if(window==null){close();return;}
         window.setType(WindowTypes.SYSTEM_UI_DIALOG);window.setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
         WindowManager.LayoutParams attrs=window.getAttributes();attrs.setTitle("OneStepLiteContentPanel");
@@ -162,7 +162,7 @@ final class SourceCaptureController implements AutoCloseable {
         if(dialog==null)return;LinearLayout body=body(dialog.getContext(),"长按图片，拖到分享入口或小窗");
         ImageView image=new ImageView(dialog.getContext());image.setImageBitmap(result);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
         image.setContentDescription("截取的主窗图片，长按拖曳分享");body.addView(image,new LinearLayout.LayoutParams(-1,0,1));
-        LinearLayout actions=new LinearLayout(dialog.getContext());button(actions,"关闭",this::close);body.addView(actions,new LinearLayout.LayoutParams(-1,dp(48)));
+        LinearLayout actions=new LinearLayout(dialog.getContext());button(actions,"关闭",this::close);body.addView(actions,new LinearLayout.LayoutParams(-1,-2));
         image.setOnLongClickListener(view->{
             try {
                 ClipData clip=new ClipData("主窗图片",new String[]{"image/jpeg"},new ClipData.Item(uri));
@@ -193,8 +193,7 @@ final class SourceCaptureController implements AutoCloseable {
 
     private void button(LinearLayout actions,String label,Runnable action) {
         TextView button=WorkspacePopupStyle.action(actions.getContext(),label,label.equals("使用选区"),action);
-        button.setOnClickListener(v->action.run());LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,-1,1);
-        params.setMargins(dp(3),dp(3),dp(3),dp(3));actions.addView(button,params);
+        actions.addView(button,WorkspacePopupStyle.actionCell(actions.getContext()));
     }
 
     private void discard(String id) {WORKER.execute(()->{

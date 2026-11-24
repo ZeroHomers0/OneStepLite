@@ -5,6 +5,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from source_paths import package_dir
 src=package_dir(Path(__file__).resolve().parents[2]);out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 files={
+'android/util/Log.java':'package android.util;public class Log{public static int w(String t,String m,Throwable e){return 0;}}',
 'android/os/Handler.java':'''package android.os;public class Handler{public java.util.Set<Runnable> delayed=new java.util.HashSet<>();public void post(Runnable r){r.run();}public void postDelayed(Runnable r,long t){delayed.add(r);}public void removeCallbacks(Runnable r){delayed.remove(r);}}''',
 'android/os/PersistableBundle.java':'''package android.os;public class PersistableBundle{public void putString(String k,String v){}}''',
 'android/content/ClipData.java':'''package android.content;public class ClipData{public Description getDescription(){return new Description();}public static class Description{public android.os.PersistableBundle getExtras(){return new android.os.PersistableBundle();}public void setExtras(Object o){}}}''',
@@ -30,10 +31,12 @@ public static Object callMethod(Object o,String n,Object...args){try{for(var m:o
 import android.graphics.*;import android.os.*;import android.view.*;import android.animation.*;import de.robv.android.xposed.*;import java.util.*;
 class ContentDragShadow{boolean down;int recycled,draws;boolean pointsDown(){return down;}boolean pointDown(boolean v){if(v==down)return false;down=v;return true;}void onProvideShadowMetrics(Point size,Point touch){size.x=100;size.y=110;touch.x=50;touch.y=107;}void onDrawShadow(Canvas c){draws++;}void recycleThumbnail(){recycled++;}}
 class WindowIdentity{static boolean ownsPicker(Object w,Object d){return false;}}
+class Tags{static final String PROBE="test";}
 public class NativeGeometryRegression{
-public static class State{public Object mLocalWin=new Object();public SurfaceControl mSurfaceControl=new SurfaceControl();public float mThumbOffsetY=107,mCurrentX=500,mCurrentY=870;public Set<Object> mNotifiedWindows=new HashSet<>();}
+public static class State{public Object mLocalWin=new Object();public SurfaceControl mSurfaceControl=new SurfaceControl();public float mThumbOffsetY=107,mCurrentX=500,mCurrentY=870;public Set<Object> mNotifiedWindows=new HashSet<>();public int ended;public void endDragLocked(boolean consumed,boolean relinquish){if(consumed||relinquish)throw new AssertionError("cancel must not report success");ended++;}}
+public static class RomState extends State{public float mCurrentDisplayX=500,mCurrentDisplayY=870;}
 public static class Wm{public Map<Object,Object> mWindowMap=new HashMap<>();public Object mGlobalLock=new Object();public Handler mH=new Handler();public android.content.Context mContext=new android.content.Context();}
-public static class Target{public Object mInputChannelToken=new Object();}
+public static class Target{public Object mInputChannelToken=new Object();public float translateToWindowX(float x){return x*.75f-20;}public float translateToWindowY(float y){return y*.75f-200;}}
 public static class Display{public Wm mWmService=new Wm();public Object mInputMethodWindow;public Target target=new Target();public Object getTouchableWinAtPointLocked(float x,float y){return y>=940&&y<1000?target:null;}}
 public static class Controller{public State mDragState=new State();}
 static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
@@ -45,6 +48,7 @@ Target source=new Target();display.mWmService.mWindowMap.put(state.mLocalWin,sou
 state.mNotifiedWindows.add(display.target);NativeDragGeometry.attach(controller,display,card,state.mSurfaceControl,()->true);
 check(display.mWmService.mH.delayed.size()==1,"one bounded lifetime");move(state,850);check(!card.down&&card.draws==0,"middle keeps original hotspot");
 var stationary=event(state,source.mInputChannelToken,500f,850f);XposedBridge.hooks.get("reportDropWindowLock").fire(stationary);check(Boolean.FALSE.equals(stationary.result),"release in source window cancels instead of resending");
+check(state.ended==1,"rejected drop ends native session instead of only skipping dispatch");
 move(state,870);check(card.down&&card.draws==1,"bottom flips the visible arrow");ValueAnimator down=ValueAnimator.latest;
 down.tick(1);check(state.mThumbOffsetY==3,"finger moves to top of card");check(state.mSurfaceControl.y==867,"card body is below finger");
 var drop=event(state,new Object(),500f,870f);XposedBridge.hooks.get("reportDropWindowLock").fire(drop);
@@ -56,6 +60,19 @@ down.tick(.5f);check(state.mThumbOffsetY==107,"retired lower animation cannot ov
 XposedBridge.hooks.get("closeLocked").fire(event(state));check(card.recycled==1&&display.mWmService.mH.delayed.isEmpty(),"close frees image and deadline");
 up.tick(.5f);check(state.mThumbOffsetY==107,"late animation after close cannot mutate WM");
 check(XposedHelpers.getAdditionalInstanceField(state,"content_drag_geometry")==null,"close removes session ownership");
+controller=new Controller();controller.mDragState=new RomState();state=controller.mDragState;display=new Display();card=new ContentDragShadow();
+source=new Target();display.mWmService.mWindowMap.put(state.mLocalWin,source);state.mNotifiedWindows.add(display.target);
+NativeDragGeometry.attach(controller,display,card,state.mSurfaceControl,()->true);
+var same=event(state,source.mInputChannelToken,22f,33f,500f,850f);XposedBridge.hooks.get("reportDropWindowLock").fire(same);
+check(Boolean.FALSE.equals(same.result)&&state.ended==1,"HyperOS five-argument same-window drop cancels before QQ sees DROP");
+XposedBridge.hooks.get("updateDragSurfaceLocked").fire(event(state,true,0,500f,870f));ValueAnimator.latest.tick(1);
+check(card.down&&state.mThumbOffsetY==3&&state.mSurfaceControl.y==867,"HyperOS four-argument movement uses physical position and new coordinate fields");
+var rom=event(state,new Object(),11f,12f,500f,870f);XposedBridge.hooks.get("reportDropWindowLock").fire(rom);
+check(rom.args[0]==display.target.mInputChannelToken&&(Float)rom.args[4]==974f,"HyperOS redirected drop preserves distinct raw arrow coordinates");
+check((Float)rom.args[1]==355f&&(Float)rom.args[2]==530.5f,"HyperOS receiver gets translated local coordinates, not raw screen coordinates");
+state.mNotifiedWindows.clear();rom=event(state,new Object(),0f,0f,500f,870f);XposedBridge.hooks.get("reportDropWindowLock").fire(rom);
+check(Boolean.FALSE.equals(rom.result)&&state.ended==2,"HyperOS unnotified target also ends with failure");
+XposedBridge.hooks.get("closeLocked").fire(event(state));
 System.out.println("Production native drag geometry checks="+checks+" passed (WM doubles; device pending)");}}
 '''
 }

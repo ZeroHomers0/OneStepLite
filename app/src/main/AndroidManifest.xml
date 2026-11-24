@@ -37,7 +37,7 @@
         <data android:mimeType="text/plain" />
       </intent-filter>
     </activity>
-    <activity android:name=".VisualSearchActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@style/Theme.OneStepLite.Settings" />
+    <activity android:name=".VisualSearchActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@style/Theme.OneStepLite.Transparent" />
     <!-- Settings scope provides only the native module settings entry. -->
     <meta-data android:name="xposedmodule" android:value="true" />
     <meta-data android:name="xposeddescription" android:value="OneStepLite：系统主窗缩放与三个真实小窗。" />

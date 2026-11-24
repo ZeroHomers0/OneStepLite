@@ -25,16 +25,16 @@ final class NativeDragGeometry {
             if(XposedBridge.hookAllMethods(type,"updateDragSurfaceLocked",new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam call){
                     Object value=XposedHelpers.getAdditionalInstanceField(call.thisObject,KEY);
-                    if(value instanceof Session && call.args.length==3)try{
-                        ((Session)value).move(((Number)call.args[2]).floatValue());
+                    if(value instanceof Session && (call.args.length==3 || call.args.length==4))try{
+                        ((Session)value).move(((Number)call.args[call.args.length-2]).floatValue(),((Number)call.args[call.args.length-1]).floatValue());
                     }catch(Throwable unavailable){((Session)value).stop();}
                 }
             }).isEmpty())return false;
             if(XposedBridge.hookAllMethods(type,"reportDropWindowLock",new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam call){
                     Object value=XposedHelpers.getAdditionalInstanceField(call.thisObject,KEY);
-                    if(value instanceof Session && call.args.length==3)try{((Session)value).drop(call);}
-                    catch(Throwable unavailable){call.setResult(false);}
+                    if(value instanceof Session && (call.args.length==3 || call.args.length==5))try{((Session)value).drop(call);}
+                    catch(Throwable unavailable){((Session)value).reject(call);}
                 }
             }).isEmpty())return false;
             XposedBridge.hookAllMethods(type,"closeLocked",new XC_MethodHook(){
@@ -70,6 +70,7 @@ final class NativeDragGeometry {
         final BooleanSupplier active;
         final Point size=new Point(),touch=new Point();
         final float unit;
+        float currentX,currentY;
         ValueAnimator animator;
         boolean stopped;
         int generation;
@@ -87,13 +88,16 @@ final class NativeDragGeometry {
                 }
             }
             origin=source;
+            try{currentX=XposedHelpers.getFloatField(state,"mCurrentDisplayX");currentY=XposedHelpers.getFloatField(state,"mCurrentDisplayY");}
+            catch(RuntimeException older){currentX=XposedHelpers.getFloatField(state,"mCurrentX");currentY=XposedHelpers.getFloatField(state,"mCurrentY");}
             handler=(Handler)XposedHelpers.getObjectField(wm,"mH");card.onProvideShadowMetrics(size,touch);unit=(size.y-touch.y)/3f;
             handler.postDelayed(expiry,60_000L);
         }
         boolean valid(){return !stopped && active.getAsBoolean() && surface.isValid()
                 && XposedHelpers.getObjectField(state,"mSurfaceControl")==surface;}
-        void move(float y){
+        void move(float x,float y){
             if(!valid())return;
+            currentX=x;currentY=y;
             float bottom=context.getResources().getDisplayMetrics().heightPixels;
             try{Object ime=XposedHelpers.getObjectField(display,"mInputMethodWindow");
                 if(ime!=null && Boolean.TRUE.equals(XposedHelpers.callMethod(ime,"isVisible")))
@@ -109,8 +113,7 @@ final class NativeDragGeometry {
                     animator.addUpdateListener(frame->{synchronized(lock){if(!valid() || token!=generation)return;
                         float offset=(Float)frame.getAnimatedValue();XposedHelpers.setFloatField(state,"mThumbOffsetY",offset);
                         try(SurfaceControl.Transaction tx=new SurfaceControl.Transaction()){
-                            tx.setPosition(surface,XposedHelpers.getFloatField(state,"mCurrentX")-touch.x,
-                                    XposedHelpers.getFloatField(state,"mCurrentY")-offset).apply();}
+                            tx.setPosition(surface,currentX-touch.x,currentY-offset).apply();}
                     }});animator.start();}
             });
         }
@@ -122,14 +125,25 @@ final class NativeDragGeometry {
         }
         void drop(XC_MethodHook.MethodHookParam call){
             if(!valid())return;
-            if(origin!=null && java.util.Objects.equals(call.args[0],XposedHelpers.getObjectField(origin,"mInputChannelToken"))){call.setResult(false);return;}
+            if(origin!=null && java.util.Objects.equals(call.args[0],XposedHelpers.getObjectField(origin,"mInputChannelToken"))){reject(call);return;}
             if(!card.pointsDown())return;
-            float x=((Number)call.args[1]).floatValue(),raw=((Number)call.args[2]).floatValue();
+            int rawIndex=call.args.length==5?3:1;
+            float x=((Number)call.args[rawIndex]).floatValue(),raw=((Number)call.args[rawIndex+1]).floatValue();
             float y=raw-XposedHelpers.getFloatField(state,"mThumbOffsetY")+size.y-3*unit;
             Object target=XposedHelpers.callMethod(display,"getTouchableWinAtPointLocked",x,y);
             Object notified=XposedHelpers.getObjectField(state,"mNotifiedWindows");
-            if(target==null || target==origin || !Boolean.TRUE.equals(XposedHelpers.callMethod(notified,"contains",target))){call.setResult(false);return;}
-            call.args[0]=XposedHelpers.getObjectField(target,"mInputChannelToken");call.args[2]=y;
+            if(target==null || target==origin || !Boolean.TRUE.equals(XposedHelpers.callMethod(notified,"contains",target))){reject(call);return;}
+            call.args[0]=XposedHelpers.getObjectField(target,"mInputChannelToken");
+            if(call.args.length==5){
+                call.args[1]=XposedHelpers.callMethod(target,"translateToWindowX",x);
+                call.args[2]=XposedHelpers.callMethod(target,"translateToWindowY",y);
+                call.args[3]=x;call.args[4]=y;
+            }else{call.args[1]=x;call.args[2]=y;}
+        }
+        void reject(XC_MethodHook.MethodHookParam call){
+            call.setResult(false);
+            try{XposedHelpers.callMethod(state,"endDragLocked",false,false);}
+            catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"native drag cancellation unavailable",unavailable);}
         }
         void stop(){if(stopped)return;stopped=true;generation++;handler.removeCallbacks(expiry);
             handler.post(()->{if(animator!=null){animator.cancel();animator=null;}card.recycleThumbnail();});}

@@ -19,7 +19,6 @@ final class WordSelectionPane extends LinearLayout {
     private final List<int[]> spans=new ArrayList<>();
     private final List<TextView> chips=new ArrayList<>();
     private final BitSet selected=new BitSet();
-    private final TextView result;
     private final FlowPane words;
     private boolean characters;
     private float downX,downY;
@@ -35,15 +34,12 @@ final class WordSelectionPane extends LinearLayout {
         split.setOnClickListener(v->{characters=!characters;split.setText(characters?"分词":"拆字");segment();});
         for(TextView action:new TextView[]{all,split,reset}) {
             WorkspacePopupStyle.styleAction(action,false);
-            LayoutParams cell=new LayoutParams(0,dp(44),1);cell.setMargins(dp(3),dp(3),dp(3),dp(3));actions.addView(action,cell);
+            actions.addView(action,WorkspacePopupStyle.actionCell(context));
         }
         addView(actions,new LayoutParams(-1,-2));
         ScrollView scroll=new ScrollView(context);scroll.setPadding(0,dp(12),0,0);scroll.setClipToPadding(false);
         words=new FlowPane(context);
         scroll.addView(words);addView(scroll,new LayoutParams(-1,0,1));
-        result=label(source);result.setMaxLines(2);result.setTextSize(12);
-        result.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        result.setOnLongClickListener(v->start(v));addView(result,new LayoutParams(-1,dp(56)));
         segment();
     }
     private void segment() {
@@ -104,7 +100,6 @@ final class WordSelectionPane extends LinearLayout {
     }
     private void refresh() {
         for(int i=0;i<chips.size();i++)chips.get(i).setSelected(selected.get(i));
-        result.setText(selected.isEmpty()?source:WordSelectionPolicy.selected(source,spans,selected));
     }
     private android.graphics.drawable.Drawable chipFill(boolean active) {
         android.graphics.drawable.GradientDrawable fill=new android.graphics.drawable.GradientDrawable();

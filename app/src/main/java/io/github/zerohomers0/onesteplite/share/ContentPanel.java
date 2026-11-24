@@ -100,7 +100,7 @@ final class ContentPanel {
         ContentPanelLayout panel=shell;
         tabButtons.clear();tabButtons.addAll(shell.tabs);
         scroll=shell.scroll;grid=shell.grid;
-        panel.addView(actions(themed),new LinearLayout.LayoutParams(-1,dp(44)));
+        panel.addView(actions(themed),new LinearLayout.LayoutParams(-1,-2));
         dialog.setContentView(panel);
         final Dialog opened = dialog;
         dialog.setOnDismissListener(ignored -> {
@@ -400,7 +400,8 @@ final class ContentPanel {
         WorkspacePopupStyle.heading(body,"图片预览",this::closePreview);
         TextView recognize=label("识别文字");recognize.setGravity(Gravity.CENTER);
         WorkspacePopupStyle.styleAction(recognize,false);
-        recognize.setOnClickListener(v->recognize(entry,recognize));body.addView(recognize,new LinearLayout.LayoutParams(-1,dp(44)));
+        recognize.setOnClickListener(v->recognize(entry,recognize));
+        LinearLayout actions=new LinearLayout(context);actions.addView(recognize,WorkspacePopupStyle.actionCell(context));body.addView(actions);
         showPreview(body);
         previewImageView=image;
         final Dialog window=preview;
@@ -431,10 +432,9 @@ final class ContentPanel {
         WorkspacePopupStyle.heading(body,"选词",this::closePreview);
         if(tab==2 && entry.text!=null) {
             TextView pin=WorkspacePopupStyle.action(context,"固定／取消固定",false,()->{history.pin(entry.text);closePreview();load();});
-            LinearLayout actions=new LinearLayout(context);actions.addView(pin,new LinearLayout.LayoutParams(0,dp(44),1));
+            LinearLayout actions=new LinearLayout(context);actions.addView(pin,WorkspacePopupStyle.actionCell(context));
             TextView delete=WorkspacePopupStyle.action(context,"删除记录",false,()->{history.remove(entry.text);closePreview();load();});
-            LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,dp(44),1);cell.setMarginStart(dp(6));
-            actions.addView(delete,cell);body.addView(actions);
+            actions.addView(delete,WorkspacePopupStyle.actionCell(context));body.addView(actions);
         }
         showPreview(body);
     }
