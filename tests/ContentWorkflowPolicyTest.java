@@ -23,6 +23,12 @@ public final class ContentWorkflowPolicyTest {
         check(edge.update(1,0,100,10,701)==-1,"left edge scroll");
         check(edge.update(-1,0,100,10,702)==0,"outside cancels");
         edge.reset();check(edge.update(99,0,100,10,900)==0,"cancel resets dwell");
+        check(edge.step(99,0,100,10,1250)==2,"scroll begins gently after dwell");
+        check(edge.step(99,0,100,10,1800)==7,"deep edge accelerates within bound");
+        check(edge.step(91,0,100,10,1801)==3,"shallow edge remains slow");
+        check(edge.step(50,0,100,10,1802)==0,"leaving edge stops immediately");
+        check(edge.step(Float.NaN,0,100,10,1803)==0,"invalid pointer cannot scroll");
+        check(edge.step(99,0,100,10,1804)==0,"reentry requires a fresh dwell");
         String id="12345678-1234-1234-1234-123456789abc";
         check(ContentInboxPolicy.validId(id),"UUID accepted");
         for(String invalid:new String[]{null,"../secret","------------------------------------",id+"/file"})

@@ -38,14 +38,15 @@ public final class TextDragActivity extends Activity {
             try {
                 ClipData clip=ClipData.newPlainText("选中文字",value);ContentDragShadow shadow=new ContentDragShadow(v,1);shadow.mark(clip);
                 dragging=v.startDragAndDrop(clip,shadow,null,View.DRAG_FLAG_GLOBAL);
-                if(dragging){getWindow().getDecorView().setAlpha(0);getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);}
+                if(!dragging)ContentDragMotion.close();
+                if(dragging)WorkspacePopupStyle.dragWindow(getWindow(),0,false);
                 return dragging;
-            } catch(RuntimeException unavailable){return false;}
+            } catch(RuntimeException unavailable){ContentDragMotion.close();return false;}
         });
         body.setOnDragListener((view,event)->{
             if(event.getAction()==DragEvent.ACTION_DRAG_ENDED && dragging) {
-                dragging=false;if(event.getResult())finish();else {getWindow().getDecorView().setAlpha(1);
-                    getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);}
+                ContentDragMotion.close();
+                dragging=false;if(event.getResult())finish();else WorkspacePopupStyle.dragWindow(getWindow(),0,true);
             }
             return event.getAction()!=DragEvent.ACTION_DROP;
         });

@@ -10,7 +10,6 @@ import java.util.UUID;
 
 /** Explicit bounded staging uses owned inbox data, independently of system recent files. */
 final class ContentShelfStore {
-    private static ClipData recent;
     private ContentShelfStore(){}
     static Bundle call(Context context,String method,Bundle input) {
         if("shelf_list".equals(method))return list(context);
@@ -18,16 +17,7 @@ final class ContentShelfStore {
         if(!"shelf_add".equals(method))throw new IllegalArgumentException("Unknown shelf operation");
         stage(context,input==null?null:input.getParcelable("clip",ClipData.class));return new Bundle();
     }
-    static synchronized void remember(Context context,ClipData clip) {
-        if(clip==null)return;SharePayload payload=new SharePayload(clip);
-        android.os.PersistableBundle extras=clip.getDescription().getExtras();
-        if(extras!=null && extras.getBoolean("android.content.extra.IS_SENSITIVE"))return;
-        for(android.net.Uri uri:payload.uris) {
-            if(!ContentInboxProvider.AUTHORITY.equals(uri.getAuthority()))return;
-            context.grantUriPermission(Packages.SYSTEM_UI,uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        }
-        recent=payload.clip;
-    }
+
     static void stage(Context context,ClipData clip) {
         SharePayload payload=new SharePayload(clip);
         synchronized(ContentInboxProvider.class) {
@@ -65,7 +55,6 @@ final class ContentShelfStore {
             staged.put(row);
         }
         Bundle result=new Bundle();result.putString("rows",staged.toString());
-        synchronized(ContentShelfStore.class){result.putParcelable("recent",recent);}
         return result;
     }
     private static void remove(Context context,Bundle input) {

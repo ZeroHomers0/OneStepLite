@@ -57,11 +57,13 @@ final class ShareWorkspace extends FrameLayout {
     private final ShareRailTransition transition;
     private final float[] pointer=new float[2];
     private float lastX,lastY;
+    private boolean hasPointer;
     private boolean edgeQueued;
     private final Runnable edgeTick=this::scrollEdge;
     private boolean dragging, dropped;
     private int generation, user;
     private ComponentName hovered;
+    private long lastFeedback;
     private ShareReadLease pendingRead;
     private DropPermissionContract delegatedRead;
     private final Runnable expire = ()->{if(deliveryPending)failDelivery(generation,user);else cancel();};
@@ -70,10 +72,12 @@ final class ShareWorkspace extends FrameLayout {
     private Runnable afterDrag=()->{};
     private ShareDragCatchment catchment;
     private int tipOffset;
+    private float dragHalfWidth;
     private boolean mainRight,panelSource;
     private ShareDelivery receipt;
     private ClipData transferClip;
     private final WindowDragHover windowHover;
+    private final EditorDragOutline editorOutline;
     private java.util.function.Function<String,String> hoverIdentity=value->value;
     private Consumer<String> hoverActivate=value->{};
     private BiConsumer<Boolean,ClipData> resultSink=this::onDeliveryResult;
@@ -93,6 +97,7 @@ final class ShareWorkspace extends FrameLayout {
         this.normalRail = normalRail;
         this.ready = ready;
         windowHover=new WindowDragHover(this,()->dragging && this.ready.getAsBoolean());
+        editorOutline=new EditorDragOutline(this,()->dragging && this.ready.getAsBoolean());
         this.dispatch = dispatch;
         this.hint = hint;
         history=new ClipboardHistory(context);
@@ -122,6 +127,7 @@ final class ShareWorkspace extends FrameLayout {
         shareFace.addView(scroll, row);
         shareFace.setVisibility(INVISIBLE);
         transition=new ShareRailTransition(normalRail,shareFace,content);
+        transition.onFrame(()->{if(dragging && hasPointer)updateHovered(lastX,lastY);});
         setOnDragListener((v, event) -> drag(event));
         if(shareOnly)setAlpha(0);
     }
@@ -137,8 +143,10 @@ final class ShareWorkspace extends FrameLayout {
                 if(dragging)return true;
                 cancel();
                 dragging = true;panelSource=panel.isDragging();
+                editorOutline.start(event.getClipDescription());
                 performHapticFeedback(android.view.HapticFeedbackConstants.DRAG_START);
                 tipOffset=ContentAccessCompat.arrowOffset(event);
+                dragHalfWidth=ContentAccessCompat.shadowHalfWidth(event);
                 if(tipOffset>0) {
                     catchment=new ShareDragCatchment(this,tipOffset,()->dragging && ready.getAsBoolean());catchment.start();
                 }
@@ -163,12 +171,13 @@ final class ShareWorkspace extends FrameLayout {
                 });
                 return true;
             case DragEvent.ACTION_DRAG_LOCATION:
-                if (dragging) locate(event.getX(), event.getY()-tipOffset);
+                if (dragging) {refreshTip(event);locate(event.getX(), event.getY()-tipOffset);}
                 return dragging;
             case DragEvent.ACTION_DRAG_EXITED:
-                stopEdge();hovered = null; clearTargetHover();hint.accept(null); return dragging;
+                hasPointer=false;stopEdge();hovered = null; clearTargetHover();hint.accept(null); return dragging;
             case DragEvent.ACTION_DROP:
                 if (!live(generation)) return false;
+                refreshTip(event);
                 locate(event.getX(), event.getY()-tipOffset);
                 if (hovered == null) return false;
                 return drop(event, hovered);
@@ -194,6 +203,13 @@ final class ShareWorkspace extends FrameLayout {
     }
 
     boolean onTipDrag(DragEvent event){return drag(event);}
+    private void refreshTip(DragEvent event){
+        dragHalfWidth=ContentAccessCompat.shadowHalfWidth(event);
+        int next=ContentAccessCompat.arrowOffset(event);if(next==tipOffset)return;
+        tipOffset=next;
+        if(catchment!=null){catchment.extend(next);return;}
+        if(next>0){catchment=new ShareDragCatchment(this,next,()->dragging && ready.getAsBoolean());catchment.start();}
+    }
     void setWindowHover(java.util.function.Function<String,String> identity,Consumer<String> activate) {
         hoverIdentity=identity;hoverActivate=activate;windowHover.bind(identity,activate);
         if(overlay!=null)overlay.setWindowHover(identity,activate);
@@ -259,10 +275,12 @@ final class ShareWorkspace extends FrameLayout {
     }
 
     private void locate(float x, float y) {
+        hasPointer=true;
         lastX=x;lastY=y;
         updateHovered(x,y);
-        edge.update(x,0,getWidth(),dp(24),android.os.SystemClock.uptimeMillis());
-        if(y>=0 && y<getHeight() && x>=0 && (x<dp(24) || x>getWidth()-dp(24))) {
+        float band=Math.max(dp(24),dragHalfWidth);
+        edge.update(x,0,getWidth(),band,android.os.SystemClock.uptimeMillis());
+        if(y>=0 && y<getHeight() && x>=0 && (x<band || x>getWidth()-band)) {
             if(!edgeQueued){edgeQueued=true;handler.postDelayed(edgeTick,16L);}
         } else stopEdge();
     }
@@ -276,25 +294,35 @@ final class ShareWorkspace extends FrameLayout {
         pointer[0]-=scroll.getLeft();pointer[1]-=scroll.getTop();
         if(pointer[1]<0 || pointer[1]>=scroll.getHeight()){clearTargetHover();hint.accept(null);return;}
         float position=pointer[0]+scroll.getScrollX();
+        String unavailable=null;
         for (int i = 0; i < targets.getChildCount(); i++) {
             View view = targets.getChildAt(i);
             ShareTarget target=view.getTag() instanceof ShareTarget?(ShareTarget)view.getTag():null;
             float inset=dp(6);
-            boolean hit=target!=null && target.enabled && ShareTargetHitPolicy.hit(position,pointer[1],view.getLeft(),view.getRight(),
+            boolean inside=target!=null && ShareTargetHitPolicy.hit(position,pointer[1],view.getLeft(),view.getRight(),
                     scroll.getHeight(),inset,target.component.equals(previous)?dp(3):0);
+            boolean hit=inside && target.enabled;
+            if(inside && !target.enabled)unavailable=target.label+" · 不支持当前内容";
             view.setAlpha(target!=null && !target.enabled?.3f:1f);
             if(view instanceof ShareTargetButton)((ShareTargetButton)view).setDragHovered(hit);
             if(hit){hovered=target.component;hint.accept(target.label);}
         }
-        if (hovered == null) hint.accept(null);
-        if(hovered!=null && !hovered.equals(previous))performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+        if (hovered == null) hint.accept(unavailable);
+        long now=android.os.SystemClock.uptimeMillis();
+        if(hovered!=null && !hovered.equals(previous) && now-lastFeedback>=90){lastFeedback=now;
+            performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);}
     }
 
     private void scrollEdge() {
         edgeQueued=false;
         if(!dragging || !isShown())return;
-        int direction=edge.update(lastX,0,getWidth(),dp(24),android.os.SystemClock.uptimeMillis());
-        if(direction!=0){scroll.scrollBy(direction*dp(4),0);updateHovered(lastX,lastY);}
+        int direction=edge.update(lastX,0,getWidth(),Math.max(dp(24),dragHalfWidth),android.os.SystemClock.uptimeMillis());
+        if(direction!=0){
+            int before=scroll.getScrollX();
+            scroll.scrollBy(dp(edge.step(lastX,0,getWidth(),Math.max(dp(24),dragHalfWidth),android.os.SystemClock.uptimeMillis())),0);
+            updateHovered(lastX,lastY);
+            if(scroll.getScrollX()==before){edge.reset();return;}
+        }
         edgeQueued=true;handler.postDelayed(edgeTick,16L);
     }
 
@@ -306,10 +334,6 @@ final class ShareWorkspace extends FrameLayout {
             SharePayload payload=new SharePayload(event.getClipData());transferClip=payload.clip;
             if(IMAGE_TEXT.equals(target))return recognizeDrop(event,payload);
             String operation=ShareActions.operation(target);
-            if(ShareActions.PASTE.equals(operation)) {
-                if(!payload.uris.isEmpty() || !EditorPasteCompat.paste(getContext(),payload.text))return false;
-                dropped=true;return true;
-            }
             Intent intent=ShareRoutes.intent(payload,target);
             if(operation.isEmpty() && getContext().getPackageManager().queryIntentActivities(intent,0).isEmpty())return false;
             int token=generation,owner=user;deliveryPending=true;
@@ -399,6 +423,8 @@ final class ShareWorkspace extends FrameLayout {
     private void finishVisuals() {
         if(catchment!=null){catchment.close();catchment=null;}
         windowHover.close();
+        editorOutline.close();
+        hasPointer=false;
         dragging = false;
         hovered = null;
         clearTargetHover();
@@ -422,6 +448,7 @@ final class ShareWorkspace extends FrameLayout {
         if (pendingRead != null) { pendingRead.close(); pendingRead = null; }
         if(delegatedRead!=null){delegatedRead.close();delegatedRead=null;}
         dropped = false;
+        if(dragging)panel.dragEnded(false);
         deliveryPending=false;retainingDelivery=false;
         Runnable settled=deliverySettled;deliverySettled=()->{};settled.run();
         finishVisuals();
@@ -453,7 +480,7 @@ final class ShareWorkspace extends FrameLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
-        if(retainingDelivery){stopEdge();panel.close();capture.close();if(portal!=null)portal.close();history.stop();picker.close();}
+        if(retainingDelivery){finishVisuals();transition.reset();panel.close();capture.close();if(portal!=null)portal.close();history.stop();picker.close();}
         else close();super.onDetachedFromWindow();
     }
     @Override protected void onSizeChanged(int w, int h, int oldW, int oldH) {

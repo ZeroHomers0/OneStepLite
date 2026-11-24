@@ -11,11 +11,17 @@ import java.util.function.BooleanSupplier;
 final class ShareDragCatchment implements AutoCloseable {
     private final ShareWorkspace owner;
     private final BooleanSupplier live;
-    private final int offset;
+    private int offset;
     private FrameLayout plate;
     private final Runnable show=this::show;
     ShareDragCatchment(ShareWorkspace owner,int offset,BooleanSupplier live){this.owner=owner;this.offset=offset;this.live=live;}
     void start(){owner.postOnAnimation(show);}
+    void extend(int next){
+        if(next<=offset)return;offset=next;if(plate==null)return;
+        WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)plate.getLayoutParams();attrs.height=owner.getHeight()+offset;
+        try{plate.getContext().getSystemService(WindowManager.class).updateViewLayout(plate,attrs);}
+        catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"share arrow reach resize failed",unavailable);}
+    }
     @android.annotation.SuppressLint("RtlHardcoded") // Window coordinates are physical screen coordinates.
     private void show() {
         if(plate!=null || !live.getAsBoolean() || !owner.isAttachedToWindow() || owner.getWidth()<=0 || owner.getHeight()<=0)return;

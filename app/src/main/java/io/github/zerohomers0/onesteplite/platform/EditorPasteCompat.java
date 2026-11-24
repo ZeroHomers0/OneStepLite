@@ -134,8 +134,9 @@ final class EditorPasteCompat {
                 int uid=XposedHelpers.getIntField(client,"mUid");if(uid/100000!=0)return null;
                 result.putInt("uid",uid);result.putInt("field",editor.fieldId);result.putBinder("window",(IBinder)window);
                 result.putBinder("editor",((IInterface)connection).asBinder());result.putLong("issued",android.os.SystemClock.uptimeMillis());
+                result.putStringArray("content_types",editor.contentMimeTypes);
             }
-            return focused(result)?result:null;
+            if(!focused(result))return null;EditorGeometryCompat.describe(display.get(),result);return result;
         }
         private boolean focused(Bundle snapshot) {
             Object target=display.get();if(target==null)return false;

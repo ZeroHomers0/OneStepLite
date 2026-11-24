@@ -60,9 +60,8 @@ check(count(c)==1&&c.grants>0,"owned image grants SystemUI read access");check(!
 ClipData foreign=new ClipData();foreign.items.add(new ClipData.Item(new android.net.Uri("foreign","photo")));Context target=c;
 denied(()->ContentShelfStore.stage(target,foreign),"external URI cannot bypass import");check(count(c)==1,"rejected external item leaves shelf unchanged");
 c.prefs.allow=false;denied(()->ContentShelfStore.stage(target,text("unsaved")),"commit failure reported");check(count(c)==1,"failed commit keeps old shelf");c.prefs.allow=true;
-ClipData recent=text("recent");ContentShelfStore.remember(c,recent);check(ContentShelfStore.call(c,"shelf_list",null).getParcelable("recent",ClipData.class)==recent,"recent payload can be replayed");
-ClipData secret=text("secret");secret.description.extras.sensitive=true;ContentShelfStore.remember(c,secret);
-check(ContentShelfStore.call(c,"shelf_list",null).getParcelable("recent",ClipData.class)==recent,"sensitive content not retained as recent");
+check(ContentShelfStore.call(c,"shelf_list",null).getParcelable("recent",ClipData.class)==null,"shelf no longer exposes recent share payloads");
+denied(()->ContentShelfStore.call(target,"recent_share",null),"removed recent-share operation rejected");
 System.out.println("Production content shelf checks="+checks+" passed (metadata doubles; filesystem retention covered separately)");}}
 '''
 }

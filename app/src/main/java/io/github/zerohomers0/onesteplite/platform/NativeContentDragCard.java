@@ -27,8 +27,8 @@ final class NativeContentDragCard {
             Class<?> controller=XposedHelpers.findClass("com.android.server.wm.DragDropController",loader);
             XposedBridge.hookAllMethods(controller,"performDrag",new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam call) {
-                    if(!active.getAsBoolean() || call.args.length!=13 || !(call.args[4] instanceof SurfaceControl)
-                            || !(call.args[12] instanceof ClipData))return;
+                    if(!active.getAsBoolean() || (call.args.length!=11 && call.args.length!=13) || !(call.args[4] instanceof SurfaceControl)
+                            || !(call.args[call.args.length-1] instanceof ClipData))return;
                     try{replace(call,display.get());}
                     catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"native text card left unchanged",unavailable);}
                 }
@@ -47,11 +47,11 @@ final class NativeContentDragCard {
         }catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"native text card hook unavailable",unavailable);}
     }
     private static void glass(XC_MethodHook.MethodHookParam call,Object display) {
-        if(display==null || call.args.length!=13 || !(call.args[12] instanceof ClipData))return;
-        ClipData clip=(ClipData)call.args[12];int offset=ContentDragShadow.offset(clip.getDescription());
+        if(display==null || (call.args.length!=11 && call.args.length!=13) || !(call.args[call.args.length-1] instanceof ClipData))return;
+        ClipData clip=(ClipData)call.args[call.args.length-1];int offset=ContentDragShadow.offset(clip.getDescription());
         android.os.PersistableBundle extras=clip.getDescription().getExtras();
         int touch=extras==null?0:extras.getInt("onesteplite_shadow_touch_y",0);
-        float unit=(touch-offset)/3f,width=((Number)call.args[10]).floatValue()*2;
+        float unit=(touch-offset)/3f,width=((Number)call.args[call.args.length-3]).floatValue()*2;
         if(offset<=0 || unit<.5f || unit>8 || !Float.isFinite(width) || width<=8*unit || width>2048 || touch>2048)return;
         Object wm=XposedHelpers.getObjectField(display,"mWmService");
         synchronized(XposedHelpers.getObjectField(wm,"mGlobalLock")) {
@@ -66,11 +66,13 @@ final class NativeContentDragCard {
         }
     }
     private static void replace(XC_MethodHook.MethodHookParam call,Object display) {
-        ClipData original=(ClipData)call.args[12];String text=plainText(original);
-        boolean image=images(original);
-        if(display==null || text==null && !image || ContentDragShadow.offset(original.getDescription())>0
+        int end=call.args.length-1;
+        ClipData original=(ClipData)call.args[end];String text=plainText(original);
+        boolean image=images(original),file=files(original);
+        if(display==null || text==null && !image && !file || ContentDragShadow.offset(original.getDescription())>0
                 || (((Integer)call.args[3])&View.DRAG_FLAG_GLOBAL)==0)return;
         Object wm=XposedHelpers.getObjectField(display,"mWmService");Context context;
+        float scale=1,offsetX=0,offsetY=0;
         synchronized(XposedHelpers.getObjectField(wm,"mGlobalLock")) {
             Map<?,?> windows=(Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap");
             android.os.IBinder token=((android.os.IInterface)call.args[2]).asBinder();Object source=windows.get(token);
@@ -83,23 +85,52 @@ final class NativeContentDragCard {
                     || (attrs.flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)return;
             Object task=XposedHelpers.callMethod(source,"getTask");
             if(task==null || !Integer.valueOf(1).equals(XposedHelpers.callMethod(task,"getWindowingMode")))return;
+            Object spec=XposedHelpers.getObjectField(display,"mMagnificationSpec");
+            if(spec!=null){
+                scale=XposedHelpers.getFloatField(spec,"scale");offsetX=XposedHelpers.getFloatField(spec,"offsetX");
+                offsetY=XposedHelpers.getFloatField(spec,"offsetY");
+                if(!Float.isFinite(scale) || scale<=0 || scale>1 || !Float.isFinite(offsetX) || !Float.isFinite(offsetY))return;
+            }
             context=(Context)XposedHelpers.getObjectField(wm,"mContext");
         }
+        float startX=((Number)call.args[end-4]).floatValue()*scale+offsetX;
+        float startY=((Number)call.args[end-3]).floatValue()*scale+offsetY;
+        if(!Float.isFinite(startX) || !Float.isFinite(startY))return;
         ContentDragShadow card=text!=null?new ContentDragShadow(text,context.getResources().getDisplayMetrics().density,original.getItemCount())
-                :imageCard((SurfaceControl)call.args[4],context,original.getItemCount());
+                :image?imageCard((SurfaceControl)call.args[4],context,original.getItemCount())
+                :new ContentDragShadow(original.getDescription().getLabel()==null?"文件":original.getDescription().getLabel().toString(),
+                        context.getResources().getDisplayMetrics().density,original.getItemCount(),false);
         if(card==null)return;
+        card.setDark(HyperOsStyle.dark(context));
         Point size=new Point(),touch=new Point();card.onProvideShadowMetrics(size,touch);
         SurfaceControl surface;
         try{surface=draw(card,size);}finally{card.recycleThumbnail();}
         ClipData clip=new ClipData(new ClipDescription(original.getDescription()),original.getItemAt(0));
         for(int i=1;i<original.getItemCount();i++)clip.addItem(original.getItemAt(i));
         card.mark(clip);call.setObjectExtra(ORIGINAL,call.args[4]);call.setObjectExtra(REPLACEMENT,surface);
-        call.args[4]=surface;call.args[10]=(float)touch.x;call.args[11]=(float)touch.y;call.args[12]=clip;
+        // performDrag starts in the source's logical space; later pointer events are physical.
+        // Normalize the first frame once, retaining the new card's physical hotspot unchanged.
+        call.args[4]=surface;call.args[end-4]=startX;call.args[end-3]=startY;
+        call.args[end-2]=(float)touch.x;call.args[end-1]=(float)touch.y;call.args[end]=clip;
         android.util.Log.i(Tags.PROBE,"native content drag card applied");
     }
     static boolean images(ClipData clip) {
         if(clip.getItemCount()<1 || clip.getItemCount()>ContentSharePolicy.MAX_ITEMS || !clip.getDescription().hasMimeType("image/*"))return false;
         for(int i=0;i<clip.getItemCount();i++) {
+            ClipData.Item item=clip.getItemAt(i);
+            if(item.getIntent()!=null || item.getUri()==null || !"content".equals(item.getUri().getScheme()))return false;
+        }
+        return true;
+    }
+    static boolean files(ClipData clip) {
+        if(clip.getItemCount()<1 || clip.getItemCount()>ContentSharePolicy.MAX_ITEMS)return false;
+        ClipDescription types=clip.getDescription();boolean binary=false;
+        for(int i=0;i<types.getMimeTypeCount();i++){
+            String mime=types.getMimeType(i);if(!ContentSharePolicy.accepts(mime))return false;
+            if(!mime.startsWith("text/"))binary=true;
+        }
+        if(!binary)return false;
+        for(int i=0;i<clip.getItemCount();i++){
             ClipData.Item item=clip.getItemAt(i);
             if(item.getIntent()!=null || item.getUri()==null || !"content".equals(item.getUri().getScheme()))return false;
         }

@@ -52,6 +52,7 @@ class ContentInboxProvider{static final String MODULE="module",AUTHORITY="owned"
 class WorkspaceSettingsStore{static final Object URI=new Object();}
 class EditorPasteCompat{static boolean available(Context c){return c.paste;}}
 class ShareActionIcon extends android.graphics.drawable.Drawable{ShareActionIcon(String key){}}
+class VisualSearchActivity{}
 class ContentAccessCompat{static String saved;static String pins(Context c){return saved;}}
 class QuickAppOrder{static List<String> decode(String s){return s==null||s.isEmpty()?List.of():List.of(s.split("\\n"));}}
 class ConversationShareCompat{static List<ShareTarget> load(Context c,ClipDescription d,int n,boolean e){return List.of();}}
@@ -71,15 +72,15 @@ c.pm.available.add("search");check(ShareActions.intent(c,text,ShareActions.SEARC
 check(ShareActions.intent(c,text,ShareActions.TRANSLATE).data.toString().contains("translator"),"translation browser fallback");
 c.pm.available.add("android.intent.action.TRANSLATE");check(ShareActions.intent(c,text,ShareActions.TRANSLATE).action.contains("TRANSLATE"),"native translation preferred");
 ClipDescription types=new ClipDescription("t",new String[]{"text/plain"});List<ShareTarget> edit=ShareActions.load(c,types,1,true);
-check(!find(edit,ShareActions.NOTE).enabled&&!find(edit,ShareActions.NOTE).unavailableReason.isEmpty(),"missing notes explained in settings");
-check(find(ShareActions.load(c,types,1,false),ShareActions.NOTE)==null,"missing notes hidden in rail");
+check(!ShareActions.known("note"),"duplicate built-in note action removed");
+check(ShareActions.retired("module/drag_operation_note"),"old built-in note pin migrated");
 check(find(edit,ShareActions.MAP).icon instanceof ShareActionIcon,"built-in uses original function icon");
-c.pm.available.add("com.miui.notes:send");check(find(ShareActions.load(c,types,1,true),ShareActions.NOTE).enabled,"installed notes available");
+check(!ShareActions.known("paste")&&ShareActions.retired("module/drag_operation_paste"),"toolbar paste removed while input service stays separate");
 SharePayload image=new SharePayload(new ClipData("i",new String[]{"image/jpeg"},new ClipData.Item(android.net.Uri.parse("content://owned/1"))));
 ClipDescription imageType=new ClipDescription("i",new String[]{"image/jpeg"});
-check(find(ShareActions.load(c,imageType,1,true),ShareActions.IMAGE_SEARCH).unavailableReason.contains("选择"),"image search needs explicit receiver");
+check(find(ShareActions.load(c,imageType,1,true),ShareActions.IMAGE_SEARCH).enabled,"built-in web image search needs no configured app");
 c.selected="pictures/Search";c.pm.available.add(c.selected);c.pm.available.add("edit");
-check(ShareActions.intent(c,image,ShareActions.IMAGE_SEARCH).component.flattenToString().equals(c.selected),"selected image receiver used");
+check(ShareActions.intent(c,image,ShareActions.IMAGE_SEARCH).component.getClassName().equals(VisualSearchActivity.class.getName()),"image search uses fixed internal web route");
 check(!find(ShareActions.load(c,imageType,2,false),ShareActions.EDIT).enabled,"multi image cannot invoke single editor");
 check(find(ShareActions.load(c,imageType,1,false),ShareActions.EDIT).enabled,"single image editor available");
 check((ShareActions.intent(c,image,ShareActions.EDIT).flags&2)!=0,"image editor receives read grant");
@@ -91,12 +92,16 @@ Intent copied=new Intent("send");ShareRoutes.copyShortcut(routed,copied);check(c
 boolean rejected=false;try{ShareRoutes.conversation(activity,"x".repeat(257));}catch(IllegalArgumentException expected){rejected=true;}check(rejected,"bounded conversation ID");
 List<String> missing=List.of("removed/Share");check(ShareTargetCatalog.load(c,types,1,false,missing).isEmpty(),"uninstalled pins hidden");
 check(!ShareTargetCatalog.load(c,types,1,true,missing).get(0).enabled,"uninstalled pin remains removable in manager");
-c.pm.available.remove(c.selected);check(ShareTargetCatalog.load(c,imageType,1,false,List.of("module/drag_operation_image_search")).isEmpty(),"removed operation receiver hidden even while pinned");
+c.pm.available.remove(c.selected);check(ShareTargetCatalog.load(c,imageType,1,false,List.of("module/drag_operation_image_search")).size()==1,"web image search does not depend on removed app");
 ContentAccessCompat.saved="";check(ShareTargetCatalog.load(c,types,1,false).isEmpty(),"explicit empty configuration stays empty");
 check(!ShareActions.known("custom_rule"),"no configurable rule route");
 Context empty=new Context();check(find(ShareActions.load(empty,types,1,false),ShareActions.SEARCH)==null,"no browser or search handler hides operation");
 check(!find(ShareActions.load(empty,types,1,true),ShareActions.MAP).enabled,"missing browser and map disabled in manager");
 check(find(ShareActions.load(empty,types,1,false),ShareActions.STAGE).enabled,"local shelf works without external apps");
+check(ShareTargetCatalog.contentMime(new ClipDescription("mixed",new String[]{"image/jpeg","image/png"})).equals("image/*"),"whole image group queries common image type");
+check(ShareTargetCatalog.contentMime(new ClipDescription("mixed",new String[]{"image/jpeg","application/pdf"})).equals("*/*"),"mixed files do not enable image-only targets");
+check(ShareTargetCatalog.contentMime(new ClipDescription("alt",new String[]{"text/plain","image/jpeg","text/uri-list"})).equals("image/jpeg"),"image URI text alternatives do not turn into text search");
+check(ShareTargetCatalog.contentMime(types).equals("text/plain"),"plain text remains native single text share");
 System.out.println("Production share actions checks="+checks+" passed");}}
 '''
 }

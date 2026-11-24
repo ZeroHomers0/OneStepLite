@@ -138,10 +138,8 @@ final class WorkspaceSettingsPage extends FrameLayout {
 
         section("内容分享");
         LinearLayout sharing=card();
-        switchOption(sharing,"分享后清理临时图片","仅清理一步生成的图片，保留相册原图；交付后留出10分钟读取时间",options.deleteSharedImages,
+        switchOption(sharing,"分享后清理临时图片","截取、提取的图片默认保留24小时；开启后缩短为交付10分钟，不删除相册原图",options.deleteSharedImages,
                 checked->persist(WorkspaceSettingsStore.read(activity).withDeleteSharedImages(checked)));
-        divider(sharing);
-        menu(sharing,"图片搜索应用","选择拍立淘、识图等应用提供的分享入口",()->ImageSearchPicker.show(activity));
         add(sharing,0,12);
 
         section("窗口与操作");

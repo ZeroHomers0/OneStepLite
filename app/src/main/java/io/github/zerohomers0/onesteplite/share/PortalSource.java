@@ -197,10 +197,9 @@ final class PortalSource implements AutoCloseable {
         WorkspacePopupStyle.heading(pane,"选词",this::closeWords);
         pane.setOnDragListener((view,event)->{
             if(event.getAction()==DragEvent.ACTION_DRAG_ENDED && selection==opened) {
-                selectingDrag=false;
+                selectingDrag=false;ContentDragMotion.close();
                 if(event.getResult())main.post(this::closeWords);
-                else {opened.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
-                    opened.getWindow().getDecorView().setAlpha(1f);}
+                else WorkspacePopupStyle.dragWindow(opened.getWindow(),Math.min(100,HyperOsStyle.dp(anchor.getContext(),28)),true);
             }
             return event.getAction()!=DragEvent.ACTION_DROP;
         });
@@ -219,10 +218,10 @@ final class PortalSource implements AutoCloseable {
         final boolean accepted;
         try{ContentDragShadow shadow=new ContentDragShadow(view,1,text);shadow.mark(clip);
             accepted=view.startDragAndDrop(clip,shadow,new SharePayload(clip),View.DRAG_FLAG_GLOBAL);}
-        catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"selected text drag unavailable",unavailable);return false;}
+        catch(RuntimeException unavailable){ContentDragMotion.close();android.util.Log.w(Tags.PROBE,"selected text drag unavailable",unavailable);return false;}
+        if(!accepted)ContentDragMotion.close();
         if(accepted) {
-            selectingDrag=true;selection.getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
-            selection.getWindow().getDecorView().setAlpha(0f);
+            selectingDrag=true;WorkspacePopupStyle.dragWindow(selection.getWindow(),Math.min(100,HyperOsStyle.dp(anchor.getContext(),28)),false);
         }
         return accepted;
     }

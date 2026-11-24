@@ -34,7 +34,7 @@ static int checks;static void check(boolean value,String message){checks++;if(!v
 static final class DragEvent {static final int ACTION_DRAG_STARTED=1,ACTION_DRAG_LOCATION=2,ACTION_DROP=3,ACTION_DRAG_ENDED=4;
 int action;DragEvent(int value){action=value;}int getAction(){return action;}Object getClipDescription(){return this;}}
 static final class ComponentName {String pkg;ComponentName(String p,String name){pkg=p;}}
-static class Counter implements AutoCloseable {int closes,stops;public void close(){closes++;}void stop(){stops++;}boolean isDragging(){return false;}}
+static class Counter implements AutoCloseable {int closes,stops,restores;public void close(){closes++;}void stop(){stops++;}boolean isDragging(){return false;}void dragEnded(boolean consumed){restores++;}}
 static class Base {int detaches;protected void onDetachedFromWindow(){detaches++;}}
 static class View {}
 static class ShareTargetButton extends View {boolean hovered=true;void setDragHovered(boolean value){hovered=value;}}
@@ -47,11 +47,12 @@ boolean isOpen(){return open;}boolean onDrag(DragEvent event,String name){events
 void setWindowHover(Function<String,String> identity,Consumer<String> activate){}void close(){open=false;closes++;}}
 static class Replay extends Base {
 BooleanSupplier ready=()->true;Object dispatch,bounds,hovered;Consumer<String> hint=value->{};ShareRailOverlay overlay;
-boolean panelSource;Object transferClip;Counter receipt;Function<String,String> hoverIdentity=value->value;Consumer<String> hoverActivate=value->{};
+boolean panelSource,hasPointer;Object transferClip;Counter receipt;Function<String,String> hoverIdentity=value->value;Consumer<String> hoverActivate=value->{};
 static class Hover extends Counter {void move(String value){}}Hover windowHover=new Hover();
 boolean dragging,dropped,deliveryPending,retainingDelivery,shareOnly;int generation,starts,ends,stops,drops;String lastTarget;
 Handler handler=new Handler();Runnable expire=()->{},deliverySettled=()->{};
 Counter pendingRead,delegatedRead,catchment;Counter panel=new Counter(),history=new Counter(),picker=new Counter(),capture=new Counter(),portal=new Counter();Runnable afterDrag=()->{};
+Counter editorOutline=new Counter();
 Transition transition=new Transition();float alpha=1;
 Targets targets=new Targets();
 boolean accepts(Object description){return true;}boolean live(int token){return dragging&&ready.getAsBoolean();}
@@ -73,6 +74,7 @@ rail=new Replay();rail.dragging=true;rail.dropped=true;rail.deliveryPending=true
 check(rail.retainDelivery(()->done[0]++),"pending delivery can outlive drag window");
 rail.onDetachedFromWindow();check(rail.panel.closes==1&&rail.capture.closes==1&&rail.history.stops==1&&rail.picker.closes==1,"detach closes all UI and listeners while retaining delivery");
 check(rail.deliveryPending&&rail.retainingDelivery&&rail.detaches==1,"detach does not cancel accepted async delivery");
+check(rail.editorOutline.closes==1&&rail.transition.resets==1&&!rail.dragging,"retained delivery cannot retain editor outline or cube animation");
 rail.delegatedRead=new Counter();Counter grant=rail.delegatedRead;rail.finishDelivery(rail.generation);
 check(!rail.deliveryPending&&!rail.retainingDelivery&&done[0]==1,"completed delivery releases retention and callback once");
 check(grant.closes==1&&rail.delegatedRead==null,"completion releases remaining delegated grant");
@@ -90,6 +92,8 @@ check(!rail.targets.child.hovered,"drag end clears target magnification while pr
 rail=new Replay();rail.catchment=new Counter();Counter reach=rail.catchment;rail.onDetachedFromWindow();check(rail.panel.closes==1&&rail.capture.closes==1&&rail.history.stops==1,"ordinary detach releases all child state");
 check(reach.closes==1&&rail.catchment==null,"detach removes the temporary arrow hit region");
 check(rail.transition.resets==1,"ordinary detach clears cube animation");
+rail=new Replay();rail.dragging=true;rail.cancel();check(rail.panel.restores==1,"cancel restores an active source popup");
+rail=new Replay();rail.cancel();check(rail.panel.restores==0,"idle reset must not end a newly staged source drag");
 System.out.println("Production share session checks="+checks+" passed");
 }}
 '''.replace('__METHODS__', methods),

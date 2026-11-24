@@ -68,7 +68,6 @@ public final class ContentImportActivity extends Activity {
     private void deliverPrepared(ClipData owned,Intent base) {
         try {
             if(cancelled.get() || !ShareDelivery.active(receipt)){runOnUiThread(this::finish);return;}
-            ContentShelfStore.remember(this,owned);
             if(ShareActions.STAGE.equals(operation)) {
                 ContentShelfStore.stage(this,owned);outcome(true,owned);runOnUiThread(this::finish);return;
             }

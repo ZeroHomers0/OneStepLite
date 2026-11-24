@@ -59,6 +59,14 @@ final class ContentAccessCompat {
         } catch(NoSuchMethodError | RuntimeException unavailable) { /* Older drag events retain the declared physical offset. */ }
         return declared;
     }
+    static float shadowHalfWidth(DragEvent event){
+        if(ContentDragShadow.offset(event.getClipDescription())<=0)return 0;
+        try{float actual=((Number)XposedHelpers.callMethod(event,"getOffsetX")).floatValue();
+            if(Float.isFinite(actual) && actual>0 && actual<=2048)return actual;
+        }catch(NoSuchMethodError | RuntimeException unavailable){/* Use the declared width on older releases. */}
+        android.os.PersistableBundle extras=event.getClipDescription().getExtras();
+        int value=extras==null?0:extras.getInt("onesteplite_shadow_half_width",0);return value>0 && value<=2048?value:0;
+    }
 
     static DropPermissionContract delegate(DragEvent event,android.content.ClipData clip) throws Exception {
         Object permissions=XposedHelpers.callMethod(event,"getDragAndDropPermissions");

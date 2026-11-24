@@ -12,6 +12,8 @@ final class ShareRailTransition {
     private ValueAnimator animator;
     private float progress;
     private int generation;
+    private Runnable frameChanged=()->{};
+    void onFrame(Runnable callback){frameChanged=callback;}
 
     ShareRailTransition(View normal,View share){this(normal,share,null);}
 
@@ -21,6 +23,7 @@ final class ShareRailTransition {
 
     void show(boolean visible) {
         int token=++generation;if(animator!=null)animator.cancel();
+        if(!ValueAnimator.areAnimatorsEnabled()){animator=null;progress=visible?1:0;render();return;}
         animator=ValueAnimator.ofFloat(progress,visible?1f:0f);
         animator.setDuration(Math.max(1,Math.round(OverlayMotionSpec.SHARE_RAIL_MS*Math.abs((visible?1:0)-progress))));
         animator.addUpdateListener(frame->{
@@ -30,9 +33,10 @@ final class ShareRailTransition {
     }
 
     private void render() {
-        renderFace(normal,false,normalPrefix==null?0:normalPrefix.getWidth(),normalMatrix);
-        if(normalPrefix!=null)renderFace(normalPrefix,false,0,prefixMatrix);
+        renderFace(normal,false,normal.getLeft(),normalMatrix);
+        if(normalPrefix!=null)renderFace(normalPrefix,false,normalPrefix.getLeft(),prefixMatrix);
         renderFace(share,true,0,shareMatrix);
+        frameChanged.run();
     }
 
     private void renderFace(View view,boolean upper,float left,Matrix matrix) {

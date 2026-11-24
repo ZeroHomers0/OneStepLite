@@ -55,6 +55,14 @@ final class WorkspacePopupStyle {
         window.setLayout(Math.max(1,width(context)-dp(context,24)),Math.max(1,height(context)-dp(context,40)));
     }
 
+    static void dragWindow(Window window,int blur,boolean visible) {
+        if(visible)window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+        else window.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+        window.getDecorView().setAlpha(visible?1:0);
+        android.view.WindowManager.LayoutParams attrs=window.getAttributes();attrs.alpha=visible?1:0;
+        window.setAttributes(attrs);window.setBackgroundBlurRadius(visible?blur:0);
+    }
+
     static android.widget.TextView action(Context context,String text,boolean primary,Runnable action) {
         android.widget.TextView button=new android.widget.TextView(context);
         button.setText(text);styleAction(button,primary);

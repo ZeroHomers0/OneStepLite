@@ -200,7 +200,7 @@ final class TopBar extends FrameLayout {
         c.height=Math.max(1,geometry.blankBottom-geometry.blankTop);
         LayoutParams h=(LayoutParams)header.getLayoutParams();h.topMargin=geometry.headerTop;h.height=geometry.headerHeight;
         LayoutParams r=(LayoutParams)quickRail.getLayoutParams();r.topMargin=geometry.railTop;r.height=geometry.railHeight;
-        r.leftMargin=Math.round(56*getResources().getDisplayMetrics().density);r.rightMargin=0;
+        r.leftMargin=Math.round(46*getResources().getDisplayMetrics().density);r.rightMargin=0;
         LayoutParams share=(LayoutParams)shareWorkspace.getLayoutParams();
         share.topMargin=geometry.railTop;share.height=geometry.railHeight;
         super.onMeasure(ws,hs);
@@ -288,7 +288,7 @@ final class TopBar extends FrameLayout {
         @Override protected void onMeasure(int ws,int hs) {
             int w=MeasureSpec.getSize(ws),h=MeasureSpec.getSize(hs);
             int edge=Math.round(10*getResources().getDisplayMetrics().density);
-            int bw=Math.min(h,Math.max(1,(w-2*edge)/8));
+            int bw=Math.min(Math.round(38*getResources().getDisplayMetrics().density),Math.min(h,Math.max(1,(w-2*edge)/8)));
             fitTitle(Math.max(1,w-2*edge-6*bw));
             title.measure(MeasureSpec.makeMeasureSpec(Math.max(1,w-2*edge-6*bw),MeasureSpec.EXACTLY),hs);
             for(View v:buttons)v.measure(MeasureSpec.makeMeasureSpec(bw,MeasureSpec.EXACTLY),hs);
@@ -300,16 +300,16 @@ final class TopBar extends FrameLayout {
                 // Small windows on the left: expand and settings lead, the top-face
                 // action and the two switches close the row on the right.
                 expand.layout(edge,0,edge+bw,h);settings.layout(edge+bw,0,edge+2*bw,h);
-                capture.layout(w-edge-4*bw,0,w-edge-3*bw,h);
+                capture.layout(edge+2*bw,0,edge+3*bw,h);
                 topApp.layout(w-edge-3*bw,0,w-edge-2*bw,h);
                 left.layout(w-edge-2*bw,0,w-edge-bw,h);right.layout(w-edge-bw,0,w-edge,h);
-                title.layout(edge+2*bw,0,w-edge-4*bw,h);
+                title.layout(edge+3*bw,0,w-edge-3*bw,h);
             } else {
                 left.layout(edge,0,edge+bw,h);right.layout(edge+bw,0,edge+2*bw,h);
                 topApp.layout(edge+2*bw,0,edge+3*bw,h);
-                capture.layout(edge+3*bw,0,edge+4*bw,h);
+                capture.layout(w-edge-3*bw,0,w-edge-2*bw,h);
                 settings.layout(w-edge-2*bw,0,w-edge-bw,h);expand.layout(w-edge-bw,0,w-edge,h);
-                title.layout(edge+4*bw,0,w-edge-2*bw,h);
+                title.layout(edge+3*bw,0,w-edge-3*bw,h);
             }
             updateColors();
             float size=Math.min(HyperOsStyle.dp(getContext(),26f),Math.min(bw,h)*.84f);

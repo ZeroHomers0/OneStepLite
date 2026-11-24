@@ -151,15 +151,15 @@ final class SourceCaptureController implements AutoCloseable {
                 ClipData clip=new ClipData("主窗图片",new String[]{"image/jpeg"},new ClipData.Item(uri));
                 ContentDragShadow shadow=new ContentDragShadow(view,1);shadow.mark(clip);
                 dragging=view.startDragAndDrop(clip,shadow,null,View.DRAG_FLAG_GLOBAL|View.DRAG_FLAG_GLOBAL_URI_READ);
-                if(dragging && dialog!=null && dialog.getWindow()!=null){dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
-                    dialog.getWindow().getDecorView().setAlpha(0);}return dragging;
-            } catch(RuntimeException unavailable){message("图片暂时无法拖曳");return false;}
+                if(!dragging)ContentDragMotion.close();
+                if(dragging && dialog!=null && dialog.getWindow()!=null)WorkspacePopupStyle.dragWindow(dialog.getWindow(),Math.min(100,dp(28)),false);
+                return dragging;
+            } catch(RuntimeException unavailable){ContentDragMotion.close();message("图片暂时无法拖曳");return false;}
         });
         image.setOnDragListener((view,event)->{
             if(event.getAction()==DragEvent.ACTION_DRAG_ENDED && dragging) {
-                dragging=false;consumed=event.getResult();if(consumed)close();
-                else if(dialog!=null && dialog.getWindow()!=null){dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
-                    dialog.getWindow().getDecorView().setAlpha(1);}
+                ContentDragMotion.close();dragging=false;consumed=event.getResult();if(consumed)close();
+                else if(dialog!=null && dialog.getWindow()!=null)WorkspacePopupStyle.dragWindow(dialog.getWindow(),Math.min(100,dp(28)),true);
             }
             return event.getAction()!=DragEvent.ACTION_DROP;
         });

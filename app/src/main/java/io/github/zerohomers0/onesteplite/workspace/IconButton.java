@@ -16,6 +16,7 @@ final class IconButton extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** One scratch path: a button paints exactly one glyph per frame. */
     private final Path glyph = new Path();
+    private final Path tile=IconContour.create(38);
     private int foreground;
 
     void setIcon(int value) {icon=value;invalidate();}
@@ -61,9 +62,10 @@ final class IconButton extends View {
             canvas.drawLine(6, 17, 9, 13, paint);
             canvas.drawLine(9, 13, 14, 18, paint);
         } else if (icon == CAPTURE) {
-            canvas.drawRoundRect(3,6,21,20,2,2,paint);
-            canvas.drawLine(7,6,9,3,paint);canvas.drawLine(9,3,15,3,paint);canvas.drawLine(15,3,17,6,paint);
-            canvas.drawCircle(12,13,4,paint);
+            canvas.drawLine(3,9,3,3,paint);canvas.drawLine(3,3,9,3,paint);
+            canvas.drawLine(15,3,21,3,paint);canvas.drawLine(21,3,21,9,paint);
+            canvas.drawLine(21,15,21,21,paint);canvas.drawLine(21,21,15,21,paint);
+            canvas.drawLine(9,21,3,21,paint);canvas.drawLine(3,21,3,15,paint);
         } else if (icon == VIDEO_FIT || icon == VIDEO_FILL) {
             canvas.drawRoundRect(3, 5, 21, 19, 2, 2, paint);
             if (icon == VIDEO_FIT) canvas.drawRect(7, 7, 17, 17, paint);
@@ -127,7 +129,7 @@ final class IconButton extends View {
         paint.setStyle(Paint.Style.FILL);
         paint.setShader(new android.graphics.LinearGradient(0,0,38,38,
                 new int[]{0xff62b9ff,0xff3869ec},null,android.graphics.Shader.TileMode.CLAMP));
-        canvas.drawRoundRect(0,0,38,38,10,10,paint);paint.setShader(null);
+        canvas.drawPath(tile,paint);paint.setShader(null);
         paint.setColor(0x70ffffff);canvas.drawRoundRect(12,7,30,25,3,3,paint);
         paint.setColor(0xffffffff);canvas.drawRoundRect(7,12,26,31,3,3,paint);
         paint.setColor(0xffb1dcff);canvas.drawRoundRect(9.5f,14.5f,23.5f,28.5f,1.5f,1.5f,paint);

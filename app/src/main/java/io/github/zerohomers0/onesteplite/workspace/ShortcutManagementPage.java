@@ -25,7 +25,7 @@ final class ShortcutManagementPage extends FrameLayout {
 
     ShortcutManagementPage(Context context,boolean applications,Bundle restored,Runnable back) {
         super(context);this.applications=applications;this.restored=restored;this.back=back;
-        setPadding(dp(12),dp(4),dp(12),dp(16));status("正在读取…");
+        setPadding(dp(20),dp(4),dp(20),dp(32));status("正在读取…");
     }
 
     @Override protected void onAttachedToWindow(){super.onAttachedToWindow();load();}
@@ -51,6 +51,7 @@ final class ShortcutManagementPage extends FrameLayout {
                 } else targets=ShareTargetCatalog.load(getContext(),new ClipDescription("内容",new String[]{"*/*"}),0,true,keys);
                 ArrayList<String> draft=restored==null?null:restored.getStringArrayList("shortcut_draft");
                 LinkedHashSet<String> initial=new LinkedHashSet<>(draft==null?keys:draft);
+                if(!applications)initial.removeIf(ShareActions::retired);
                 List<ShareTarget> available=targets;
                 post(()->{if(token==generation && isAttachedToWindow())showEditor(available,initial);});
             } catch(RuntimeException unavailable) {
@@ -61,10 +62,9 @@ final class ShortcutManagementPage extends FrameLayout {
 
     private void showEditor(List<ShareTarget> targets,LinkedHashSet<String> initial) {
         chosen=initial;removeAllViews();
-        ShortcutEditor editor=new ShortcutEditor(getContext(),targets,chosen,back,this::persist,applications);
-        editor.saveImmediately(this::persist);
+        ShortcutSettingsContent editor=new ShortcutSettingsContent(getContext(),targets,chosen,applications,this::persist);
         int width=getResources().getDisplayMetrics().widthPixels;
-        addView(editor,new LayoutParams(Math.min(width-dp(24),dp(680)),-1,Gravity.TOP|Gravity.CENTER_HORIZONTAL));
+        addView(editor,new LayoutParams(Math.min(width-dp(40),dp(640)),-1,Gravity.TOP|Gravity.CENTER_HORIZONTAL));
     }
 
     private void persist() {

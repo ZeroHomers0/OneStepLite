@@ -20,14 +20,15 @@ public boolean setPolyToPoly(float[] a,int ai,float[] b,int bi,int count){destin
 public boolean invert(Matrix target){target.destination=destination;return true;}public void mapPoints(float[] points){}
 }''',
 'android/view/View.java':'''package android.view;public class View {
-public static final int VISIBLE=0,INVISIBLE=4;public int visibility=VISIBLE,width=400;public float y,rotation,alpha=1,pivotX;
+public static final int VISIBLE=0,INVISIBLE=4;public int visibility=VISIBLE,width=400,left;public float y,rotation,alpha=1,pivotX;
 public android.graphics.Matrix animation;public void setAnimationMatrix(android.graphics.Matrix value){animation=value;}public int getVisibility(){return visibility;}
 public void setVisibility(int v){visibility=v;}public void setPivotY(float v){}public void setPivotX(float v){pivotX=v;}public void setCameraDistance(float v){}
 public void setTranslationY(float v){y=v;}public void setRotationX(float v){rotation=v;}public void setAlpha(float v){alpha=v;}
-public int getHeight(){return 100;}public int getWidth(){return width;}public android.content.res.Resources getResources(){return new android.content.res.Resources();}}''',
+public int getLeft(){return left;}public int getHeight(){return 100;}public int getWidth(){return width;}public android.content.res.Resources getResources(){return new android.content.res.Resources();}}''',
 'android/animation/ValueAnimator.java':'''package android.animation;public class ValueAnimator {
 public interface Listener {void update(ValueAnimator frame);}public static ValueAnimator latest;
 public float from,to,value;public long duration;Listener listener;
+public static boolean enabled=true;public static boolean areAnimatorsEnabled(){return enabled;}
 public static ValueAnimator ofFloat(float a,float b){latest=new ValueAnimator();latest.from=a;latest.to=b;latest.value=a;return latest;}
 public void setDuration(long ms){duration=ms;}public void addUpdateListener(Listener next){listener=next;}
 public Object getAnimatedValue(){return value;}public void start(){tick(from);}public void cancel(){}
@@ -38,11 +39,13 @@ public class ShareRailMotionRegression {
 static int checks;static void check(boolean value,String message){checks++;if(!value)throw new AssertionError(message);}
 public static void main(String[] args){
 View normal=new View(),share=new View();ShareRailTransition motion=new ShareRailTransition(normal,share);motion.reset();
+int[] refreshes={0};motion.onFrame(()->refreshes[0]++);
 check(normal.visibility==0&&share.visibility==4,"idle shows normal rail only");
 motion.show(true);ValueAnimator entrance=ValueAnimator.latest;
 check(entrance.duration==480,"dedicated share duration remains unchanged");
 check(normal.visibility==0&&share.visibility==4,"first frame starts from front cube face");
 entrance.tick(.25f);check(share.visibility==0&&normal.visibility==0,"two cube faces appear during turn");
+check(refreshes[0]>=2,"stationary pointer can refresh hit mapping while cube face moves");
 check(normal.animation!=null&&share.animation!=null,"contents use projected face matrices");
 check(Math.abs(normal.animation.destination[1]-share.animation.destination[7])<.002f,"projected face matrices join at one edge");
 entrance.tick(1);check(share.visibility==0&&normal.visibility==4,"share replaces entire normal row");
@@ -60,7 +63,7 @@ interrupted.tick(1);check(normal.visibility==0,"retired entrance cannot hide cur
 reverse.tick(.2f);check(normal.visibility==0&&share.visibility==0,"reverse retains both visible faces");
 motion.reset();reverse.tick(.7f);check(normal.visibility==0&&share.visibility==4,"retired reverse cannot revive share face");
 check(normal.animation==null&&share.animation==null,"reset releases both face matrices");
-View prefix=new View();prefix.width=100;share.width=500;
+View prefix=new View();prefix.width=100;share.width=500;normal.left=100;
 ShareRailTransition entire=new ShareRailTransition(normal,share,prefix);entire.show(true);ValueAnimator full=ValueAnimator.latest;
 full.tick(.25f);check(prefix.animation!=null&&normal.animation!=null,"normal content cell rotates with application face");
 check(Math.abs(prefix.animation.destination[2]-normal.animation.destination[0]-100)<.002f,"split normal cells use one physical cube projection");
@@ -71,6 +74,14 @@ entire.reset();back.tick(1);check(prefix.visibility==0&&prefix.animation==null,"
 entire.showShareOnly();check(share.visibility==0&&prefix.visibility==4&&normal.visibility==4,"video overlay exposes only share targets without content cell");
 check(share.animation==null&&entire.mapSharePoint(new float[]{25,50}),"share-only overlay starts with identity drop coordinates");
 entire.reset();check(prefix.visibility==0&&share.visibility==4,"share-only retirement restores ordinary row ownership");
+prefix.left=12;normal.left=92;entire.show(true);ValueAnimator.latest.tick(.25f);
+float scale=(normal.animation.destination[2]-normal.animation.destination[0])/normal.width;
+float prefixEdge=prefix.animation.destination[2]+prefix.left,appPoint=normal.animation.destination[0]+normal.left+20*scale;
+check(Math.abs(prefixEdge-appPoint)<.002f,"content inset and tightened application margin keep the same physical projection");
+entire.reset();check(normal.left==92&&prefix.left==12,"animation never rewrites real rail spacing");
+ValueAnimator.enabled=false;entire.show(true);check(share.visibility==0&&normal.visibility==4&&prefix.visibility==4,"reduced motion enters final face immediately");
+check(share.animation==null&&entire.mapSharePoint(new float[]{25,50}),"reduced motion retains exact endpoint hit coordinates");
+entire.show(false);check(normal.visibility==0&&prefix.visibility==0&&share.visibility==4,"reduced motion restores immediately");
 System.out.println("Production share rail motion checks="+checks+" passed");
 }}''',
 }

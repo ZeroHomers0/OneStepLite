@@ -21,10 +21,6 @@ public final class WorkspaceSettingsProvider extends ContentProvider {
                 if (Packages.SYSTEM_UI.equals(name)) allowed = true;
         }
         if (!allowed) throw new SecurityException("Settings snapshots are restricted to OneStepLite and SystemUI");
-        if("read_share_actions".equals(method)) {
-            if(uid/100000!=Process.myUid()/100000)throw new SecurityException("Different action user");
-            return ShareActions.settings(getContext());
-        }
         if("read_shortcuts".equals(method) || "write_shortcuts".equals(method)) {
             if(uid/100000!=Process.myUid()/100000)throw new SecurityException("Different shortcut user");
             return ShortcutSettingsStore.call(getContext(),method,arg,extras);

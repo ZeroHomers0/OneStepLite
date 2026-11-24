@@ -24,7 +24,7 @@ final class PortalInputCompat implements AutoCloseable {
         try {
             Object proxy=Proxy.newProxyInstance(listener.getClassLoader(),new Class<?>[]{listener},(self,method,args)->{
                 if("onInputEvent".equals(method.getName()) && args[0] instanceof MotionEvent) {
-                    try{sink.accept((MotionEvent)args[0]);}catch(RuntimeException failure){android.util.Log.w(Tags.PROBE,"portal pointer rejected",failure);}
+                    try{ContentDragMotion.motion((MotionEvent)args[0]);EditorDragOutline.motion((MotionEvent)args[0]);sink.accept((MotionEvent)args[0]);}catch(RuntimeException failure){android.util.Log.w(Tags.PROBE,"portal pointer rejected",failure);}
                 } else if("hashCode".equals(method.getName()))return System.identityHashCode(self);
                 else if("equals".equals(method.getName()))return self==args[0];
                 else if("toString".equals(method.getName()))return "PortalPointerObserver";
@@ -53,8 +53,9 @@ final class PortalInputCompat implements AutoCloseable {
         ContentDragShadow shadow=new ContentDragShadow(source,1);shadow.mark(clip);
         try{
             dragRoot.set(XposedHelpers.callMethod(source,"getViewRootImpl"));dragTouch.set(event);
-            return source.startDragAndDrop(clip,shadow,null,View.DRAG_FLAG_GLOBAL|View.DRAG_FLAG_GLOBAL_URI_READ);
-        }catch(Throwable unavailable){throw new IllegalStateException("Native source input unavailable",unavailable);}
+            boolean started=source.startDragAndDrop(clip,shadow,null,View.DRAG_FLAG_GLOBAL|View.DRAG_FLAG_GLOBAL_URI_READ);
+            if(!started)ContentDragMotion.close();return started;
+        }catch(Throwable unavailable){ContentDragMotion.close();throw new IllegalStateException("Native source input unavailable",unavailable);}
         finally{dragTouch.remove();dragRoot.remove();}
     }
     static void bindSource(android.view.WindowManager.LayoutParams attrs,String source) {
@@ -62,6 +63,7 @@ final class PortalInputCompat implements AutoCloseable {
         catch(Throwable unavailable){throw new IllegalStateException("Source identity field unavailable",unavailable);}
     }
     @Override public void close() {
+        ContentDragMotion.close();
         try{if(receiver!=null)XposedHelpers.callMethod(receiver,"dispose");}
         catch(Throwable failure){android.util.Log.w(Tags.PROBE,"portal receiver disposal failed",failure);}
         finally{

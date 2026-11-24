@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="io.github.zerohomers0.onesteplite">
   <permission android:name="io.github.zerohomers0.onesteplite.CONTENT_ACCESS" android:protectionLevel="signature" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="io.github.zerohomers0.onesteplite.CONTENT_ACCESS" />
   <queries>
     <package android:name="com.miui.contentextension" />
     <package android:name="com.miui.contentcatcher" />
@@ -11,7 +13,6 @@
     <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="geo" /></intent>
     <intent><action android:name="android.intent.action.WEB_SEARCH" /></intent>
     <intent><action android:name="android.intent.action.TRANSLATE" /></intent>
-    <intent><action android:name="android.intent.action.CREATE_NOTE" /></intent>
     <intent><action android:name="android.intent.action.EDIT" /><data android:mimeType="image/*" /></intent>
   </queries>
   <application android:hasCode="true" android:extractNativeLibs="false" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:label="OneStepLite">
@@ -36,6 +37,7 @@
         <data android:mimeType="text/plain" />
       </intent-filter>
     </activity>
+    <activity android:name=".VisualSearchActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@style/Theme.OneStepLite.Settings" />
     <!-- Settings scope provides only the native module settings entry. -->
     <meta-data android:name="xposedmodule" android:value="true" />
     <meta-data android:name="xposeddescription" android:value="OneStepLite：系统主窗缩放与三个真实小窗。" />

@@ -39,6 +39,8 @@ final class ContentPanel {
     private ScrollView scroll;
     private TextView selectionButton;
     private Dialog preview;
+    private ImageView previewImageView;
+    private Bitmap previewPixels;
     private ImageTextRequest recognition;
     private ShareReadLease recognitionRead;
     private final ClipboardHistory history;
@@ -51,23 +53,18 @@ final class ContentPanel {
     private volatile int generation;
     private int imageSize,contentWidth;
     private boolean dragging;
-    private ClipData recent;
     boolean isDragging(){return dragging;}
     void delivery(boolean success,ClipData retained,boolean ownSource) {
-        boolean sensitive=retained!=null && retained.getDescription().getExtras()!=null
-                && retained.getDescription().getExtras().getBoolean("android.content.extra.IS_SENSITIVE");
-        if(retained!=null && !sensitive){if(owner!=CurrentUser.id()){selection.reset();selecting=false;owner=CurrentUser.id();}recent=retained;}
         if(success)return;
         if(ownSource){if(dialog==null)open();return;}
         if(retained==null)return;
-        if(sensitive){if(dialog==null)open();replay(retained);return;}
         final int user=CurrentUser.id();
         WORKER.execute(()->{
             try{Bundle input=new Bundle();input.putParcelable("clip",retained);
                 context.getContentResolver().call(ContentInboxProvider.ROOT,"shelf_add",null,input);
                 anchor.post(()->{if(user==CurrentUser.id() && anchor.isShown()){tab=3;if(dialog==null)open();else load();}});
             }catch(RuntimeException unavailable){anchor.post(()->{if(user==CurrentUser.id() && anchor.isShown()){
-                if(dialog==null)open();replay();}});}
+                message("无法暂存此内容，请重新提起");}});}
         });
     }
     private CancellationSignal query;
@@ -81,7 +78,7 @@ final class ContentPanel {
         this.capture=capture;
         this.bounds = bounds;
         this.history = history;
-        history.onChanged(() -> { if(dialog!=null && tab==2 && !dragging)load(); });
+        history.onChanged(() -> { if(dialog!=null && preview==null && tab==2 && !dragging)load(); });
     }
 
     // WMS x/y below use physical display bounds, independently of text direction.
@@ -89,7 +86,7 @@ final class ContentPanel {
     void open() {
         if (dialog != null) { close(); return; }
         if (!ContentAccessCompat.currentProcessUser()) { message("暂不支持此用户的内容访问"); return; }
-        if(owner!=CurrentUser.id()) { selection.reset();selecting=false;recent=null;owner=CurrentUser.id(); }
+        if(owner!=CurrentUser.id()) { selection.reset();selecting=false;owner=CurrentUser.id(); }
         Context windowContext = context.createDisplayContext(anchor.getDisplay())
                 .createWindowContext(WindowTypes.SYSTEM_UI_DIALOG, null);
         Context themed=new android.view.ContextThemeWrapper(windowContext,HyperOsStyle.dark(context)
@@ -140,7 +137,7 @@ final class ContentPanel {
         panelActions=new ContentPanelActions(context,()->{
             selecting=!selecting;if(!selecting)selection.clear(tab);refreshSelection();
         },this::clearRecords,this::historyOptions,this::chooseSystemFiles);
-        selectionButton=panelActions.selection;if(recent!=null)panelActions.recent(this::replay);return panelActions;
+        selectionButton=panelActions.selection;return panelActions;
     }
 
     private void chooseSystemFiles() {
@@ -189,7 +186,7 @@ final class ContentPanel {
         cancelQuery();
         shell.select(tab);panelActions.page(tab);
         shell.clearStatus();grid.removeAllViews();
-        entries.clear();tiles.clear();refreshSelection();
+        clearEntries();refreshSelection();
         if(tab==3){int token=generation,user=CurrentUser.id();shell.status("正在读取暂存…");WORKER.execute(()->shelf(token,user));return;}
         if (tab == 2) {
             clipboard();final int token=generation,user=CurrentUser.id();
@@ -264,6 +261,7 @@ final class ContentPanel {
     }
 
     private void addEntry(ContentEntry entry) {
+        if(entries.containsKey(entry.key)){if(entry.thumbnail!=null && entry.thumbnail!=entries.get(entry.key).thumbnail)entry.thumbnail.recycle();return;}
         shell.clearStatus();if(entries.isEmpty())grid.removeAllViews();
         entries.put(entry.key,entry);
         View view;
@@ -312,7 +310,7 @@ final class ContentPanel {
                 if(page==1 && !row.has("document_uri"))continue;
                 Uri uri=text?null:ContentInboxProvider.uri(row.getString("id"));
                 Bitmap thumbnail=null;
-                if(image)try{thumbnail=context.getContentResolver().loadThumbnail(uri,new Size(160,160),null);}catch(Exception ignored){}
+                if(image)try{int side=Math.max(160,Math.min(512,imageSize));thumbnail=context.getContentResolver().loadThumbnail(uri,new Size(side,side),null);}catch(Exception ignored){}
                 ContentEntry entry=new ContentEntry(text?"inbox:"+row.getString("id"):uri.toString(),
                         text?row.getString("text"):row.optString("name","导入内容"),mime,text?row.getString("text"):null,uri,thumbnail);
                 anchor.post(()->{
@@ -341,18 +339,16 @@ final class ContentPanel {
         try{
             Bundle result=context.getContentResolver().call(ContentInboxProvider.ROOT,"shelf_list",null,null);
             if(result==null)throw new IllegalStateException("Missing shelf");
-            ClipData last=result.getParcelable("recent",ClipData.class);
             org.json.JSONArray rows=new org.json.JSONArray(result.getString("rows","[]"));
             java.util.List<ContentEntry> items=new java.util.ArrayList<>();
             for(int i=0;i<rows.length() && token==generation;i++){
                 org.json.JSONObject row=rows.getJSONObject(i);boolean text=row.has("text");String mime=row.optString("mime","application/octet-stream");
                 Uri uri=text?null:ContentInboxProvider.uri(row.getString("id"));Bitmap thumb=null;
-                if(mime.startsWith("image/"))try{thumb=context.getContentResolver().loadThumbnail(uri,new Size(160,160),null);}catch(Exception ignored){}
+                if(mime.startsWith("image/"))try{int side=Math.max(160,Math.min(512,imageSize));thumb=context.getContentResolver().loadThumbnail(uri,new Size(side,side),null);}catch(Exception ignored){}
                 items.add(new ContentEntry("shelf:"+row.getString("id"),row.optString("name","暂存内容"),mime,text?row.getString("text"):null,uri,thumb));
             }
             anchor.post(()->{
                 if(!valid(token,user)){for(ContentEntry item:items)if(item.thumbnail!=null)item.thumbnail.recycle();return;}
-                recent=last;if(recent!=null)panelActions.recent(this::replay);
                 for(ContentEntry item:items)addEntry(item);
                 if(items.isEmpty())shell.status("将内容拖到顶栏“暂存”\n临时内容保留24小时");restorePosition(token,user);
             });
@@ -370,22 +366,8 @@ final class ContentPanel {
         }catch(RuntimeException unavailable){anchor.post(()->{if(valid(token,user))message("暂存移除失败，请重试");});}});
     }
 
-    private void replay() {
-        replay(recent);
-    }
-    private void replay(ClipData clip) {
-        if(clip==null || dialog==null)return;
-        SharePayload payload;
-        try{payload=new SharePayload(clip);}catch(RuntimeException invalid){return;}
-        LinearLayout body=new LinearLayout(context);body.setOrientation(LinearLayout.VERTICAL);WorkspacePopupStyle.decorate(body,null);
-        WorkspacePopupStyle.heading(body,"上次分享 · "+clip.getItemCount()+"项",this::closePreview);
-        TextView summary=label(payload.uris.isEmpty()?payload.text:payload.mime.startsWith("image/")?"图片 · "+payload.uris.size()+"张":"文件 · "+payload.uris.size()+"项");
-        summary.setMaxLines(4);summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        body.addView(summary,new LinearLayout.LayoutParams(-1,0,1));
-        TextView drag=WorkspacePopupStyle.action(context,"长按再次拖曳",true,()->{});
-        drag.setOnLongClickListener(v->begin(v,clip));body.addView(drag,new LinearLayout.LayoutParams(-1,dp(44)));
-        summary.setOnLongClickListener(v->begin(v,clip));showPreview(body);
-    }
+
+
 
     private boolean beginEntry(View source,ContentEntry entry) {
         if(selecting && !selection.contains(tab,entry.key)) {selection.clear(tab);selection.toggle(tab,entry.key);}
@@ -419,6 +401,7 @@ final class ContentPanel {
         WorkspacePopupStyle.styleAction(recognize,false);
         recognize.setOnClickListener(v->recognize(entry,recognize));body.addView(recognize,new LinearLayout.LayoutParams(-1,dp(44)));
         showPreview(body);
+        previewImageView=image;
         final Dialog window=preview;
         final int token=generation;
         WORKER.execute(()->{
@@ -431,7 +414,9 @@ final class ContentPanel {
                     decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE);
                 });
                 anchor.post(()->{
-                    if(preview==window && token==generation && window!=null && window.isShowing())image.setImageBitmap(bitmap);
+                    if(preview==window && token==generation && window!=null && window.isShowing()){
+                        previewPixels=bitmap;image.setImageBitmap(bitmap);
+                    }
                     else bitmap.recycle();
                 });
             } catch(Exception unavailable) { /* Keep the bounded thumbnail preview. */ }
@@ -494,6 +479,8 @@ final class ContentPanel {
         if(recognitionRead!=null){recognitionRead.close();recognitionRead=null;}
         Dialog old=preview;preview=null;
         if(old!=null) { old.setOnDismissListener(null);old.dismiss(); }
+        if(previewImageView!=null){previewImageView.setImageDrawable(null);previewImageView=null;}
+        if(previewPixels!=null){previewPixels.recycle();previewPixels=null;}
     }
 
     private void clipboard() {
@@ -536,24 +523,31 @@ final class ContentPanel {
             started = source.startDragAndDrop(clip, shadow, new SharePayload(clip),
                     View.DRAG_FLAG_GLOBAL | View.DRAG_FLAG_GLOBAL_URI_READ);
         } catch (RuntimeException denied) {
+            ContentDragMotion.close();
             dragging=false;
             message("此内容暂时无法拖曳，请使用应用原有分享");
             return false;
         }
-        if(!started)dragging=false;
+        if(!started){dragging=false;ContentDragMotion.close();}
         if (started && dialog != null) {
             dragging = true;
             Window window = dialog.getWindow();
             if (window != null) {
                 window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
                 window.getDecorView().setAlpha(0f);
+                setDragWindow(window,false);
             }
             if(preview!=null && preview.getWindow()!=null) {
                 preview.getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
                 preview.getWindow().getDecorView().setAlpha(0f);
+                setDragWindow(preview.getWindow(),false);
             }
         }
         return started;
+    }
+
+    private void setDragWindow(Window window,boolean visible) {
+        WorkspacePopupStyle.dragWindow(window,Math.min(100,dp(28)),visible);
     }
 
     void dragEnded(boolean consumed) {
@@ -563,9 +557,11 @@ final class ContentPanel {
         else if (dialog != null && dialog.getWindow() != null) {
             dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
             dialog.getWindow().getDecorView().setAlpha(1f);
+            setDragWindow(dialog.getWindow(),true);
             if(preview!=null && preview.getWindow()!=null) {
                 preview.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
                 preview.getWindow().getDecorView().setAlpha(1f);
+                setDragWindow(preview.getWindow(),true);
             }
         }
     }
@@ -580,13 +576,17 @@ final class ContentPanel {
         if (old != null) try { old.setOnDismissListener(null);old.dismiss(); }
         catch (RuntimeException unavailable) { android.util.Log.w(Tags.PROBE, "content popup already detached", unavailable); }
         if(grid!=null)grid.removeAllViews();
-        entries.clear();tiles.clear();
+        clearEntries();
         shell=null;panelActions=null;grid=null;scroll=null;selectionButton=null;
         tabButtons.clear();
         releaseIsland();
     }
 
     private void releaseIsland() { if (island != null) { island.close(); island = null; } }
+    private void clearEntries(){
+        for(ContentEntry entry:entries.values())if(entry.thumbnail!=null && !entry.thumbnail.isRecycled())entry.thumbnail.recycle();
+        entries.clear();tiles.clear();
+    }
     private void cancelQuery() { generation++; if (query != null) { query.cancel(); query = null; } }
     private int dp(int value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }
     private void message(String value) {

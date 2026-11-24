@@ -39,8 +39,10 @@ public final class ContentInboxProvider extends ContentProvider {
     @Override public Bundle call(String method,String arg,Bundle extras) {
         if(method!=null && method.startsWith("portal_"))return PortalRelay.call(getContext(),method,extras);
         if("paste_register".equals(method))return EditorPasteCompat.relay(getContext(),method,extras);
+        if("editor_bounds_offer".equals(method))return EditorBoundsRelay.call(getContext(),method,extras);
         enforceHost();
         if(Binder.getCallingUid()/100000!=android.os.Process.myUid()/100000)throw new SecurityException("Different content user");
+        if(method!=null && method.startsWith("editor_bounds_"))return EditorBoundsRelay.call(getContext(),method,extras);
         if("conversation_list".equals(method))return EditorPasteCompat.relay(getContext(),method,extras);
         if(method!=null && method.startsWith("shelf_")) {
             if(Binder.getCallingUid()/100000!=android.os.Process.myUid()/100000)throw new SecurityException("Different shelf user");

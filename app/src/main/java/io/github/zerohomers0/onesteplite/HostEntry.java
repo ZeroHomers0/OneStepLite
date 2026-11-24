@@ -88,6 +88,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             return;
         }
         if ("com.xiaomi.type".equals(lpparam.packageName)) {
+            try{EditorBoundsIme.install(lpparam.classLoader);}catch(Throwable unavailable){log("editor bounds IME unavailable: "+unavailable);}
             // Optional keyboard policy only; ordinary app layout/input uses the system hooks.
             hookMiTypeAutoFloating(lpparam.classLoader);
             return;

@@ -24,6 +24,7 @@ final class ContentPanelLayout extends LinearLayout {
     private final android.widget.FrameLayout track;
     private final android.view.View thumb;
     private int current=-1;
+    private int thumbWidth,thumbHeight;
     ContentPanelLayout(Context context,IntConsumer select) {
         super(context);setOrientation(VERTICAL);WorkspacePopupStyle.decorate(this,null);
         track=new android.widget.FrameLayout(context);
@@ -56,15 +57,20 @@ final class ContentPanelLayout extends LinearLayout {
     void clearStatus(){empty.setVisibility(GONE);scroll.setVisibility(VISIBLE);}
     private void positionThumb(boolean animate) {
         int width=Math.max(1,(track.getWidth()-dp(6))/tabs.size());
-        thumb.getLayoutParams().width=width;thumb.getLayoutParams().height=Math.max(1,track.getHeight()-dp(6));thumb.requestLayout();
+        int height=Math.max(1,track.getHeight()-dp(6));
+        if(width==thumbWidth && height==thumbHeight && !animate)return;
+        thumbWidth=width;thumbHeight=height;
+        if(thumb.getLayoutParams().width!=width || thumb.getLayoutParams().height!=height){
+            thumb.getLayoutParams().width=width;thumb.getLayoutParams().height=height;thumb.requestLayout();}
         thumb.setY(dp(3));float x=dp(3)+Math.max(0,current)*width;thumb.animate().cancel();
-        if(animate)thumb.animate().translationX(x).setDuration(240).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+        if(animate && android.animation.ValueAnimator.areAnimatorsEnabled())thumb.animate().translationX(x).setDuration(360).setInterpolator(new android.view.animation.OvershootInterpolator(.65f)).start();
         else thumb.setTranslationX(x);
     }
     void select(int page) {
         int previous=current;current=page;positionThumb(previous>=0 && previous!=page);
         scroll.animate().cancel();
-        if(previous>=0 && previous!=page){scroll.setTranslationX(dp(28)*(page>previous?1:-1));scroll.setAlpha(.4f);
+        scroll.setTranslationX(0);scroll.setAlpha(1);
+        if(previous>=0 && previous!=page && android.animation.ValueAnimator.areAnimatorsEnabled()){scroll.setTranslationX(dp(28)*(page>previous?1:-1));scroll.setAlpha(.4f);
             scroll.animate().translationX(0).alpha(1).setDuration(240).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();}
         for(int i=0;i<tabs.size();i++) {
             tabs.get(i).setSelected(i==page);

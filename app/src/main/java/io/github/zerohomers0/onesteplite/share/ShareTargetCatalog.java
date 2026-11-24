@@ -22,22 +22,24 @@ final class ShareTargetCatalog {
     }
 
     static List<ShareTarget> load(Context context,ClipDescription content,int count,boolean editing,List<String> pins) {
+        String mime=contentMime(content);
+        ClipDescription effective=editing?content:new ClipDescription("内容",new String[]{mime});
         LinkedHashMap<String,ResolveInfo> all=new LinkedHashMap<>();
         Set<String> matching=new LinkedHashSet<>();
         for(String action:new String[]{Intent.ACTION_SEND,Intent.ACTION_SEND_MULTIPLE}) {
             collect(context,new Intent(action).setType("*/*"),all,null);
-            if(!editing && (count==0 || action.equals(count>1?Intent.ACTION_SEND_MULTIPLE:Intent.ACTION_SEND)))
-                for(int i=0;i<content.getMimeTypeCount();i++)
-                    collect(context,new Intent(action).setType(content.getMimeType(i)),all,matching);
+            if(!editing && (count==0 || action.equals(count>1 && !mime.startsWith("text/")?Intent.ACTION_SEND_MULTIPLE:Intent.ACTION_SEND)))
+                collect(context,new Intent(action).setType(mime),all,matching);
         }
         List<String> keys=pins.isEmpty()?new ArrayList<>(all.keySet()):new ArrayList<>(pins);
         java.util.Map<String,ShareTarget> extra=new LinkedHashMap<>();
-        for(ShareTarget action:ShareActions.load(context,content,count,editing))extra.put(action.key(),action);
-        for(ShareTarget action:ConversationShareCompat.load(context,content,count,editing))extra.put(action.key(),action);
+        for(ShareTarget action:ShareActions.load(context,effective,count,editing))extra.put(action.key(),action);
+        for(ShareTarget action:ConversationShareCompat.load(context,effective,count,editing))extra.put(action.key(),action);
         if(editing || pins.isEmpty())for(String key:extra.keySet())if(!keys.contains(key))keys.add(key);
         if(editing)for(String key:all.keySet())if(!keys.contains(key))keys.add(key);
         List<ShareTarget> result=new ArrayList<>();
         for(String key:keys) {
+            if(ShareActions.retired(key))continue;
             if(extra.containsKey(key)){result.add(extra.get(key));continue;}
             ComponentName component=ComponentName.unflattenFromString(key);if(component==null)continue;
             if(!editing && (!ShareActions.operation(component).isEmpty() || !ShareRoutes.activity(component).equals(component)))continue;
@@ -52,6 +54,20 @@ final class ShareTargetCatalog {
             int label=a.label.compareToIgnoreCase(b.label);return label!=0?label:a.key().compareTo(b.key());
         });
         return result;
+    }
+
+    static String contentMime(ClipDescription description) {
+        String result=null;
+        for(int i=0;i<description.getMimeTypeCount();i++){
+            String type=description.getMimeType(i);
+            if(type.equals("text/plain") || type.equals("text/uri-list"))continue;
+            if(result==null)result=type;
+            else if(!result.equals(type)){
+                int slash=result.indexOf('/');String family=slash>0?result.substring(0,slash):"*";
+                result=type.startsWith(family+"/")?family+"/*":"*/*";
+            }
+        }
+        return result!=null?(result.startsWith("text/")?"text/plain":result):description.hasMimeType("text/plain")?"text/plain":"application/octet-stream";
     }
 
     private static void collect(Context context,Intent intent,LinkedHashMap<String,ResolveInfo> all,Set<String> matched) {

@@ -14,12 +14,13 @@ def member(signature):
     while depth:
         depth+=(source[end]=='{')-(source[end]=='}');end+=1
     return source[start:end]
-methods='\n'.join(member(x) for x in ['    private static void replace(', '    private static String plainText(', '    static boolean images('])
+methods='\n'.join(member(x) for x in ['    private static void replace(', '    private static String plainText(', '    static boolean images(', '    static boolean files('])
 files={
 'android/os/IBinder.java':'package android.os;public interface IBinder{}',
 'android/os/IInterface.java':'package android.os;public interface IInterface{IBinder asBinder();}',
 'android/content/ClipDescription.java':'''package android.content;public class ClipDescription{public boolean text=true;public int offset;
-public ClipDescription(){}public ClipDescription(ClipDescription d){text=d.text;offset=d.offset;}public boolean hasMimeType(String t){return "image/*".equals(t)?!text:text;}}''',
+public String mime;public CharSequence getLabel(){return "文件.pdf";}public int getMimeTypeCount(){return 1;}public String getMimeType(int i){return mime!=null?mime:text?"text/plain":"image/jpeg";}
+public ClipDescription(){}public ClipDescription(ClipDescription d){text=d.text;offset=d.offset;mime=d.mime;}public boolean hasMimeType(String t){return mime!=null?mime.equals(t):"image/*".equals(t)?!text:text;}}''',
 'android/content/ClipData.java':'''package android.content;public class ClipData{public ClipDescription d;public Item item;public int count=1;java.util.List<Item> items=new java.util.ArrayList<>();
 public ClipData(ClipDescription d,Item item){this.d=d;this.item=item;items.add(item);}public ClipDescription getDescription(){return d;}
 public void addItem(Item i){items.add(i);count++;}public int getItemCount(){return count;}public Item getItemAt(int i){return i<items.size()?items.get(i):item;}
@@ -39,13 +40,15 @@ public static class MethodHookParam{public Object[] args;public void setObjectEx
 'de/robv/android/xposed/XposedHelpers.java':'''package de.robv.android.xposed;public class XposedHelpers{
 public static Object getObjectField(Object o,String n){try{return o.getClass().getField(n).get(o);}catch(Exception e){throw new RuntimeException(e);}}
 public static int getIntField(Object o,String n){return (Integer)getObjectField(o,n);}
+public static float getFloatField(Object o,String n){return (Float)getObjectField(o,n);}
 public static Object callMethod(Object o,String n){try{return o.getClass().getMethod(n).invoke(o);}catch(Exception e){throw new RuntimeException(e);}}}''',
 'io/github/zerohomers0/onesteplite/NativeTextRegression.java':'''package io.github.zerohomers0.onesteplite;
 import android.content.*;import android.graphics.Point;import android.view.*;import android.os.*;import java.util.*;
 import de.robv.android.xposed.XC_MethodHook;import de.robv.android.xposed.XposedHelpers;
 class Tags{static final String PROBE="test";}class Packages{static final String SYSTEM_UI="com.android.systemui";}
 class ContentInboxProvider{static final String MODULE="module";}
-class ContentDragShadow{ContentDragShadow(String t,float d,int n){}static int offset(ClipDescription d){return d.offset;}
+class HyperOsStyle{static boolean dark(Context c){return false;}}
+class ContentDragShadow{ContentDragShadow(String t,float d,int n){}ContentDragShadow(String t,float d,int n,boolean words){}void setDark(boolean dark){}static int offset(ClipDescription d){return d.offset;}
 void recycleThumbnail(){}void mark(ClipData c){c.d.offset=86;}void onProvideShadowMetrics(Point size,Point touch){size.x=128;size.y=92;touch.x=64;touch.y=89;}}
 public class NativeTextRegression{
 static final String ORIGINAL="original",REPLACEMENT="replacement";
@@ -55,7 +58,8 @@ __METHODS__
 public static class Token implements IBinder{}public static class Client implements IInterface{public IBinder token=new Token();public IBinder asBinder(){return token;}}
 public static class Task{public int mode=1;public int getWindowingMode(){return mode;}}
 public static class Wm{public Map<IBinder,Object> mWindowMap=new HashMap<>();public Object mGlobalLock=new Object();public Context mContext=new Context();}
-public static class Display{public Wm mWmService=new Wm();}
+public static class Spec{public float scale=.75f,offsetX=300,offsetY=600;}
+public static class Display{public Wm mWmService=new Wm();public Spec mMagnificationSpec;}
 public static class Win{public Display display;public int mOwnerUid=10001;public boolean visible=true;public Task task=new Task();
 public WindowManager.LayoutParams mAttrs=new WindowManager.LayoutParams();public Object getDisplayContent(){return display;}
 public boolean isVisible(){return visible;}public Object getTask(){return task;}}
@@ -92,6 +96,23 @@ check(plainText(words).equals("第一条\\n第二条"));call=call(client,words);
 check(((ClipData)call.args[12]).getItemAt(1)==second&&((ClipData)call.args[12]).getItemCount()==2);
 words.d.text=false;words.item.uri=new android.net.Uri();check(!images(words));second.uri=new android.net.Uri();check(images(words));
 second.intent=new Object();check(!images(words));
+clip.d.text=true;clip.item.uri=null;clip.count=1;d.mMagnificationSpec=new Spec();
+call=call(client,clip);replace(call,d);
+check((Float)call.args[8]==375f&&(Float)call.args[9]==675f);
+check((Float)call.args[10]==64f&&(Float)call.args[11]==89f);
+// First frame and an unchanged physical MOVE must put the card at exactly the same position.
+check((Float)call.args[9]-(Float)call.args[11]==675f-89f);
+call=call(client,clip);Object[] compact=new Object[11];System.arraycopy(call.args,0,compact,0,5);
+System.arraycopy(call.args,7,compact,5,6);call.args=compact;replace(call,d);
+check((Float)call.args[6]==375f&&(Float)call.args[7]==675f&&((ClipData)call.args[10]).d.offset==86);
+d.mMagnificationSpec.scale=Float.NaN;reject(d,client,clip);
+d.mMagnificationSpec.scale=0;reject(d,client,clip);d.mMagnificationSpec.scale=1.2f;reject(d,client,clip);
+d.mMagnificationSpec.scale=.75f;d.mMagnificationSpec.offsetY=Float.POSITIVE_INFINITY;reject(d,client,clip);
+d.mMagnificationSpec.offsetY=600;clip.d.mime="application/pdf";clip.item.uri=new android.net.Uri();
+check(files(clip)&&!images(clip));call=call(client,clip);old=call.args[4];int priorImages=imageCalls;replace(call,d);
+check(call.args[4]!=old&&imageCalls==priorImages);
+clip.item.intent=new Object();check(!files(clip));clip.item.intent=null;
+clip.d.mime="application/vnd.android.activity";check(!files(clip));
 System.out.println("Production native text card checks="+checks+" passed (surface rendering requires device)");
 }}
 '''.replace('__METHODS__',methods)
