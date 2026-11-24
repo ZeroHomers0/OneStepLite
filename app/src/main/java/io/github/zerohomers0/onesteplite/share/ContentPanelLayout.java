@@ -28,6 +28,7 @@ final class ContentPanelLayout extends LinearLayout {
     private final IntConsumer selectPage;
     private int thumbWidth,thumbHeight;
     private android.view.View detail;
+    private android.view.View actionLayer;
     void push(android.view.View page){
         pop(false);
         for(int i=0;i<getChildCount();i++)getChildAt(i).setVisibility(GONE);
@@ -69,6 +70,7 @@ final class ContentPanelLayout extends LinearLayout {
         this.track.addView(header,new android.widget.FrameLayout.LayoutParams(-1,-2));
         this.track.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->positionThumb(false));
         scroll=new ScrollView(context);scroll.setFillViewport(true);
+        scroll.setVerticalScrollBarEnabled(false);
         scroll.setPadding(0,dp(8),0,0);scroll.setClipToPadding(false);
         grid=new GridLayout(context);grid.setColumnCount(3);scroll.addView(grid);
         pages=new PageSwipeArea(context);pages.addView(scroll,new android.widget.FrameLayout.LayoutParams(-1,-1));
@@ -140,8 +142,25 @@ final class ContentPanelLayout extends LinearLayout {
     }
 
     void setActions(ContentPanelActions actions) {
-        LayoutParams size=new LayoutParams(dp(44),dp(44));
-        size.setMarginStart(dp(4));toolbar.addView(actions,size);
+        LayoutParams size=new LayoutParams(dp(36),dp(44));
+        size.setMarginStart(dp(2));toolbar.addView(actions,size);actions.bindMenu(this::setActionMenu);
+    }
+
+    boolean closeActionMenu(){
+        if(actionLayer==null)return false;
+        pages.removeView(actionLayer);actionLayer=null;return true;
+    }
+
+    private void setActionMenu(android.view.View menu) {
+        boolean wasOpen=closeActionMenu();
+        if(menu==null || wasOpen)return;
+        android.widget.FrameLayout overlay=new android.widget.FrameLayout(getContext());
+        overlay.setOnClickListener(ignored->setActionMenu(null));
+        android.widget.FrameLayout.LayoutParams position=new android.widget.FrameLayout.LayoutParams(
+                dp(160),-2,Gravity.TOP|Gravity.END);
+        position.topMargin=dp(4);
+        overlay.addView(menu,position);pages.addView(overlay,new android.widget.FrameLayout.LayoutParams(-1,-1));
+        actionLayer=overlay;
     }
 
     void heading(String title,int width) {
@@ -169,6 +188,7 @@ final class ContentPanelLayout extends LinearLayout {
         else thumb.setTranslationX(x);
     }
     void select(int page) {
+        if(current!=page)setActionMenu(null);
         int previous=current;current=page;positionThumb(previous>=0 && previous!=page);
         scroll.animate().cancel();
         scroll.setTranslationX(0);scroll.setAlpha(1);

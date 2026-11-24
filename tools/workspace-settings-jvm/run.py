@@ -114,6 +114,18 @@ public class SettingsRegression {
   try {WorkspaceSettingsStore.decode(null);throw new AssertionError("missing snapshot accepted");}
   catch(IllegalArgumentException expected){checks++;}
   c.prefs.commit=true;
+  check(WorkspaceSettingsStore.decode(new Bundle()).themeMode==WorkspaceOptions.THEME_SYSTEM,"missing theme follows system");
+  WorkspaceOptions themed=WorkspaceSettingsStore.read(c).withThemeMode(WorkspaceOptions.THEME_DARK).withShowLunar(false);
+  check(WorkspaceSettingsStore.write(c,themed),"theme preference saves alongside existing settings");
+  check(WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(WorkspaceSettingsStore.read(c))).themeMode==WorkspaceOptions.THEME_DARK,
+       "saved theme reaches SystemUI and survives edits to other settings");
+  check(themed.withThemeMode(100).themeMode==WorkspaceOptions.THEME_SYSTEM,"invalid theme falls back to system");
+  check(old.followTopBarSide && WorkspaceSettingsStore.decode(new Bundle()).followTopBarSide,"older settings keep mirrored controls");
+  WorkspaceOptions fixed=themed.withFollowTopBarSide(false).withSwapMode(0).withThemeMode(1);
+  check(WorkspaceSettingsStore.write(c,fixed),"fixed toolbar setting can be saved");
+  check(!WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(WorkspaceSettingsStore.read(c))).followTopBarSide,
+       "fixed toolbar survives other edits and reaches SystemUI");
+  check(fixed.withFollowTopBarSide(true).followTopBarSide,"switch can be enabled again");
   check(!WorkspaceSettingsStore.read(c).deleteSharedImages,"new cleanup defaults off on existing installs");
   check(WorkspaceSettingsStore.write(c,WorkspaceSettingsStore.read(c).withDeleteSharedImages(true)),"cleanup option saves");
   check(WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(WorkspaceSettingsStore.read(c))).deleteSharedImages,"cleanup reaches provider clients");

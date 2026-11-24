@@ -47,7 +47,6 @@ final class ContentAccessCompat {
 
     static int arrowOffset(DragEvent event) {
         int declared=ContentDragShadow.offset(event.getClipDescription());
-        if(ContentDragMotion.matches(event.getClipDescription()))return ContentDragMotion.aimOffset();
         // Our cards are drawn in physical pixels. DragEvent's private offset can still carry
         // the source app's compatibility scale; applying it again moves the aim above the tip.
         return declared;

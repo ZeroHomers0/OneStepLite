@@ -128,15 +128,15 @@ final class EditorPasteCompat {
                 EditorInfo editor=(EditorInfo)field(data,"mCurEditorInfo","mCurAttribute");
                 Object connection=field(data,"mCurInputConnection","mCurInputContext"),client=field(data,"mCurClient");
                 Object binding=field(data,"mImeBindingState");
-                Object window=binding==null?field(data,"mCurFocusedWindow"):field(binding,"mFocusedWindow");
+                Object window=field(binding,"mFocusedWindow","mCurFocusedWindow");
+                if(!(window instanceof IBinder))window=field(data,"mCurFocusedWindow");
                 if(editor==null || editor.inputType==0 || Packages.SYSTEM_UI.equals(editor.packageName)
                         || !(connection instanceof IInterface) || !(window instanceof IBinder) || client==null)return null;
                 int uid=XposedHelpers.getIntField(client,"mUid");if(uid/100000!=0)return null;
                 result.putInt("uid",uid);result.putInt("field",editor.fieldId);result.putBinder("window",(IBinder)window);
                 result.putBinder("editor",((IInterface)connection).asBinder());result.putLong("issued",android.os.SystemClock.uptimeMillis());
-                result.putStringArray("content_types",editor.contentMimeTypes);
             }
-            if(!focused(result))return null;EditorGeometryCompat.describe(display.get(),result);return result;
+            return focused(result)?result:null;
         }
         private boolean focused(Bundle snapshot) {
             Object target=display.get();if(target==null)return false;

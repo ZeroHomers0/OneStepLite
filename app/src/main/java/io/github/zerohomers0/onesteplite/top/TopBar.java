@@ -40,6 +40,7 @@ final class TopBar extends FrameLayout {
     private Bitmap glassWallpaper;
     private int glassWidth, glassHeight, statusBarInset, tabletHeaderHeight;
     private boolean mainOnRight, tabletToolsExpanded;
+    private boolean followTopBarSide=true;
     private RectF workspaceMain;
     private TopBarGeometry geometry;
     private boolean workspaceActive = true;
@@ -104,10 +105,22 @@ final class TopBar extends FrameLayout {
         shareWorkspace.setWindowHover(pkg->this.listener.contentHoverKey(pkg),key->this.listener.onContentHover(key));
     }
 
-    void applyOptions(WorkspaceOptions options) { clock.setShowLunar(options.showLunar); }
+    private int appliedTheme=-1;
+    void applyOptions(WorkspaceOptions options) {
+        clock.setShowLunar(options.showLunar);
+        if(followTopBarSide!=options.followTopBarSide){
+            followTopBarSide=options.followTopBarSide;
+            setMainOnRight(mainOnRight);
+        }
+        if(appliedTheme==options.themeMode)return;
+        appliedTheme=options.themeMode;
+        header.updateColors();if(tabletHeader!=null)tabletHeader.updateColors();
+        shareWorkspace.refreshAppearance();clock.invalidate();invalidate();
+    }
     void setMainOnRight(boolean right) {
         mainOnRight = right;
-        quickRail.setMainOnRight(right);shareWorkspace.setMainOnRight(right);
+        boolean mirrored=followTopBarSide && right;
+        quickRail.setMainOnRight(mirrored);shareWorkspace.setMainOnRight(mirrored);
         header.updateActions();
         if (tabletHeader != null) tabletHeader.updateActions();
     }
@@ -119,7 +132,6 @@ final class TopBar extends FrameLayout {
     }
     void setWorkspaceMainHole(RectF hole) {
         workspaceMain = hole == null ? null : new RectF(hole);
-        quickRail.setWorkspaceMainHole(hole);
         invalidate(); header.invalidate();
     }
     private float reveal(float l, float t, float r, float b) {
@@ -128,7 +140,7 @@ final class TopBar extends FrameLayout {
                 workspaceMain.right,workspaceMain.bottom,12f*getResources().getDisplayMetrics().density);
     }
     @Override protected boolean drawChild(Canvas canvas, View child, long time) {
-        if (child == header || child == quickRail || workspaceMain == null)
+        if (child == header || child == quickRail || child == shareWorkspace || workspaceMain == null)
             return super.drawChild(canvas, child, time);
         float alpha = reveal(child.getLeft(), child.getTop(), child.getRight(), child.getBottom());
         if (alpha <= 0) return false;
@@ -200,7 +212,7 @@ final class TopBar extends FrameLayout {
         c.height=Math.max(1,geometry.blankBottom-geometry.blankTop);
         LayoutParams h=(LayoutParams)header.getLayoutParams();h.topMargin=geometry.headerTop;h.height=geometry.headerHeight;
         LayoutParams r=(LayoutParams)quickRail.getLayoutParams();r.topMargin=geometry.railTop;r.height=geometry.railHeight;
-        r.leftMargin=Math.round(46*getResources().getDisplayMetrics().density);r.rightMargin=0;
+        r.leftMargin=0;r.rightMargin=0;
         LayoutParams share=(LayoutParams)shareWorkspace.getLayoutParams();
         share.topMargin=geometry.railTop;share.height=geometry.railHeight;
         super.onMeasure(ws,hs);
@@ -266,43 +278,16 @@ final class TopBar extends FrameLayout {
             topApp.setAlpha(enabled ? 1f : .32f);
         }
         void updateColors() {
-            for(IconButton icon:icons)updateButtonGlass(icon);
             int fallback=HyperOsStyle.textPrimary(getContext());
-            for(IconButton icon:icons)icon.setIconColor(HyperOsStyle.dark(getContext())?0xffffffff:HyperOsStyle.wallpaperTextColor(
-                    glassWallpaper,glassWidth,glassHeight,getLeft()+icon.getLeft(),getTop()+icon.getTop(),
-                    icon.getWidth(),icon.getHeight(),fallback));
+            for(IconButton icon:icons) {
+                icon.setCompactGlyph();
+                icon.setIconColor(HyperOsStyle.dark(getContext())?0xffffffff:HyperOsStyle.wallpaperTextColor(
+                        glassWallpaper,glassWidth,glassHeight,getLeft()+icon.getLeft(),getTop()+icon.getTop(),
+                        icon.getWidth(),icon.getHeight(),fallback));
+            }
             title.setTextColor(HyperOsStyle.dark(getContext())?0xffffffff:HyperOsStyle.wallpaperTextColor(glassWallpaper,glassWidth,glassHeight,
                     getLeft()+title.getLeft(),getTop()+title.getTop(),title.getWidth(),title.getHeight(),fallback));
         }
-        private void updateButtonGlass(IconButton icon) {
-            int x=TopBar.this.getLeft()+getLeft()+icon.getLeft();
-            int y=TopBar.this.getTop()+getTop()+icon.getTop();
-            int gap=Math.round(HyperOsStyle.dp(getContext(),2));
-            android.graphics.drawable.Drawable previous=icon.getBackground();
-            if(glassWallpaper!=null && !glassWallpaper.isRecycled()) {
-                int tint=HyperOsStyle.dark(getContext())?0x5510151c:0x4cffffff;
-                if(previous instanceof android.graphics.drawable.InsetDrawable) {
-                    android.graphics.drawable.Drawable body=((android.graphics.drawable.InsetDrawable)previous).getDrawable();
-                    if(body instanceof android.graphics.drawable.LayerDrawable) {
-                        WallpaperCropDrawable crop=(WallpaperCropDrawable)((android.graphics.drawable.LayerDrawable)body).getDrawable(1);
-                        if(crop.matchesWallpaper(glassWallpaper,glassWidth,glassHeight,tint)) {
-                            crop.setScreenOrigin(x+gap,y+gap);return;
-                        }
-                    }
-                }
-                WallpaperCropDrawable crop=new WallpaperCropDrawable(glassWallpaper,glassWidth,glassHeight,x+gap,y+gap,tint);
-                android.graphics.drawable.Drawable outline=HyperOsStyle.glassSheet(getContext(),14);
-                android.graphics.drawable.LayerDrawable plate=new android.graphics.drawable.LayerDrawable(
-                        new android.graphics.drawable.Drawable[]{outline,crop});
-                icon.setBackground(new android.graphics.drawable.InsetDrawable(plate,gap));
-            } else if(previous==null || previous instanceof android.graphics.drawable.InsetDrawable
-                    && ((android.graphics.drawable.InsetDrawable)previous).getDrawable() instanceof android.graphics.drawable.LayerDrawable) {
-                android.graphics.drawable.Drawable glass=HyperOsStyle.glassSheet(getContext(),14);
-                glass.setAlpha(130);icon.setBackground(new android.graphics.drawable.InsetDrawable(glass,gap));
-            }
-            icon.setClipToOutline(true);
-        }
-
         private IconButton button(int icon,String text,Runnable action) {
             IconButton b=new IconButton(getContext(),icon,text);b.setTooltipText(text);
             b.setOnClickListener(v->action.run());addView(b);return b;
@@ -326,7 +311,7 @@ final class TopBar extends FrameLayout {
         }
         @Override protected void onLayout(boolean changed,int l,int t,int r,int b) {
             int w=r-l,h=b-t,edge=Math.round(10*getResources().getDisplayMetrics().density),bw=left.getMeasuredWidth();
-            if(mainOnRight) {
+            if(followTopBarSide && mainOnRight) {
                 // Small windows on the left: expand and settings lead, the top-face
                 // action and the two switches close the row on the right.
                 expand.layout(edge,0,edge+bw,h);settings.layout(edge+bw,0,edge+2*bw,h);

@@ -21,12 +21,12 @@ import android.widget.Toast;
 
 /** Settings use the installed system Settings resources and layout proportions. */
 final class WorkspaceSettingsPage extends FrameLayout {
-    private static final int HOME = 0, SWAP = 3, GESTURE = 5, LANDSCAPE = 6, APPS = 7, SHARE = 8;
+    private static final int HOME = 0, SWAP = 3, GESTURE = 5, LANDSCAPE = 6, APPS = 7, SHARE = 8, APP_DRAG = 9, IMAGE_DRAG = 10;
     private static final int BLUE = HyperOsStyle.CONTROL_ACCENT;
     private final SettingsActivity activity;
     private final boolean dark;
     private final int primary, secondary, surface;
-    private final int[] scrollPositions = new int[SHARE + 1];
+    private final int[] scrollPositions = new int[IMAGE_DRAG + 1];
     private ShortcutManagementPage shortcutPage;
     private Bundle shortcutDraft;
     private final android.database.ContentObserver gestureObserver =
@@ -42,7 +42,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
     WorkspaceSettingsPage(SettingsActivity activity, Bundle state) {
         super(activity);
         this.activity = activity;
-        dark = (getResources().getConfiguration().uiMode & 48) == 32;
+        dark = HyperOsStyle.dark(activity);
         primary = activity.settingsColor("miuix_preference_primary_text_color_" + (dark ? "dark" : "light"),
                 dark ? 0xfff4f5f8 : 0xff000000);
         secondary = activity.settingsColor("miuix_preference_secondary_text_color_" + (dark ? "dark" : "light"),
@@ -56,7 +56,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
         int restored = state == null ? HOME : state.getInt("settings_page", HOME);
         shortcutDraft=state==null?null:state.getBundle("shortcuts");
         show(restored == SWAP || restored == GESTURE || restored == LANDSCAPE
-                || restored == APPS || restored == SHARE ? restored : HOME, false);
+                || restored == APPS || restored == SHARE || restored == APP_DRAG || restored == IMAGE_DRAG ? restored : HOME, false);
     }
 
     void save(Bundle state) {
@@ -102,10 +102,13 @@ final class WorkspaceSettingsPage extends FrameLayout {
         addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         activity.setPageTitle(next == SWAP ? "主窗与小窗交换方式"
                 : next == GESTURE ? "打开工作区的手势"
-                : next == LANDSCAPE ? "横屏应用显示位置" : "OneStepLite");
+                : next == LANDSCAPE ? "横屏应用显示位置"
+                : next == APP_DRAG ? "拖入空小窗" : next == IMAGE_DRAG ? "长按提起图片" : "OneStepLite");
         if (next == SWAP) swap();
         else if (next == GESTURE) gesture();
         else if (next == LANDSCAPE) landscape();
+        else if(next==APP_DRAG)appDragDiagram();
+        else if(next==IMAGE_DRAG)previewImageDrag();
         else home();
         int restoreY = scrollPositions[next];
         scroll.post(() -> scroll.scrollTo(0, restoreY));
@@ -127,15 +130,20 @@ final class WorkspaceSettingsPage extends FrameLayout {
         LinearLayout appearance = card();
         switchOption(appearance, "显示农历", "日期下方显示农历", options.showLunar,
                 checked -> persist(WorkspaceSettingsStore.read(activity).withShowLunar(checked)));
+        divider(appearance);
+        menu(appearance,"主题模式",WorkspaceOptions.themeLabel(options.themeMode),()->chooseTheme(options.themeMode));
+        divider(appearance);
+        switchOption(appearance,"顶栏控件随窗口换边","开启时，顶部操作按钮和前台、分享标记一起换边；关闭时按默认位置显示",
+                options.followTopBarSide,value->persist(WorkspaceSettingsStore.read(activity).withFollowTopBarSide(value)));
         add(appearance, 0, 12);
 
         section("顶栏");
         LinearLayout shortcuts=card();
-        menu(shortcuts,"管理快捷应用","选择常用应用并调整顺序",()->show(APPS,true));
+        menu(shortcuts,"管理快捷应用","选择显示的应用并调整顺序",()->show(APPS,true));
         divider(shortcuts);
         menu(shortcuts,"管理分享入口","应用功能、操作与可用会话入口",()->show(SHARE,true));
         divider(shortcuts);
-        menu(shortcuts,"拖入空小窗","长按快捷应用再拖入高亮空槽",()->previewDrag(false));
+        menu(shortcuts,"拖入空小窗","长按快捷应用再拖入高亮空槽",()->show(APP_DRAG,true));
         add(shortcuts,0,12);
 
         section("内容分享");
@@ -143,7 +151,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
         switchOption(sharing,"分享后清理临时图片","截取、提取的图片默认保留24小时；开启后缩短为交付10分钟，不删除相册原图",options.deleteSharedImages,
                 checked->persist(WorkspaceSettingsStore.read(activity).withDeleteSharedImages(checked)));
         divider(sharing);
-        menu(sharing,"长按提起图片","长按后移动提起，原地松手取消",()->previewDrag(true));
+        menu(sharing,"长按提起图片","长按后移动提起，原地松手取消",()->show(IMAGE_DRAG,true));
         add(sharing,0,12);
 
         section("窗口与操作");
@@ -240,11 +248,15 @@ final class WorkspaceSettingsPage extends FrameLayout {
     private void diagramOption(String title,String detail,boolean selected,boolean enabled,View diagram,Runnable select) {
         LinearLayout group=card();
         choiceOption(group,title,detail,selected,enabled,select);
+        addDiagram(group,diagram,enabled);
+        if(enabled) {group.setOnClickListener(v->select.run());diagram.setOnClickListener(v->select.run());}
+        add(group,0,14);
+    }
+
+    private void addDiagram(LinearLayout group,View diagram,boolean enabled) {
         LinearLayout.LayoutParams preview=new LinearLayout.LayoutParams(-1,dp(206));
         preview.leftMargin=preview.rightMargin=dp(12);preview.bottomMargin=dp(12);
         diagram.setAlpha(enabled?1f:.45f);group.addView(diagram,preview);
-        if(enabled) {group.setOnClickListener(v->select.run());diagram.setOnClickListener(v->select.run());}
-        add(group,0,14);
     }
 
     private void previewNote(String value) {
@@ -370,27 +382,41 @@ final class WorkspaceSettingsPage extends FrameLayout {
         add(section, 0, 8);
     }
 
-    private void previewDrag(boolean picture) {
-        DragPreview preview=new DragPreview(picture);
-        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(activity)
-                .setTitle(picture?"长按提起图片":"拖入空小窗").setView(preview)
-                .setMessage(picture?"长按主窗图片，明确移动后提起。原地松手可取消。"
-                        :"长按顶栏快捷应用，拖进高亮的空小窗再松手。")
-                .setPositiveButton("完成",null).setNeutralButton("重播",null).create();
-        dialog.setOnShowListener(ignored->{
-            dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL)
-                    .setOnClickListener(v->preview.play());
-            preview.play();
-        });
-        dialog.show();
+    private void chooseTheme(int current) {
+        new android.app.AlertDialog.Builder(activity).setTitle("主题模式")
+                .setSingleChoiceItems(new String[]{"跟随系统","浅色","深色"},current,(dialog,choice)->{
+                    dialog.dismiss();
+                    if(choice!=current && persist(WorkspaceSettingsStore.read(activity).withThemeMode(choice)))
+                        activity.recreate();
+                }).setNegativeButton("取消",null).show();
     }
 
-    private final class DragPreview extends View {
+    private void appDragDiagram() {
+        LinearLayout group=card();
+        LinearLayout item=row();
+        LinearLayout labels=optionLabels("拖动顶栏应用","长按快捷应用，拖到高亮的空小窗后松手");
+        labels.getChildAt(0).setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        item.addView(labels,new LinearLayout.LayoutParams(-1,-2));
+        group.addView(item);
+        addDiagram(group,SwapModeDiagram.insertIntoEmptySlot(
+                activity,secondary,dark?0xff353840:0xffe9e9e9,BLUE),true);
+        add(group,0,14);
+    }
+
+    private void previewImageDrag() {
+        LinearLayout group=card();
+        ImageDragPreview preview=new ImageDragPreview();
+        addDiagram(group,preview,true);
+        divider(group);
+        menu(group,"重播示范","长按后移动提起，原地松手取消",preview::play);
+        add(group,0,14);preview.post(preview::play);
+    }
+
+    private final class ImageDragPreview extends View {
         private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final boolean picture;
         private android.animation.ValueAnimator animation;
         private float progress;
-        DragPreview(boolean picture){super(activity);this.picture=picture;setMinimumHeight(dp(144));}
+        ImageDragPreview(){super(activity);}
 
         void play(){
             if(animation!=null)animation.cancel();
@@ -402,6 +428,8 @@ final class WorkspaceSettingsPage extends FrameLayout {
 
         @Override protected void onDraw(Canvas canvas){
             super.onDraw(canvas);
+            int save=canvas.save();
+            canvas.translate(0,(getHeight()-dp(144))/2f);
             float width=getWidth();
             paint.setColor(dark?0xff353840:0xffe9e9e9);
             canvas.drawRoundRect(width*.14f,dp(30),width*.58f,dp(124),dp(8),dp(8),paint);
@@ -409,10 +437,10 @@ final class WorkspaceSettingsPage extends FrameLayout {
             paint.setStrokeWidth(dp(1.5f));
             canvas.drawRoundRect(width*.64f,dp(53),width*.85f,dp(108),dp(8),dp(8),paint);
             paint.setStyle(Paint.Style.FILL);paint.setColor(BLUE);
-            float x=width*((picture?.34f:.24f)+progress*(picture?.40f:.50f));
-            float y=dp(picture?75:19)+progress*dp(picture?4:60);
-            if(picture)canvas.drawRoundRect(x-dp(14),y-dp(10),x+dp(14),y+dp(10),dp(4),dp(4),paint);
-            else canvas.drawCircle(x,y,dp(9),paint);
+            float x=width*(.34f+progress*.40f);
+            float y=dp(75)+progress*dp(4);
+            canvas.drawRoundRect(x-dp(14),y-dp(10),x+dp(14),y+dp(10),dp(4),dp(4),paint);
+            canvas.restoreToCount(save);
         }
 
         @Override protected void onDetachedFromWindow(){

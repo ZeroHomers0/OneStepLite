@@ -11,13 +11,24 @@ import android.view.View;
 final class IconButton extends View {
     static final int SETTINGS = 0, CLOSE = 10, SIDE_LEFT = 13, SIDE_RIGHT = 14,
             PLAY = 16, PAUSE = 17, VIDEO_RETURN = 18, TOP_APP = 19, EXPAND_LEFT = 20, EXPAND_RIGHT = 21,
-            VIDEO_FIT = 22, VIDEO_FILL = 23, CONTENT = 24, CAPTURE = 25, MORE = 26, CHECK = 27;
+            VIDEO_FIT = 22, VIDEO_FILL = 23, CONTENT = 24, CAPTURE = 25, MORE = 26, CHECK = 27,
+            MORE_VERTICAL = 28;
     private int icon;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** One scratch path: a button paints exactly one glyph per frame. */
     private final Path glyph = new Path();
     private final Path tile=IconContour.create(38);
     private int foreground;
+    private boolean compactGlyph;
+    private final android.graphics.LinearGradient contentGradient = new android.graphics.LinearGradient(
+            0,0,30,38,new int[]{0xff80ceff,0xff4b93f6,0xff3758d7},null,
+            android.graphics.Shader.TileMode.CLAMP);
+
+    void setCompactGlyph() {
+        if(compactGlyph)return;
+        compactGlyph=true;
+        invalidate();
+    }
 
     void setIcon(int value) {icon=value;invalidate();}
 
@@ -50,19 +61,16 @@ final class IconButton extends View {
         super.onDraw(canvas);
         if(icon==CONTENT) {drawContentIcon(canvas);return;}
         int save = canvas.save();
-        float size = Math.min(HyperOsStyle.dp(getContext(), 26f), Math.min(getWidth(), getHeight()) * .84f);
+        float size = Math.min(HyperOsStyle.dp(getContext(), compactGlyph ? 24f : 26f), Math.min(getWidth(), getHeight()) * .84f);
         canvas.translate((getWidth() - size) / 2f, (getHeight() - size) / 2f);
         canvas.scale(size / 24f, size / 24f);
         paint.setStyle(Paint.Style.STROKE);
         paint.setColor(foreground == 0 ? HyperOsStyle.textPrimary(getContext()) : foreground);
         paint.setStrokeWidth(2.1f);
-        if (icon == CONTENT) {
-            canvas.drawRoundRect(7, 3, 21, 17, 2, 2, paint);
-            canvas.drawRoundRect(3, 7, 17, 21, 2, 2, paint);
-            canvas.drawLine(6, 17, 9, 13, paint);
-            canvas.drawLine(9, 13, 14, 18, paint);
-        } else if (icon == MORE) {
+        if (compactGlyph) paint.setShadowLayer(.7f,0,.6f,0x48000000);
+        if (icon == MORE || icon == MORE_VERTICAL) {
             paint.setStyle(Paint.Style.FILL);
+            if (icon == MORE_VERTICAL) canvas.rotate(90,12,12);
             canvas.drawCircle(6,12,1.65f,paint);canvas.drawCircle(12,12,1.65f,paint);
             canvas.drawCircle(18,12,1.65f,paint);
         } else if (icon == CHECK) {
@@ -125,17 +133,25 @@ final class IconButton extends View {
             canvas.drawPath(gear, paint);
             canvas.drawCircle(12, 12, 3.5f, paint);
         }
+        paint.clearShadowLayer();
         canvas.restoreToCount(save);
     }
 
     private void drawContentIcon(Canvas canvas) {
         int save=canvas.save();
-        float size=Math.min(HyperOsStyle.dp(getContext(),38),Math.min(getWidth(),getHeight()));
+        float size=Math.min(HyperOsStyle.dp(getContext(),compactGlyph?34:38),Math.min(getWidth(),getHeight()));
         canvas.translate((getWidth()-size)/2,(getHeight()-size)/2);canvas.scale(size/38,size/38);
         paint.setStyle(Paint.Style.FILL);
-        paint.setShader(new android.graphics.LinearGradient(0,0,38,38,
-                new int[]{0xff62b9ff,0xff3869ec},null,android.graphics.Shader.TileMode.CLAMP));
+        paint.setShader(contentGradient);
         canvas.drawPath(tile,paint);paint.setShader(null);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(1f);
+        paint.setColor(0x58ffffff);
+        int edge=canvas.save();
+        canvas.clipPath(tile);
+        canvas.drawPath(tile,paint);
+        canvas.restoreToCount(edge);
+        paint.setStyle(Paint.Style.FILL);
         paint.setColor(0x70ffffff);canvas.drawRoundRect(12,7,30,25,3,3,paint);
         paint.setColor(0xffffffff);canvas.drawRoundRect(7,12,26,31,3,3,paint);
         paint.setColor(0xffb1dcff);canvas.drawRoundRect(9.5f,14.5f,23.5f,28.5f,1.5f,1.5f,paint);

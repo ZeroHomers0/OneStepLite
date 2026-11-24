@@ -40,6 +40,7 @@ final class ShortcutManagementPage extends FrameLayout {
         WORKER.execute(()->{
             try {
                 String pins=ShortcutSettingsClient.read(getContext(),kind());
+                boolean implicitApps=applications && pins==null;
                 if(pins==null)pins=Settings.Secure.getString(getContext().getContentResolver(),applications
                         ?ShortcutSettingsClient.LEGACY_APPS:ShortcutSettingsClient.LEGACY_SHARE);
                 List<String> keys=QuickAppOrder.decode(pins);List<ShareTarget> targets=new ArrayList<>();
@@ -48,6 +49,9 @@ final class ShortcutManagementPage extends FrameLayout {
                     apps.sort((a,b)->a.label.compareToIgnoreCase(b.label));List<String> installed=new ArrayList<>();
                     for(QuickApp app:apps){targets.add(new ShareTarget(app.component,app.label,app.icon,true));installed.add(app.component.flattenToString());}
                     keys=QuickAppReconcilePolicy.prune(keys,installed);
+                    if(implicitApps){LinkedHashSet<String> visible=new LinkedHashSet<>(keys);
+                        visible.addAll(installed);keys=new ArrayList<>(visible);}
+
                 } else targets=ShareTargetCatalog.load(getContext(),new ClipDescription("内容",new String[]{"*/*"}),0,true,keys);
                 ArrayList<String> draft=restored==null?null:restored.getStringArrayList("shortcut_draft");
                 LinkedHashSet<String> initial=new LinkedHashSet<>(draft==null?keys:draft);

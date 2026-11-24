@@ -24,7 +24,7 @@ final class PortalInputCompat implements AutoCloseable {
         try {
             Object proxy=Proxy.newProxyInstance(listener.getClassLoader(),new Class<?>[]{listener},(self,method,args)->{
                 if("onInputEvent".equals(method.getName()) && args[0] instanceof MotionEvent) {
-                    try{ContentDragMotion.motion((MotionEvent)args[0]);EditorDragOutline.motion((MotionEvent)args[0]);sink.accept((MotionEvent)args[0]);}catch(RuntimeException failure){android.util.Log.w(Tags.PROBE,"portal pointer rejected",failure);}
+                    try{ContentDragMotion.motion((MotionEvent)args[0]);sink.accept((MotionEvent)args[0]);}catch(RuntimeException failure){android.util.Log.w(Tags.PROBE,"portal pointer rejected",failure);}
                 } else if("hashCode".equals(method.getName()))return System.identityHashCode(self);
                 else if("equals".equals(method.getName()))return self==args[0];
                 else if("toString".equals(method.getName()))return "PortalPointerObserver";

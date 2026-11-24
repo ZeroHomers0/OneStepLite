@@ -2,8 +2,9 @@ package io.github.zerohomers0.onesteplite;
 
 import android.content.Context;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.FrameLayout;
-import android.widget.PopupMenu;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /** Page actions occupy one slot beside the content tabs. */
@@ -12,10 +13,11 @@ final class ContentPanelActions extends FrameLayout {
     private final TextView count;
     private int page;
     private boolean selecting;
+    private java.util.function.Consumer<View> menuHost=ignored->{};
 
     ContentPanelActions(Context context,Runnable select,Runnable clear,Runnable record,Runnable browse) {
         super(context);
-        button=new IconButton(context,IconButton.MORE,"内容操作");
+        button=new IconButton(context,IconButton.MORE_VERTICAL,"内容操作");
         addView(button,new LayoutParams(-1,-1));
         count=new TextView(context);count.setTextColor(HyperOsStyle.CONTROL_ACCENT);
         count.setTextSize(9);count.setGravity(Gravity.CENTER);count.setIncludeFontPadding(false);
@@ -25,22 +27,30 @@ final class ContentPanelActions extends FrameLayout {
         button.setTooltipText("内容操作");
         button.setOnClickListener(v->{
             if(selecting){select.run();return;}
-            PopupMenu menu=new PopupMenu(context,button,Gravity.END);
-            menu.getMenu().add(0,1,0,"多选");
-            if(page==1)menu.getMenu().add(0,2,1,"更多文件");
-            if(page==2)menu.getMenu().add(0,3,1,"历史设置");
-            menu.getMenu().add(0,4,2,page==3?"移除暂存":"清除记录");
-            menu.setOnMenuItemClickListener(item->{
-                switch(item.getItemId()) {
-                    case 1: select.run();return true;
-                    case 2: browse.run();return true;
-                    case 3: record.run();return true;
-                    case 4: clear.run();return true;
-                    default: return false;
-                }
-            });
-            menu.show();
+            LinearLayout menu=new LinearLayout(context);
+            menu.setOrientation(LinearLayout.VERTICAL);
+            android.graphics.drawable.GradientDrawable background=new android.graphics.drawable.GradientDrawable();
+            background.setColor(HyperOsStyle.page(context));background.setCornerRadius(HyperOsStyle.dp(context,16));
+            menu.setBackground(background);menu.setClipToOutline(true);
+            menu.setElevation(HyperOsStyle.dp(context,8));
+            addAction(menu,"多选",select);
+            if(page==1)addAction(menu,"更多文件",browse);
+            if(page==2)addAction(menu,"历史设置",record);
+            addAction(menu,page==3?"移除暂存":"清除记录",clear);
+            menuHost.accept(menu);
         });
+    }
+
+    void bindMenu(java.util.function.Consumer<View> host){menuHost=host;}
+
+    private void addAction(LinearLayout menu,String label,Runnable action) {
+        TextView row=new TextView(getContext());row.setText(label);row.setTextSize(13);
+        row.setTextColor(HyperOsStyle.textPrimary(getContext()));
+        row.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
+        int inset=HyperOsStyle.dp(getContext(),16);
+        row.setPaddingRelative(inset,0,inset,0);
+        row.setOnClickListener(v->{menuHost.accept(null);action.run();});
+        menu.addView(row,new LinearLayout.LayoutParams(-1,HyperOsStyle.dp(getContext(),44)));
     }
 
     void page(int page){this.page=page;}
@@ -48,7 +58,7 @@ final class ContentPanelActions extends FrameLayout {
     @android.annotation.SuppressLint("SetTextI18n")
     void selection(boolean active,int selected) {
         selecting=active;
-        button.setIcon(active?IconButton.CHECK:IconButton.MORE);
+        button.setIcon(active?IconButton.CHECK:IconButton.MORE_VERTICAL);
         String description=active?"完成多选，已选 "+selected+" 项":"内容操作";
         button.setContentDescription(description);button.setTooltipText(description);
         count.setText(active?String.valueOf(selected):"");

@@ -25,6 +25,7 @@ final class ShareRailOverlay implements AutoCloseable {
     private FrameLayout plate;
     private ShareWorkspace rail;
     private ModalIslandLease island;
+    private boolean mainRight;
     private java.util.function.Function<String,String> hoverIdentity=value->value;
     private Consumer<String> hoverActivate=value->{};
     void setWindowHover(java.util.function.Function<String,String> identity,Consumer<String> activate) {
@@ -37,7 +38,7 @@ final class ShareRailOverlay implements AutoCloseable {
     }
 
     boolean isOpen(){return plate!=null;}
-    void setMainOnRight(boolean right){if(rail!=null)rail.setMainOnRight(right);}
+    void setMainOnRight(boolean right){mainRight=right;if(rail!=null)rail.setMainOnRight(right);}
 
     boolean onDrag(DragEvent event,String targetPackage) {
         if(event.getAction()==DragEvent.ACTION_DRAG_STARTED && !isOpen()) {
@@ -58,6 +59,7 @@ final class ShareRailOverlay implements AutoCloseable {
             windows=context.getSystemService(WindowManager.class);
             plate=new FrameLayout(context);View normal=new View(context);plate.addView(normal,new FrameLayout.LayoutParams(-1,-1));
             rail=new ShareWorkspace(context,normal,ready,dispatch,hint,bounds,true);
+            rail.setMainOnRight(mainRight);
             rail.setWindowHover(hoverIdentity,hoverActivate);
             if(owner instanceof ShareWorkspace)rail.setResultSink(((ShareWorkspace)owner)::onDeliveryResult);
             plate.addView(rail,new FrameLayout.LayoutParams(-1,-1));

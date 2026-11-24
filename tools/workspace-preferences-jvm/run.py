@@ -53,7 +53,7 @@ files = {
         class QuickApp {Component component;QuickApp(String key){component=new Component(key);}
         static class Component {String key;Component(String key){this.key=key;}String flattenToString(){return key;}}}
     ''',
-    'io/github/zerohomers0/onesteplite/HyperOsStyle.java': 'package io.github.zerohomers0.onesteplite;import android.graphics.Bitmap;import android.content.Context;class HyperOsStyle {\n' + style[start:end] + '\n'+night+'\n}',
+    'io/github/zerohomers0/onesteplite/HyperOsStyle.java': 'package io.github.zerohomers0.onesteplite;import android.graphics.Bitmap;import android.content.Context;class HyperOsStyle {\n static int themeMode;\n' + style[start:end] + '\n'+night+'\n}',
     'io/github/zerohomers0/onesteplite/PreferencesRegression.java': '''package io.github.zerohomers0.onesteplite;
         import java.util.List;import android.graphics.Bitmap;import de.robv.android.xposed.XposedHelpers;
         public class PreferencesRegression {

@@ -63,6 +63,13 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
+        if (WechatImageSource.PACKAGE.equals(lpparam.packageName)) {
+            if(lpparam.packageName.equals(lpparam.processName)) {
+                try{WechatImageSource.install();}
+                catch(Throwable unavailable){log("WeChat image source unavailable: "+unavailable);}
+            }
+            return;
+        }
         if (SystemExtractHooks.PACKAGE.equals(lpparam.packageName)) {
             SystemExtractHooks.install(lpparam.classLoader);
             return;
@@ -88,16 +95,8 @@ public class HostEntry implements IXposedHookLoadPackage {
             return;
         }
         if ("com.xiaomi.type".equals(lpparam.packageName)) {
-            try{EditorBoundsIme.install(lpparam.classLoader);}catch(Throwable unavailable){log("editor bounds IME unavailable: "+unavailable);}
             // Optional keyboard policy only; ordinary app layout/input uses the system hooks.
             hookMiTypeAutoFloating(lpparam.classLoader);
-            return;
-        }
-        if ("com.sohu.inputmethod.sogou.xiaomi".equals(lpparam.packageName)
-                || "com.baidu.input_mi".equals(lpparam.packageName)
-                || "com.iflytek.inputmethod.miui".equals(lpparam.packageName)
-                || "com.google.android.inputmethod.latin".equals(lpparam.packageName)) {
-            try{EditorBoundsIme.install(lpparam.classLoader);}catch(Throwable unavailable){log("editor bounds IME unavailable: "+unavailable);}
             return;
         }
         if (!SYSTEMUI.equals(lpparam.packageName)) {

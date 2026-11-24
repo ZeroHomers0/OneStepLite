@@ -15,8 +15,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class VisualSearchActivity extends Activity {
     private final AtomicBoolean closed=new AtomicBoolean();
     private WebView web;
+    private android.widget.ProgressBar progress;
     private String form;
     @Override public void onCreate(Bundle state){
+        HyperOsStyle.theme(WorkspaceSettingsStore.read(this).themeMode);
         super.onCreate(state);
         if(state!=null){finish();return;}
         try{
@@ -48,9 +50,20 @@ public final class VisualSearchActivity extends Activity {
         actions.addView(WorkspacePopupStyle.action(this,"返回",false,this::finish),WorkspacePopupStyle.actionCell(this));
         actions.addView(WorkspacePopupStyle.action(this,"重试",false,()->{if(form!=null)submit();}),WorkspacePopupStyle.actionCell(this));
         page.addView(actions,new LinearLayout.LayoutParams(-1,-2));
+        progress=new android.widget.ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+        progress.setIndeterminate(false);
+        progress.setContentDescription("正在加载识图结果");
+        page.addView(progress,new LinearLayout.LayoutParams(-1,HyperOsStyle.dp(this,3)));
         web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);
         web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);
         web.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        web.setWebChromeClient(new android.webkit.WebChromeClient(){
+            @Override public void onProgressChanged(WebView view,int percent){
+                if(closed.get())return;
+                progress.setProgress(percent);
+                progress.setVisibility(percent<100?android.view.View.VISIBLE:android.view.View.GONE);
+            }
+        });
         web.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView view,android.webkit.WebResourceRequest request){return !"https".equals(request.getUrl().getScheme());}
             @Override public void onReceivedError(WebView view,android.webkit.WebResourceRequest request,android.webkit.WebResourceError error){
@@ -63,6 +76,6 @@ public final class VisualSearchActivity extends Activity {
             view.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;
         });page.requestApplyInsets();
     }
-    private void submit(){web.loadDataWithBaseURL(VisualSearchForm.BASE,form,"text/html","UTF-8",null);}
+    private void submit(){progress.setProgress(0);progress.setVisibility(android.view.View.VISIBLE);web.loadDataWithBaseURL(VisualSearchForm.BASE,form,"text/html","UTF-8",null);}
     @Override protected void onDestroy(){closed.set(true);form=null;if(web!=null){web.stopLoading();web.destroy();web=null;}super.onDestroy();}
 }

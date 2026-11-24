@@ -519,6 +519,7 @@ public final class WorkspaceHost {
             slots[i] = new Slot(i);
         }
         workspaceSettings = new WorkspaceSettingsClient(this.ctx, main, options -> {
+            HyperOsStyle.theme(options.themeMode);
             workspaceOptions = options;
             if (topBar != null) topBar.applyOptions(options);
             if(scene==ACTIVE && screenOn && !keyguardLocked)refreshQuickApps();
@@ -3676,6 +3677,7 @@ public final class WorkspaceHost {
         },()->layout!=null && !layout.tabletLandscape && workspaceAlpha<1f && mainSideAnimator!=null
                 ?workspaceTopHole():null);
         topBar=chrome.bar;topStripBacking=chrome.backing;topLiveClip=chrome.clip;
+        topBar.applyOptions(workspaceOptions);
         root.setOnDragListener((view, event) -> event.getLocalState() instanceof QuickApp
                 ? onQuickAppDrag(view,event,(QuickApp)event.getLocalState()) : onWindowContentDrag(event));
         refreshQuickApps();

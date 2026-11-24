@@ -30,7 +30,6 @@ files={
  'io/github/zerohomers0/onesteplite/DragArrowRegression.java':'''package io.github.zerohomers0.onesteplite;
 import android.view.DragEvent;
 class ContentDragShadow{static int offset(DragEvent event){return event.declared;}}
-class ContentDragMotion{static boolean matches(DragEvent event){return false;}static int aimOffset(){return 0;}}
 class XposedHelpers{static Object callMethod(DragEvent event,String method){
  if(event.missing)throw new IllegalStateException();return method.equals("getOffsetX")?event.actualX:event.actual;}}
 class ContentAccessCompat{static int arrowOffset(DragEvent e){return DragArrowRegression.arrowOffset(e);}static float shadowHalfWidth(DragEvent e){return DragArrowRegression.shadowHalfWidth(e);}}

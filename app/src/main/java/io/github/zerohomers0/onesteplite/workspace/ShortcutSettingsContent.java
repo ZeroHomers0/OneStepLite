@@ -33,7 +33,8 @@ final class ShortcutSettingsContent extends LinearLayout {
         boolean dark=HyperOsStyle.dark(context);primary=dark?0xfff4f5f8:0xff000000;
         secondary=dark?0xff999ca7:0xff999999;surface=dark?0xff1b1d23:0xffffffff;
         setOrientation(VERTICAL);
-        TextView help=text("选择后自动保存，长按已启用的图标调整顺序",12,secondary);
+        TextView help=text(applications?"开启的应用显示在顶栏，关闭后隐藏。长按上方图标调整顺序。":
+                "选择后自动保存，长按已启用的图标调整顺序",12,secondary);
         help.setPadding(dp(16),dp(8),dp(16),dp(16));addView(help);
         count=text("",13,secondary);count.setPadding(dp(16),0,dp(16),dp(8));addView(count);
         List<QuickApp> apps=new ArrayList<>();for(ShareTarget target:targets)apps.add(QuickApp.shortcut(target.label,target.component,target.icon));

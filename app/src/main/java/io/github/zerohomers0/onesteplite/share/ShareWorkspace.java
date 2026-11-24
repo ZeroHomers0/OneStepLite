@@ -55,7 +55,8 @@ final class ShareWorkspace extends FrameLayout {
     private final ShareTargetPicker picker=new ShareTargetPicker();
     private final ShareEdgePolicy edge=new ShareEdgePolicy();
     private final ShareRailTransition transition;
-    private final float[] pointer=new float[2];
+    private final float[] pointer=new float[2],physicalAim=new float[2];
+    private final int[] railOrigin=new int[2];
     private float lastX,lastY;
     private boolean hasPointer;
     private boolean edgeQueued;
@@ -79,7 +80,6 @@ final class ShareWorkspace extends FrameLayout {
     private ShareDelivery receipt;
     private ClipData transferClip;
     private final WindowDragHover windowHover;
-    private final EditorDragOutline editorOutline;
     private java.util.function.Function<String,String> hoverIdentity=value->value;
     private Consumer<String> hoverActivate=value->{};
     private BiConsumer<Boolean,ClipData> resultSink=this::onDeliveryResult;
@@ -99,14 +99,14 @@ final class ShareWorkspace extends FrameLayout {
         this.normalRail = normalRail;
         this.ready = ready;
         windowHover=new WindowDragHover(this,()->dragging && this.ready.getAsBoolean());
-        editorOutline=new EditorDragOutline(this,()->dragging && this.ready.getAsBoolean(),hint);
         this.dispatch = dispatch;
         this.hint = hint;
         history=new ClipboardHistory(context);
         capture=new SourceCaptureController(this,()->ready.getAsBoolean() && !dragging,bounds);
         panel = new ContentPanel(this, bounds,history,()->capture.open());
-        portal=shareOnly?null:new PortalSource(this,()->ready.getAsBoolean() && !dragging,bounds,uri->{panel.open();panel.previewImage(uri);});
+        portal=shareOnly?null:new PortalSource(this,()->ready.getAsBoolean() && !dragging,bounds,panel::showExtractedImage);
         content = new IconButton(context, IconButton.CONTENT, "内容：近期图片、文件和剪贴板");
+        content.setCompactGlyph();
         content.setTooltipText("近期图片、文件和剪贴板");
         content.setOnClickListener(v -> {
             if (!ready.getAsBoolean() || dragging) return;
@@ -117,6 +117,11 @@ final class ShareWorkspace extends FrameLayout {
             }
         });
         LayoutParams contentBounds=new LayoutParams(dp(50),-1);contentBounds.leftMargin=dp(6);addView(content,contentBounds);
+        if(normalRail instanceof QuickAppRail) {
+            content.setTooltipText(null);content.setClickable(false);content.setLongClickable(false);
+            ((QuickAppRail)normalRail).setContentCell(dp(46),content::performClick,
+                    offset->content.setTranslationX(-offset));
+        }
         shareFace=new FrameLayout(context);shareFace.setBackground(HyperOsStyle.shareRailBackground(context));
         shareFace.setClipChildren(false);shareFace.setClipToPadding(false);
         addView(shareFace,new LayoutParams(-1,-1));
@@ -134,6 +139,8 @@ final class ShareWorkspace extends FrameLayout {
         if(shareOnly)setAlpha(0);
     }
 
+    void refreshAppearance(){shareFace.setBackground(HyperOsStyle.shareRailBackground(getContext()));}
+
     private boolean drag(DragEvent event) {
         if(!shareOnly && (covered.getAsBoolean() || overlay!=null && overlay.isOpen()))
             return onWindowDrag(event,null,true);
@@ -148,7 +155,6 @@ final class ShareWorkspace extends FrameLayout {
                 sourcePackage=event.getClipDescription().getExtras()==null?null:event.getClipDescription().getExtras().getString("onesteplite_source_package");
                 if(portal!=null)portal.dragStarted();
                 ContentDragMotion.managed(this,event.getClipDescription());
-                editorOutline.start(event.getClipDescription());
                 performHapticFeedback(android.view.HapticFeedbackConstants.DRAG_START);
                 tipOffset=ContentAccessCompat.arrowOffset(event);
                 dragHalfWidth=ContentAccessCompat.shadowHalfWidth(event);
@@ -180,14 +186,13 @@ final class ShareWorkspace extends FrameLayout {
                 });
                 return true;
             case DragEvent.ACTION_DRAG_LOCATION:
-                if (dragging) {refreshTip(event);locate(event.getX(), event.getY()-tipOffset);}
+                if(dragging)locateDragTip(event);
                 return dragging;
             case DragEvent.ACTION_DRAG_EXITED:
                 hasPointer=false;stopEdge();hovered = null; clearTargetHover();hint.accept(null); return dragging;
             case DragEvent.ACTION_DROP:
                 if (!live(generation)) return false;
-                refreshTip(event);
-                locate(event.getX(), event.getY()-tipOffset);
+                locateDragTip(event);
                 if (hovered == null) return false;
                 return drop(event, hovered);
             case DragEvent.ACTION_DRAG_ENDED:
@@ -212,6 +217,14 @@ final class ShareWorkspace extends FrameLayout {
     }
 
     boolean onTipDrag(DragEvent event){return drag(event);}
+    private void locateDragTip(DragEvent event) {
+        refreshTip(event);
+        if(ContentDragMotion.physicalTip(event.getClipDescription(),physicalAim)){
+            getLocationOnScreen(railOrigin);
+            locate(physicalAim[0]-railOrigin[0],physicalAim[1]-railOrigin[1]);
+        }else locate(event.getX(),event.getY()-tipOffset);
+    }
+
     private void refreshTip(DragEvent event){
         dragHalfWidth=ContentAccessCompat.shadowHalfWidth(event);
         int next=ContentAccessCompat.arrowOffset(event);if(next==tipOffset)return;
@@ -247,7 +260,10 @@ final class ShareWorkspace extends FrameLayout {
         if(event.getAction()==DragEvent.ACTION_DRAG_STARTED && portal!=null)portal.dragStarted();
         if(covered || overlay!=null && overlay.isOpen()) {
             if(event.getAction()==DragEvent.ACTION_DRAG_STARTED)panelSource=panel.isDragging();
-            if(overlay==null){overlay=new ShareRailOverlay(this,ready,dispatch,hint,bounds);overlay.setWindowHover(hoverIdentity,hoverActivate);}
+            if(overlay==null){
+                overlay=new ShareRailOverlay(this,ready,dispatch,hint,bounds);
+                overlay.setMainOnRight(mainRight);overlay.setWindowHover(hoverIdentity,hoverActivate);
+            }
             return overlay.onDrag(event,targetPackage);
         }
         if (event.getAction() == DragEvent.ACTION_DRAG_STARTED)
@@ -442,7 +458,6 @@ final class ShareWorkspace extends FrameLayout {
         if(catchment!=null){catchment.close();catchment=null;}
         windowHover.close();
         windowPackages=null;
-        editorOutline.close();
         hasPointer=false;
         dragging = false;
         hovered = null;

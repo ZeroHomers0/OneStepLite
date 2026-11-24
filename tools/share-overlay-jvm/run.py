@@ -89,6 +89,7 @@ overlay.onDrag(event(4),null);check(!overlay.isOpen()&&context.windows.removes==
 check(first.closes==1&&ModalIslandLease.active==0,"ordinary cancel releases rail and lease");
 check(!overlay.onDrag(event(3),"late.pkg"),"late drop cannot recreate closed overlay");
 overlay.onDrag(event(1),null);ShareWorkspace pending=ShareWorkspace.latest;pending.pending=true;
+check(pending.mainRight,"new overlay inherits the configured badge side");
 overlay.onDrag(event(4),null);check(!overlay.isOpen()&&pending.closes==0,"accepted async delivery survives visual window removal");
 check(ModalIslandLease.active==0,"pending delivery never keeps island hidden");
 overlay.setMainOnRight(true);check(pending.mainRight&&pending.closes==0,"side change preserves accepted detached delivery");pending.deliver();overlay.close();

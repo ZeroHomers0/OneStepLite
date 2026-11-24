@@ -29,7 +29,7 @@ final class HyperOsStyle {
         return selected ? CONTROL_ACCENT : dark(context) ? 0xff363940 : 0xffe5e8ee;
     }
 
-    /** One immutable 16 KiB tile; each face keeps its own Drawable and animation bounds. */
+    /** The tile is shared, but each animated face owns its drawable bounds. */
     static synchronized Drawable shareRailBackground(Context context) {
         if(shareGrain==null){
             int[] pixels=new int[64*64];int seed=0x51ac27;
@@ -58,7 +58,11 @@ final class HyperOsStyle {
                 ? 0x24ffffff : 0x12000000), base, mask);
     }
 
+    private static volatile int themeMode;
+    static void theme(int mode){themeMode=mode;}
+
     static boolean dark(Context context) {
+        if(themeMode!=0)return themeMode==2;
         return (context.getResources().getConfiguration().uiMode & 48) == 32;
     }
 

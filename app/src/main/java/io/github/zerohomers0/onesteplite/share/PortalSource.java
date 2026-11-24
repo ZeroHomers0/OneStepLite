@@ -68,14 +68,14 @@ final class PortalSource implements AutoCloseable {
     void start() {
         if(input!=null)return;
         try {
-            input=new PortalInputCompat(anchor.getContext().getClassLoader(),this::motion);
+            input=new PortalInputCompat(anchor.getContext().getClassLoader(),this::observeMotion);
             Bundle request=new Bundle();request.putBinder("host",endpoint);
             anchor.getContext().getContentResolver().call(ContentInboxProvider.ROOT,"portal_register",null,request);
             ShareDiagnostics.event(ShareDiagnostics.Stage.POINTER,ShareDiagnostics.Code.READY);
         } catch(Throwable failure){close();android.util.Log.w(Tags.PROBE,"portal source unavailable",failure);}
     }
     void dragStarted(){
-        generation++;issued=0;liftCandidate=null;
+        generation++;issued=0;clearLiftCandidate();
         if(pendingWords!=null){main.removeCallbacks(pendingWords);pendingWords=null;}
         if(fallbackJob!=null){main.removeCallbacks(fallbackJob);fallbackJob=null;}
         fallbackCapture.close();validGesture=false;
@@ -125,6 +125,29 @@ final class PortalSource implements AutoCloseable {
             main.postDelayed(fallbackJob,900L);
         }
     }
+    private void observeMotion(MotionEvent event) {
+        Bundle candidate=liftCandidate;
+        motion(event);
+        if(candidate!=liftCandidate && candidate!=null && !candidate.getBoolean("lift"))discardLiftCandidate(candidate);
+    }
+
+    private void clearLiftCandidate() {
+        Bundle candidate=liftCandidate;liftCandidate=null;
+        discardLiftCandidate(candidate);
+    }
+
+    private void discardLiftCandidate(Bundle candidate) {
+        if(candidate==null)return;
+        android.graphics.Bitmap bitmap=candidate.getParcelable("preview",android.graphics.Bitmap.class);
+        if(bitmap!=null)bitmap.recycle();
+        String id=candidate.getString("wechat_capture_id");
+        if(id==null)return;
+        android.content.ContentResolver resolver=anchor.getContext().getContentResolver();
+        java.util.concurrent.CompletableFuture.runAsync(()->{
+            try{resolver.call(ContentInboxProvider.ROOT,"discard_capture",id,null);}
+            catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"unused image cleanup deferred",unavailable);}
+        });
+    }
     private boolean live() {
         Rect mainBounds=bounds.get();
         return pointer!=null && input!=null && ContentAccessCompat.currentProcessUser()
@@ -159,6 +182,8 @@ final class PortalSource implements AutoCloseable {
     @android.annotation.SuppressLint("RtlHardcoded") // Physical display coordinates, not layout direction.
     private void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
         Context context=anchor.getContext();String uri=request.getString("uri"),text=request.getString("text");
+        if(WechatImageSource.PACKAGE.equals(request.getString("source")) && request.getBoolean("wechat_view")
+                && pointer.getPointerCount()!=1){done.countDown();return;}
         if(uri==null && (text==null || text.isEmpty() || text.length()>ContentSharePolicy.MAX_TEXT)){done.countDown();return;}
         if(pointer.getPointerCount()==1 && !request.getBoolean("lift")){
             if(liftCandidate!=null && (liftCandidate.getString("uri")!=null
@@ -205,11 +230,16 @@ final class PortalSource implements AutoCloseable {
             int token=generation;
             source.postOnAnimation(()->{
                 boolean accepted=false;
-                try{if(!expired.get() && token==generation && live())accepted=PortalInputCompat.start(source,clip,pointer);}
+                boolean current=!expired.get() && token==generation && live();
+                try{if(current)accepted=PortalInputCompat.start(source,clip,pointer);}
                 catch(RuntimeException failure){android.util.Log.w(Tags.PROBE,"portal drag start rejected",failure);}
                 Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);result[0]=reply;
                 ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,accepted?ShareDiagnostics.Code.STARTED:ShareDiagnostics.Code.FAILED);
-                if(!accepted)clearWindow();else main.postDelayed(expire,60_000L);
+                if(!accepted) {
+                    boolean offerPreview=current && uri!=null && token==generation && live();
+                    clearWindow();
+                    if(offerPreview && ready.getAsBoolean())imagePreview.accept(android.net.Uri.parse(uri));
+                } else main.postDelayed(expire,60_000L);
                 done.countDown();
             });
         } catch(RuntimeException unavailable){clearWindow();done.countDown();}
@@ -252,7 +282,7 @@ final class PortalSource implements AutoCloseable {
         catch(RuntimeException detached){android.util.Log.w(Tags.PROBE,"portal source detached",detached);}
     }
     @Override public void close() {
-        liftCandidate=null;
+        clearLiftCandidate();
         if(fallbackJob!=null){main.removeCallbacks(fallbackJob);fallbackJob=null;}fallbackCapture.close();
         if(pendingWords!=null){main.removeCallbacks(pendingWords);pendingWords=null;}
         generation++;issued=0;validGesture=false;clearWindow();

@@ -59,9 +59,9 @@ final class QuickAppPicker {
         final int user = QuickAppPins.user();
         final LinkedHashSet<String> chosen;
         try {
-            List<String> keys = new ArrayList<>(available.size());
-            for (QuickApp app : available) keys.add(app.component.flattenToString());
-            chosen = new LinkedHashSet<>(QuickAppReconcilePolicy.prune(QuickAppPins.read(base, user), keys));
+            chosen=new LinkedHashSet<>();
+            for(QuickApp app:QuickAppPins.arrange(base,available))
+                chosen.add(app.component.flattenToString());
         }
         catch (Throwable unavailable) {
             Toast.makeText(base, "无法读取快捷应用配置", Toast.LENGTH_SHORT).show();
@@ -357,7 +357,7 @@ final class QuickAppPicker {
             mark.invalidate();
             setBackground(button(getContext(), checked ? 0x18347ff4
                     : HyperOsStyle.dark(getContext()) ? 0x16777777 : 0x12777777, 17));
-            setContentDescription(app.label + (checked ? "，已固定，第" + order + "位" : "，未固定"));
+            setContentDescription(app.label + (checked ? "，显示，第" + order + "位" : "，已隐藏"));
         }
         @Override public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
             super.onInitializeAccessibilityNodeInfo(info);

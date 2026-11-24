@@ -149,7 +149,8 @@ final class ContentPanel {
                 .createWindowContext(WindowTypes.SYSTEM_UI_DIALOG, null);
         Context themed=new android.view.ContextThemeWrapper(windowContext,HyperOsStyle.dark(context)
                 ?android.R.style.Theme_Material_Dialog_Alert:android.R.style.Theme_Material_Light_Dialog_Alert);
-        dialog = new WorkspaceDialog(themed,()->{if(preview!=null)closePreview();else close();});
+        dialog = new WorkspaceDialog(themed,()->{if(shell!=null && shell.closeActionMenu())return;
+            if(preview!=null)closePreview();else close();});
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         shell=new ContentPanelLayout(themed,selected->{
             selection.position(tab,scroll.getScrollY());tab=selected;load();
@@ -252,7 +253,7 @@ final class ContentPanel {
         if(tab==3){int token=generation,user=CurrentUser.id();shell.status("正在读取暂存…");WORKER.execute(()->shelf(token,user));return;}
         if (tab == 2) {
             clipboard();final int token=generation,user=CurrentUser.id();
-            WORKER.execute(()->inbox(token,user,2));return;
+            WORKER.execute(()->loadImportedClipboard(token,user));return;
         }
         loadMedia(false);
     }
@@ -279,6 +280,7 @@ final class ContentPanel {
         } catch(RuntimeException denied) {unavailable=true;}
         if(page==1 && !signal.isCanceled())rows.addAll(inboxRows(token,page,hidden,signal));
         if(signal.isCanceled()){releaseRows(rows);return;}
+        rows.sort(java.util.Comparator.comparingLong((ContentEntry row)->row.addedAt).reversed());
         boolean denied=unavailable;
         if(!anchor.post(()->applyMedia(token,user,page,rows,refresh,denied)))releaseRows(rows);
     }
@@ -339,7 +341,7 @@ final class ContentPanel {
     private void addEntry(ContentEntry entry) {
         if(entries.containsKey(entry.key)){if(entry.thumbnail!=null && entry.thumbnail!=entries.get(entry.key).thumbnail)entry.thumbnail.recycle();return;}
         shell.clearStatus();
-        if(tab==0 && entry.thumbnail!=null)imageHeading(entry.addedAt);
+        if(tab==0 && entry.mime.startsWith("image/"))imageHeading(entry.addedAt);
         entries.put(entry.key,entry);
         View view;
         if(tab==2 || tab==3 && (entry.text!=null || entry.mime.startsWith("image/"))) {
@@ -379,14 +381,15 @@ final class ContentPanel {
         long day=date==null?Long.MIN_VALUE+1:date.toEpochDay();
         if(day==imageDay)return;
         imageDay=day;
-        shell.heading(date==null?"导入图片":date.equals(java.time.LocalDate.now())?"今天"
+        shell.heading(date==null?"日期未知":date.equals(java.time.LocalDate.now())?"今天"
                 :date.equals(java.time.LocalDate.now().minusDays(1))?"昨天":date.toString(),contentWidth);
     }
 
-    private void inbox(int token,int user,int page) {
-        java.util.List<ContentEntry> rows=inboxRows(token,page,java.util.Collections.emptySet(),null);
+    private void loadImportedClipboard(int token,int user) {
+        java.util.List<ContentEntry> rows=inboxRows(token,2,java.util.Collections.emptySet(),null);
         anchor.post(()->{
             if(!valid(token,user))return;
+            if(!rows.isEmpty())shell.heading("应用分享的文字",contentWidth);
             for(ContentEntry entry:rows)addEntry(entry);
             restorePosition(token,user);
         });
@@ -412,7 +415,7 @@ final class ContentPanel {
                 if(hidden.contains(key))continue;
                 String label=text?row.getString("text"):row.optString("name","导入内容");
                 entries.add(new ContentEntry(key,label,mime,text?label:null,uri,image?thumbnail(uri,signal):null,
-                        -1,page==0?0:row.optLong("time")));
+                        -1,row.optLong("time")));
             }
         } catch(Exception unavailable) { /* The module inbox may not yet be installed on the device. */ }
         return entries;
@@ -557,6 +560,11 @@ final class ContentPanel {
         preview(entry);recognitionRead=read;
         TextView action=label("识别文字");recognize(entry,action);
     }
+    void showExtractedImage(Uri uri){
+        try{if(dialog==null)open();if(dialog!=null)previewImage(uri);}
+        catch(RuntimeException unavailable){close();message("无法打开提取图片");}
+    }
+
     void previewImage(Uri uri){preview(new ContentEntry("extracted-image","图片","image/jpeg",null,uri,null));}
 
     private void closePreview() {

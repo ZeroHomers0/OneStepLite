@@ -45,16 +45,15 @@ static class Transition {int resets,returns;void show(boolean value){if(!value)r
 static class ShareRailOverlay {boolean open;int events,closes;String target;
 ShareRailOverlay(Object view,BooleanSupplier ready,Object dispatch,Object hint,Object bounds){}
 boolean isOpen(){return open;}boolean onDrag(DragEvent event,String name){events++;target=name;open=event.action!=4;return true;}
-void setWindowHover(Function<String,String> identity,Consumer<String> activate){}void close(){open=false;closes++;}}
+void setWindowHover(Function<String,String> identity,Consumer<String> activate){}void setMainOnRight(boolean right){}void close(){open=false;closes++;}}
 static class Replay extends Base {
 BooleanSupplier ready=()->true;Object dispatch,bounds,hovered;Consumer<String> hint=value->{};ShareRailOverlay overlay;
-boolean panelSource,hasPointer;Object transferClip;Counter receipt;Function<String,String> hoverIdentity=value->value;Consumer<String> hoverActivate=value->{};
+boolean panelSource,hasPointer,mainRight;Object transferClip;Counter receipt;Function<String,String> hoverIdentity=value->value;Consumer<String> hoverActivate=value->{};
 String sourcePackage;Set<String> windowPackages;
 static class Hover extends Counter {void move(String value){}}Hover windowHover=new Hover();
 boolean dragging,dropped,deliveryPending,retainingDelivery,shareOnly;int generation,starts,ends,stops,drops;String lastTarget;
 Handler handler=new Handler();Runnable expire=()->{},deliverySettled=()->{};
 Counter pendingRead,delegatedRead,catchment;Counter panel=new Counter(),history=new Counter(),picker=new Counter(),capture=new Counter(),portal=new Counter();Runnable afterDrag=()->{};
-Counter editorOutline=new Counter();
 Transition transition=new Transition();float alpha=1;
 Targets targets=new Targets();
 boolean accepts(Object description){return true;}boolean live(int token){return dragging&&ready.getAsBoolean();}
@@ -81,7 +80,7 @@ rail=new Replay();rail.dragging=true;rail.dropped=true;rail.deliveryPending=true
 check(rail.retainDelivery(()->done[0]++),"pending delivery can outlive drag window");
 rail.onDetachedFromWindow();check(rail.panel.closes==1&&rail.capture.closes==1&&rail.history.stops==1&&rail.picker.closes==1,"detach closes all UI and listeners while retaining delivery");
 check(rail.deliveryPending&&rail.retainingDelivery&&rail.detaches==1,"detach does not cancel accepted async delivery");
-check(rail.editorOutline.closes==1&&rail.transition.resets==1&&!rail.dragging,"retained delivery cannot retain editor outline or cube animation");
+check(rail.transition.resets==1&&!rail.dragging,"retained delivery cannot retain cube animation");
 rail.delegatedRead=new Counter();Counter grant=rail.delegatedRead;rail.finishDelivery(rail.generation);
 check(!rail.deliveryPending&&!rail.retainingDelivery&&done[0]==1,"completed delivery releases retention and callback once");
 check(grant.closes==1&&rail.delegatedRead==null,"completion releases remaining delegated grant");

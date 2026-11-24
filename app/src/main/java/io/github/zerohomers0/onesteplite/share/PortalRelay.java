@@ -23,21 +23,29 @@ final class PortalRelay {
             }
             return new Bundle();
         }
-        if(!names.contains(PortalWire.PACKAGE) && !names.contains(SystemExtractHooks.PACKAGE))throw new SecurityException("Not an extraction service");
+        boolean wechat="portal_wechat_status".equals(method) || "portal_wechat_offer".equals(method);
+        if(wechat?!names.contains(WechatImageSource.PACKAGE)
+                :!names.contains(PortalWire.PACKAGE) && !names.contains(SystemExtractHooks.PACKAGE))
+            throw new SecurityException("Not an extraction service");
         IBinder target;synchronized(PortalRelay.class){target=host;}
         if(target==null || !target.isBinderAlive()){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_SESSION);return null;}
-        if("portal_status".equals(method))return PortalWire.call(target,PortalWire.STATUS,null);
-        if(!"portal_offer".equals(method) || data==null)throw new IllegalArgumentException("Source operation");
+        if("portal_status".equals(method) || "portal_wechat_status".equals(method))
+            return PortalWire.call(target,PortalWire.STATUS,null);
+        if(!"portal_offer".equals(method) && !"portal_wechat_offer".equals(method) || data==null)
+            throw new IllegalArgumentException("Source operation");
         byte[] image=data.getByteArray("image");String id=null;
+        if(wechat && (image==null || data.containsKey("text")))throw new IllegalArgumentException("Missing WeChat image");
         Bundle request=new Bundle();request.putLong("down",data.getLong("down"));
         request.putInt("generation",data.getInt("generation"));request.putString("text",data.getString("text"));
-        String source=data.getString("source");
+        String source=wechat?WechatImageSource.PACKAGE:data.getString("source");
         if(source==null || source.isEmpty() || source.length()>255)throw new IllegalArgumentException("Source identity missing");
         request.putString("source",source);
+        if(wechat)request.putBoolean("wechat_view",true);
         try {
             if(image!=null) {
                 Bundle stored=CaptureInboxStore.store(context,image);id=stored.getString("id");
                 request.putString("uri",stored.getString("uri"));
+                if(wechat)request.putString("wechat_capture_id",id);
             }
             Bundle result=PortalWire.call(target,PortalWire.OFFER,request);
             if(id!=null && (result==null || !result.getBoolean("accepted")))CaptureInboxStore.discard(context,id);

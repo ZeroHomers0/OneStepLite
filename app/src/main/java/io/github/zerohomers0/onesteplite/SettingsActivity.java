@@ -30,13 +30,11 @@ public final class SettingsActivity extends Activity {
                     .createConfigurationContext(getResources().getConfiguration()).getResources();
         } catch (android.content.pm.PackageManager.NameNotFoundException ignored) { }
 
-        TypedValue background = new TypedValue();
-        getTheme().resolveAttribute(android.R.attr.colorBackground, background, true);
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        boolean dark = (getResources().getConfiguration().uiMode
-                & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
-        int pageBackground = dark ? background.data : 0xfff2f2f2;
+        HyperOsStyle.theme(WorkspaceSettingsStore.read(this).themeMode);
+        boolean dark=HyperOsStyle.dark(this);
+        int pageBackground = dark ? 0xff14151a : 0xfff2f2f2;
         page.setBackgroundColor(pageBackground);
         getWindow().setBackgroundDrawable(new ColorDrawable(pageBackground));
 

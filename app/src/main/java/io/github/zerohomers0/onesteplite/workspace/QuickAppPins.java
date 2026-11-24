@@ -35,7 +35,15 @@ final class QuickAppPins {
     static List<QuickApp> arrange(Context context, List<QuickApp> apps) {
         try {
             int user = user();
-            List<String> saved = read(context, user);
+            String configured=ShortcutSettingsClient.readForUser(context,ShortcutSettingsClient.APPS,user);
+            List<String> saved=configured==null?read(context,user):QuickAppOrder.decode(configured);
+            if(configured!=null) {
+                java.util.Map<String,QuickApp> byKey=new java.util.HashMap<>();
+                for(QuickApp app:apps)byKey.put(app.component.flattenToString(),app);
+                List<QuickApp> showing=new java.util.ArrayList<>();
+                for(String key:saved){QuickApp match=byKey.get(key);if(match!=null)showing.add(match);}
+                return showing;
+            }
             List<String> installed = new java.util.ArrayList<>(apps.size());
             for (QuickApp app : apps) installed.add(app.component.flattenToString());
             List<String> pins = QuickAppReconcilePolicy.prune(saved, installed);

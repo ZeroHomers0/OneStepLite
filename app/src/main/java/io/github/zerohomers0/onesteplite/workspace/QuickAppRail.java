@@ -40,7 +40,14 @@ final class QuickAppRail extends View {
     private final float iconSize;
     private final Listener listener;
     private final float padding;
-    private float scrollOffset;
+    private float scrollOffset,prefixWidth;
+    private Runnable prefixClick=()->{};
+    private java.util.function.Consumer<Float> prefixMove=value->{};
+
+    void setContentCell(float width,Runnable click,java.util.function.Consumer<Float> move) {
+        prefixWidth=width;prefixClick=click;prefixMove=move;
+        prefixMove.accept(scrollOffset);invalidate();
+    }
     private final OverScroller scroller;
     private final int minimumVelocity;
     private final int maximumVelocity;
@@ -73,7 +80,7 @@ final class QuickAppRail extends View {
         float f = context.getResources().getDisplayMetrics().density;
         this.tileWidth = 50.0f * f;
         this.padding = 10.0f * f;
-        this.iconSize = 38.0f * f;
+        this.iconSize = 35.0f * f;
         ViewConfiguration config = ViewConfiguration.get(context);
         this.touchSlop = config.getScaledTouchSlop();
         this.minimumVelocity = config.getScaledMinimumFlingVelocity();
@@ -97,7 +104,7 @@ final class QuickAppRail extends View {
         selectedIndex = stackFromIndex = stackToIndex = -1;
         stackProgress = 1f;
         scroller.forceFinished(true);
-        scrollOffset = 0f;
+        scrollOffset = 0f;prefixMove.accept(0f);
         invalidate();
     }
 
@@ -106,13 +113,13 @@ final class QuickAppRail extends View {
         super.onDraw(canvas);
         int iSave = canvas.save();
         // Keep the stationary content cell's trailing gutter clear while the row scrolls.
-        canvas.clipRect(padding, 0, getWidth(), getHeight());
-        canvas.translate(-this.scrollOffset, 0.0f);
+        canvas.clipRect(0, 0, getWidth(), getHeight());
+        canvas.translate(prefixWidth-this.scrollOffset, 0.0f);
         float iconY = getHeight() * 0.5f;
         boolean stacking = stackProgress < 1f && stackFromIndex >= 0 && stackToIndex >= 0;
-        int first = Math.max(0, (int) Math.floor((scrollOffset - padding) / tileWidth) - 1);
+        int first = Math.max(0, (int) Math.floor((scrollOffset - prefixWidth - padding) / tileWidth) - 1);
         int end = Math.min(apps.size(),
-                (int) Math.ceil((scrollOffset + getWidth() - padding) / tileWidth) + 1);
+                (int) Math.ceil((scrollOffset + getWidth() - prefixWidth - padding) / tileWidth) + 1);
         for (int i = first; i < end; i++) {
             if (!stacking || (i != stackFromIndex && i != stackToIndex)) {
                 float scale = i == this.activeIndex && this.down && !this.editing
@@ -193,7 +200,7 @@ final class QuickAppRail extends View {
 
     private void followFinger(float x, float y) {
         float dx = x - downX, dy = y - downY;
-        if (!scrolling && Math.max(Math.abs(dx), Math.abs(dy)) > touchSlop && activeIndex >= 0) {
+        if (!scrolling && Math.max(Math.abs(dx), Math.abs(dy)) > touchSlop && activeIndex != -1) {
             removeCallbacks(pressDrag);
             activeIndex = -1;
             invalidate();
@@ -217,7 +224,7 @@ final class QuickAppRail extends View {
     private void setOffset(float value) {
         float next = clamp(value, 0f, maxScroll());
         if (next == scrollOffset) return;
-        scrollOffset = next;
+        scrollOffset = next;prefixMove.accept(next);
         invalidate();
     }
 
@@ -236,6 +243,7 @@ final class QuickAppRail extends View {
 
 
     private void launchActive() {
+        if(activeIndex==-2){prefixClick.run();return;}
         if (this.activeIndex >= 0 && this.activeIndex < this.apps.size() && this.listener != null) {
             this.selectedIndex = this.activeIndex;
             this.listener.onLaunch(this.apps.get(this.activeIndex));
@@ -310,10 +318,11 @@ final class QuickAppRail extends View {
     void setMainOnRight(boolean right){mainRight=right;invalidate();}
 
     private int indexAt(float f) {
-        if (this.apps.isEmpty() || f < 0 || f >= getWidth()) {
+        if (f < 0 || f >= getWidth()) {
             return -1;
         }
-        int index = (int) Math.floor(((f + this.scrollOffset) - this.padding) / this.tileWidth);
+        if(f+scrollOffset<prefixWidth)return -2;
+        int index = (int) Math.floor((f+scrollOffset-prefixWidth-padding)/tileWidth);
         return index >= 0 && index < this.apps.size() ? index : -1;
     }
 
@@ -330,7 +339,7 @@ final class QuickAppRail extends View {
     }
 
     private float contentWidth() {
-        return (this.padding * 2.0f) + (this.tileWidth * this.apps.size());
+        return prefixWidth+(this.padding * 2.0f)+(this.tileWidth * this.apps.size());
     }
 
     private float maxScroll() {

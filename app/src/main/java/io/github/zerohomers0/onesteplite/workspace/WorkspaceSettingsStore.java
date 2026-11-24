@@ -12,6 +12,8 @@ final class WorkspaceSettingsStore {
             ENTRY_GESTURE = "entry_gesture", KEEP_ON_LOCK = "keep_on_lock",
             SCROLL_SIDE_TASKS = "scroll_side_tasks", LANDSCAPE_VIDEO = "landscape_video",
             HIDE_RECENTS = "hide_side_recents", PARK_MAIN = "park_main_on_launch", DELETE_SHARED_IMAGES = "delete_shared_images";
+    static final String THEME="theme_mode";
+    static final String FOLLOW_TOP_BAR_SIDE="follow_top_bar_side";
     private WorkspaceSettingsStore() {}
 
     private static SharedPreferences preferences(Context context) {
@@ -27,7 +29,8 @@ final class WorkspaceSettingsStore {
                 preferences.getBoolean(SCROLL_SIDE_TASKS, false), preferences.getBoolean(LUNAR, true),
                 preferences.getInt(LANDSCAPE_VIDEO, WorkspaceOptions.VIDEO_TURNED),
                 preferences.getBoolean(HIDE_RECENTS, false),
-                preferences.getBoolean(PARK_MAIN, false),preferences.getBoolean(DELETE_SHARED_IMAGES,false));
+                preferences.getBoolean(PARK_MAIN, false),preferences.getBoolean(DELETE_SHARED_IMAGES,false),preferences.getInt(THEME,0),
+                preferences.getBoolean(FOLLOW_TOP_BAR_SIDE,true));
     }
 
     static boolean write(Context context, WorkspaceOptions options) {
@@ -35,7 +38,8 @@ final class WorkspaceSettingsStore {
                 && !EntryGesturePolicy.canSelect(options.entryGesture,
                         EntryGestureSettings.lineHidden(context))) return false;
         boolean saved = preferences(context).edit().remove("hidden_buttons").putBoolean(LUNAR, options.showLunar)
-                .putInt(SWAP, options.swapMode).putInt(ENTRY_GESTURE, options.entryGesture)
+                .putInt(THEME,options.themeMode).putInt(SWAP, options.swapMode).putInt(ENTRY_GESTURE, options.entryGesture)
+                .putBoolean(FOLLOW_TOP_BAR_SIDE,options.followTopBarSide)
                 .putBoolean(KEEP_ON_LOCK, options.keepOnLock)
                 .putBoolean(SCROLL_SIDE_TASKS, options.scrollSideTasks)
                 .putInt(LANDSCAPE_VIDEO, options.landscapeVideo)
@@ -53,7 +57,7 @@ final class WorkspaceSettingsStore {
 
     static Bundle bundle(WorkspaceOptions options) {
         Bundle result = new Bundle();
-        result.putBoolean(LUNAR, options.showLunar); result.putInt(SWAP, options.swapMode);
+        result.putInt(THEME,options.themeMode);result.putBoolean(LUNAR, options.showLunar); result.putInt(SWAP, options.swapMode);
         result.putInt(ENTRY_GESTURE, options.entryGesture);
         result.putBoolean(KEEP_ON_LOCK, options.keepOnLock);
         result.putBoolean(SCROLL_SIDE_TASKS, options.scrollSideTasks);
@@ -61,6 +65,7 @@ final class WorkspaceSettingsStore {
         result.putBoolean(HIDE_RECENTS, options.hideSideRecents);
         result.putBoolean(PARK_MAIN, options.parkMainOnLaunch);
         result.putBoolean(DELETE_SHARED_IMAGES,options.deleteSharedImages);
+        result.putBoolean(FOLLOW_TOP_BAR_SIDE,options.followTopBarSide);
         return result;
     }
 
@@ -71,6 +76,7 @@ final class WorkspaceSettingsStore {
                 bundle.getBoolean(KEEP_ON_LOCK, false), bundle.getBoolean(SCROLL_SIDE_TASKS, false), bundle.getBoolean(LUNAR, true),
                 bundle.getInt(LANDSCAPE_VIDEO, WorkspaceOptions.VIDEO_TURNED),
                 bundle.getBoolean(HIDE_RECENTS, false),
-                bundle.getBoolean(PARK_MAIN, false),bundle.getBoolean(DELETE_SHARED_IMAGES,false));
+                bundle.getBoolean(PARK_MAIN, false),bundle.getBoolean(DELETE_SHARED_IMAGES,false),bundle.getInt(THEME,0),
+                bundle.getBoolean(FOLLOW_TOP_BAR_SIDE,true));
     }
 }

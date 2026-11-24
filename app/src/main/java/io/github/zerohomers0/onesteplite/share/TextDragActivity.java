@@ -19,6 +19,7 @@ public final class TextDragActivity extends Activity {
     @Override protected void onStop(){super.onStop();if(!dragging)finish();}
 
     @Override protected void onCreate(Bundle state) {
+        HyperOsStyle.theme(WorkspaceSettingsStore.read(this).themeMode);
         setTheme(HyperOsStyle.dark(this)?android.R.style.Theme_Material_Dialog_NoActionBar:android.R.style.Theme_Material_Light_Dialog_NoActionBar);
         super.onCreate(state);
         requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
