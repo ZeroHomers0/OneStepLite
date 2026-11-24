@@ -29,7 +29,8 @@ final class ContentPanelLayout extends LinearLayout {
     void push(android.view.View page){
         pop(false);
         for(int i=0;i<getChildCount();i++)getChildAt(i).setVisibility(GONE);
-        detail=page;page.setBackground(null);page.setPadding(0,0,0,0);addView(page,new LayoutParams(-1,0,1));
+        detail=page;page.setBackground(null);page.setPadding(0,0,0,0);
+        page.setClipToOutline(false);page.setOutlineProvider(null);addView(page,new LayoutParams(-1,0,1));
         if(android.animation.ValueAnimator.areAnimatorsEnabled()){
             page.setTranslationX(dp(36));page.setAlpha(.5f);page.animate().translationX(0).alpha(1).setDuration(240).start();
         }

@@ -82,6 +82,7 @@ final class NativeContentDragCard {
                 || (((Integer)call.args[3])&View.DRAG_FLAG_GLOBAL)==0)return;
         Object wm=XposedHelpers.getObjectField(display,"mWmService");Context context;
         float scale=1,offsetX=0,offsetY=0;
+        float physicalX=Float.NaN,physicalY=Float.NaN;
         String sourcePackage;
         synchronized(XposedHelpers.getObjectField(wm,"mGlobalLock")) {
             Map<?,?> windows=(Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap");
@@ -92,13 +93,25 @@ final class NativeContentDragCard {
             if(uid!=(Integer)call.args[1] || uid/100000!=0)return;
             WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(source,"mAttrs");
             sourcePackage=attrs.packageName;
-            boolean own=WindowIdentity.ownsPicker(source,display);
+            boolean module=ContentInboxProvider.MODULE.equals(attrs.packageName);
+            context=(Context)XposedHelpers.getObjectField(wm,"mContext");
+            if(module){
+                android.os.PersistableBundle data=original.getDescription().getExtras();
+                if(data==null || ContentDragShadow.offset(original.getDescription())<=0)return;
+                try{if(context.getPackageManager().getApplicationInfo(ContentInboxProvider.MODULE,0).uid!=uid)return;}
+                catch(Exception unavailable){return;}
+                physicalX=(float)data.getDouble("onesteplite_module_pointer_x",Double.NaN);
+                physicalY=(float)data.getDouble("onesteplite_module_pointer_y",Double.NaN);
+                if(!Float.isFinite(physicalX) || !Float.isFinite(physicalY) || physicalX<0 || physicalY<0
+                        || physicalX>=context.getResources().getDisplayMetrics().widthPixels || physicalY>=context.getResources().getDisplayMetrics().heightPixels)return;
+            }
+            boolean own=WindowIdentity.ownsPicker(source,display) || module;
             if(own && !geometryReady)return;
             if(own && "OneStepLitePortalSource".contentEquals(attrs.getTitle())){
                 Object origin=XposedHelpers.getObjectField(attrs,"accessibilityTitle");
                 if(origin instanceof CharSequence)sourcePackage=origin.toString();
             }
-            if((Packages.SYSTEM_UI.equals(attrs.packageName) && !own) || ContentInboxProvider.MODULE.equals(attrs.packageName)
+            if((Packages.SYSTEM_UI.equals(attrs.packageName) && !own)
                     || (attrs.flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)return;
             Object task=XposedHelpers.callMethod(source,"getTask");
             if(!own && (task==null || !Integer.valueOf(1).equals(XposedHelpers.callMethod(task,"getWindowingMode"))))return;
@@ -110,8 +123,8 @@ final class NativeContentDragCard {
             }
             context=(Context)XposedHelpers.getObjectField(wm,"mContext");
         }
-        float startX=((Number)call.args[end-4]).floatValue()*scale+offsetX;
-        float startY=((Number)call.args[end-3]).floatValue()*scale+offsetY;
+        float startX=Float.isFinite(physicalX)?physicalX:((Number)call.args[end-4]).floatValue()*scale+offsetX;
+        float startY=Float.isFinite(physicalY)?physicalY:((Number)call.args[end-3]).floatValue()*scale+offsetY;
         if(!Float.isFinite(startX) || !Float.isFinite(startY))return;
         ContentDragShadow card=text!=null?new ContentDragShadow(text,context.getResources().getDisplayMetrics().density,original.getItemCount())
                 :image?imageCard((SurfaceControl)call.args[4],context,original.getItemCount())

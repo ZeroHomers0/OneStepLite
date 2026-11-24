@@ -17,19 +17,20 @@ def member(signature):
 methods='\n'.join(member(x) for x in ['    private static void replace(', '    private static String plainText(', '    static boolean images(', '    static boolean files('])
 files={
 'android/os/IBinder.java':'package android.os;public interface IBinder{}',
-'android/os/PersistableBundle.java':'package android.os;public class PersistableBundle{public void putString(String k,String v){}}',
+'android/os/PersistableBundle.java':'package android.os;public class PersistableBundle{public java.util.Map<String,Object> values=new java.util.HashMap<>();public void putString(String k,String v){values.put(k,v);}public void putDouble(String k,double v){values.put(k,v);}public double getDouble(String k,double d){return (Double)values.getOrDefault(k,d);}}',
 'android/os/IInterface.java':'package android.os;public interface IInterface{IBinder asBinder();}',
 'android/content/ClipDescription.java':'''package android.content;public class ClipDescription{public boolean text=true;public int offset;
 public String mime;public CharSequence getLabel(){return "文件.pdf";}public int getMimeTypeCount(){return 1;}public String getMimeType(int i){return mime!=null?mime:text?"text/plain":"image/jpeg";}
-public android.os.PersistableBundle getExtras(){return new android.os.PersistableBundle();}public void setExtras(android.os.PersistableBundle d){}
+public android.os.PersistableBundle data=new android.os.PersistableBundle();public android.os.PersistableBundle getExtras(){return data;}public void setExtras(android.os.PersistableBundle d){data=d;}
 public ClipDescription(){}public ClipDescription(ClipDescription d){text=d.text;offset=d.offset;mime=d.mime;}public boolean hasMimeType(String t){return mime!=null?mime.equals(t):"image/*".equals(t)?!text:text;}}''',
 'android/content/ClipData.java':'''package android.content;public class ClipData{public ClipDescription d;public Item item;public int count=1;java.util.List<Item> items=new java.util.ArrayList<>();
 public ClipData(ClipDescription d,Item item){this.d=d;this.item=item;items.add(item);}public ClipDescription getDescription(){return d;}
 public void addItem(Item i){items.add(i);count++;}public int getItemCount(){return count;}public Item getItemAt(int i){return i<items.size()?items.get(i):item;}
 public static class Item{public String text;public android.net.Uri uri;public Object intent;public Item(String t){text=t;}
 public CharSequence getText(){return text;}public android.net.Uri getUri(){return uri;}public Object getIntent(){return intent;}}}''',
-'android/content/Context.java':'''package android.content;public class Context{public static class Metrics{public float density=3;}
-public static class Resources{public Metrics getDisplayMetrics(){return new Metrics();}}public Resources getResources(){return new Resources();}}''',
+'android/content/Context.java':'''package android.content;public class Context{public static class Metrics{public float density=3;public int widthPixels=1080,heightPixels=2400;}
+public static class Resources{public Metrics getDisplayMetrics(){return new Metrics();}}public Resources getResources(){return new Resources();}
+public Pm pm=new Pm();public Pm getPackageManager(){return pm;}public static class Pm{public int uid=10001;public Pm getApplicationInfo(String p,int f){return this;}}}''',
 'android/net/Uri.java':'package android.net;public class Uri{public String scheme="content";public String getScheme(){return scheme;}}',
 'android/graphics/Point.java':'package android.graphics;public class Point{public int x,y;}',
 'android/view/View.java':'package android.view;public class View{public static final int DRAG_FLAG_GLOBAL=256,DRAG_FLAG_OPAQUE=512;}',
@@ -118,6 +119,18 @@ check(files(clip)&&!images(clip));call=call(client,clip);old=call.args[4];int pr
 check(call.args[4]!=old&&imageCalls==priorImages);
 clip.item.intent=new Object();check(!files(clip));clip.item.intent=null;
 clip.d.mime="application/vnd.android.activity";check(!files(clip));
+// A module dialog is not magnified like the main app: use its authenticated actual pointer.
+geometryReady=true;win.mAttrs.packageName="module";win.task.mode=5;
+ClipData selected=new ClipData(new ClipDescription(),new ClipData.Item("exact selected text"));selected.d.offset=86;
+selected.d.data.putDouble("onesteplite_module_pointer_x",780);selected.d.data.putDouble("onesteplite_module_pointer_y",1600);
+call=call(client,selected);old=call.args[4];replace(call,d);check(call.args[4]!=old);
+check((Float)call.args[8]==780f&&(Float)call.args[9]==1600f);
+check((Float)call.args[9]-(Float)call.args[11]==1600f-89f);
+check(((ClipData)call.args[12]).item==selected.item);
+d.mWmService.mContext.pm.uid=10002;reject(d,client,selected);d.mWmService.mContext.pm.uid=10001;
+selected.d.data.putDouble("onesteplite_module_pointer_y",Double.NaN);reject(d,client,selected);
+selected.d.data.putDouble("onesteplite_module_pointer_y",2401);reject(d,client,selected);
+selected.d.data.putDouble("onesteplite_module_pointer_y",1600);selected.d.offset=0;reject(d,client,selected);
 System.out.println("Production native text card checks="+checks+" passed (surface rendering requires device)");
 }}
 '''.replace('__METHODS__',methods)

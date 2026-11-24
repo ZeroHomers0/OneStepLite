@@ -13,6 +13,8 @@ import android.widget.TextView;
 /** Standard selected-text entry keeps source apps' own selection and permission behavior. */
 public final class TextDragActivity extends Activity {
     private boolean dragging;
+    private float pointerX,pointerY;
+    private boolean pointerActive;
 
     @Override protected void onStop(){super.onStop();if(!dragging)finish();}
 
@@ -29,10 +31,19 @@ public final class TextDragActivity extends Activity {
         int inset=HyperOsStyle.dp(this,8);
         TextView text=new TextView(this);text.setText(value);text.setTextSize(14);text.setPadding(inset,inset,inset,inset);
         text.setTextColor(HyperOsStyle.textPrimary(this));text.setContentDescription("选中文字，长按拖曳分享");
+        text.setOnTouchListener((view,event)->{
+            int action=event.getActionMasked();
+            pointerActive=event.getPointerCount()==1 && action!=android.view.MotionEvent.ACTION_UP && action!=android.view.MotionEvent.ACTION_CANCEL;
+            if(pointerActive){pointerX=event.getRawX();pointerY=event.getRawY();}return false;
+        });
         ScrollView scroll=new ScrollView(this);scroll.addView(text);body.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         text.setOnLongClickListener(v->{
+            if(!pointerActive)return false;
             try {
                 ClipData clip=ClipData.newPlainText("选中文字",value);ContentDragShadow shadow=new ContentDragShadow(v,1);shadow.mark(clip);
+                android.os.PersistableBundle metadata=clip.getDescription().getExtras();
+                metadata.putDouble("onesteplite_module_pointer_x",pointerX);metadata.putDouble("onesteplite_module_pointer_y",pointerY);
+                clip.getDescription().setExtras(metadata);
                 dragging=v.startDragAndDrop(clip,shadow,null,View.DRAG_FLAG_GLOBAL);
                 if(!dragging)ContentDragMotion.close();
                 if(dragging)WorkspacePopupStyle.dragWindow(getWindow(),0,false);
