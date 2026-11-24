@@ -20,6 +20,7 @@ final class HyperOsStyle {
     private static final int FALLBACK_ACCENT_LIGHT = -13664019;
     private static final int LIGHT_TEXT = -15263717;
     private static final int LIGHT_TEXT_SECONDARY = -8946814;
+    private static Bitmap shareGrain;
 
     private HyperOsStyle() {
     }
@@ -28,8 +29,21 @@ final class HyperOsStyle {
         return selected ? CONTROL_ACCENT : dark(context) ? 0xff363940 : 0xffe5e8ee;
     }
 
-    static int shareRailFill(Context context) {
-        return blend(controlFill(context,false),CONTROL_ACCENT,dark(context)?.20f:.13f);
+    /** One immutable 16 KiB tile; each face keeps its own Drawable and animation bounds. */
+    static synchronized Drawable shareRailBackground(Context context) {
+        if(shareGrain==null){
+            int[] pixels=new int[64*64];int seed=0x51ac27;
+            for(int i=0;i<pixels.length;i++){
+                seed=seed*1664525+1013904223;int grain=((seed>>>24)&63)-31;
+                pixels[i]=Color.rgb(170+grain,190+grain,38+grain);
+            }
+            shareGrain=Bitmap.createBitmap(pixels,64,64,Bitmap.Config.ARGB_8888);
+            shareGrain.setDensity(Bitmap.DENSITY_NONE);
+        }
+        android.graphics.drawable.BitmapDrawable background=new android.graphics.drawable.BitmapDrawable(context.getResources(),shareGrain);
+        background.setTileModeXY(android.graphics.Shader.TileMode.REPEAT,android.graphics.Shader.TileMode.REPEAT);
+        background.setFilterBitmap(false);
+        return background;
     }
 
     /** Shared tonal surface and bounded ripple for workspace and settings actions. */

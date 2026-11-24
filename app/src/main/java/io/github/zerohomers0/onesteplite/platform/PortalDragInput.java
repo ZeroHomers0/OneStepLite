@@ -42,6 +42,7 @@ final class PortalDragInput {
         Object focus=XposedHelpers.getObjectField(display,"mCurrentFocus");
         if(focus==null || focus==source || !Boolean.TRUE.equals(XposedHelpers.callMethod(focus,"isVisible")))return null;
         WindowManager.LayoutParams focused=(WindowManager.LayoutParams)XposedHelpers.getObjectField(focus,"mAttrs");
+        if(focused.type>=WindowManager.LayoutParams.FIRST_SUB_WINDOW && focused.type<=WindowManager.LayoutParams.LAST_SUB_WINDOW)return null;
         Object expected=XposedHelpers.getObjectField(attrs,"accessibilityTitle");
         if(!(expected instanceof CharSequence) || !expected.toString().equals(focused.packageName))return null;
         Object task=XposedHelpers.callMethod(focus,"getTask");

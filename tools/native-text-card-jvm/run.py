@@ -17,9 +17,11 @@ def member(signature):
 methods='\n'.join(member(x) for x in ['    private static void replace(', '    private static String plainText(', '    static boolean images(', '    static boolean files('])
 files={
 'android/os/IBinder.java':'package android.os;public interface IBinder{}',
+'android/os/PersistableBundle.java':'package android.os;public class PersistableBundle{public void putString(String k,String v){}}',
 'android/os/IInterface.java':'package android.os;public interface IInterface{IBinder asBinder();}',
 'android/content/ClipDescription.java':'''package android.content;public class ClipDescription{public boolean text=true;public int offset;
 public String mime;public CharSequence getLabel(){return "文件.pdf";}public int getMimeTypeCount(){return 1;}public String getMimeType(int i){return mime!=null?mime:text?"text/plain":"image/jpeg";}
+public android.os.PersistableBundle getExtras(){return new android.os.PersistableBundle();}public void setExtras(android.os.PersistableBundle d){}
 public ClipDescription(){}public ClipDescription(ClipDescription d){text=d.text;offset=d.offset;mime=d.mime;}public boolean hasMimeType(String t){return mime!=null?mime.equals(t):"image/*".equals(t)?!text:text;}}''',
 'android/content/ClipData.java':'''package android.content;public class ClipData{public ClipDescription d;public Item item;public int count=1;java.util.List<Item> items=new java.util.ArrayList<>();
 public ClipData(ClipDescription d,Item item){this.d=d;this.item=item;items.add(item);}public ClipDescription getDescription(){return d;}
@@ -30,9 +32,9 @@ public CharSequence getText(){return text;}public android.net.Uri getUri(){retur
 public static class Resources{public Metrics getDisplayMetrics(){return new Metrics();}}public Resources getResources(){return new Resources();}}''',
 'android/net/Uri.java':'package android.net;public class Uri{public String scheme="content";public String getScheme(){return scheme;}}',
 'android/graphics/Point.java':'package android.graphics;public class Point{public int x,y;}',
-'android/view/View.java':'package android.view;public class View{public static final int DRAG_FLAG_GLOBAL=256;}',
+'android/view/View.java':'package android.view;public class View{public static final int DRAG_FLAG_GLOBAL=256,DRAG_FLAG_OPAQUE=512;}',
 'android/view/WindowManager.java':'''package android.view;public class WindowManager{public static class LayoutParams{
-public static final int FLAG_SECURE=8192;public String packageName="source.app";public int flags;}}''',
+public static final int FLAG_SECURE=8192;public String packageName="source.app";public int flags;public CharSequence getTitle(){return "app";}}}''',
 'android/view/SurfaceControl.java':'package android.view;public class SurfaceControl{}',
 'android/util/Log.java':'package android.util;public class Log{public static int i(String t,String s){return 0;}}',
 'de/robv/android/xposed/XC_MethodHook.java':'''package de.robv.android.xposed;public class XC_MethodHook{
@@ -48,10 +50,13 @@ import de.robv.android.xposed.XC_MethodHook;import de.robv.android.xposed.Xposed
 class Tags{static final String PROBE="test";}class Packages{static final String SYSTEM_UI="com.android.systemui";}
 class ContentInboxProvider{static final String MODULE="module";}
 class HyperOsStyle{static boolean dark(Context c){return false;}}
+class WindowIdentity{static boolean ownsPicker(Object w,Object d){return false;}}
+class NativeDragGeometry{static void mark(ClipData clip){}}
 class ContentDragShadow{ContentDragShadow(String t,float d,int n){}ContentDragShadow(String t,float d,int n,boolean words){}void setDark(boolean dark){}static int offset(ClipDescription d){return d.offset;}
 void recycleThumbnail(){}void mark(ClipData c){c.d.offset=86;}void onProvideShadowMetrics(Point size,Point touch){size.x=128;size.y=92;touch.x=64;touch.y=89;}}
 public class NativeTextRegression{
 static final String ORIGINAL="original",REPLACEMENT="replacement";
+static boolean geometryReady;
 static int imageCalls;static ContentDragShadow imageCard(SurfaceControl s,Context c,int n){imageCalls++;return new ContentDragShadow("image",3,n);}
 static SurfaceControl draw(ContentDragShadow c,Point s){return new SurfaceControl();}
 __METHODS__
@@ -80,7 +85,7 @@ win.mOwnerUid=10002;reject(d,client,clip);win.mOwnerUid=110001;reject(d,client,c
 win.mAttrs.flags=8192;reject(d,client,clip);win.mAttrs.flags=0;
 win.mAttrs.packageName=Packages.SYSTEM_UI;reject(d,client,clip);win.mAttrs.packageName="module";reject(d,client,clip);win.mAttrs.packageName="source.app";
 win.task.mode=5;reject(d,client,clip);win.task.mode=1;
-clip.d.offset=86;reject(d,client,clip);clip.d.offset=0;
+clip.d.offset=86;XC_MethodHook.MethodHookParam marked=call(client,clip);replace(marked,d);check(marked.args[12]!=clip);clip.d.offset=0;
 XC_MethodHook.MethodHookParam call=call(client,clip);Object old=call.args[4];replace(call,d);
 check(call.args[4]!=old);check((Float)call.args[10]==64f&&(Float)call.args[11]==89f);
 check(call.args[12]!=clip&&((ClipData)call.args[12]).d.offset==86&&clip.d.offset==0);

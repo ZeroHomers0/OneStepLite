@@ -16,7 +16,7 @@ final class SystemExtractHooks {
     static void install(ClassLoader loader) {
         try {
             Class<?> service=XposedHelpers.findClass("com.miui.contentcatcher.ContentCatcherService",loader);
-            XposedBridge.hookAllMethods(service,"onContentCatched",new XC_MethodHook(){
+            boolean installed=!XposedBridge.hookAllMethods(service,"onContentCatched",new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam call) {
                     if(call.args.length!=1 || call.args[0]==null)return;
                     try {
@@ -34,20 +34,33 @@ final class SystemExtractHooks {
                         finally{Binder.restoreCallingIdentity(identity);}
                     }catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"system extraction left to OEM",unavailable);}
                 }
-            });
+            }).isEmpty();
+            ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,installed?ShareDiagnostics.Code.READY:ShareDiagnostics.Code.UNSUPPORTED);
         }catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"system extraction adapter unavailable",unavailable);}
     }
     private static boolean offer(Context context,Object injector,Object content) {
         Object raw=XposedHelpers.getObjectField(content,"mResultMap");if(!(raw instanceof Map))return false;
+        Bundle state=null;int inspected=0;boolean matched=false;
         for(Map.Entry<?,?> entry:((Map<?,?>)raw).entrySet()) {
-            String key=String.valueOf(entry.getKey());if(!key.startsWith("com.miui.contentextension#"))continue;
+            if(++inspected>64)break;
+            if(!(entry.getKey() instanceof String))continue;
+            String key=(String)entry.getKey();if(!key.startsWith("com.miui.contentextension#"))continue;
             boolean image=key.endsWith("#image_pick_mode");
             if(!image && !key.endsWith("#pick_mode"))continue;
-            Bundle state=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_status",null,null);
-            if(state==null || !SystemExtractPayload.append(injector,entry.getValue(),image,state))return false;
-            Bundle reply=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_offer",null,state);
-            return reply!=null && reply.getBoolean("accepted");
+            matched=true;
+            if(state==null){state=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_status",null,null);
+                if(state==null){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_SESSION);return false;}}
+            try{
+                Bundle candidate=new Bundle(state);
+                if(!SystemExtractPayload.append(injector,entry.getValue(),image,candidate))continue;
+                Bundle reply=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_offer",null,candidate);
+                if(reply!=null && reply.getBoolean("accepted")){
+                    ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.ACCEPTED);return true;
+                }
+                ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.REJECTED);
+            }catch(RuntimeException invalid){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.UNSUPPORTED);}
         }
+        if(matched)ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_CONTENT);
         return false;
     }
 }

@@ -19,6 +19,10 @@ while depth:
     depth+=(style[end]=='{')-(style[end]=='}');end+=1
 window_style=style[start:end]
 files={
+'android/animation/ValueAnimator.java':'package android.animation;public class ValueAnimator{public static boolean areAnimatorsEnabled(){return true;}}',
+'android/os/SystemClock.java':'package android.os;public class SystemClock{public static long uptimeMillis(){return 1000;}}',
+'android/os/PersistableBundle.java':'package android.os;public class PersistableBundle{public String getString(String k){return null;}public int getInt(String k,int d){return d;}}',
+'android/content/ClipDescription.java':'package android.content;public class ClipDescription{public android.os.PersistableBundle getExtras(){return null;}}',
 'android/os/Looper.java':'package android.os;public class Looper{public static Looper getMainLooper(){return new Looper();}}',
 'android/os/Handler.java':'''package android.os;public class Handler{public static java.util.List<Runnable> jobs=new java.util.ArrayList<>();public Handler(Looper l){}
 public void postDelayed(Runnable r,long delay){if(delay!=60000)throw new AssertionError("bound");jobs.add(r);}public void removeCallbacks(Runnable r){jobs.remove(r);}}''',
@@ -36,7 +40,7 @@ public void clearFlags(int f){flags&=~f;}public void addFlags(int f){flags|=f;}p
 'io/github/zerohomers0/onesteplite/ContentDragUiRegression.java':'''package io.github.zerohomers0.onesteplite;
 import android.view.*;
 class WorkspacePopupStyle{__STYLE__}
-class ContentDragShadow{boolean down,recycled;boolean pointsDown(){return down;}boolean pointDown(boolean v){if(down==v)return false;down=v;return true;}
+class ContentDragShadow{boolean down,recycled;static int offset(android.content.ClipDescription d){return 0;}boolean pointsDown(){return down;}boolean pointDown(boolean v){if(down==v)return false;down=v;return true;}
 void recycleThumbnail(){recycled=true;}}
 public class ContentDragUiRegression{
 static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}

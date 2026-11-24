@@ -103,7 +103,8 @@ final class QuickAppRail extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         int iSave = canvas.save();
-        canvas.clipRect(0, 0, getWidth(), getHeight());
+        // Keep the stationary content cell's trailing gutter clear while the row scrolls.
+        canvas.clipRect(padding, 0, getWidth(), getHeight());
         canvas.translate(-this.scrollOffset, 0.0f);
         float iconY = getHeight() * 0.5f;
         boolean stacking = stackProgress < 1f && stackFromIndex >= 0 && stackToIndex >= 0;

@@ -79,7 +79,7 @@ ready[0]=true;bounds[0]=null;check(!overlay.onDrag(event(1),null),"missing scene
 bounds[0]=new Rect();bounds[0].empty=true;check(!overlay.onDrag(event(1),null),"empty scene geometry rejects drag overlay");bounds[0].empty=false;
 check(overlay.onDrag(event(1),null)&&overlay.isOpen(),"first content drag mounts overlay");
 ShareWorkspace first=ShareWorkspace.latest;check(context.windows.adds==1&&first.events==1,"root's drag-start initializes the mounted share session");
-check(context.windows.last.y==250&&context.windows.last.height==50,"share rail occupies only strip immediately above main");
+check(context.windows.last.y==248&&context.windows.last.height==52,"share rail occupies only strip immediately above main");
 check(context.windows.last.width==1080&&context.windows.last.type==2017,"strip uses physical display width and existing modal window type");
 check(HostWindowPolicy.checks==1&&ModalIslandLease.active==1,"window uses owned overlay and island lease");
 overlay.setMainOnRight(true);check(first.mainRight&&first.closes==0,"side change mirrors icons without cancelling live drag");

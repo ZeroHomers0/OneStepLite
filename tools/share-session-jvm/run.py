@@ -34,7 +34,7 @@ static int checks;static void check(boolean value,String message){checks++;if(!v
 static final class DragEvent {static final int ACTION_DRAG_STARTED=1,ACTION_DRAG_LOCATION=2,ACTION_DROP=3,ACTION_DRAG_ENDED=4;
 int action;DragEvent(int value){action=value;}int getAction(){return action;}Object getClipDescription(){return this;}}
 static final class ComponentName {String pkg;ComponentName(String p,String name){pkg=p;}}
-static class Counter implements AutoCloseable {int closes,stops,restores;public void close(){closes++;}void stop(){stops++;}boolean isDragging(){return false;}void dragEnded(boolean consumed){restores++;}}
+static class Counter implements AutoCloseable {int closes,stops,restores;void dragStarted(){}public void close(){closes++;}void stop(){stops++;}boolean isDragging(){return false;}void dragEnded(boolean consumed){restores++;}}
 static class Base {int detaches;protected void onDetachedFromWindow(){detaches++;}}
 static class View {}
 static class ShareTargetButton extends View {boolean hovered=true;void setDragHovered(boolean value){hovered=value;}}
@@ -48,6 +48,7 @@ void setWindowHover(Function<String,String> identity,Consumer<String> activate){
 static class Replay extends Base {
 BooleanSupplier ready=()->true;Object dispatch,bounds,hovered;Consumer<String> hint=value->{};ShareRailOverlay overlay;
 boolean panelSource,hasPointer;Object transferClip;Counter receipt;Function<String,String> hoverIdentity=value->value;Consumer<String> hoverActivate=value->{};
+String sourcePackage;
 static class Hover extends Counter {void move(String value){}}Hover windowHover=new Hover();
 boolean dragging,dropped,deliveryPending,retainingDelivery,shareOnly;int generation,starts,ends,stops,drops;String lastTarget;
 Handler handler=new Handler();Runnable expire=()->{},deliverySettled=()->{};
@@ -92,6 +93,7 @@ check(!rail.targets.child.hovered,"drag end clears target magnification while pr
 rail=new Replay();rail.catchment=new Counter();Counter reach=rail.catchment;rail.onDetachedFromWindow();check(rail.panel.closes==1&&rail.capture.closes==1&&rail.history.stops==1,"ordinary detach releases all child state");
 check(reach.closes==1&&rail.catchment==null,"detach removes the temporary arrow hit region");
 check(rail.transition.resets==1,"ordinary detach clears cube animation");
+rail=new Replay();rail.dragging=true;rail.sourcePackage="chat.pkg";check(!rail.onWindowDrag(new DragEvent(3),"chat.pkg",false)&&rail.drops==0,"same-app window release must not send the source message again");
 rail=new Replay();rail.dragging=true;rail.cancel();check(rail.panel.restores==1,"cancel restores an active source popup");
 rail=new Replay();rail.cancel();check(rail.panel.restores==0,"idle reset must not end a newly staged source drag");
 System.out.println("Production share session checks="+checks+" passed");

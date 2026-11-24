@@ -18,6 +18,7 @@ final class EditorBoundsRelay {
     static final String PERMISSION="io.github.zerohomers0.onesteplite.CONTENT_ACCESS";
     private static String ticket,imePackage;
     private static Bundle target,geometry;
+    private static ShareDiagnostics.Code geometryState=ShareDiagnostics.Code.WAITING_BOUNDS;
     private static long deadline;
     private static IBinder owner;
     private static IBinder.DeathRecipient death;
@@ -31,37 +32,50 @@ final class EditorBoundsRelay {
             end(context,input==null?null:input.getString("ticket"));return new Bundle();
         }
         if(!"editor_bounds_read".equals(method))throw new IllegalArgumentException("Unknown editor geometry operation");
-        String token=input==null?null:input.getString("ticket");Bundle expected,cached;
+        String token=input==null?null:input.getString("ticket");Bundle expected,cached;String keyboard;boolean expired;ShareDiagnostics.Code cachedState;
         ComponentName currentIme=ComponentName.unflattenFromString(Settings.Secure.getString(context.getContentResolver(),Settings.Secure.DEFAULT_INPUT_METHOD));
         synchronized(EditorBoundsRelay.class){
-            if(token==null || !token.equals(ticket) || SystemClock.uptimeMillis()>deadline)return new Bundle();
-            if(currentIme==null || !currentIme.getPackageName().equals(imePackage))return new Bundle();
+            if(token==null || !token.equals(ticket))return status(ShareDiagnostics.Code.NO_SESSION);
+            expired=SystemClock.uptimeMillis()>deadline;keyboard=imePackage;
             expected=target;cached=geometry==null?null:new Bundle(geometry);
+            cachedState=geometryState;
         }
+        if(expired){end(context,token);return status(ShareDiagnostics.Code.TIMEOUT);}
+        if(currentIme==null || !currentIme.getPackageName().equals(keyboard)){end(context,token);return status(ShareDiagnostics.Code.NO_IME);}
         Bundle current=EditorPasteCompat.relay(context,"paste_status",null);
-        if(!same(expected,current) || cached==null)return new Bundle();
-        float[] transform=current.getFloatArray("geometry_transform");if(transform==null || transform.length!=3)return new Bundle();
-        RectF rect=cached.getParcelable("bounds",RectF.class);if(rect==null)return new Bundle();
+        if(!same(expected,current))return status(current==null?ShareDiagnostics.Code.NO_EDITOR:ShareDiagnostics.Code.STALE_TARGET);
+        if(cached==null)return status(cachedState);
+        float[] transform=current.getFloatArray("geometry_transform");
+        if(transform==null || transform.length!=3 || !Float.isFinite(transform[0]) || transform[0]<=0 || transform[0]>=1
+                || !Float.isFinite(transform[1]) || !Float.isFinite(transform[2]))return status(ShareDiagnostics.Code.NO_TRANSFORM);
+        RectF rect=cached.getParcelable("bounds",RectF.class);if(rect==null)return status(ShareDiagnostics.Code.WAITING_BOUNDS);
         rect=new RectF(rect.left*transform[0]+transform[1],rect.top*transform[0]+transform[2],
                 rect.right*transform[0]+transform[1],rect.bottom*transform[0]+transform[2]);
-        Bundle result=new Bundle();result.putParcelable("bounds",rect);return result;
+        if(!finite(rect) || rect.isEmpty())return status(ShareDiagnostics.Code.WAITING_BOUNDS);
+        Bundle result=status(ShareDiagnostics.Code.READY);result.putParcelable("bounds",rect);return result;
+    }
+    static Bundle status(ShareDiagnostics.Code code){
+        ShareDiagnostics.event(ShareDiagnostics.Stage.EDITOR,code);Bundle result=new Bundle();result.putString("state",code.name());return result;
     }
     private static Bundle start(Context context,Bundle input){
         ComponentName ime=ComponentName.unflattenFromString(Settings.Secure.getString(context.getContentResolver(),Settings.Secure.DEFAULT_INPUT_METHOD));
         Bundle snapshot=EditorPasteCompat.relay(context,"paste_status",null);
         ClipDescription description=input==null?null:input.getParcelable("types",ClipDescription.class);
         IBinder client=input==null?null:input.getBinder("owner");
-        if(ime==null || snapshot==null || description==null || client==null || snapshot.getFloatArray("geometry_transform")==null
-                || !accepts(snapshot,description))return new Bundle();
+        if(ime==null)return status(ShareDiagnostics.Code.NO_IME);
+        if(snapshot==null)return status(ShareDiagnostics.Code.NO_EDITOR);
+        if(description==null || client==null)return status(ShareDiagnostics.Code.NO_SESSION);
+        if(snapshot.getFloatArray("geometry_transform")==null)return status(ShareDiagnostics.Code.NO_TRANSFORM);
+        if(!accepts(snapshot,description))return status(ShareDiagnostics.Code.TYPE_UNSUPPORTED);
         String token=UUID.randomUUID().toString(),old,oldIme;boolean linked;
         synchronized(EditorBoundsRelay.class){old=ticket;oldIme=imePackage;ticket=token;imePackage=ime.getPackageName();
             if(owner!=null && death!=null)owner.unlinkToDeath(death,0);
             owner=client;Context app=context.getApplicationContext();death=()->end(app,token);
-            target=new Bundle(snapshot);geometry=null;deadline=SystemClock.uptimeMillis()+60_000L;
+            target=new Bundle(snapshot);geometry=null;geometryState=ShareDiagnostics.Code.WAITING_BOUNDS;deadline=SystemClock.uptimeMillis()+60_000L;
             try{client.linkToDeath(death,0);linked=true;}catch(android.os.RemoteException gone){clear();linked=false;}}
         if(old!=null)signal(context,oldIme,old,false);
-        if(!linked)return new Bundle();
-        signal(context,ime.getPackageName(),token,true,client);Bundle result=new Bundle();result.putString("ticket",token);return result;
+        if(!linked)return status(ShareDiagnostics.Code.NO_SESSION);
+        signal(context,ime.getPackageName(),token,true,client);Bundle result=status(ShareDiagnostics.Code.WAITING_BOUNDS);result.putString("ticket",token);return result;
     }
     private static void offer(Context context,Bundle input){
         ComponentName ime=ComponentName.unflattenFromString(Settings.Secure.getString(context.getContentResolver(),Settings.Secure.DEFAULT_INPUT_METHOD));
@@ -71,10 +85,12 @@ final class EditorBoundsRelay {
         synchronized(EditorBoundsRelay.class){
             if(input==null || ticket==null || !ticket.equals(input.getString("ticket")) || SystemClock.uptimeMillis()>deadline)return;
             geometry=null;
+            geometryState=ShareDiagnostics.Code.STALE_TARGET;
             if(input.getInt("uid",-1)!=target.getInt("uid") || input.getInt("field",-1)!=target.getInt("field"))return;
+            geometryState="UNSUPPORTED".equals(input.getString("state"))?ShareDiagnostics.Code.UNSUPPORTED:ShareDiagnostics.Code.WAITING_BOUNDS;
             RectF bounds=input.getParcelable("bounds",RectF.class);
             if(bounds==null || !finite(bounds) || bounds.isEmpty())return;
-            geometry=new Bundle();geometry.putParcelable("bounds",new RectF(bounds));
+            geometry=new Bundle();geometry.putParcelable("bounds",new RectF(bounds));geometryState=ShareDiagnostics.Code.READY;
         }
     }
     static boolean accepts(Bundle snapshot,ClipDescription types){
@@ -82,11 +98,15 @@ final class EditorBoundsRelay {
         for(int i=0;i<types.getMimeTypeCount();i++)if(!types.getMimeType(i).startsWith("text/"))text=false;
         if(text)return true;
         String[] accepted=snapshot.getStringArray("content_types");if(accepted==null)return false;
+        int offered=0;
         for(int i=0;i<types.getMimeTypeCount();i++){
+            String type=types.getMimeType(i);
+            if(type.equals("text/plain") || type.equals("text/uri-list"))continue;
+            offered++;
             boolean supported=false;for(String mime:accepted)if(ClipDescription.compareMimeTypes(types.getMimeType(i),mime))supported=true;
             if(!supported)return false;
         }
-        return types.getMimeTypeCount()>0;
+        return offered>0;
     }
     static boolean same(Bundle a,Bundle b){
         return a!=null && b!=null && a.getInt("uid")==b.getInt("uid") && a.getInt("field")==b.getInt("field")

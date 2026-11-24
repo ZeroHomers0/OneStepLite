@@ -41,6 +41,7 @@ final class ContentPanel {
     private Dialog preview;
     private ImageView previewImageView;
     private Bitmap previewPixels;
+    private int previewGeneration;
     private ImageTextRequest recognition;
     private ShareReadLease recognitionRead;
     private final ClipboardHistory history;
@@ -91,7 +92,7 @@ final class ContentPanel {
                 .createWindowContext(WindowTypes.SYSTEM_UI_DIALOG, null);
         Context themed=new android.view.ContextThemeWrapper(windowContext,HyperOsStyle.dark(context)
                 ?android.R.style.Theme_Material_Dialog_Alert:android.R.style.Theme_Material_Light_Dialog_Alert);
-        dialog = new WorkspaceDialog(themed,this::close);
+        dialog = new WorkspaceDialog(themed,()->{if(preview!=null)closePreview();else close();});
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         shell=new ContentPanelLayout(themed,selected->{
             selection.position(tab,scroll.getScrollY());tab=selected;load();
@@ -404,6 +405,7 @@ final class ContentPanel {
         previewImageView=image;
         final Dialog window=preview;
         final int token=generation;
+        final int detail=previewGeneration;
         WORKER.execute(()->{
             try {
                 Bitmap bitmap=android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(
@@ -414,7 +416,7 @@ final class ContentPanel {
                     decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE);
                 });
                 anchor.post(()->{
-                    if(preview==window && token==generation && window!=null && window.isShowing()){
+                    if(preview==window && token==generation && detail==previewGeneration && window!=null && window.isShowing()){
                         previewPixels=bitmap;image.setImageBitmap(bitmap);
                     }
                     else bitmap.recycle();
@@ -440,16 +442,7 @@ final class ContentPanel {
     private void showPreview(View content) {
         closePreview();
         if(dialog==null)return;
-        preview=new WorkspaceDialog(dialog.getContext(),this::close);preview.setContentView(content);
-        final Dialog opened = preview;
-        preview.setOnDismissListener(ignored -> { if (preview == opened) closePreview(); });
-        Window window=preview.getWindow();if(window==null){closePreview();return;}
-        window.setType(WindowTypes.SYSTEM_UI_DIALOG);
-        WindowManager.LayoutParams attrs=window.getAttributes();attrs.setTitle("OneStepLiteContentPanel");
-        attrs.flags|=WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
-        HostWindowPolicy.configure(attrs);window.setAttributes(attrs);
-        window.setBackgroundDrawableResource(android.R.color.transparent);preview.show();WorkspacePopupStyle.secondary(window,context);
-        if(shell!=null)shell.setAlpha(.55f);
+        preview=dialog;shell.push(content);
     }
 
     private void recognize(ContentEntry entry,TextView action) {
@@ -474,11 +467,13 @@ final class ContentPanel {
     void previewImage(Uri uri){preview(new ContentEntry("extracted-image","图片","image/jpeg",null,uri,null));}
 
     private void closePreview() {
+        previewGeneration++;
+        if(shell!=null)shell.pop(true);
         if(shell!=null)shell.setAlpha(1f);
         if(recognition!=null){recognition.close();recognition=null;}
         if(recognitionRead!=null){recognitionRead.close();recognitionRead=null;}
         Dialog old=preview;preview=null;
-        if(old!=null) { old.setOnDismissListener(null);old.dismiss(); }
+        if(old!=null && old!=dialog) { old.setOnDismissListener(null);old.dismiss(); }
         if(previewImageView!=null){previewImageView.setImageDrawable(null);previewImageView=null;}
         if(previewPixels!=null){previewPixels.recycle();previewPixels=null;}
     }

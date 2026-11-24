@@ -11,8 +11,7 @@ import java.util.function.Consumer;
 final class ClipboardOptionsPane extends LinearLayout {
     ClipboardOptionsPane(Context context,boolean enabled,Consumer<Boolean> changed,Runnable close) {
         super(context);setOrientation(VERTICAL);WorkspacePopupStyle.decorate(this,null);
-        TextView title=label("剪贴板历史",16);title.setTypeface(null,android.graphics.Typeface.BOLD);
-        addView(title,new LayoutParams(-1,HyperOsStyle.dp(context,40)));
+        WorkspacePopupStyle.heading(this,"剪贴板历史",close);
         LinearLayout row=new LinearLayout(context);row.setGravity(Gravity.CENTER_VERTICAL);
         TextView name=label("记录复制的文字",13);row.addView(name,new LayoutParams(0,-2,1));
         Switch toggle=WorkspaceSwitch.create(context,"记录复制的文字",enabled);
@@ -22,8 +21,6 @@ final class ClipboardOptionsPane extends LinearLayout {
         TextView detail=label("仅在工作区打开时记录；保留7天，最多64条。",12);
         detail.setTextColor(HyperOsStyle.textSecondary(context));addView(detail,new LayoutParams(-1,-2));
         android.view.View spacer=new android.view.View(context);addView(spacer,new LayoutParams(-1,0,1));
-        TextView done=WorkspacePopupStyle.action(context,"完成",false,close);
-        addView(done,new LayoutParams(-1,HyperOsStyle.dp(context,44)));
     }
     private TextView label(String text,int size) {
         TextView view=new TextView(getContext());view.setText(text);view.setTextSize(size);

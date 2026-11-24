@@ -63,6 +63,7 @@ final class ShareWorkspace extends FrameLayout {
     private boolean dragging, dropped;
     private int generation, user;
     private ComponentName hovered;
+    private String sourcePackage;
     private long lastFeedback;
     private ShareReadLease pendingRead;
     private DropPermissionContract delegatedRead;
@@ -97,7 +98,7 @@ final class ShareWorkspace extends FrameLayout {
         this.normalRail = normalRail;
         this.ready = ready;
         windowHover=new WindowDragHover(this,()->dragging && this.ready.getAsBoolean());
-        editorOutline=new EditorDragOutline(this,()->dragging && this.ready.getAsBoolean());
+        editorOutline=new EditorDragOutline(this,()->dragging && this.ready.getAsBoolean(),hint);
         this.dispatch = dispatch;
         this.hint = hint;
         history=new ClipboardHistory(context);
@@ -115,7 +116,7 @@ final class ShareWorkspace extends FrameLayout {
             }
         });
         LayoutParams contentBounds=new LayoutParams(dp(50),-1);contentBounds.leftMargin=dp(6);addView(content,contentBounds);
-        shareFace=new FrameLayout(context);shareFace.setBackgroundColor(HyperOsStyle.shareRailFill(context));
+        shareFace=new FrameLayout(context);shareFace.setBackground(HyperOsStyle.shareRailBackground(context));
         shareFace.setClipChildren(false);shareFace.setClipToPadding(false);
         addView(shareFace,new LayoutParams(-1,-1));
         scroll = new HorizontalScrollView(context);
@@ -143,6 +144,9 @@ final class ShareWorkspace extends FrameLayout {
                 if(dragging)return true;
                 cancel();
                 dragging = true;panelSource=panel.isDragging();
+                sourcePackage=event.getClipDescription().getExtras()==null?null:event.getClipDescription().getExtras().getString("onesteplite_source_package");
+                if(portal!=null)portal.dragStarted();
+                ContentDragMotion.managed(this,event.getClipDescription());
                 editorOutline.start(event.getClipDescription());
                 performHapticFeedback(android.view.HapticFeedbackConstants.DRAG_START);
                 tipOffset=ContentAccessCompat.arrowOffset(event);
@@ -235,6 +239,7 @@ final class ShareWorkspace extends FrameLayout {
     }
 
     boolean onWindowDrag(DragEvent event, String targetPackage,boolean covered) {
+        if(event.getAction()==DragEvent.ACTION_DRAG_STARTED && portal!=null)portal.dragStarted();
         if(covered || overlay!=null && overlay.isOpen()) {
             if(event.getAction()==DragEvent.ACTION_DRAG_STARTED)panelSource=panel.isDragging();
             if(overlay==null){overlay=new ShareRailOverlay(this,ready,dispatch,hint,bounds);overlay.setWindowHover(hoverIdentity,hoverActivate);}
@@ -247,7 +252,7 @@ final class ShareWorkspace extends FrameLayout {
         else windowHover.close();
         if (!dragging || targetPackage == null) return false;
         if (event.getAction() == DragEvent.ACTION_DROP)
-            return live(generation) && drop(event, new ComponentName(targetPackage, ""));
+            return !targetPackage.equals(sourcePackage) && live(generation) && drop(event, new ComponentName(targetPackage, ""));
         if (event.getAction() == DragEvent.ACTION_DRAG_LOCATION) hint.accept("停留切换窗口，松开分享");
         return true;
     }

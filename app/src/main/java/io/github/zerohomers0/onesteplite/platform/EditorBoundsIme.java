@@ -37,7 +37,17 @@ final class EditorBoundsIme {
             @Override protected void afterHookedMethod(MethodHookParam call){attach((InputMethodService)call.thisObject);}
         });
         XposedBridge.hookAllMethods(InputMethodService.class,"onStartInput",new XC_MethodHook(){
-            @Override protected void afterHookedMethod(MethodHookParam call){track(((InputMethodService)call.thisObject).getCurrentInputConnection());}
+            @Override protected void afterHookedMethod(MethodHookParam call){
+                InputMethodService service=(InputMethodService)call.thisObject;attach(service);track(service.getCurrentInputConnection());
+            }
+        });
+        Class<?> input=XposedHelpers.findClassIfExists("android.inputmethodservice.InputMethodService$InputMethodImpl",loader);
+        if(input!=null)for(String name:new String[]{"startInput","restartInput"})XposedBridge.hookAllMethods(input,name,new XC_MethodHook(){
+            @Override protected void afterHookedMethod(MethodHookParam call){
+                try{Object service=XposedHelpers.getObjectField(call.thisObject,"this$0");
+                    if(service instanceof InputMethodService){attach((InputMethodService)service);track(((InputMethodService)service).getCurrentInputConnection());}
+                }catch(Throwable unavailable){/* Optional IME variants must not affect ordinary typing. */}
+            }
         });
         XposedBridge.hookAllMethods(InputMethodService.class,"onDestroy",new XC_MethodHook(){
             @Override protected void beforeHookedMethod(MethodHookParam call){Publisher owner=owner((InputMethodService)call.thisObject);if(owner!=null)owner.close();}
@@ -109,8 +119,8 @@ final class EditorBoundsIme {
             requested=new int[]{InputConnection.CURSOR_UPDATE_IMMEDIATE|InputConnection.CURSOR_UPDATE_MONITOR,filter};
             main.postDelayed(expiry,60_000L);
             requestSequence=0;REQUEST.set(this);
-            try{if(!connection.requestCursorUpdates(requested[0],filter))stop();}
-            catch(RuntimeException unsupported){stop();}
+            try{if(!connection.requestCursorUpdates(requested[0],filter))unsupported();}
+            catch(RuntimeException unsupported){unsupported();}
             finally{REQUEST.remove();}
         }
         void offer(CursorAnchorInfo info){
@@ -125,6 +135,10 @@ final class EditorBoundsIme {
             EditorInfo editor=service.getCurrentInputEditorInfo();InputBinding binding=service.getCurrentInputBinding();
             if(ticket==null || editor==null || binding==null)return null;
             Bundle result=new Bundle();result.putString("ticket",ticket);result.putInt("uid",binding.getUid());result.putInt("field",editor.fieldId);return result;
+        }
+        void unsupported(){
+            Bundle failure=packet();stop();
+            if(failure!=null){failure.putString("state","UNSUPPORTED");send(failure);}
         }
         void send(Bundle value){
             synchronized(this){pending=value;if(sending)return;sending=true;}

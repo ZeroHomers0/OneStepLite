@@ -25,7 +25,7 @@ final class PortalRelay {
         }
         if(!names.contains(PortalWire.PACKAGE) && !names.contains(SystemExtractHooks.PACKAGE))throw new SecurityException("Not an extraction service");
         IBinder target;synchronized(PortalRelay.class){target=host;}
-        if(target==null || !target.isBinderAlive())return null;
+        if(target==null || !target.isBinderAlive()){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_SESSION);return null;}
         if("portal_status".equals(method))return PortalWire.call(target,PortalWire.STATUS,null);
         if(!"portal_offer".equals(method) || data==null)throw new IllegalArgumentException("Source operation");
         byte[] image=data.getByteArray("image");String id=null;

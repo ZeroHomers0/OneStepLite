@@ -47,23 +47,13 @@ final class ContentAccessCompat {
 
     static int arrowOffset(DragEvent event) {
         int declared=ContentDragShadow.offset(event.getClipDescription());
-        if(declared==0)return 0;
-        android.os.PersistableBundle extras=event.getClipDescription().getExtras();
-        int touch=extras.getInt("onesteplite_shadow_touch_y",0);
-        if(touch<=0)return declared;
-        try {
-            float actual=((Number)XposedHelpers.callMethod(event,"getOffsetY")).floatValue();
-            if(Float.isFinite(actual) && actual>0 && actual<=4096) {
-                int scaled=Math.round(declared*actual/touch);if(scaled>0 && scaled<=2048)return scaled;
-            }
-        } catch(NoSuchMethodError | RuntimeException unavailable) { /* Older drag events retain the declared physical offset. */ }
+        if(ContentDragMotion.matches(event.getClipDescription()))return ContentDragMotion.aimOffset();
+        // Our cards are drawn in physical pixels. DragEvent's private offset can still carry
+        // the source app's compatibility scale; applying it again moves the aim above the tip.
         return declared;
     }
     static float shadowHalfWidth(DragEvent event){
         if(ContentDragShadow.offset(event.getClipDescription())<=0)return 0;
-        try{float actual=((Number)XposedHelpers.callMethod(event,"getOffsetX")).floatValue();
-            if(Float.isFinite(actual) && actual>0 && actual<=2048)return actual;
-        }catch(NoSuchMethodError | RuntimeException unavailable){/* Use the declared width on older releases. */}
         android.os.PersistableBundle extras=event.getClipDescription().getExtras();
         int value=extras==null?0:extras.getInt("onesteplite_shadow_half_width",0);return value>0 && value<=2048?value:0;
     }

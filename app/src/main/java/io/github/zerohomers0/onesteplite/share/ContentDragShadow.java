@@ -85,13 +85,13 @@ final class ContentDragShadow extends View.DragShadowBuilder {
         int value=extras==null?0:extras.getInt(TIP_OFFSET,0);return value>0 && value<=2048?value:0;
     }
     @Override public void onDrawShadow(Canvas canvas){
-        paint.setStyle(Paint.Style.FILL);paint.setColor(dark?0xee252e3a:0xeef6faff);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(dark?0xfa252e3a:0xfaf6faff);
         paint.setShadowLayer(4*unit,0,2*unit,0x55000000);
         RectF card=new RectF(4*unit,top,width-4*unit,height-(down?12:6)*unit);
         if(count>1){
             paint.clearShadowLayer();paint.setColor(dark?0xbb34465a:0xbbe0effa);
             canvas.drawRoundRect(card.left+3*unit,card.top+5*unit,card.right,card.bottom+3*unit,12*unit,12*unit,paint);
-            paint.setColor(dark?0xee252e3a:0xeef6faff);paint.setShadowLayer(4*unit,0,2*unit,0x55000000);
+            paint.setColor(dark?0xfa252e3a:0xfaf6faff);paint.setShadowLayer(4*unit,0,2*unit,0x55000000);
         }
         float corner=12*unit;
         outline.reset();outline.moveTo(card.left+corner,card.top);

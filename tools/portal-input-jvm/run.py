@@ -13,6 +13,7 @@ files = {
 'android/os/IBinder.java': 'package android.os; public interface IBinder {}',
 'android/view/WindowManager.java': '''package android.view;
 public class WindowManager {public static class LayoutParams {
+public static final int FIRST_SUB_WINDOW=1000,LAST_SUB_WINDOW=1999;public int type=2;
 public String packageName;public CharSequence accessibilityTitle,title;
 public CharSequence getTitle(){return title;}}}''',
 'android/util/Log.java': 'package android.util; public class Log {public static int w(String t,String s,Throwable e){return 0;}}',
@@ -53,6 +54,7 @@ source.mAttrs.title=PortalDragInput.TITLE;source.mAttrs.accessibilityTitle="sour
 display.mWmService.mWindowMap.put("source",source);display.mWmService.mWindowMap.put("focus",focus);
 boolean[] active={true};PortalDragInput.install(PortalInputRegression.class.getClassLoader(),()->display,()->active[0]);
 check(XposedBridge.transfer(source.mInputChannelToken)==focus.mInputChannelToken);
+focus.mAttrs.type=1002;check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);focus.mAttrs.type=2;
 active[0]=false;check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);active[0]=true;
 source.authorized=false;check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);source.authorized=true;
 source.mAttrs.title="other";check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);source.mAttrs.title=PortalDragInput.TITLE;

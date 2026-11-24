@@ -11,13 +11,14 @@ def member(signature):
         depth+=(source[end]=='{')-(source[end]=='}');end+=1
     return source[start:end]
 files={
+ 'android/os/Bundle.java':'package android.os;public class Bundle{public boolean lift;public void putBoolean(String k,boolean v){lift=v;}}',
  'android/os/SystemClock.java':'package android.os;public class SystemClock{public static long now=1100;public static long uptimeMillis(){return now;}}',
  'android/view/InputDevice.java':'package android.view;public class InputDevice{public static final int SOURCE_TOUCHSCREEN=4098;}',
- 'android/view/ViewConfiguration.java':'package android.view;public class ViewConfiguration{public static ViewConfiguration get(Object c){return new ViewConfiguration();}public int getScaledTouchSlop(){return 8;}}',
+ 'android/view/ViewConfiguration.java':'package android.view;public class ViewConfiguration{public static ViewConfiguration get(Object c){return new ViewConfiguration();}public static int getLongPressTimeout(){return 500;}public int getScaledTouchSlop(){return 8;}}',
  'io/github/zerohomers0/onesteplite/WordHoldRegression.java':'''package io.github.zerohomers0.onesteplite;
-import java.util.*;import java.util.function.*;
+import java.util.*;import java.util.function.*;import android.os.Bundle;import java.util.concurrent.CountDownLatch;import java.util.concurrent.atomic.AtomicBoolean;
 class MotionEvent{
- static final int ACTION_DOWN=0,ACTION_UP=1,ACTION_MOVE=2,ACTION_CANCEL=3;
+ static final int ACTION_DOWN=0,ACTION_UP=1,ACTION_MOVE=2,ACTION_CANCEL=3,ACTION_POINTER_UP=6;
  int action,count=1;long down=1000;float x=50,y=50;boolean recycled;
  MotionEvent(int action){this.action=action;}
  int getActionMasked(){return action;}int getPointerCount(){return count;}
@@ -29,7 +30,9 @@ public class WordHoldRegression{
  static class Handler{Map<Runnable,Long> queue=new LinkedHashMap<>();void postDelayed(Runnable r,long ms){queue.put(r,ms);}
  void removeCallbacks(Runnable r){queue.remove(r);}void drain(){var copy=new ArrayList<>(queue.keySet());queue.clear();for(Runnable r:copy)r.run();}}
  static class Anchor{Object getContext(){return this;}}
- Object window,selection;MotionEvent pointer;Runnable pendingWords;float wordX,wordY;boolean validGesture;
+ Object window,selection;MotionEvent pointer;Runnable pendingWords,fallbackJob;float wordX,wordY,fallbackX,fallbackY;boolean validGesture,fallbackIssued;
+ Bundle liftCandidate;float liftX,liftY;int lifts;void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired){if(request.lift)lifts++;}
+ static class Capture{void close(){}void extractText(java.util.function.Consumer<String> callback){callback.accept("screen OCR");}}Capture fallbackCapture=new Capture();
  Handler main=new Handler();Anchor anchor=new Anchor();int generation,opens,wordPointers;boolean active=true;
  BooleanSupplier ready=()->active;boolean live(){return pointer!=null&&validGesture&&active;}
  boolean openWords(String text){opens++;return true;}
@@ -37,7 +40,7 @@ public class WordHoldRegression{
  static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
  static WordHoldRegression fresh(){android.os.SystemClock.now=1100;var h=new WordHoldRegression();h.motion(new MotionEvent(0));return h;}
  public static void main(String[] args){
- var h=fresh();check(h.deferWords("selected"),"live text accepted");check(h.opens==0&&h.main.queue.values().iterator().next()==2900,"single-finger extraction waits until three seconds");
+ var h=fresh();check(h.deferWords("selected"),"live text accepted");check(h.opens==0&&h.main.queue.values().iterator().next()==1000,"single-finger extraction waits beyond the system menu timeout");
  check(h.deferWords("duplicate")&&h.main.queue.size()==1,"duplicate OEM paths share one pending selection");
  android.os.SystemClock.now=4000;h.main.drain();check(h.opens==1,"held gesture opens once");
  h=fresh();h.deferWords("cancelled");h.motion(new MotionEvent(1));h.main.drain();check(h.opens==0&&h.pointer==null,"release before three seconds cancels");
@@ -47,6 +50,14 @@ public class WordHoldRegression{
  h=fresh();MotionEvent two=new MotionEvent(2);two.count=2;h.motion(two);h.deferWords("explicit");check(h.main.queue.values().iterator().next()==0,"explicit two-finger extraction retains immediate access");h.main.drain();check(h.opens==1,"two-finger selection opens once");
  h=fresh();h.deferWords("cancelled");h.motion(new MotionEvent(3));h.main.drain();check(h.opens==0,"native input cancellation retires timer");
  h=fresh();h.selection=new Object();check(!h.deferWords("other"),"existing selection is not replaced");
+ h=fresh();two=new MotionEvent(2);two.count=2;h.motion(two);check(h.fallbackJob!=null,"stable two-finger hold arms screenshot OCR fallback");h.main.drain();check(h.opens==1,"fallback opens local selection without OEM offer");
+ h=fresh();two=new MotionEvent(2);two.count=2;h.motion(two);h.motion(new MotionEvent(1));h.main.drain();check(h.opens==0,"release cancels unarmed screenshot request");
+ h=fresh();two=new MotionEvent(2);two.count=2;h.motion(two);move=new MotionEvent(2);move.count=2;move.x=90;h.motion(move);h.main.drain();check(h.opens==0,"pinch or scroll movement cancels screenshot fallback");
+ h=fresh();two=new MotionEvent(2);two.count=2;h.motion(two);MotionEvent lift=new MotionEvent(6);lift.count=2;h.motion(lift);h.main.drain();check(h.opens==0,"lifting either finger cancels fallback even without another MOVE");
+ h=fresh();h.liftCandidate=new Bundle();h.liftX=h.liftY=50;h.motion(new MotionEvent(1));check(h.liftCandidate==null&&h.lifts==0,"stationary release never initiates drag");
+ h=fresh();h.liftCandidate=new Bundle();h.liftX=h.liftY=50;move=new MotionEvent(2);move.x=90;h.motion(move);check(h.lifts==0&&h.liftCandidate==null,"ordinary scrolling before long press never initiates drag");
+ h=fresh();h.liftCandidate=new Bundle();h.liftX=h.liftY=50;android.os.SystemClock.now=1800;move=new MotionEvent(2);move.x=90;h.motion(move);check(h.lifts==1,"long press followed by movement explicitly lifts content");
+ h=fresh();h.liftCandidate=new Bundle();h.motion(new MotionEvent(0));check(h.liftCandidate==null,"new DOWN cannot reuse an earlier gesture's content");
  System.out.println("Production word hold cancellation checks="+checks+" passed");
  }
 }

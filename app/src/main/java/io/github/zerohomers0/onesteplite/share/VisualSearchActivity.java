@@ -1,12 +1,11 @@
 package io.github.zerohomers0.onesteplite;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.ImageDecoder;
 import android.net.Uri;
 import android.os.Bundle;
-import android.webkit.ValueCallback;
-import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -15,7 +14,7 @@ import android.widget.TextView;
 import java.io.ByteArrayOutputStream;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** A user-requested image search uses the site's upload form without a filesystem or JavaScript bridge. */
+/** Uploads the explicitly shared image, then hands a portable Bing result to the default browser. */
 public final class VisualSearchActivity extends Activity {
     static final String PAGE="https://explore.microsoft.com/zh-cn/bing/visual-search?form=MT016O&cs=701383366";
     static final String UPLOAD="https://www.bing.com/images/search?view=detailv2&iss=sbiupload&FORM=SBIVSP&sbisrc=ImgPicker&idpbck=1";
@@ -24,8 +23,8 @@ public final class VisualSearchActivity extends Activity {
     private TextView status;
     private Uri image;
     private String form;
-    private boolean supplied;
-    private boolean baidu;
+    private boolean handedOff;
+    private int generation;
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
         try{SharePayload payload=new SharePayload(getIntent().getClipData());
@@ -35,55 +34,59 @@ public final class VisualSearchActivity extends Activity {
         }catch(RuntimeException invalid){finish();return;}
         createPage();new Thread(this::prepare,"VisualSearchImage").start();
     }
-    @android.annotation.SuppressLint("SetJavaScriptEnabled") // Remote search UI has no JavaScript interface or filesystem access.
+    @android.annotation.SuppressLint("SetJavaScriptEnabled") // Fixed upload form; no JavaScript interface or filesystem access.
     private void createPage(){
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setBackgroundColor(HyperOsStyle.page(this));
         LinearLayout actions=new LinearLayout(this);actions.setPadding(dp(8),dp(8),dp(8),dp(8));
-        addAction(actions,"返回",this::finish);addAction(actions,"必应重试",()->{baidu=false;if(form!=null)submit();});
-        addAction(actions,"百度识图",()->{baidu=true;supplied=false;status.setText("在网页中点上传图片，将使用刚拖来的图片");web.loadUrl("https://graph.baidu.com/pcpage/index?tpl_from=pc");});
+        addAction(actions,"返回",this::finish);addAction(actions,"重新识图",()->{if(form!=null)submit();});
         page.addView(actions,new LinearLayout.LayoutParams(-1,dp(60)));
-        status=new TextView(this);status.setText("正在准备图片…");status.setTextSize(12);status.setTextColor(HyperOsStyle.textSecondary(this));
-        status.setPadding(dp(16),dp(8),dp(16),dp(8));page.addView(status);
-        web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);
-        web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(true);
+        status=new TextView(this);status.setText("正在准备图片…");status.setTextSize(13);status.setTextColor(HyperOsStyle.textSecondary(this));
+        status.setGravity(android.view.Gravity.CENTER);page.addView(status,new LinearLayout.LayoutParams(-1,0,1));
+        web=new WebView(this);web.setVisibility(android.view.View.INVISIBLE);
+        web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);
+        web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);
         web.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        web.setWebChromeClient(new WebChromeClient(){
-            @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> result,FileChooserParams params){
-                if(!supplied && trusted(view.getUrl())){supplied=true;result.onReceiveValue(new Uri[]{image});}
-                else result.onReceiveValue(null);return true;
-            }
-        });
         web.setWebViewClient(new WebViewClient(){
-            @Override public void onPageCommitVisible(WebView view,String url){
-                if(!closed.get() && url.startsWith("https://www.bing.com/"))status.setText("必应图片搜索");
-            }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
-                Uri uri=request.getUrl();return !"https".equals(uri.getScheme()) && !"http".equals(uri.getScheme());
+                Uri uri=request.getUrl();if(result(uri)){openBrowser(uri);return true;}
+                return !"https".equals(uri.getScheme());
             }
             @Override public void onPageFinished(WebView view,String url){
-                if(closed.get())return;
-                if(url.startsWith("https://www.bing.com/images") && !url.contains("sbi"))status.setText("必应没有返回以图搜图结果，可重试或使用百度识图");
-                else if(url.startsWith("https://www.bing.com/")){status.setText("必应图片搜索");
-                    view.evaluateJavascript("Boolean(document.body && document.body.innerHTML.length)",hasContent->{
-                        if(!closed.get() && "false".equals(hasContent))status.setText("结果页未能加载，可重试或使用百度识图");});}
+                if(closed.get() || handedOff || !trusted(Uri.parse(url)))return;
+                if(result(Uri.parse(url))){openBrowser(Uri.parse(url));return;}
+                int token=generation;
+                view.evaluateJavascript("(()=>{const link=document.querySelector('a[href*=\"bcid=\"]');return link?link.href:null})()",value->{
+                    if(closed.get() || token!=generation || value==null || value.equals("null"))return;
+                    try{Object decoded=new org.json.JSONTokener(value).nextValue();
+                        if(decoded instanceof String && result(Uri.parse((String)decoded)))openBrowser(Uri.parse((String)decoded));
+                    }catch(org.json.JSONException invalid){/* No portable result URL yet. */}
+                });
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
-                if(!closed.get() && request.isForMainFrame())status.setText("网络暂时不可用，可重试或使用百度识图");
+                if(!closed.get() && request.isForMainFrame())status.setText("网络暂时不可用，请重试");
             }
         });
-        page.addView(web,new LinearLayout.LayoutParams(-1,0,1));setContentView(page);
+        page.addView(web,new LinearLayout.LayoutParams(1,1));setContentView(page);
         page.setOnApplyWindowInsetsListener((view,insets)->{
             android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());
             view.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;
         });page.requestApplyInsets();
-        android.view.WindowInsetsController controller=getWindow().getInsetsController();
-        if(controller!=null){int light=android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
-            controller.setSystemBarsAppearance(HyperOsStyle.dark(this)?0:light,light);}
     }
-    private boolean trusted(String url){
-        if(url==null)return false;Uri uri=Uri.parse(url);String host=uri.getHost();
-        return "https".equals(uri.getScheme()) && ("www.bing.com".equals(host) || "explore.microsoft.com".equals(host)
-                || "graph.baidu.com".equals(host) || "image.baidu.com".equals(host));
+    private boolean trusted(Uri uri){
+        String host=uri.getHost();return "https".equals(uri.getScheme()) && ("www.bing.com".equals(host) || "cn.bing.com".equals(host));
+    }
+    private boolean result(Uri uri){
+        return trusted(uri) && uri.toString().length()<=8192 && (uri.getQueryParameter("bcid")!=null || uri.getQueryParameter("insightsToken")!=null);
+    }
+    private void openBrowser(Uri uri){
+        if(closed.get() || handedOff || !result(uri))return;
+        Intent open=new Intent(Intent.ACTION_VIEW,uri).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        Intent probe=new Intent(Intent.ACTION_VIEW,Uri.parse("https://example.com")).addCategory(Intent.CATEGORY_BROWSABLE);
+        android.content.pm.ResolveInfo browser=getPackageManager().resolveActivity(probe,android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+        if(browser!=null && browser.activityInfo!=null && !"android".equals(browser.activityInfo.packageName)
+                && !"com.android.intentresolver".equals(browser.activityInfo.packageName))open.setPackage(browser.activityInfo.packageName);
+        try{handedOff=true;startActivity(open);finish();}
+        catch(RuntimeException unavailable){handedOff=false;status.setText("无法打开默认浏览器，请安装或启用浏览器后重试");}
     }
     private void prepare(){
         Bitmap bitmap=null;
@@ -95,18 +98,22 @@ public final class VisualSearchActivity extends Activity {
             ByteArrayOutputStream bytes=new ByteArrayOutputStream();if(!bitmap.compress(Bitmap.CompressFormat.JPEG,90,bytes))throw new IllegalStateException("JPEG encoding failed");
             String encoded=android.util.Base64.encodeToString(bytes.toByteArray(),android.util.Base64.NO_WRAP);
             int width=bitmap.getWidth(),height=bitmap.getHeight();String url=UPLOAD+"&thw="+width+"&thh="+height+"&expw="+width+"&exph="+height+"&dlen="+encoded.length();
-            String html="<!doctype html><meta name='referrer' content='origin'><form method='POST' enctype='multipart/form-data' action='"+url+"'>"
-                    +"<input name='imgurl' value=''><input name='cbir' value='sbi'><input name='imageBin' type='hidden' value='"+encoded
+            String html="<!doctype html><meta name='referrer' content='origin'><form hidden style='display:none' method='POST' enctype='multipart/form-data' action='"+url+"'>"
+                    +"<input type='hidden' name='imgurl' value=''><input type='hidden' name='cbir' value='sbi'><input name='imageBin' type='hidden' value='"+encoded
                     +"'></form><script>document.forms[0].submit()</script>";
-            runOnUiThread(()->{if(!closed.get()){form=html;if(!baidu)submit();}});
-        }catch(Exception unavailable){runOnUiThread(()->{if(!closed.get()){status.setText("图片无法准备，可返回重试");web.loadUrl(PAGE);}});}
+            runOnUiThread(()->{if(!closed.get()){form=html;submit();}});
+        }catch(Exception unavailable){runOnUiThread(()->{if(!closed.get())status.setText("图片无法准备，请返回重试");});}
         finally{if(bitmap!=null)bitmap.recycle();}
     }
-    private void submit(){supplied=false;status.setText("正在向必应提交图片…");web.loadDataWithBaseURL(PAGE,form,"text/html","UTF-8",null);}
+    private void submit(){
+        int token=++generation;status.setText("正在识图，完成后将在默认浏览器打开…");web.loadDataWithBaseURL(PAGE,form,"text/html","UTF-8",null);
+        status.postDelayed(()->{if(!closed.get() && !handedOff && token==generation)status.setText("必应尚未返回可打开的结果，请重试");},30_000L);
+    }
     private void addAction(LinearLayout row,String name,Runnable clicked){
         TextView action=WorkspacePopupStyle.action(this,name,false,clicked);LinearLayout.LayoutParams bounds=new LinearLayout.LayoutParams(0,-1,1);
         bounds.setMargins(dp(3),0,dp(3),0);row.addView(action,bounds);
     }
     private int dp(int value){return HyperOsStyle.dp(this,value);}
-    @Override protected void onDestroy(){closed.set(true);form=null;if(web!=null){web.stopLoading();web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){closed.set(true);form=null;generation++;
+        if(web!=null){web.stopLoading();web.destroy();web=null;}super.onDestroy();}
 }

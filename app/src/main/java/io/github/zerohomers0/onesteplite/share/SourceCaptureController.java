@@ -42,6 +42,8 @@ final class SourceCaptureController implements AutoCloseable {
     private volatile int generation;
     private int owner=-1;
     private boolean closed=true,busy,consumed,dragging;
+    private java.util.function.Consumer<String> textResult;
+    private ImageTextRequest recognition;
 
     SourceCaptureController(View anchor,BooleanSupplier ready,Supplier<Rect> bounds) {
         this.anchor=anchor;context=anchor.getContext();this.ready=ready;this.bounds=bounds;
@@ -59,8 +61,10 @@ final class SourceCaptureController implements AutoCloseable {
             if(!valid(token))return;
             anchor.postOnAnimation(()->anchor.postOnAnimation(()->WORKER.execute(()->capture(token,region))));
         },300L);
-        main.postDelayed(()->{if(token==generation && dialog==null)close();},10_000L);
+        main.postDelayed(()->{if(token==generation && dialog==null && recognition==null)close();},10_000L);
     }
+
+    void extractText(java.util.function.Consumer<String> completed){open();if(!closed)textResult=completed;}
 
     private void capture(int token,Rect region) {
         Bitmap frame=null;
@@ -73,6 +77,7 @@ final class SourceCaptureController implements AutoCloseable {
             main.post(()->{
                 if(!valid(token)){captured.recycle();if(token==generation)close();return;}
                 synchronized(pixels){snapshot=captured;}
+                if(textResult!=null){busy=true;WORKER.execute(()->encode(token,new Rect(0,0,captured.getWidth(),captured.getHeight())));return;}
                 try{showCrop();}catch(RuntimeException unavailable){message("无法打开框选页面");close();}
             });
         } catch(Throwable unavailable) {
@@ -132,6 +137,7 @@ final class SourceCaptureController implements AutoCloseable {
             main.post(()->{
                 if(!valid(token)){readyPicture.recycle();discard(id);if(token==generation)close();return;}
                 storedId=id;result=readyPicture;busy=false;
+                if(textResult!=null){recognizeCapture(token,Uri.parse(reply.getString("uri")));return;}
                 try{showResult(Uri.parse(reply.getString("uri")));}
                 catch(RuntimeException unavailable){message("无法显示截取图片");close();return;}
                 synchronized(pixels){if(snapshot!=null){snapshot.recycle();snapshot=null;}}
@@ -139,6 +145,17 @@ final class SourceCaptureController implements AutoCloseable {
         } catch(RuntimeException unavailable) {
             main.post(()->{if(token==generation){busy=false;message("无法准备图片，请重新框选或使用原有分享");}});
         } finally {if(picture!=null)picture.recycle();if(created!=null)discard(created);}
+    }
+
+    private void recognizeCapture(int token,Uri uri){
+        ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.STARTED);
+        recognition=new ImageTextRequest(context,uri,(text,error)->{
+            if(!valid(token)){close();return;}
+            java.util.function.Consumer<String> completed=textResult;
+            close();if(error!=null){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.FAILED);message(error);return;}
+            ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.ACCEPTED);if(completed!=null)completed.accept(text);
+        });recognition.start();
+        synchronized(pixels){if(snapshot!=null){snapshot.recycle();snapshot=null;}}
     }
 
     private void showResult(Uri uri) {
@@ -187,6 +204,7 @@ final class SourceCaptureController implements AutoCloseable {
 
     @Override public void close() {
         if(closed)return;closed=true;generation++;busy=false;dragging=false;
+        textResult=null;if(recognition!=null){recognition.close();recognition=null;}
         Dialog old=dialog;dialog=null;if(old!=null)old.dismiss();
         if(island!=null){island.close();island=null;}
         synchronized(pixels){if(snapshot!=null){snapshot.recycle();snapshot=null;}}

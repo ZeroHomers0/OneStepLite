@@ -61,7 +61,7 @@ final class ShareRailOverlay implements AutoCloseable {
             rail.setWindowHover(hoverIdentity,hoverActivate);
             if(owner instanceof ShareWorkspace)rail.setResultSink(((ShareWorkspace)owner)::onDeliveryResult);
             plate.addView(rail,new FrameLayout.LayoutParams(-1,-1));
-            int height=HyperOsStyle.dp(context,50);
+            int height=HyperOsStyle.dp(context,52);
             WindowManager.LayoutParams params=new WindowManager.LayoutParams(
                     owner.getResources().getDisplayMetrics().widthPixels,height,WindowTypes.SYSTEM_UI_DIALOG,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,PixelFormat.TRANSLUCENT);

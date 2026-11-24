@@ -93,6 +93,13 @@ public class HostEntry implements IXposedHookLoadPackage {
             hookMiTypeAutoFloating(lpparam.classLoader);
             return;
         }
+        if ("com.sohu.inputmethod.sogou.xiaomi".equals(lpparam.packageName)
+                || "com.baidu.input_mi".equals(lpparam.packageName)
+                || "com.iflytek.inputmethod.miui".equals(lpparam.packageName)
+                || "com.google.android.inputmethod.latin".equals(lpparam.packageName)) {
+            try{EditorBoundsIme.install(lpparam.classLoader);}catch(Throwable unavailable){log("editor bounds IME unavailable: "+unavailable);}
+            return;
+        }
         if (!SYSTEMUI.equals(lpparam.packageName)) {
             // Raw correction is owned by the system publisher; never invert it twice in apps.
             return;

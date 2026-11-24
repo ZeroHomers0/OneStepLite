@@ -25,6 +25,23 @@ final class ContentPanelLayout extends LinearLayout {
     private final android.view.View thumb;
     private int current=-1;
     private int thumbWidth,thumbHeight;
+    private android.view.View detail;
+    void push(android.view.View page){
+        pop(false);
+        for(int i=0;i<getChildCount();i++)getChildAt(i).setVisibility(GONE);
+        detail=page;page.setBackground(null);page.setPadding(0,0,0,0);addView(page,new LayoutParams(-1,0,1));
+        if(android.animation.ValueAnimator.areAnimatorsEnabled()){
+            page.setTranslationX(dp(36));page.setAlpha(.5f);page.animate().translationX(0).alpha(1).setDuration(240).start();
+        }
+    }
+    void pop(boolean animate){
+        if(detail==null)return;detail.animate().cancel();removeView(detail);detail=null;
+        for(int i=0;i<getChildCount();i++)getChildAt(i).setVisibility(VISIBLE);
+        if(animate && android.animation.ValueAnimator.areAnimatorsEnabled()){
+            pages.animate().cancel();pages.setTranslationX(-dp(28));pages.setAlpha(.5f);
+            pages.animate().translationX(0).alpha(1).setDuration(240).start();
+        }
+    }
     ContentPanelLayout(Context context,IntConsumer select) {
         super(context);setOrientation(VERTICAL);WorkspacePopupStyle.decorate(this,null);
         track=new android.widget.FrameLayout(context);
@@ -83,6 +100,6 @@ final class ContentPanelLayout extends LinearLayout {
             tabs.get(i).setTextColor(i==page?HyperOsStyle.CONTROL_ACCENT:HyperOsStyle.textSecondary(getContext()));
         }
     }
-    @Override protected void onDetachedFromWindow(){thumb.animate().cancel();scroll.animate().cancel();super.onDetachedFromWindow();}
+    @Override protected void onDetachedFromWindow(){thumb.animate().cancel();scroll.animate().cancel();pages.animate().cancel();if(detail!=null)detail.animate().cancel();super.onDetachedFromWindow();}
     private int dp(int value){return Math.round(HyperOsStyle.dp(getContext(),value));}
 }

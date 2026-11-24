@@ -7,6 +7,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from source_paths import package_dir
 src=package_dir(Path(__file__).resolve().parents[2]);out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 files={
+ 'android/util/Log.java':'package android.util;public class Log{public static int i(String t,String v){return 0;}}',
 'android/os/RemoteException.java':'package android.os;public class RemoteException extends Exception{}',
 'android/os/IBinder.java':'''package android.os;public interface IBinder{interface DeathRecipient{void binderDied();}void linkToDeath(DeathRecipient d,int f)throws RemoteException;boolean unlinkToDeath(DeathRecipient d,int f);}''',
 'android/os/Binder.java':'''package android.os;public class Binder implements IBinder{public static int uid=10042;public boolean alive=true;java.util.List<DeathRecipient> deaths=new java.util.ArrayList<>();
@@ -81,6 +82,7 @@ static Bundle start(Context c,Binder life,String mime){Bundle in=new Bundle();in
 static Bundle packet(String id,RectF r){Bundle p=new Bundle();p.putString("ticket",id);p.putInt("uid",10001);p.putInt("field",17);if(r!=null)p.putParcelable("bounds",r);return p;}
 static void offer(Context c,Bundle p){Binder.uid=12000;EditorBoundsRelay.call(c,"editor_bounds_offer",p);Binder.uid=10042;}
 static RectF read(Context c,String id){Bundle p=new Bundle();p.putString("ticket",id);return EditorBoundsRelay.call(c,"editor_bounds_read",p).getParcelable("bounds",RectF.class);}
+static String status(Context c,String id){Bundle p=new Bundle();p.putString("ticket",id);return EditorBoundsRelay.call(c,"editor_bounds_read",p).getString("state");}
 static void denied(Runnable r,String why){boolean failed=false;try{r.run();}catch(SecurityException expected){failed=true;}check(failed,why);}
 public static class Connection implements InputConnection{public int mode,filter,calls;boolean accept=true;
 public boolean requestCursorUpdates(int m,int f){calls++;if(accept){mode=m;filter=f;}de.robv.android.xposed.XposedBridge.fired(this,new Object[]{m,f},accept);return accept;}}
@@ -105,6 +107,22 @@ check(EditorBoundsRelay.accepts(state(),new ClipDescription("t",new String[]{"te
 Binder.uid=110042;denied(()->EditorBoundsRelay.call(c,"editor_bounds_read",new Bundle()),"cross-user geometry rejected");Binder.uid=10042;
 id=start(c,new Binder(),"text/plain").getString("ticket");SystemClock.now=60101;check(read(c,id)==null,"drag capability expires");SystemClock.now=100;
 EditorPasteCompat.current=null;check(start(c,new Binder(),"text/plain").getString("ticket")==null,"no verified focus never arms monitor");
+check("NO_EDITOR".equals(start(c,new Binder(),"text/plain").getString("state")),"missing focus has explicit feedback");
+EditorPasteCompat.current=state();EditorPasteCompat.current.remove("geometry_transform");
+check("NO_TRANSFORM".equals(start(c,new Binder(),"text/plain").getString("state")),"missing window transform reported separately");
+EditorPasteCompat.current=state();check("TYPE_UNSUPPORTED".equals(start(c,new Binder(),"image/jpeg").getString("state")),"image acceptance cannot be inferred from text focus");
+Bundle armed=start(c,new Binder(),"text/plain");id=armed.getString("ticket");
+check("WAITING_BOUNDS".equals(armed.getString("state"))&&"WAITING_BOUNDS".equals(status(c,id)),"no geometry never presented as a selected editor");
+Bundle unsupported=packet(id,null);unsupported.putString("state","UNSUPPORTED");offer(c,unsupported);
+check("UNSUPPORTED".equals(status(c,id)),"IME rejection survives relay instead of waiting forever");
+offer(c,packet(id,new RectF(0,1800,900,1900)));check("READY".equals(status(c,id)),"verified geometry has explicit ready state");
+EditorPasteCompat.current.putFloatArray("geometry_transform",new float[]{Float.NaN,0,0});
+check("NO_TRANSFORM".equals(status(c,id)),"invalid transform cannot draw false feedback");
+EditorPasteCompat.current=state();check("STALE_TARGET".equals(status(c,id)),"new editor connection invalidates selection");
+android.provider.Settings.Secure.current=null;check("NO_IME".equals(status(c,id)),"keyboard disappearance releases monitor");
+android.provider.Settings.Secure.current="ime/Service";check("NO_SESSION".equals(status(c,id)),"ended capability never remains readable");
+id=start(c,new Binder(),"text/plain").getString("ticket");SystemClock.now=60101;
+check("TIMEOUT".equals(status(c,id)),"expiry reports reason and releases session");SystemClock.now=100;
 InputMethodService service=new InputMethodService();Connection connection=new Connection();service.connection=connection;
 EditorBoundsIme.install(EditorBoundsRegression.class.getClassLoader());EditorBoundsIme.attach(service);
 check(EditorBoundsRelay.PERMISSION.equals(service.permission),"IME receiver accepts only signature-authorized sender");
@@ -119,6 +137,13 @@ token=java.util.UUID.randomUUID().toString();service.receiver.onReceive(service,
 service.receiver.onReceive(service,command(token,false,owner));check(connection.mode==3&&connection.filter==20,"keyboard's newer identical request is not overwritten");
 connection.requestCursorUpdates(0,0);token=java.util.UUID.randomUUID().toString();owner=new Binder();service.receiver.onReceive(service,command(token,true,owner));
 check(connection.mode==3&&connection.filter==4,"bounds-only monitoring when keyboard had none");owner.die();check(connection.mode==0&&connection.filter==0,"owner death restores no-monitor state");
+connection.requestCursorUpdates(2,16);connection.accept=false;token=java.util.UUID.randomUUID().toString();
+service.receiver.onReceive(service,command(token,true,new Binder()));String refusedToken=token;
+long refusedUntil=System.currentTimeMillis()+2000;boolean refused=false;
+while(!refused&&System.currentTimeMillis()<refusedUntil){synchronized(service.resolver.packets){for(Bundle v:service.resolver.packets)
+if(refusedToken.equals(v.getString("ticket"))&&"UNSUPPORTED".equals(v.getString("state")))refused=true;}if(!refused)Thread.sleep(2);}
+check(refused,"rejected cursor monitoring publishes a bounded reason");
+check(connection.mode==2&&connection.filter==16,"rejected geometry request preserves keyboard monitor settings");connection.accept=true;
 var close=publisher(service).getClass().getDeclaredMethod("close");close.setAccessible(true);close.invoke(publisher(service));check(service.receiver==null,"destroy removes IME receiver");
 var worker=EditorBoundsIme.class.getDeclaredField("WORKER");worker.setAccessible(true);var executor=(java.util.concurrent.ExecutorService)worker.get(null);executor.shutdown();executor.awaitTermination(2,java.util.concurrent.TimeUnit.SECONDS);
 System.out.println("Production editor geometry relay/IME checks="+checks+" passed");}}
@@ -127,7 +152,7 @@ System.out.println("Production editor geometry relay/IME checks="+checks+" passe
 paths=[]
 for name,body in files.items():
     p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body,encoding='utf-8');paths.append(str(p))
-paths += [str(src/'EditorBoundsRelay.java'),str(src/'EditorBoundsIme.java')]
+paths += [str(src/'EditorBoundsRelay.java'),str(src/'EditorBoundsIme.java'),str(src/'ShareDiagnostics.java')]
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.EditorBoundsRegression'],check=True)

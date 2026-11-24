@@ -71,18 +71,23 @@ public final class ContentImportActivity extends Activity {
             if(ShareActions.STAGE.equals(operation)) {
                 ContentShelfStore.stage(this,owned);outcome(true,owned);runOnUiThread(this::finish);return;
             }
+            owned=ShareContentPreparation.prepare(this,owned,()->!cancelled.get());
             SharePayload payload=new SharePayload(owned);
             android.content.ComponentName target=base.getComponent()==null
                     ?new android.content.ComponentName(base.getPackage(),""):base.getComponent();
             Intent share=operation.isEmpty()?payload.intent(target):ShareActions.intent(this,payload,operation);
             ShareRoutes.copyShortcut(base,share);share.setClipData(owned);
+            ClipData prepared=owned;
+            ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.READY);
             runOnUiThread(()->{
-                if(isFinishing() || isDestroyed() || cancelled.get() || !ShareDelivery.active(receipt)){outcome(false,owned);finish();return;}
-                try{startActivity(share);CaptureInboxStore.shared(this,share);outcome(true,owned);}
-                catch(RuntimeException unavailable){outcome(false,owned);message("目标暂时无法接收，内容已保留，可换个入口重试");}
+                if(isFinishing() || isDestroyed() || cancelled.get() || !ShareDelivery.active(receipt)){outcome(false,prepared);finish();return;}
+                try{startActivity(share);CaptureInboxStore.shared(this,share);outcome(true,prepared);
+                    ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.LAUNCHED);}
+                catch(RuntimeException unavailable){outcome(false,prepared);message("目标暂时无法接收，内容已保留，可换个入口重试");}
                 finish();
             });
-        }catch(RuntimeException unavailable){outcome(false,owned);runOnUiThread(()->{message("无法准备此操作，内容已保留");finish();});}
+        }catch(Exception unavailable){ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.FAILED);
+            outcome(false,owned);runOnUiThread(()->{message("无法准备此操作，内容已保留");finish();});}
     }
     private void outcome(boolean success,ClipData clip) {
         if(reported.compareAndSet(false,true))ShareDelivery.report(receipt,success,clip);
@@ -135,6 +140,7 @@ public final class ContentImportActivity extends Activity {
         if(importing)return;
         if(!BUSY.compareAndSet(false,true)){message("另一次导入尚未完成");finish();return;}
         importing=true;
+        ShareDiagnostics.event(ShareDiagnostics.Stage.COPY,ShareDiagnostics.Code.STARTED);
         new Thread(()->{
             ArrayList<File> created=new ArrayList<>();
             try {
@@ -148,18 +154,23 @@ public final class ContentImportActivity extends Activity {
                 for(Uri uri:payload.uris) {
                     String id=UUID.randomUUID().toString();File target=ContentInboxProvider.file(this,id);created.add(target);
                     long copied=copy(uri,target,budget-total);total+=copied;
-                    String mime=getContentResolver().getType(uri);
+                    String mime=payload.mime;
+                    try{String declared=getContentResolver().getType(uri);if(declared!=null)mime=declared;}
+                    catch(RuntimeException unavailable){ShareDiagnostics.event(ShareDiagnostics.Stage.COPY,ShareDiagnostics.Code.UNSUPPORTED);}
                     String name="导入文件";
                     try(android.database.Cursor cursor=getContentResolver().query(uri,new String[]{"_display_name"},null,null,null)) {
                         if(cursor!=null && cursor.moveToFirst())name=cursor.getString(0);
-                    }
-                    rows.put(new JSONObject().put("id",id).put("name",name).put("mime",mime==null?payload.mime:mime)
+                    }catch(RuntimeException unavailable){/* Optional source metadata must not invalidate a completed bounded copy. */}
+                    ShareImageInfo info;
+                    try(InputStream input=new java.io.FileInputStream(target)){info=ShareImageInfo.read(input,name,mime,payload.mime);}
+                    rows.put(new JSONObject().put("id",id).put("name",info.name).put("mime",info.mime)
                             .put("time",System.currentTimeMillis()));
                 }
                 if(!payload.text.isEmpty())rows.put(new JSONObject().put("id",UUID.randomUUID().toString())
                         .put("name","分享的文字").put("text",payload.text).put("mime","text/plain").put("time",System.currentTimeMillis()));
                 if(cancelled.get())throw new java.io.IOException("Import cancelled");
                 ContentInboxProvider.append(this,rows);
+                releaseDelegatedRead();
                 if(externalTarget!=null) {
                     ClipData owned=null;
                     for(int i=0;i<rows.length();i++) {
@@ -171,10 +182,11 @@ public final class ContentImportActivity extends Activity {
                     deliverPrepared(owned,externalTarget);
                 } else runOnUiThread(()->{message("已加入一步内容面板，导入内容保留24小时");finish();});
             } catch(Exception error) {
+                ShareDiagnostics.event(ShareDiagnostics.Stage.COPY,cancelled.get()?ShareDiagnostics.Code.CANCELLED:ShareDiagnostics.Code.FAILED);
                 outcome(false,null);
                 for(File file:created)if(file.exists() && !file.delete())android.util.Log.w(Tags.PROBE,"partial inbox cleanup failed");
                 runOnUiThread(()->{if(!cancelled.get())message("导入失败：内容不可读、过大或临时区已满");finish();});
-            } finally {DropPermissionContract.release(delegatedRead);delegatedRead=null;BUSY.set(false);}
+            } finally {releaseDelegatedRead();BUSY.set(false);}
         },"ContentInboxImport").start();
     }
 
@@ -210,6 +222,9 @@ public final class ContentImportActivity extends Activity {
         return data;
     }
 
-    @Override protected void onDestroy(){outcome(false,null);cancelled.set(true);ioSignal.cancel();DropPermissionContract.release(delegatedRead);super.onDestroy();}
+    private void releaseDelegatedRead(){
+        android.os.IBinder old;synchronized(this){old=delegatedRead;delegatedRead=null;}DropPermissionContract.release(old);
+    }
+    @Override protected void onDestroy(){cancelled.set(true);ioSignal.cancel();releaseDelegatedRead();outcome(false,null);super.onDestroy();}
     private void message(String text){android.widget.Toast.makeText(this,text,android.widget.Toast.LENGTH_LONG).show();}
 }

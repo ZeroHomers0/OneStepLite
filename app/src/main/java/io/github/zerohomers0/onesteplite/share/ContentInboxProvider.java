@@ -42,6 +42,7 @@ public final class ContentInboxProvider extends ContentProvider {
         if("editor_bounds_offer".equals(method))return EditorBoundsRelay.call(getContext(),method,extras);
         enforceHost();
         if(Binder.getCallingUid()/100000!=android.os.Process.myUid()/100000)throw new SecurityException("Different content user");
+        if("share_diagnostics".equals(method)){Bundle result=new Bundle();result.putString("events",ShareDiagnostics.snapshot());return result;}
         if(method!=null && method.startsWith("editor_bounds_"))return EditorBoundsRelay.call(getContext(),method,extras);
         if("conversation_list".equals(method))return EditorPasteCompat.relay(getContext(),method,extras);
         if(method!=null && method.startsWith("shelf_")) {
@@ -163,7 +164,8 @@ public final class ContentInboxProvider extends ContentProvider {
             if(!row.has("document_uri"))bytes+=file(context,row.optString("id")).length();
         }
         if(bytes>ContentInboxPolicy.MAX_TOTAL)throw new IllegalStateException("Inbox byte budget exceeded");
-        context.getSharedPreferences("content_inbox",Context.MODE_PRIVATE).edit().putString("rows",all.toString()).apply();
+        if(!context.getSharedPreferences("content_inbox",Context.MODE_PRIVATE).edit().putString("rows",all.toString()).commit())
+            throw new IllegalStateException("Inbox metadata save failed");
     }
 
     static Uri uri(String id){return ROOT.buildUpon().appendPath(id).build();}
@@ -178,23 +180,65 @@ public final class ContentInboxProvider extends ContentProvider {
         return null;
     }
 
+    static String normalize(Context context,Uri uri,String expected)throws java.io.IOException {
+        if(!AUTHORITY.equals(uri.getAuthority()))throw new SecurityException("Unowned image metadata");
+        JSONObject snapshot=find(context,uri);if(snapshot==null)throw new FileNotFoundException("Expired share record");
+        String mime=snapshot.optString("mime","application/octet-stream");ShareImageInfo info;
+        if(snapshot.has("document_uri")){
+            long identity=Binder.clearCallingIdentity();
+            try(java.io.InputStream input=context.getContentResolver().openInputStream(Uri.parse(snapshot.optString("document_uri")))){
+                if(input==null)throw new FileNotFoundException("Document image unavailable");
+                info=ShareImageInfo.read(input,snapshot.optString("name"),mime,expected);
+            }finally{Binder.restoreCallingIdentity(identity);}
+        }
+        else try(java.io.InputStream input=new java.io.FileInputStream(file(context,snapshot.optString("id")))){
+            info=ShareImageInfo.read(input,snapshot.optString("name"),mime,expected);
+        }
+        synchronized(ContentInboxProvider.class){
+            JSONArray rows=rows(context);JSONObject current=null;
+            for(int i=0;i<rows.length();i++)if(rows.optJSONObject(i).optString("id").equals(snapshot.optString("id")))current=rows.optJSONObject(i);
+            if(current==null)throw new FileNotFoundException("Expired share metadata");
+            if(!info.mime.equals(current.optString("mime")) || !info.name.equals(current.optString("name")))try{
+                current.put("mime",info.mime).put("name",info.name);
+                if(!context.getSharedPreferences("content_inbox",Context.MODE_PRIVATE).edit().putString("rows",rows.toString()).commit())
+                    throw new java.io.IOException("Metadata save failed");
+            }catch(org.json.JSONException invalid){throw new java.io.IOException("Metadata invalid",invalid);}
+        }
+        return info.mime;
+    }
+
     @Override public ParcelFileDescriptor openFile(Uri uri,String mode) throws FileNotFoundException {
         if(!"r".equals(mode))throw new SecurityException("Read only inbox");
         JSONObject row=find(getContext(),uri);
         if(row==null)throw new FileNotFoundException("Inbox item expired");
-        if(row.has("document_uri"))return getContext().getContentResolver().openFileDescriptor(
-                Uri.parse(row.optString("document_uri")),"r");
-        return ParcelFileDescriptor.open(file(getContext(),row.optString("id")),ParcelFileDescriptor.MODE_READ_ONLY);
+        try{
+            ParcelFileDescriptor descriptor;
+            if(row.has("document_uri")){
+                long identity=Binder.clearCallingIdentity();
+                try{descriptor=getContext().getContentResolver().openFileDescriptor(Uri.parse(row.optString("document_uri")),"r");}
+                finally{Binder.restoreCallingIdentity(identity);}
+            }else descriptor=ParcelFileDescriptor.open(file(getContext(),row.optString("id")),ParcelFileDescriptor.MODE_READ_ONLY);
+            if(descriptor==null)throw new FileNotFoundException("Document did not provide a descriptor");
+            ShareDiagnostics.event(ShareDiagnostics.Stage.READ,ShareDiagnostics.Code.OPENED);return descriptor;
+        }catch(FileNotFoundException | RuntimeException unavailable){ShareDiagnostics.event(ShareDiagnostics.Stage.READ,ShareDiagnostics.Code.FAILED);throw unavailable;}
     }
 
     @Override public Cursor query(Uri uri,String[] projection,String selection,String[] args,String order) {
         JSONObject row=find(getContext(),uri);if(row==null)return null;
         String[] columns=projection==null?new String[]{"_display_name","_size"}:projection;
+        Long documentSize=null;
+        if(row.has("document_uri")){
+            long identity=Binder.clearCallingIdentity();
+            try(Cursor original=getContext().getContentResolver().query(Uri.parse(row.optString("document_uri")),new String[]{"_size"},null,null,null)){
+                if(original!=null && original.moveToFirst() && !original.isNull(0) && original.getLong(0)>=0)documentSize=original.getLong(0);
+            }catch(RuntimeException unavailable){/* Unknown document size does not remove its read capability. */}
+            finally{Binder.restoreCallingIdentity(identity);}
+        }
         android.database.MatrixCursor cursor=new android.database.MatrixCursor(columns);
         Object[] values=new Object[columns.length];
         for(int i=0;i<columns.length;i++) {
             if("_display_name".equals(columns[i]))values[i]=row.optString("name");
-            if("_size".equals(columns[i]))values[i]=row.has("document_uri")?null:file(getContext(),row.optString("id")).length();
+            if("_size".equals(columns[i]))values[i]=row.has("document_uri")?documentSize:Long.valueOf(file(getContext(),row.optString("id")).length());
         }
         cursor.addRow(values);return cursor;
     }

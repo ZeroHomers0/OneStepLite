@@ -43,7 +43,7 @@ final class WordSelectionPane extends LinearLayout {
         scroll.addView(words);addView(scroll,new LayoutParams(-1,0,1));
         result=label(source);result.setMaxLines(2);result.setTextSize(12);
         result.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        result.setOnLongClickListener(v->start(v));addView(result,new LayoutParams(-1,dp(84)));
+        result.setOnLongClickListener(v->start(v));addView(result,new LayoutParams(-1,dp(56)));
         segment();
     }
     private void segment() {
@@ -62,11 +62,11 @@ final class WordSelectionPane extends LinearLayout {
             states.addState(new int[]{},chipFill(false));chip.setBackground(states);
             chip.setTextColor(new android.content.res.ColorStateList(
                     new int[][]{new int[]{android.R.attr.state_selected},new int[]{}},
-                    new int[]{android.graphics.Color.WHITE,HyperOsStyle.textPrimary(getContext())}));
-            chip.setTextSize(12);chip.setMaxLines(2);chip.setOnClickListener(v->{selected.flip(index);refresh();});
+                    new int[]{HyperOsStyle.CONTROL_ACCENT,HyperOsStyle.textPrimary(getContext())}));
+            chip.setTextSize(13);chip.setMaxLines(2);chip.setOnClickListener(v->{selected.flip(index);refresh();});
             chip.setOnLongClickListener(v->{if(selected.isEmpty()){selected.set(index);refresh();}return start(v);});
             chip.setOnTouchListener((view,event)->touch(view,event,index));
-            chip.setMinWidth(dp(42));chip.setMinHeight(dp(40));
+            chip.setMinWidth(dp(36));chip.setMinHeight(dp(36));
             words.addView(chip,new android.view.ViewGroup.LayoutParams(-2,-2));chips.add(chip);
         }
         refresh();
@@ -107,7 +107,11 @@ final class WordSelectionPane extends LinearLayout {
         result.setText(selected.isEmpty()?source:WordSelectionPolicy.selected(source,spans,selected));
     }
     private android.graphics.drawable.Drawable chipFill(boolean active) {
-        return HyperOsStyle.controlButton(getContext(),active,10);
+        android.graphics.drawable.GradientDrawable fill=new android.graphics.drawable.GradientDrawable();
+        fill.setCornerRadius(dp(6));
+        fill.setColor(active?(HyperOsStyle.dark(getContext())?0x303482ff:0x183482ff):android.graphics.Color.TRANSPARENT);
+        fill.setStroke(dp(1),active?HyperOsStyle.CONTROL_ACCENT:HyperOsStyle.dark(getContext())?0xff586272:0xffc7d1df);
+        return new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x183482ff),fill,null);
     }
     private TextView label(String text) {
         TextView view=new TextView(getContext());view.setText(text);view.setTextSize(15);

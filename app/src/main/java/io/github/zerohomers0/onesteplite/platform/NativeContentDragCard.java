@@ -21,9 +21,11 @@ import de.robv.android.xposed.XposedHelpers;
 final class NativeContentDragCard {
     private static final String ORIGINAL="native_text_original_surface";
     private static final String REPLACEMENT="native_text_card_surface";
+    private static boolean geometryReady;
     private NativeContentDragCard(){}
     static void install(ClassLoader loader,Supplier<Object> display,BooleanSupplier active) {
         try {
+            geometryReady=NativeDragGeometry.install(loader,active);
             Class<?> controller=XposedHelpers.findClass("com.android.server.wm.DragDropController",loader);
             XposedBridge.hookAllMethods(controller,"performDrag",new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam call) {
@@ -33,6 +35,13 @@ final class NativeContentDragCard {
                     catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"native text card left unchanged",unavailable);}
                 }
                 @Override protected void afterHookedMethod(MethodHookParam call) {
+                    Object owned=call.getObjectExtra("native_card_geometry");
+                    if(owned instanceof ContentDragShadow){
+                        ContentDragShadow card=(ContentDragShadow)owned;
+                        if(geometryReady && !call.hasThrowable() && call.getResult()!=null)
+                            NativeDragGeometry.attach(call.thisObject,display.get(),card,(SurfaceControl)call.args[4],active);
+                        else card.recycleThumbnail();
+                    }
                     try{if(!call.hasThrowable() && call.getResult()!=null && active.getAsBoolean())glass(call,display.get());}
                     catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"drag glass unavailable",unavailable);}
                     try {
@@ -69,10 +78,11 @@ final class NativeContentDragCard {
         int end=call.args.length-1;
         ClipData original=(ClipData)call.args[end];String text=plainText(original);
         boolean image=images(original),file=files(original);
-        if(display==null || text==null && !image && !file || ContentDragShadow.offset(original.getDescription())>0
+        if(display==null || text==null && !image && !file
                 || (((Integer)call.args[3])&View.DRAG_FLAG_GLOBAL)==0)return;
         Object wm=XposedHelpers.getObjectField(display,"mWmService");Context context;
         float scale=1,offsetX=0,offsetY=0;
+        String sourcePackage;
         synchronized(XposedHelpers.getObjectField(wm,"mGlobalLock")) {
             Map<?,?> windows=(Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap");
             android.os.IBinder token=((android.os.IInterface)call.args[2]).asBinder();Object source=windows.get(token);
@@ -81,11 +91,18 @@ final class NativeContentDragCard {
             int uid=XposedHelpers.getIntField(source,"mOwnerUid");
             if(uid!=(Integer)call.args[1] || uid/100000!=0)return;
             WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(source,"mAttrs");
-            if(Packages.SYSTEM_UI.equals(attrs.packageName) || ContentInboxProvider.MODULE.equals(attrs.packageName)
+            sourcePackage=attrs.packageName;
+            boolean own=WindowIdentity.ownsPicker(source,display);
+            if(own && !geometryReady)return;
+            if(own && "OneStepLitePortalSource".contentEquals(attrs.getTitle())){
+                Object origin=XposedHelpers.getObjectField(attrs,"accessibilityTitle");
+                if(origin instanceof CharSequence)sourcePackage=origin.toString();
+            }
+            if((Packages.SYSTEM_UI.equals(attrs.packageName) && !own) || ContentInboxProvider.MODULE.equals(attrs.packageName)
                     || (attrs.flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)return;
             Object task=XposedHelpers.callMethod(source,"getTask");
-            if(task==null || !Integer.valueOf(1).equals(XposedHelpers.callMethod(task,"getWindowingMode")))return;
-            Object spec=XposedHelpers.getObjectField(display,"mMagnificationSpec");
+            if(!own && (task==null || !Integer.valueOf(1).equals(XposedHelpers.callMethod(task,"getWindowingMode"))))return;
+            Object spec=own?null:XposedHelpers.getObjectField(display,"mMagnificationSpec");
             if(spec!=null){
                 scale=XposedHelpers.getFloatField(spec,"scale");offsetX=XposedHelpers.getFloatField(spec,"offsetX");
                 offsetY=XposedHelpers.getFloatField(spec,"offsetY");
@@ -104,13 +121,18 @@ final class NativeContentDragCard {
         card.setDark(HyperOsStyle.dark(context));
         Point size=new Point(),touch=new Point();card.onProvideShadowMetrics(size,touch);
         SurfaceControl surface;
-        try{surface=draw(card,size);}finally{card.recycleThumbnail();}
+        try{surface=draw(card,size);}catch(Throwable failed){card.recycleThumbnail();throw failed;}
         ClipData clip=new ClipData(new ClipDescription(original.getDescription()),original.getItemAt(0));
         for(int i=1;i<original.getItemCount();i++)clip.addItem(original.getItemAt(i));
         card.mark(clip);call.setObjectExtra(ORIGINAL,call.args[4]);call.setObjectExtra(REPLACEMENT,surface);
+        if(geometryReady)NativeDragGeometry.mark(clip);
+        android.os.PersistableBundle metadata=clip.getDescription().getExtras();
+        metadata.putString("onesteplite_source_package",sourcePackage);clip.getDescription().setExtras(metadata);
+        call.setObjectExtra("native_card_geometry",card);
         // performDrag starts in the source's logical space; later pointer events are physical.
         // Normalize the first frame once, retaining the new card's physical hotspot unchanged.
         call.args[4]=surface;call.args[end-4]=startX;call.args[end-3]=startY;
+        call.args[3]=(Integer)call.args[3]|View.DRAG_FLAG_OPAQUE;
         call.args[end-2]=(float)touch.x;call.args[end-1]=(float)touch.y;call.args[end]=clip;
         android.util.Log.i(Tags.PROBE,"native content drag card applied");
     }

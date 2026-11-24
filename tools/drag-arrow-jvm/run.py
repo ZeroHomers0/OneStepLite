@@ -30,6 +30,7 @@ files={
  'io/github/zerohomers0/onesteplite/DragArrowRegression.java':'''package io.github.zerohomers0.onesteplite;
 import android.view.DragEvent;
 class ContentDragShadow{static int offset(DragEvent event){return event.declared;}}
+class ContentDragMotion{static boolean matches(DragEvent event){return false;}static int aimOffset(){return 0;}}
 class XposedHelpers{static Object callMethod(DragEvent event,String method){
  if(event.missing)throw new IllegalStateException();return method.equals("getOffsetX")?event.actualX:event.actual;}}
 class ContentAccessCompat{static int arrowOffset(DragEvent e){return DragArrowRegression.arrowOffset(e);}static float shadowHalfWidth(DragEvent e){return DragArrowRegression.shadowHalfWidth(e);}}
@@ -46,7 +47,7 @@ public static void main(String[] args){
  DragEvent event=new DragEvent();event.declared=312;event.extras.touch=321;
  for(float scale:new float[]{.5f,.748f,1f,1.25f}){
   event.actual=321*scale;int offset=arrowOffset(event);
-  check(Math.abs(offset-312*scale)<=.5f);
+  check(offset==312);
   float railTop=500,tip=railTop+60,pointer=tip+offset;
   check(Math.abs(pointer-offset-tip)<.01f);
  }
@@ -61,12 +62,12 @@ public static void main(String[] args){
  event.declared=0;check(arrowOffset(event)==0);
  event.declared=312;event.extras.touch=321;event.actual=0;
  Replay session=new Replay();ShareDragCatchment reach=session.catchment;
- event.actual=240;event.actualX=150;session.refreshTip(event);
- check(session.tipOffset==233&&session.dragHalfWidth==150);
+ event.actual=240;event.actualX=150;event.extras.width=150;session.refreshTip(event);
+ check(session.tipOffset==312&&session.dragHalfWidth==150);
  check(session.catchment==reach&&reach.closes==0);
- event.actual=400;session.refreshTip(event);check(session.tipOffset==389&&reach.extent==389);
+ event.actual=400;session.refreshTip(event);check(session.tipOffset==312&&reach.extent==312);
  event.actualX=Float.NaN;event.extras.width=252;check(shadowHalfWidth(event)==252);
- event.actualX=300;check(shadowHalfWidth(event)==300);
+ event.actualX=300;check(shadowHalfWidth(event)==252);
  event.actualX=9999;check(shadowHalfWidth(event)==252);
  event.declared=0;check(shadowHalfWidth(event)==0);
  System.out.println("Production drag arrow scaling checks="+checks+" passed");

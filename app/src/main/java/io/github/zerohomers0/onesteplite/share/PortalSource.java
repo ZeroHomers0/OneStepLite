@@ -28,6 +28,12 @@ final class PortalSource implements AutoCloseable {
     private final BooleanSupplier ready;
     private final Supplier<Rect> bounds;
     private final java.util.function.Consumer<android.net.Uri> imagePreview;
+    private final SourceCaptureController fallbackCapture;
+    private Runnable fallbackJob;
+    private boolean fallbackIssued;
+    private float fallbackX,fallbackY;
+    private Bundle liftCandidate;
+    private float liftX,liftY;
     private final Handler main=new Handler(Looper.getMainLooper());
     private PortalInputCompat input;
     private MotionEvent pointer;
@@ -53,6 +59,7 @@ final class PortalSource implements AutoCloseable {
     };
     PortalSource(View anchor,BooleanSupplier ready,Supplier<Rect> bounds,java.util.function.Consumer<android.net.Uri> imagePreview){
         this.anchor=anchor;this.ready=ready;this.bounds=bounds;this.imagePreview=imagePreview;
+        fallbackCapture=new SourceCaptureController(anchor,()->ready.getAsBoolean() && selection==null && !selectingDrag,bounds);
     }
     void start() {
         if(input!=null)return;
@@ -60,7 +67,14 @@ final class PortalSource implements AutoCloseable {
             input=new PortalInputCompat(anchor.getContext().getClassLoader(),this::motion);
             Bundle request=new Bundle();request.putBinder("host",endpoint);
             anchor.getContext().getContentResolver().call(ContentInboxProvider.ROOT,"portal_register",null,request);
+            ShareDiagnostics.event(ShareDiagnostics.Stage.POINTER,ShareDiagnostics.Code.READY);
         } catch(Throwable failure){close();android.util.Log.w(Tags.PROBE,"portal source unavailable",failure);}
+    }
+    void dragStarted(){
+        liftCandidate=null;
+        if(pendingWords!=null){main.removeCallbacks(pendingWords);pendingWords=null;}
+        if(fallbackJob!=null){main.removeCallbacks(fallbackJob);fallbackJob=null;}
+        fallbackCapture.close();validGesture=false;
     }
     private boolean moduleCaller() {
         try{return Binder.getCallingUid()==anchor.getContext().getPackageManager().getApplicationInfo(ContentInboxProvider.MODULE,0).uid;}
@@ -68,17 +82,39 @@ final class PortalSource implements AutoCloseable {
     }
     private void motion(MotionEvent event) {
         if(window!=null)return;
+        if(event.getActionMasked()==MotionEvent.ACTION_DOWN || event.getActionMasked()==MotionEvent.ACTION_UP
+                || event.getActionMasked()==MotionEvent.ACTION_CANCEL || event.getPointerCount()!=1)liftCandidate=null;
+        if(fallbackJob!=null && (event.getPointerCount()!=2 || event.getActionMasked()==MotionEvent.ACTION_UP
+                || event.getActionMasked()==MotionEvent.ACTION_POINTER_UP || event.getActionMasked()==MotionEvent.ACTION_CANCEL || Math.hypot(event.getRawX()-fallbackX,event.getRawY()-fallbackY)>
+                android.view.ViewConfiguration.get(anchor.getContext()).getScaledTouchSlop())){
+            main.removeCallbacks(fallbackJob);fallbackJob=null;
+        }
         if(pendingWords!=null && (event.getActionMasked()==MotionEvent.ACTION_UP
                 || event.getActionMasked()==MotionEvent.ACTION_CANCEL || event.getPointerCount()!=wordPointers
+                || event.getActionMasked()==MotionEvent.ACTION_POINTER_UP
                 || Math.hypot(event.getRawX()-wordX,event.getRawY()-wordY)>
                         android.view.ViewConfiguration.get(anchor.getContext()).getScaledTouchSlop())) {
             main.removeCallbacks(pendingWords);pendingWords=null;
         }
         if(pointer!=null){pointer.recycle();pointer=null;}
-        if(event.getActionMasked()==MotionEvent.ACTION_DOWN)validGesture=event.getPointerCount()==1;
+        if(event.getActionMasked()==MotionEvent.ACTION_DOWN){validGesture=event.getPointerCount()==1;fallbackIssued=false;}
         if(event.getPointerCount()>2)validGesture=false;
-        if(event.getActionMasked()==MotionEvent.ACTION_UP || event.getActionMasked()==MotionEvent.ACTION_CANCEL)return;
+        if(event.getActionMasked()==MotionEvent.ACTION_UP || event.getActionMasked()==MotionEvent.ACTION_CANCEL
+                || event.getActionMasked()==MotionEvent.ACTION_POINTER_UP)return;
         if(validGesture && event.isFromSource(android.view.InputDevice.SOURCE_TOUCHSCREEN))pointer=MotionEvent.obtainNoHistory(event);
+        if(liftCandidate!=null && event.getActionMasked()==MotionEvent.ACTION_MOVE && Math.hypot(event.getRawX()-liftX,event.getRawY()-liftY)>
+                android.view.ViewConfiguration.get(anchor.getContext()).getScaledTouchSlop()){
+            Bundle request=liftCandidate;liftCandidate=null;
+            if(android.os.SystemClock.uptimeMillis()-event.getDownTime()>=android.view.ViewConfiguration.getLongPressTimeout()+150L){
+                request.putBoolean("lift",true);offer(request,new Bundle[1],new CountDownLatch(1),new AtomicBoolean());
+            }
+        }
+        if(event.getPointerCount()==2 && !fallbackIssued && pendingWords==null && selection==null && live()){
+            fallbackIssued=true;fallbackX=event.getRawX();fallbackY=event.getRawY();
+            fallbackJob=()->{fallbackJob=null;if(live() && pointer.getPointerCount()==2 && pendingWords==null && selection==null)
+                fallbackCapture.extractText(text->{if(ready.getAsBoolean() && selection==null)openWords(text);});};
+            main.postDelayed(fallbackJob,900L);
+        }
     }
     private boolean live() {
         Rect mainBounds=bounds.get();
@@ -113,7 +149,12 @@ final class PortalSource implements AutoCloseable {
     private void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
         Context context=anchor.getContext();String uri=request.getString("uri"),text=request.getString("text");
         if(uri==null && (text==null || text.isEmpty() || text.length()>ContentSharePolicy.MAX_TEXT)){done.countDown();return;}
-        if(uri==null) {
+        if(pointer.getPointerCount()==1 && !request.getBoolean("lift")){
+            liftCandidate=new Bundle(request);liftX=pointer.getRawX();liftY=pointer.getRawY();
+            ShareDiagnostics.event(ShareDiagnostics.Stage.POINTER,ShareDiagnostics.Code.ACCEPTED);
+            Bundle reply=new Bundle();reply.putBoolean("accepted",true);result[0]=reply;done.countDown();return;
+        }
+        if(uri==null && !request.getBoolean("lift")) {
             boolean accepted=deferWords(text);Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);
             result[0]=reply;done.countDown();return;
         }
@@ -147,18 +188,21 @@ final class PortalSource implements AutoCloseable {
                 try{if(!expired.get() && token==generation && live())accepted=PortalInputCompat.start(source,clip,pointer);}
                 catch(RuntimeException failure){android.util.Log.w(Tags.PROBE,"portal drag start rejected",failure);}
                 Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);result[0]=reply;
+                ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,accepted?ShareDiagnostics.Code.STARTED:ShareDiagnostics.Code.FAILED);
                 if(!accepted)clearWindow();else main.postDelayed(expire,60_000L);
                 done.countDown();
             });
         } catch(RuntimeException unavailable){clearWindow();done.countDown();}
     }
     private boolean deferWords(String text) {
+        if(fallbackJob!=null){main.removeCallbacks(fallbackJob);fallbackJob=null;}fallbackCapture.close();
         if(!live() || selection!=null)return false;
         if(pendingWords!=null)return true;
         long down=pointer.getDownTime();int token=generation;
         wordX=pointer.getRawX();wordY=pointer.getRawY();wordPointers=pointer.getPointerCount();
         // Two-finger extraction is explicit; ordinary long-press menus retain their original timing.
-        long wait=pointer.getPointerCount()==1?Math.max(0,3000-(android.os.SystemClock.uptimeMillis()-down)):0;
+        long hold=Math.max(1100,android.view.ViewConfiguration.getLongPressTimeout()+350L);
+        long wait=pointer.getPointerCount()==1?Math.max(0,hold-(android.os.SystemClock.uptimeMillis()-down)):0;
         pendingWords=()->{
             pendingWords=null;
             if(token==generation && live() && pointer.getDownTime()==down)openWords(text);
@@ -174,6 +218,8 @@ final class PortalSource implements AutoCloseable {
         catch(RuntimeException detached){android.util.Log.w(Tags.PROBE,"portal source detached",detached);}
     }
     @Override public void close() {
+        liftCandidate=null;
+        if(fallbackJob!=null){main.removeCallbacks(fallbackJob);fallbackJob=null;}fallbackCapture.close();
         if(pendingWords!=null){main.removeCallbacks(pendingWords);pendingWords=null;}
         generation++;issued=0;validGesture=false;clearWindow();
         closeWords();
