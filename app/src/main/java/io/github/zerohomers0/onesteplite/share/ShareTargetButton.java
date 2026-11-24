@@ -26,9 +26,8 @@ final class ShareTargetButton extends ImageView {
         setSelected(hovered);
         if(!android.animation.ValueAnimator.areAnimatorsEnabled()){setScaleX(hovered?1.1f:1);setScaleY(hovered?1.1f:1);return;}
         animate().scaleX(hovered?1.14f:1f).scaleY(hovered?1.14f:1f)
-                .setDuration(hovered?260:160)
-                .setInterpolator(hovered?new android.view.animation.OvershootInterpolator(1.8f)
-                        :new android.view.animation.DecelerateInterpolator()).start();
+                .setDuration(hovered?120:100)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
     }
 
     @Override protected void onDetachedFromWindow() {

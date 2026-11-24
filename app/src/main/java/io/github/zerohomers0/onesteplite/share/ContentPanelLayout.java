@@ -22,8 +22,10 @@ final class ContentPanelLayout extends LinearLayout {
     private final android.widget.FrameLayout pages;
     private final TextView empty;
     private final android.widget.FrameLayout track;
+    private final LinearLayout toolbar;
     private final android.view.View thumb;
     private int current=-1;
+    private final IntConsumer selectPage;
     private int thumbWidth,thumbHeight;
     private android.view.View detail;
     void push(android.view.View page){
@@ -44,8 +46,11 @@ final class ContentPanelLayout extends LinearLayout {
         }
     }
     ContentPanelLayout(Context context,IntConsumer select) {
-        super(context);setOrientation(VERTICAL);WorkspacePopupStyle.decorate(this,null);
+        super(context);selectPage=select;setOrientation(VERTICAL);WorkspacePopupStyle.decorate(this,null);
+        toolbar=new LinearLayout(context);toolbar.setGravity(Gravity.CENTER_VERTICAL);
+        addView(toolbar,new LayoutParams(-1,-2));
         track=new android.widget.FrameLayout(context);
+        toolbar.addView(track,new LayoutParams(0,-2,1));
         LinearLayout header=new LinearLayout(context);
         header.setPadding(dp(3),dp(3),dp(3),dp(3));
         GradientDrawable track=new GradientDrawable();track.setColor(HyperOsStyle.controlFill(context,false));
@@ -61,16 +66,95 @@ final class ContentPanelLayout extends LinearLayout {
             tab.setOnClickListener(v->select.accept(index));tabs.add(tab);
             LayoutParams cell=new LayoutParams(0,-2,1);header.addView(tab,cell);
         }
-        this.track.addView(header,new android.widget.FrameLayout.LayoutParams(-1,-2));addView(this.track);
+        this.track.addView(header,new android.widget.FrameLayout.LayoutParams(-1,-2));
         this.track.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->positionThumb(false));
         scroll=new ScrollView(context);scroll.setFillViewport(true);
         scroll.setPadding(0,dp(8),0,0);scroll.setClipToPadding(false);
         grid=new GridLayout(context);grid.setColumnCount(3);scroll.addView(grid);
-        pages=new android.widget.FrameLayout(context);pages.addView(scroll,new android.widget.FrameLayout.LayoutParams(-1,-1));
+        pages=new PageSwipeArea(context);pages.addView(scroll,new android.widget.FrameLayout.LayoutParams(-1,-1));
         empty=new TextView(context);empty.setTextSize(12);empty.setTextColor(HyperOsStyle.textSecondary(context));
         empty.setGravity(Gravity.CENTER);empty.setPadding(dp(16),dp(12),dp(16),dp(12));empty.setVisibility(GONE);
         pages.addView(empty,new android.widget.FrameLayout.LayoutParams(-1,-1));addView(pages,new LayoutParams(-1,0,1));
     }
+    private final class PageSwipeArea extends android.widget.FrameLayout {
+        private float downX,downY;
+        private boolean decided,tracking;
+        PageSwipeArea(Context context){super(context);}
+
+        @Override public boolean onInterceptTouchEvent(android.view.MotionEvent event) {
+            switch(event.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    downX=event.getX();downY=event.getY();decided=tracking=false;
+                    animate().cancel();setTranslationX(0);break;
+                case android.view.MotionEvent.ACTION_POINTER_DOWN:
+                    decided=true;break;
+                case android.view.MotionEvent.ACTION_MOVE:
+                    float dx=event.getX()-downX,dy=event.getY()-downY;
+                    int slop=android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                    if(!decided && Math.max(Math.abs(dx),Math.abs(dy))>slop){
+                        decided=true;tracking=Math.abs(dx)>Math.abs(dy)*1.2f;
+                    }
+                    break;
+                default:break;
+            }
+            return tracking;
+        }
+
+        @Override public boolean onTouchEvent(android.view.MotionEvent event) {
+            int action=event.getActionMasked();
+            if(!tracking) {
+                if(action==android.view.MotionEvent.ACTION_DOWN)return true;
+                if(action!=android.view.MotionEvent.ACTION_MOVE || !onInterceptTouchEvent(event))return true;
+            }
+            float delta=event.getRawX()-downRawX;
+            int direction=delta<0?1:-1;
+            if(getLayoutDirection()==LAYOUT_DIRECTION_RTL)direction=-direction;
+            int next=current+direction;
+            boolean available=next>=0 && next<tabs.size();
+            switch(event.getActionMasked()){
+                case android.view.MotionEvent.ACTION_MOVE:
+                    setTranslationX(Math.copySign(Math.min(Math.abs(delta)*(available?.45f:.16f),dp(96)),delta));
+                    return true;
+                case android.view.MotionEvent.ACTION_UP:
+                    tracking=false;
+                    boolean commit=available && Math.abs(delta)>=Math.min(dp(84),getWidth()*.25f);
+                    if(commit){setTranslationX(0);selectPage.accept(next);}
+                    else returnToPage();
+                    return true;
+                default:
+                    tracking=false;returnToPage();return true;
+            }
+        }
+
+        private void returnToPage(){
+            animate().cancel();
+            if(android.animation.ValueAnimator.areAnimatorsEnabled())animate().translationX(0).setDuration(140).start();
+            else setTranslationX(0);
+        }
+
+        private float downRawX;
+        @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+            if(event.getActionMasked()==android.view.MotionEvent.ACTION_DOWN)downRawX=event.getRawX();
+            return super.dispatchTouchEvent(event);
+        }
+    }
+
+    void setActions(ContentPanelActions actions) {
+        LayoutParams size=new LayoutParams(dp(44),dp(44));
+        size.setMarginStart(dp(4));toolbar.addView(actions,size);
+    }
+
+    void heading(String title,int width) {
+        TextView label=new TextView(getContext());label.setText(title);
+        label.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
+        label.setPaddingRelative(dp(6),0,0,0);
+        label.setTextSize(12);label.setTypeface(null,Typeface.BOLD);
+        label.setTextColor(HyperOsStyle.textSecondary(getContext()));
+        GridLayout.LayoutParams row=new GridLayout.LayoutParams(GridLayout.spec(GridLayout.UNDEFINED),
+                GridLayout.spec(0,3));
+        row.width=width;row.height=dp(32);grid.addView(label,row);
+    }
+
     void status(String text){empty.setText(text);empty.setVisibility(VISIBLE);scroll.setVisibility(INVISIBLE);}
     void clearStatus(){empty.setVisibility(GONE);scroll.setVisibility(VISIBLE);}
     private void positionThumb(boolean animate) {

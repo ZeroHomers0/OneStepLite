@@ -37,7 +37,7 @@ final class ContentPanel {
     private ContentPanelActions panelActions;
     private GridLayout grid;
     private ScrollView scroll;
-    private TextView selectionButton;
+    private long imageDay=Long.MIN_VALUE;
     private Dialog preview;
     private ImageView previewImageView;
     private Bitmap previewPixels;
@@ -69,6 +69,63 @@ final class ContentPanel {
         });
     }
     private CancellationSignal query;
+    private ClipboardManager visibleClipboard;
+    private boolean clipboardDirty;
+    private final ClipboardManager.OnPrimaryClipChangedListener clipboardListener=this::scheduleClipboardRefresh;
+    private final Runnable refreshClipboard=this::refreshClipboard;
+
+    private void scheduleClipboardRefresh() {
+        if(dialog==null || tab!=2)return;
+        clipboardDirty=true;
+        anchor.removeCallbacks(refreshClipboard);anchor.post(refreshClipboard);
+    }
+
+    private void refreshClipboard() {
+        if(!clipboardDirty || dialog==null || tab!=2 || preview!=null || dragging || selecting)return;
+        selection.position(tab,scroll.getScrollY());
+        load();
+    }
+
+    private void watchClipboard(boolean visible) {
+        if(visible && visibleClipboard==null) {
+            ClipboardManager manager=context.getSystemService(ClipboardManager.class);
+            if(manager!=null)try{
+                manager.addPrimaryClipChangedListener(clipboardListener);visibleClipboard=manager;
+            }catch(RuntimeException unavailable){ /* Refresh on the next page visit. */ }
+        } else if(!visible) {
+            anchor.removeCallbacks(refreshClipboard);clipboardDirty=false;
+            if(visibleClipboard!=null)try{visibleClipboard.removePrimaryClipChangedListener(clipboardListener);}
+            catch(RuntimeException unavailable){ /* Clipboard service may have disconnected. */ }
+            visibleClipboard=null;
+        }
+    }
+
+    private Uri watchedMedia;
+    private boolean mediaDirty;
+    private final Runnable refreshMedia=this::refreshMedia;
+    private final android.database.ContentObserver mediaObserver=new android.database.ContentObserver(
+            new android.os.Handler(android.os.Looper.getMainLooper())) {
+        @Override public void onChange(boolean selfChange) {
+            mediaDirty=true;anchor.removeCallbacks(refreshMedia);anchor.postDelayed(refreshMedia,250);
+        }
+    };
+
+    private void refreshMedia() {
+        if(!mediaDirty || dialog==null || watchedMedia==null || dragging || selecting || preview!=null)return;
+        loadMedia(true);
+    }
+
+    private void watchMedia(Uri uri) {
+        if(java.util.Objects.equals(uri,watchedMedia))return;
+        anchor.removeCallbacks(refreshMedia);mediaDirty=false;
+        if(watchedMedia!=null)try{context.getContentResolver().unregisterContentObserver(mediaObserver);}
+        catch(RuntimeException unavailable){ /* The media provider may have disconnected. */ }
+        watchedMedia=null;
+        if(uri!=null)try{
+            context.getContentResolver().registerContentObserver(uri,true,mediaObserver);
+            watchedMedia=uri;
+        }catch(RuntimeException unavailable){ /* Refresh when the page is opened again. */ }
+    }
     private ModalIslandLease island;
     private final java.util.ArrayList<TextView> tabButtons = new java.util.ArrayList<>();
 
@@ -79,7 +136,7 @@ final class ContentPanel {
         this.capture=capture;
         this.bounds = bounds;
         this.history = history;
-        history.onChanged(() -> { if(dialog!=null && preview==null && tab==2 && !dragging)load(); });
+        history.onChanged(this::scheduleClipboardRefresh);
     }
 
     // WMS x/y below use physical display bounds, independently of text direction.
@@ -100,7 +157,7 @@ final class ContentPanel {
         ContentPanelLayout panel=shell;
         tabButtons.clear();tabButtons.addAll(shell.tabs);
         scroll=shell.scroll;grid=shell.grid;
-        panel.addView(actions(themed),new LinearLayout.LayoutParams(-1,-2));
+        panel.setActions(actions(themed));
         dialog.setContentView(panel);
         final Dialog opened = dialog;
         dialog.setOnDismissListener(ignored -> {
@@ -134,11 +191,11 @@ final class ContentPanel {
         load();
     }
 
-    private View actions(Context context) {
+    private ContentPanelActions actions(Context context) {
         panelActions=new ContentPanelActions(context,()->{
-            selecting=!selecting;if(!selecting)selection.clear(tab);refreshSelection();
+            selecting=!selecting;if(!selecting)selection.clear(tab);refreshSelection();refreshMedia();refreshClipboard();
         },this::clearRecords,this::historyOptions,this::chooseSystemFiles);
-        selectionButton=panelActions.selection;return panelActions;
+        return panelActions;
     }
 
     private void chooseSystemFiles() {
@@ -185,6 +242,10 @@ final class ContentPanel {
 
     private void load() {
         cancelQuery();
+        mediaDirty=false;clipboardDirty=false;
+        watchClipboard(tab==2);
+        watchMedia(tab==0?MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                :tab==1?MediaStore.Files.getContentUri("external"):null);
         shell.select(tab);panelActions.page(tab);
         shell.clearStatus();grid.removeAllViews();
         clearEntries();refreshSelection();
@@ -193,68 +254,82 @@ final class ContentPanel {
             clipboard();final int token=generation,user=CurrentUser.id();
             WORKER.execute(()->inbox(token,user,2));return;
         }
-        final int token = generation;
-        final int user = CurrentUser.id();
-        final CancellationSignal signal = new CancellationSignal();
-        query = signal;
-        boolean files = tab == 1;
-        final int page=tab;
-        final java.util.Set<String> hidden=new java.util.HashSet<>(preferences().getStringSet("hidden_"+tab,java.util.Collections.emptySet()));
-        shell.status(files ? "正在读取最近文件…" : "正在读取近期图片…");
-        WORKER.execute(() -> {if(files)files(token,user,signal,hidden);else {inbox(token,user,page);images(token,user,signal,hidden);}});
+        loadMedia(false);
     }
 
-    private void files(int token,int user,CancellationSignal signal,java.util.Set<String> hidden) {
+    private void loadMedia(boolean refresh) {
+        if(refresh)cancelQuery();
+        mediaDirty=false;
+        int token=generation,user=CurrentUser.id(),page=tab;
+        CancellationSignal signal=new CancellationSignal();query=signal;
+        java.util.Set<String> hidden=new java.util.HashSet<>(preferences()
+                .getStringSet("hidden_"+page,java.util.Collections.emptySet()));
+        if(!refresh)shell.status(page==1?"正在读取最近文件…":"正在读取近期图片…");
+        WORKER.execute(()->readMedia(token,user,page,signal,hidden,refresh));
+    }
+
+    private void readMedia(int token,int user,int page,CancellationSignal signal,
+            java.util.Set<String> hidden,boolean refresh) {
+        java.util.List<ContentEntry> rows=new java.util.ArrayList<>();
+        boolean unavailable=false;
+        if(page==0)rows.addAll(inboxRows(token,page,hidden,signal));
         try {
-            java.util.List<ContentEntry> rows=RecentFilesSource.load(context,signal,hidden);
-            anchor.post(()->{
-                if(!valid(token,user))return;
-                grid.removeAllViews();
-                for(ContentEntry row:rows)addEntry(row);
-                if(rows.isEmpty())shell.status("暂无可访问的最近文件，可用“更多文件”补充");
-            });
-            restorePosition(token,user);
-        } catch(RuntimeException denied) {
-            anchor.post(()->{if(valid(token,user)) {
-                grid.removeAllViews();shell.status("无法读取系统最近文件，可用“更多文件”选择");
-            }});
-        }
-        inbox(token,user,1);
+            if(page==1)rows.addAll(RecentFilesSource.load(context,signal,hidden));
+            else readImages(signal,hidden,rows);
+        } catch(RuntimeException denied) {unavailable=true;}
+        if(page==1 && !signal.isCanceled())rows.addAll(inboxRows(token,page,hidden,signal));
+        if(signal.isCanceled()){releaseRows(rows);return;}
+        boolean denied=unavailable;
+        if(!anchor.post(()->applyMedia(token,user,page,rows,refresh,denied)))releaseRows(rows);
     }
 
-    private void images(int token, int user, CancellationSignal signal,java.util.Set<String> hidden) {
-        Bundle args = new Bundle();
+    private void applyMedia(int token,int user,int page,java.util.List<ContentEntry> rows,
+            boolean refresh,boolean unavailable) {
+        if(!valid(token,user)){releaseRows(rows);return;}
+        if(refresh && (dragging || selecting || preview!=null)){
+            releaseRows(rows);mediaDirty=true;return;
+        }
+        if(refresh && unavailable){releaseRows(rows);return;}
+        if(refresh)selection.position(page,scroll.getScrollY());
+        grid.removeAllViews();clearEntries();
+        for(ContentEntry entry:rows)addEntry(entry);
+        if(rows.isEmpty())shell.status(page==1
+                ?(unavailable?"无法读取系统最近文件，可用“更多文件”选择":"暂无可访问的最近文件，可用“更多文件”补充")
+                :(unavailable?"无法读取相册，请检查系统媒体访问权限":"没有可读取的近期图片"));
+        restorePosition(token,user);
+    }
+
+    private void readImages(CancellationSignal signal,java.util.Set<String> hidden,
+            java.util.List<ContentEntry> rows) {
+        Bundle args=new Bundle();
         args.putStringArray(android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS,
-                new String[]{MediaStore.Images.Media.DATE_ADDED});
+                new String[]{MediaStore.Images.Media.DATE_ADDED,MediaStore.Images.Media._ID});
         args.putInt(android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION,
                 android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING);
-        args.putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, 60);
-        Uri collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
-        try (Cursor cursor = context.getContentResolver().query(collection,
-                new String[]{MediaStore.Images.Media._ID, MediaStore.Images.Media.MIME_TYPE}, args, signal)) {
-            anchor.post(() -> { if (valid(token, user) && entries.isEmpty()) grid.removeAllViews(); });
-            int count = 0;
-            while (cursor != null && cursor.moveToNext() && count++ < 60 && !signal.isCanceled()) {
-                Uri uri = ContentUris.withAppendedId(collection, cursor.getLong(0));
-                String mime = cursor.getString(1);
+        args.putInt(android.content.ContentResolver.QUERY_ARG_LIMIT,60);
+        Uri collection=MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+        try(Cursor cursor=context.getContentResolver().query(collection,new String[]{
+                MediaStore.Images.Media._ID,MediaStore.Images.Media.MIME_TYPE,MediaStore.Images.Media.DATE_ADDED},args,signal)) {
+            int count=0;
+            while(cursor!=null && cursor.moveToNext() && count++<60 && !signal.isCanceled()) {
+                Uri uri=ContentUris.withAppendedId(collection,cursor.getLong(0));
                 if(hidden.contains(uri.toString()))continue;
-                Bitmap thumbnail;
-                try {int side=Math.max(160,Math.min(512,imageSize));
-                    thumbnail = context.getContentResolver().loadThumbnail(uri, new Size(side,side), signal); }
-                catch (Exception unavailable) { continue; }
-                anchor.post(() -> {
-                    if (!valid(token, user)) { thumbnail.recycle(); return; }
-                    addEntry(new ContentEntry(uri.toString(),"近期图片",mime==null?"image/*":mime,null,uri,thumbnail));
-                });
+                String mime=cursor.getString(1);
+                Bitmap thumbnail=thumbnail(uri,signal);
+                if(thumbnail!=null)rows.add(new ContentEntry(uri.toString(),"近期图片",mime==null?"image/*":mime,
+                        null,uri,thumbnail,-1,cursor.getLong(2)*1000L));
             }
-            anchor.post(() -> { if (valid(token, user) && grid.getChildCount()==0)
-                shell.status("没有可读取的近期图片"); });
-            restorePosition(token,user);
-        } catch (Exception denied) {
-            anchor.post(() -> { if (valid(token, user)) {
-                grid.removeAllViews(); shell.status("无法读取相册，请检查系统媒体访问权限");
-            }});
         }
+    }
+
+    private Bitmap thumbnail(Uri uri,CancellationSignal signal) {
+        int side=Math.max(160,Math.min(512,imageSize));
+        try{return context.getContentResolver().loadThumbnail(uri,new Size(side,side),signal);}
+        catch(java.io.IOException | RuntimeException unavailable){return null;}
+    }
+
+    private void releaseRows(java.util.Collection<ContentEntry> rows) {
+        for(ContentEntry row:rows)if(row.thumbnail!=null && !row.thumbnail.isRecycled())row.thumbnail.recycle();
     }
 
     private boolean valid(int token, int user) {
@@ -263,7 +338,8 @@ final class ContentPanel {
 
     private void addEntry(ContentEntry entry) {
         if(entries.containsKey(entry.key)){if(entry.thumbnail!=null && entry.thumbnail!=entries.get(entry.key).thumbnail)entry.thumbnail.recycle();return;}
-        shell.clearStatus();if(entries.isEmpty())grid.removeAllViews();
+        shell.clearStatus();
+        if(tab==0 && entry.thumbnail!=null)imageHeading(entry.addedAt);
         entries.put(entry.key,entry);
         View view;
         if(tab==2 || tab==3 && (entry.text!=null || entry.mime.startsWith("image/"))) {
@@ -297,34 +373,53 @@ final class ContentPanel {
         grid.addView(view,params);tiles.put(entry.key,view);refreshSelection();
     }
 
+    private void imageHeading(long timestamp) {
+        java.time.LocalDate date=timestamp>0?java.time.Instant.ofEpochMilli(timestamp)
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate():null;
+        long day=date==null?Long.MIN_VALUE+1:date.toEpochDay();
+        if(day==imageDay)return;
+        imageDay=day;
+        shell.heading(date==null?"导入图片":date.equals(java.time.LocalDate.now())?"今天"
+                :date.equals(java.time.LocalDate.now().minusDays(1))?"昨天":date.toString(),contentWidth);
+    }
+
     private void inbox(int token,int user,int page) {
+        java.util.List<ContentEntry> rows=inboxRows(token,page,java.util.Collections.emptySet(),null);
+        anchor.post(()->{
+            if(!valid(token,user))return;
+            for(ContentEntry entry:rows)addEntry(entry);
+            restorePosition(token,user);
+        });
+    }
+
+    private java.util.List<ContentEntry> inboxRows(int token,int page,java.util.Set<String> hidden,
+            CancellationSignal signal) {
+        java.util.List<ContentEntry> entries=new java.util.ArrayList<>();
         try {
             Bundle result=context.getContentResolver().call(ContentInboxProvider.ROOT,"list",null,null);
-            if(result==null)return;
+            if(result==null)return entries;
             org.json.JSONArray rows=new org.json.JSONArray(result.getString("rows","[]"));
-            for(int i=0;i<rows.length();i++) {
-                if(token!=generation)return;
-                org.json.JSONObject row=rows.getJSONObject(i);String mime=row.optString("mime","application/octet-stream");
+            for(int i=0;i<rows.length() && token==generation;i++) {
+                org.json.JSONObject row=rows.getJSONObject(i);
+                String mime=row.optString("mime","application/octet-stream");
                 if(row.optBoolean("staged") || row.optBoolean("shelf_removed"))continue;
                 boolean text=row.has("text"),image=mime.startsWith("image/");
                 if(page==2?!text:page==0?!image:image || text)continue;
                 if(page==1 && !row.has("document_uri"))continue;
-                Uri uri=text?null:ContentInboxProvider.uri(row.getString("id"));
-                Bitmap thumbnail=null;
-                if(image)try{int side=Math.max(160,Math.min(512,imageSize));thumbnail=context.getContentResolver().loadThumbnail(uri,new Size(side,side),null);}catch(Exception ignored){}
-                ContentEntry entry=new ContentEntry(text?"inbox:"+row.getString("id"):uri.toString(),
-                        text?row.getString("text"):row.optString("name","导入内容"),mime,text?row.getString("text"):null,uri,thumbnail);
-                anchor.post(()->{
-                    if(valid(token,user) && !preferences().getStringSet("hidden_"+page,java.util.Collections.emptySet()).contains(entry.key))addEntry(entry);
-                    else if(entry.thumbnail!=null)entry.thumbnail.recycle();
-                });
+                String id=row.getString("id");
+                Uri uri=text?null:ContentInboxProvider.uri(id);
+                String key=text?"inbox:"+id:uri.toString();
+                if(hidden.contains(key))continue;
+                String label=text?row.getString("text"):row.optString("name","导入内容");
+                entries.add(new ContentEntry(key,label,mime,text?label:null,uri,image?thumbnail(uri,signal):null,
+                        -1,page==0?0:row.optLong("time")));
             }
-            restorePosition(token,user);
         } catch(Exception unavailable) { /* The module inbox may not yet be installed on the device. */ }
+        return entries;
     }
 
     private void refreshSelection() {
-        if(selectionButton!=null)selectionButton.setText(selecting?"已选 "+selection.keys(tab).size()+" · 完成":"多选");
+        if(panelActions!=null)panelActions.selection(selecting,selection.keys(tab).size());
         for(java.util.Map.Entry<String,View> tile:tiles.entrySet()) {
             android.graphics.drawable.GradientDrawable mark=null;
             if(selection.contains(tab,tile.getKey())) {
@@ -431,10 +526,8 @@ final class ContentPanel {
                 (view,text)->begin(view,ClipData.newPlainText("选中文字",text)));
         WorkspacePopupStyle.heading(body,"选词",this::closePreview);
         if(tab==2 && entry.text!=null) {
-            TextView pin=WorkspacePopupStyle.action(context,"固定／取消固定",false,()->{history.pin(entry.text);closePreview();load();});
-            LinearLayout actions=new LinearLayout(context);actions.addView(pin,WorkspacePopupStyle.actionCell(context));
-            TextView delete=WorkspacePopupStyle.action(context,"删除记录",false,()->{history.remove(entry.text);closePreview();load();});
-            actions.addView(delete,WorkspacePopupStyle.actionCell(context));body.addView(actions);
+            body.addHistoryActions(()->{history.pin(entry.text);closePreview();load();},
+                    ()->{history.remove(entry.text);closePreview();load();});
         }
         showPreview(body);
     }
@@ -476,6 +569,7 @@ final class ContentPanel {
         if(old!=null && old!=dialog) { old.setOnDismissListener(null);old.dismiss(); }
         if(previewImageView!=null){previewImageView.setImageDrawable(null);previewImageView=null;}
         if(previewPixels!=null){previewPixels.recycle();previewPixels=null;}
+        if(old!=null){refreshMedia();refreshClipboard();}
     }
 
     private void clipboard() {
@@ -487,6 +581,7 @@ final class ContentPanel {
                 android.os.PersistableBundle extras=data.getDescription().getExtras();
                 if(extras==null || !extras.getBoolean("android.content.extra.IS_SENSITIVE")) {
                     SharePayload payload=new SharePayload(data);
+                    if(!payload.text.isEmpty() || !payload.uris.isEmpty())shell.heading("当前剪贴板",contentWidth);
                     if(!payload.text.isEmpty())addEntry(new ContentEntry("text:"+payload.text,payload.text,
                             "text/plain",payload.text,null,null));
                     for(Uri uri:payload.uris) {
@@ -495,9 +590,11 @@ final class ContentPanel {
                     }
                 }
             }
+            boolean historyHeading=false;
             for(ClipboardHistory.Record record:history.records()) {
                 String key="text:"+record.text;if(entries.containsKey(key))continue;
-                addEntry(new ContentEntry(key,(record.pinned?"已固定 · ":"")+record.text,"text/plain",record.text,null,null));
+                if(!historyHeading){shell.heading("历史",contentWidth);historyHeading=true;}
+                addEntry(new ContentEntry(key,(record.pinned?"已固定 · ":"")+record.text,"text/plain",record.text,null,null,-1,record.time));
             }
             if(entries.isEmpty())shell.status("暂无剪贴板内容");
             restorePosition(generation,CurrentUser.id());
@@ -507,7 +604,7 @@ final class ContentPanel {
     private boolean begin(View source, ClipData clip) {
         if (!ContentAccessCompat.currentProcessUser()) return false;
         source.setOnDragListener((view,event)->{
-            if(event.getAction()==android.view.DragEvent.ACTION_DRAG_ENDED)dragEnded(event.getResult());
+            if(event.getAction()==android.view.DragEvent.ACTION_DRAG_ENDED){dragEnded(event.getResult());refreshMedia();refreshClipboard();}
             return event.getAction()!=android.view.DragEvent.ACTION_DROP;
         });
         final boolean started;
@@ -562,6 +659,8 @@ final class ContentPanel {
     }
 
     void close() {
+        watchClipboard(false);
+        watchMedia(null);
         cancelQuery();
         if(scroll!=null)selection.position(tab,scroll.getScrollY());
         closePreview();
@@ -572,15 +671,15 @@ final class ContentPanel {
         catch (RuntimeException unavailable) { android.util.Log.w(Tags.PROBE, "content popup already detached", unavailable); }
         if(grid!=null)grid.removeAllViews();
         clearEntries();
-        shell=null;panelActions=null;grid=null;scroll=null;selectionButton=null;
+        shell=null;panelActions=null;grid=null;scroll=null;
         tabButtons.clear();
         releaseIsland();
     }
 
     private void releaseIsland() { if (island != null) { island.close(); island = null; } }
     private void clearEntries(){
-        for(ContentEntry entry:entries.values())if(entry.thumbnail!=null && !entry.thumbnail.isRecycled())entry.thumbnail.recycle();
-        entries.clear();tiles.clear();
+        releaseRows(entries.values());
+        entries.clear();tiles.clear();imageDay=Long.MIN_VALUE;
     }
     private void cancelQuery() { generation++; if (query != null) { query.cancel(); query = null; } }
     private int dp(int value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }

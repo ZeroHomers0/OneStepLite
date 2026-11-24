@@ -36,7 +36,7 @@ final class WorkspacePopupStyle {
         mask.setCornerRadius(dp(context,28));mask.setColor(HyperOsStyle.page(context));window.setBackgroundDrawable(mask);
         android.view.WindowManager manager=context.getSystemService(android.view.WindowManager.class);
         boolean capable=WindowGlassCompat.enable(window);
-        java.util.function.Consumer<Boolean> update=enabled->mask.setColor(enabled && capable?0x01000000:HyperOsStyle.page(context));
+        java.util.function.Consumer<Boolean> update=enabled->mask.setColor(enabled && capable?(HyperOsStyle.dark(context)?0x3010151c:0x30ffffff):HyperOsStyle.page(context));
         View decor=window.getDecorView();
         decor.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){
             private boolean registered;

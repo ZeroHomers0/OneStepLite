@@ -30,7 +30,7 @@ public class WordHoldRegression{
  static class Handler{Map<Runnable,Long> queue=new LinkedHashMap<>();void postDelayed(Runnable r,long ms){queue.put(r,ms);}
  void removeCallbacks(Runnable r){queue.remove(r);}void drain(){var copy=new ArrayList<>(queue.keySet());queue.clear();for(Runnable r:copy)r.run();}}
  static class Anchor{Object getContext(){return this;}}
- Object window,selection;MotionEvent pointer;Runnable pendingWords,fallbackJob;float wordX,wordY,fallbackX,fallbackY;boolean validGesture,fallbackIssued;
+ Object window,selection;MotionEvent pointer;Runnable pendingWords,fallbackJob;float wordX,wordY,fallbackX,fallbackY;boolean validGesture,fallbackIssued,selectingDrag;
  Bundle liftCandidate;float liftX,liftY;int lifts;void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired){if(request.lift)lifts++;}
  static class Capture{void close(){}void extractText(java.util.function.Consumer<String> callback){callback.accept("screen OCR");}}Capture fallbackCapture=new Capture();
  Handler main=new Handler();Anchor anchor=new Anchor();int generation,opens,wordPointers;boolean active=true;
@@ -57,7 +57,14 @@ public class WordHoldRegression{
  h=fresh();h.liftCandidate=new Bundle();h.liftX=h.liftY=50;h.motion(new MotionEvent(1));check(h.liftCandidate==null&&h.lifts==0,"stationary release never initiates drag");
  h=fresh();h.liftCandidate=new Bundle();h.liftX=h.liftY=50;move=new MotionEvent(2);move.x=90;h.motion(move);check(h.lifts==0&&h.liftCandidate==null,"ordinary scrolling before long press never initiates drag");
  h=fresh();h.liftCandidate=new Bundle();h.liftX=h.liftY=50;android.os.SystemClock.now=1800;move=new MotionEvent(2);move.x=90;h.motion(move);check(h.lifts==1,"long press followed by movement explicitly lifts content");
+ h=fresh();h.liftCandidate=new Bundle();h.liftX=h.liftY=50;android.os.SystemClock.now=1550;
+ move=new MotionEvent(2);move.x=90;h.motion(move);check(h.lifts==0&&h.liftCandidate!=null,"movement during the system-menu grace period retains the candidate without lifting");
+ android.os.SystemClock.now=1660;h.motion(move);check(h.lifts==1&&h.liftCandidate==null,"continued movement after the grace period starts one drag");
+ h=fresh();h.liftCandidate=new Bundle();h.liftX=h.liftY=50;android.os.SystemClock.now=1550;
+ h.motion(move);h.motion(new MotionEvent(1));check(h.lifts==0&&h.liftCandidate==null,"release during the grace period cancels pending lift");
  h=fresh();h.liftCandidate=new Bundle();h.motion(new MotionEvent(0));check(h.liftCandidate==null,"new DOWN cannot reuse an earlier gesture's content");
+ h=fresh();int previous=h.generation;h.motion(new MotionEvent(0));check(h.generation!=previous,"a new press invalidates preceding extraction offers");
+ h=fresh();h.selection=new Object();two=new MotionEvent(2);two.count=2;h.motion(two);check(h.fallbackJob==null,"word selection owns its touch stream");
  System.out.println("Production word hold cancellation checks="+checks+" passed");
  }
 }

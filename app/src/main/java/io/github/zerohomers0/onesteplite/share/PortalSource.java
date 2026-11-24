@@ -32,7 +32,11 @@ final class PortalSource implements AutoCloseable {
     private Runnable fallbackJob;
     private boolean fallbackIssued;
     private float fallbackX,fallbackY;
-    private Bundle liftCandidate;
+    private static final java.util.concurrent.ExecutorService PREVIEW_WORKER=
+            new java.util.concurrent.ThreadPoolExecutor(1,1,0,TimeUnit.MILLISECONDS,
+                    new java.util.concurrent.ArrayBlockingQueue<>(1),
+                    new java.util.concurrent.ThreadPoolExecutor.DiscardOldestPolicy());
+    private volatile Bundle liftCandidate;
     private float liftX,liftY;
     private final Handler main=new Handler(Looper.getMainLooper());
     private PortalInputCompat input;
@@ -71,7 +75,7 @@ final class PortalSource implements AutoCloseable {
         } catch(Throwable failure){close();android.util.Log.w(Tags.PROBE,"portal source unavailable",failure);}
     }
     void dragStarted(){
-        liftCandidate=null;
+        generation++;issued=0;liftCandidate=null;
         if(pendingWords!=null){main.removeCallbacks(pendingWords);pendingWords=null;}
         if(fallbackJob!=null){main.removeCallbacks(fallbackJob);fallbackJob=null;}
         fallbackCapture.close();validGesture=false;
@@ -81,7 +85,7 @@ final class PortalSource implements AutoCloseable {
         catch(Exception unavailable){return false;}
     }
     private void motion(MotionEvent event) {
-        if(window!=null)return;
+        if(window!=null || selection!=null || selectingDrag)return;
         if(event.getActionMasked()==MotionEvent.ACTION_DOWN || event.getActionMasked()==MotionEvent.ACTION_UP
                 || event.getActionMasked()==MotionEvent.ACTION_CANCEL || event.getPointerCount()!=1)liftCandidate=null;
         if(fallbackJob!=null && (event.getPointerCount()!=2 || event.getActionMasked()==MotionEvent.ACTION_UP
@@ -97,15 +101,20 @@ final class PortalSource implements AutoCloseable {
             main.removeCallbacks(pendingWords);pendingWords=null;
         }
         if(pointer!=null){pointer.recycle();pointer=null;}
-        if(event.getActionMasked()==MotionEvent.ACTION_DOWN){validGesture=event.getPointerCount()==1;fallbackIssued=false;}
+        if(event.getActionMasked()==MotionEvent.ACTION_DOWN){
+            generation++;validGesture=event.getPointerCount()==1;fallbackIssued=false;
+        }
         if(event.getPointerCount()>2)validGesture=false;
         if(event.getActionMasked()==MotionEvent.ACTION_UP || event.getActionMasked()==MotionEvent.ACTION_CANCEL
                 || event.getActionMasked()==MotionEvent.ACTION_POINTER_UP)return;
         if(validGesture && event.isFromSource(android.view.InputDevice.SOURCE_TOUCHSCREEN))pointer=MotionEvent.obtainNoHistory(event);
         if(liftCandidate!=null && event.getActionMasked()==MotionEvent.ACTION_MOVE && Math.hypot(event.getRawX()-liftX,event.getRawY()-liftY)>
                 android.view.ViewConfiguration.get(anchor.getContext()).getScaledTouchSlop()){
-            Bundle request=liftCandidate;liftCandidate=null;
-            if(android.os.SystemClock.uptimeMillis()-event.getDownTime()>=android.view.ViewConfiguration.getLongPressTimeout()+150L){
+            long held=android.os.SystemClock.uptimeMillis()-event.getDownTime();
+            int longPress=android.view.ViewConfiguration.getLongPressTimeout();
+            if(held<longPress)liftCandidate=null;
+            else if(held>=longPress+150L){
+                Bundle request=liftCandidate;liftCandidate=null;
                 request.putBoolean("lift",true);offer(request,new Bundle[1],new CountDownLatch(1),new AtomicBoolean());
             }
         }
@@ -129,7 +138,8 @@ final class PortalSource implements AutoCloseable {
             try {
             if(expired.get()){done.countDown();return;}
             if(code==PortalWire.STATUS)result[0]=status();
-            else if(request!=null && live() && window==null && request.getInt("generation")==generation
+            else if(request!=null && live() && window==null && selection==null && !selectingDrag
+                    && request.getInt("generation")==generation
                     && PortalGesturePolicy.offer(request.getLong("down"),pointer.getDownTime(),issued,android.os.SystemClock.uptimeMillis()))
                 offer(request,result,done,expired);
             if(window==null || code==PortalWire.STATUS)done.countDown();
@@ -143,14 +153,20 @@ final class PortalSource implements AutoCloseable {
     private Bundle status() {
         if(!live() || window!=null || selection!=null)return null;
         issued=android.os.SystemClock.uptimeMillis();Bundle state=new Bundle();
-        state.putLong("down",pointer.getDownTime());state.putInt("generation",generation);return state;
+        state.putLong("down",pointer.getDownTime());state.putInt("generation",generation);
+        state.putBoolean("prefer_image",pointer.getPointerCount()==1);return state;
     }
     @android.annotation.SuppressLint("RtlHardcoded") // Physical display coordinates, not layout direction.
     private void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
         Context context=anchor.getContext();String uri=request.getString("uri"),text=request.getString("text");
         if(uri==null && (text==null || text.isEmpty() || text.length()>ContentSharePolicy.MAX_TEXT)){done.countDown();return;}
         if(pointer.getPointerCount()==1 && !request.getBoolean("lift")){
+            if(liftCandidate!=null && (liftCandidate.getString("uri")!=null
+                    || uri==null && java.util.Objects.equals(liftCandidate.getString("text"),text))){
+                done.countDown();return;
+            }
             liftCandidate=new Bundle(request);liftX=pointer.getRawX();liftY=pointer.getRawY();
+            if(uri!=null)prepareLiftPreview(liftCandidate,android.net.Uri.parse(uri));
             ShareDiagnostics.event(ShareDiagnostics.Stage.POINTER,ShareDiagnostics.Code.ACCEPTED);
             Bundle reply=new Bundle();reply.putBoolean("accepted",true);result[0]=reply;done.countDown();return;
         }
@@ -167,7 +183,11 @@ final class PortalSource implements AutoCloseable {
                 new ClipData.Item(android.net.Uri.parse(uri)));
         Context display=context.createDisplayContext(anchor.getDisplay()).createWindowContext(WindowTypes.SYSTEM_UI_DIALOG,null);
         window=new FrameLayout(display);View source;
-        if(uri!=null){ImageView image=new ImageView(display);image.setImageURI(android.net.Uri.parse(uri));source=image;}
+        if(uri!=null){
+            ImageView image=new ImageView(display);
+            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            image.setImageBitmap(request.getParcelable("preview",android.graphics.Bitmap.class));source=image;
+        }
         else {TextView words=new TextView(display);words.setText(text);source=words;}
         source.setContentDescription(uri==null?text:"提取图片");window.addView(source,new FrameLayout.LayoutParams(240,240));
         WindowManager.LayoutParams attrs=new WindowManager.LayoutParams(240,240,WindowTypes.SYSTEM_UI_DIALOG,
@@ -194,6 +214,20 @@ final class PortalSource implements AutoCloseable {
             });
         } catch(RuntimeException unavailable){clearWindow();done.countDown();}
     }
+    private void prepareLiftPreview(Bundle candidate,android.net.Uri uri) {
+        android.content.ContentResolver resolver=anchor.getContext().getContentResolver();
+        PREVIEW_WORKER.execute(()->{
+            if(liftCandidate!=candidate)return;
+            android.graphics.Bitmap preview;
+            try{preview=resolver.loadThumbnail(uri,new android.util.Size(240,240),null);}
+            catch(java.io.IOException | RuntimeException unavailable){return;}
+            if(!main.post(()->{
+                if(liftCandidate==candidate)candidate.putParcelable("preview",preview);
+                else preview.recycle();
+            }))preview.recycle();
+        });
+    }
+
     private boolean deferWords(String text) {
         if(fallbackJob!=null){main.removeCallbacks(fallbackJob);fallbackJob=null;}fallbackCapture.close();
         if(!live() || selection!=null)return false;
@@ -233,6 +267,8 @@ final class PortalSource implements AutoCloseable {
     }
     private boolean openWords(String text) {
         if(selection!=null || !ready.getAsBoolean())return false;
+        dragStarted();
+        if(pointer!=null){pointer.recycle();pointer=null;}
         Context context=anchor.getContext().createDisplayContext(anchor.getDisplay())
                 .createWindowContext(WindowTypes.SYSTEM_UI_DIALOG,null);
         Context themed=new android.view.ContextThemeWrapper(context,HyperOsStyle.dark(context)

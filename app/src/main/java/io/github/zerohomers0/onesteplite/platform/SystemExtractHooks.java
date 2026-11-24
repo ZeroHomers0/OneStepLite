@@ -40,16 +40,23 @@ final class SystemExtractHooks {
     }
     private static boolean offer(Context context,Object injector,Object content) {
         Object raw=XposedHelpers.getObjectField(content,"mResultMap");if(!(raw instanceof Map))return false;
-        Bundle state=null;int inspected=0;boolean matched=false;
+        java.util.List<Map.Entry<?,?>> candidates=new java.util.ArrayList<>();
+        int inspected=0;
         for(Map.Entry<?,?> entry:((Map<?,?>)raw).entrySet()) {
             if(++inspected>64)break;
             if(!(entry.getKey() instanceof String))continue;
             String key=(String)entry.getKey();if(!key.startsWith("com.miui.contentextension#"))continue;
             boolean image=key.endsWith("#image_pick_mode");
             if(!image && !key.endsWith("#pick_mode"))continue;
-            matched=true;
-            if(state==null){state=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_status",null,null);
-                if(state==null){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_SESSION);return false;}}
+            candidates.add(entry);
+        }
+        if(candidates.isEmpty())return false;
+        Bundle state=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_status",null,null);
+        if(state==null){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_SESSION);return false;}
+        if(state.getBoolean("prefer_image"))candidates.sort(java.util.Comparator.comparing(
+                entry->!((String)entry.getKey()).endsWith("#image_pick_mode")));
+        for(Map.Entry<?,?> entry:candidates) {
+            boolean image=((String)entry.getKey()).endsWith("#image_pick_mode");
             try{
                 Bundle candidate=new Bundle(state);
                 if(!SystemExtractPayload.append(injector,entry.getValue(),image,candidate))continue;
@@ -60,7 +67,7 @@ final class SystemExtractHooks {
                 ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.REJECTED);
             }catch(RuntimeException invalid){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.UNSUPPORTED);}
         }
-        if(matched)ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_CONTENT);
+        ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_CONTENT);
         return false;
     }
 }

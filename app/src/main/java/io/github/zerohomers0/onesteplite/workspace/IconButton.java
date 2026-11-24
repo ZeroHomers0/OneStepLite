@@ -11,7 +11,7 @@ import android.view.View;
 final class IconButton extends View {
     static final int SETTINGS = 0, CLOSE = 10, SIDE_LEFT = 13, SIDE_RIGHT = 14,
             PLAY = 16, PAUSE = 17, VIDEO_RETURN = 18, TOP_APP = 19, EXPAND_LEFT = 20, EXPAND_RIGHT = 21,
-            VIDEO_FIT = 22, VIDEO_FILL = 23, CONTENT = 24, CAPTURE = 25;
+            VIDEO_FIT = 22, VIDEO_FILL = 23, CONTENT = 24, CAPTURE = 25, MORE = 26, CHECK = 27;
     private int icon;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** One scratch path: a button paints exactly one glyph per frame. */
@@ -61,6 +61,12 @@ final class IconButton extends View {
             canvas.drawRoundRect(3, 7, 17, 21, 2, 2, paint);
             canvas.drawLine(6, 17, 9, 13, paint);
             canvas.drawLine(9, 13, 14, 18, paint);
+        } else if (icon == MORE) {
+            paint.setStyle(Paint.Style.FILL);
+            canvas.drawCircle(6,12,1.65f,paint);canvas.drawCircle(12,12,1.65f,paint);
+            canvas.drawCircle(18,12,1.65f,paint);
+        } else if (icon == CHECK) {
+            canvas.drawLine(5,11,10,16,paint);canvas.drawLine(10,16,19,6,paint);
         } else if (icon == CAPTURE) {
             canvas.drawLine(3,9,3,3,paint);canvas.drawLine(3,3,9,3,paint);
             canvas.drawLine(15,3,21,3,paint);canvas.drawLine(21,3,21,9,paint);

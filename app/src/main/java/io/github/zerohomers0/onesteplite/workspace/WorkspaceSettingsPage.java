@@ -134,12 +134,16 @@ final class WorkspaceSettingsPage extends FrameLayout {
         menu(shortcuts,"管理快捷应用","选择常用应用并调整顺序",()->show(APPS,true));
         divider(shortcuts);
         menu(shortcuts,"管理分享入口","应用功能、操作与可用会话入口",()->show(SHARE,true));
+        divider(shortcuts);
+        menu(shortcuts,"拖入空小窗","长按快捷应用再拖入高亮空槽",()->previewDrag(false));
         add(shortcuts,0,12);
 
         section("内容分享");
         LinearLayout sharing=card();
         switchOption(sharing,"分享后清理临时图片","截取、提取的图片默认保留24小时；开启后缩短为交付10分钟，不删除相册原图",options.deleteSharedImages,
                 checked->persist(WorkspaceSettingsStore.read(activity).withDeleteSharedImages(checked)));
+        divider(sharing);
+        menu(sharing,"长按提起图片","长按后移动提起，原地松手取消",()->previewDrag(true));
         add(sharing,0,12);
 
         section("窗口与操作");
@@ -364,6 +368,57 @@ final class WorkspaceSettingsPage extends FrameLayout {
         section.setPadding(dp(16), dp(8), dp(16), 0);
         section.setAccessibilityHeading(true);
         add(section, 0, 8);
+    }
+
+    private void previewDrag(boolean picture) {
+        DragPreview preview=new DragPreview(picture);
+        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(activity)
+                .setTitle(picture?"长按提起图片":"拖入空小窗").setView(preview)
+                .setMessage(picture?"长按主窗图片，明确移动后提起。原地松手可取消。"
+                        :"长按顶栏快捷应用，拖进高亮的空小窗再松手。")
+                .setPositiveButton("完成",null).setNeutralButton("重播",null).create();
+        dialog.setOnShowListener(ignored->{
+            dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL)
+                    .setOnClickListener(v->preview.play());
+            preview.play();
+        });
+        dialog.show();
+    }
+
+    private final class DragPreview extends View {
+        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final boolean picture;
+        private android.animation.ValueAnimator animation;
+        private float progress;
+        DragPreview(boolean picture){super(activity);this.picture=picture;setMinimumHeight(dp(144));}
+
+        void play(){
+            if(animation!=null)animation.cancel();
+            animation=android.animation.ValueAnimator.ofFloat(0f,1f);
+            animation.setDuration(850);
+            animation.addUpdateListener(value->{progress=(float)value.getAnimatedValue();invalidate();});
+            animation.start();
+        }
+
+        @Override protected void onDraw(Canvas canvas){
+            super.onDraw(canvas);
+            float width=getWidth();
+            paint.setColor(dark?0xff353840:0xffe9e9e9);
+            canvas.drawRoundRect(width*.14f,dp(30),width*.58f,dp(124),dp(8),dp(8),paint);
+            paint.setColor(progress>.75f?BLUE:secondary);paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(1.5f));
+            canvas.drawRoundRect(width*.64f,dp(53),width*.85f,dp(108),dp(8),dp(8),paint);
+            paint.setStyle(Paint.Style.FILL);paint.setColor(BLUE);
+            float x=width*((picture?.34f:.24f)+progress*(picture?.40f:.50f));
+            float y=dp(picture?75:19)+progress*dp(picture?4:60);
+            if(picture)canvas.drawRoundRect(x-dp(14),y-dp(10),x+dp(14),y+dp(10),dp(4),dp(4),paint);
+            else canvas.drawCircle(x,y,dp(9),paint);
+        }
+
+        @Override protected void onDetachedFromWindow(){
+            if(animation!=null)animation.cancel();
+            super.onDetachedFromWindow();
+        }
     }
 
     private TextView text(String value, int size, int color) {

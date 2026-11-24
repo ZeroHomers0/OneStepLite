@@ -18,7 +18,8 @@ final class SideDismiss {
     private ValueAnimator animator;
     private boolean delivered, closed, written;
     private float writtenX;
-    private float offset;
+    private float offset,releaseSpeed;
+    private long lastMotion;
     private boolean settling;
 
     SideDismiss(View root, View view, float distance, BooleanSupplier current,
@@ -37,7 +38,15 @@ final class SideDismiss {
     void follow(float dx) {
         if (!isTracking() || !Float.isFinite(dx)) return;
         if (!current.getAsBoolean() || !root.isAttachedToWindow()) { finish(false); return; }
-        offset = Math.copySign(Math.max(0f, Math.min(Math.abs(distance), dx * Math.signum(distance))), distance);
+        float next=Math.copySign(Math.max(0f,Math.min(Math.abs(distance),dx*Math.signum(distance))),distance);
+        long now=android.os.SystemClock.uptimeMillis();
+        long elapsed=now-lastMotion;
+        if(next!=offset) {
+            releaseSpeed=lastMotion!=0 && elapsed>0 && elapsed<=100
+                    ?(next-offset)/elapsed:0f;
+            lastMotion=now;
+        }
+        offset=next;
         position(offset);
     }
 
@@ -57,7 +66,12 @@ final class SideDismiss {
             final float from = offset, to = commit ? distance : 0f;
             ValueAnimator run = ValueAnimator.ofFloat(0f, 1f);
             animator = run;
-            run.setDuration(Math.max(90L, Math.round(220f * Math.abs(to - from) / Math.abs(distance))));
+            float remaining=Math.abs(to-from);
+            boolean movingTowards=android.os.SystemClock.uptimeMillis()-lastMotion<=100
+                    && releaseSpeed*Math.signum(to-from)>.2f;
+            long duration=movingTowards?Math.round(remaining/Math.abs(releaseSpeed))
+                    :Math.round(220f*remaining/Math.max(1f,Math.abs(distance)));
+            run.setDuration(Math.max(90L,Math.min(240L,duration)));
             run.setInterpolator(new android.view.animation.PathInterpolator(.4f, 0f, .2f, 1f));
             run.addUpdateListener(value -> {
                 if (animator != run || delivered || closed) return;

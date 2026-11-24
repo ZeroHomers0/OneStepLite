@@ -2,7 +2,7 @@ package io.github.zerohomers0.onesteplite;
 
 import java.util.Locale;
 
-/** Recent files are ordered by addition time; unknown sizes remain explicit. */
+/** Filtering and display metadata for recent files. */
 final class RecentFilePolicy {
     static final int LIMIT=60;
     private RecentFilePolicy(){}

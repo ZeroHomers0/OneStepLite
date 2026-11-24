@@ -28,10 +28,11 @@ methods = '\n'.join(member(signature) for signature in [
     '    @Override protected void onDetachedFromWindow()', '    void close()'])
 files = {
 'ShareSessionRegression.java': '''package io.github.zerohomers0.onesteplite;
+import java.util.Set;
 import java.util.function.*;
 public class ShareSessionRegression {
 static int checks;static void check(boolean value,String message){checks++;if(!value)throw new AssertionError(message);}
-static final class DragEvent {static final int ACTION_DRAG_STARTED=1,ACTION_DRAG_LOCATION=2,ACTION_DROP=3,ACTION_DRAG_ENDED=4;
+static final class DragEvent {static final int ACTION_DRAG_STARTED=1,ACTION_DRAG_LOCATION=2,ACTION_DROP=3,ACTION_DRAG_ENDED=4,ACTION_DRAG_EXITED=5;
 int action;DragEvent(int value){action=value;}int getAction(){return action;}Object getClipDescription(){return this;}}
 static final class ComponentName {String pkg;ComponentName(String p,String name){pkg=p;}}
 static class Counter implements AutoCloseable {int closes,stops,restores;void dragStarted(){}public void close(){closes++;}void stop(){stops++;}boolean isDragging(){return false;}void dragEnded(boolean consumed){restores++;}}
@@ -48,7 +49,7 @@ void setWindowHover(Function<String,String> identity,Consumer<String> activate){
 static class Replay extends Base {
 BooleanSupplier ready=()->true;Object dispatch,bounds,hovered;Consumer<String> hint=value->{};ShareRailOverlay overlay;
 boolean panelSource,hasPointer;Object transferClip;Counter receipt;Function<String,String> hoverIdentity=value->value;Consumer<String> hoverActivate=value->{};
-String sourcePackage;
+String sourcePackage;Set<String> windowPackages;
 static class Hover extends Counter {void move(String value){}}Hover windowHover=new Hover();
 boolean dragging,dropped,deliveryPending,retainingDelivery,shareOnly;int generation,starts,ends,stops,drops;String lastTarget;
 Handler handler=new Handler();Runnable expire=()->{},deliverySettled=()->{};
@@ -64,6 +65,11 @@ __METHODS__
 }
 public static void main(String[] args){
 Replay rail=new Replay();check(rail.onWindowDrag(new DragEvent(1),null,false)&&rail.starts==1&&rail.dragging,"host root initializes normal share session");
+rail.windowPackages=Set.of("chat.pkg");
+check(rail.onWindowDrag(new DragEvent(2),"chat.pkg",false),"known compatible window can be highlighted");
+check(!rail.onWindowDrag(new DragEvent(2),"other.pkg",false),"unknown window does not advertise an app share");
+rail.sourcePackage="chat.pkg";check(!rail.onWindowDrag(new DragEvent(2),"chat.pkg",false),"source window never highlights");
+rail.sourcePackage=null;
 rail.onWindowDrag(new DragEvent(3),"chat.pkg",false);check(rail.drops==1&&"chat.pkg".equals(rail.lastTarget),"small-window DROP uses target package");
 check(!rail.onWindowDrag(new DragEvent(3),null,false),"drop outside occupied target rejected");
 rail.onWindowDrag(new DragEvent(4),null,false);check(rail.ends==1&&!rail.dragging,"root drag end always retires session");

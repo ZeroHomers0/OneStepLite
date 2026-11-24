@@ -29,6 +29,8 @@ final class SystemExtractPayload {
     @SuppressWarnings("deprecation") // OEM bundles contain typed alternatives, not a fixed Parcelable class.
     static Object value(Object mode,String key,boolean image,int depth){
         if(depth>2)return null;
+        if(image && mode instanceof Bitmap || !image && (mode instanceof CharSequence
+                || mode instanceof CharSequence[] || mode instanceof java.util.List))return mode;
         Object direct=null,nested=null;
         if(mode instanceof Bundle){direct=((Bundle)mode).get(key);nested=((Bundle)mode).get(image?"image_pick_mode":"pick_mode");}
         else if(mode instanceof java.util.Map){direct=((java.util.Map<?,?>)mode).get(key);nested=((java.util.Map<?,?>)mode).get(image?"image_pick_mode":"pick_mode");}

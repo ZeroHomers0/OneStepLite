@@ -266,6 +266,7 @@ final class TopBar extends FrameLayout {
             topApp.setAlpha(enabled ? 1f : .32f);
         }
         void updateColors() {
+            for(IconButton icon:icons)updateButtonGlass(icon);
             int fallback=HyperOsStyle.textPrimary(getContext());
             for(IconButton icon:icons)icon.setIconColor(HyperOsStyle.dark(getContext())?0xffffffff:HyperOsStyle.wallpaperTextColor(
                     glassWallpaper,glassWidth,glassHeight,getLeft()+icon.getLeft(),getTop()+icon.getTop(),
@@ -273,6 +274,35 @@ final class TopBar extends FrameLayout {
             title.setTextColor(HyperOsStyle.dark(getContext())?0xffffffff:HyperOsStyle.wallpaperTextColor(glassWallpaper,glassWidth,glassHeight,
                     getLeft()+title.getLeft(),getTop()+title.getTop(),title.getWidth(),title.getHeight(),fallback));
         }
+        private void updateButtonGlass(IconButton icon) {
+            int x=TopBar.this.getLeft()+getLeft()+icon.getLeft();
+            int y=TopBar.this.getTop()+getTop()+icon.getTop();
+            int gap=Math.round(HyperOsStyle.dp(getContext(),2));
+            android.graphics.drawable.Drawable previous=icon.getBackground();
+            if(glassWallpaper!=null && !glassWallpaper.isRecycled()) {
+                int tint=HyperOsStyle.dark(getContext())?0x5510151c:0x4cffffff;
+                if(previous instanceof android.graphics.drawable.InsetDrawable) {
+                    android.graphics.drawable.Drawable body=((android.graphics.drawable.InsetDrawable)previous).getDrawable();
+                    if(body instanceof android.graphics.drawable.LayerDrawable) {
+                        WallpaperCropDrawable crop=(WallpaperCropDrawable)((android.graphics.drawable.LayerDrawable)body).getDrawable(1);
+                        if(crop.matchesWallpaper(glassWallpaper,glassWidth,glassHeight,tint)) {
+                            crop.setScreenOrigin(x+gap,y+gap);return;
+                        }
+                    }
+                }
+                WallpaperCropDrawable crop=new WallpaperCropDrawable(glassWallpaper,glassWidth,glassHeight,x+gap,y+gap,tint);
+                android.graphics.drawable.Drawable outline=HyperOsStyle.glassSheet(getContext(),14);
+                android.graphics.drawable.LayerDrawable plate=new android.graphics.drawable.LayerDrawable(
+                        new android.graphics.drawable.Drawable[]{outline,crop});
+                icon.setBackground(new android.graphics.drawable.InsetDrawable(plate,gap));
+            } else if(previous==null || previous instanceof android.graphics.drawable.InsetDrawable
+                    && ((android.graphics.drawable.InsetDrawable)previous).getDrawable() instanceof android.graphics.drawable.LayerDrawable) {
+                android.graphics.drawable.Drawable glass=HyperOsStyle.glassSheet(getContext(),14);
+                glass.setAlpha(130);icon.setBackground(new android.graphics.drawable.InsetDrawable(glass,gap));
+            }
+            icon.setClipToOutline(true);
+        }
+
         private IconButton button(int icon,String text,Runnable action) {
             IconButton b=new IconButton(getContext(),icon,text);b.setTooltipText(text);
             b.setOnClickListener(v->action.run());addView(b);return b;

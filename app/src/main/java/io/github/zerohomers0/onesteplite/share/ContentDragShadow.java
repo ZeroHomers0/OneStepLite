@@ -54,7 +54,8 @@ final class ContentDragShadow extends View.DragShadowBuilder {
         width=(image||textContent?100:168)*unit;height=(image||textContent?110:58)*unit;top=12*unit;
         CharSequence text=selected!=null?selected:view instanceof TextView?((TextView)view).getText():view.getContentDescription();
         caption=text==null?"文件":text.toString().replace("，长按拖曳分享","").replace('\n',' ');
-        paint.setFilterBitmap(true);thumbnail=image?snapshot(view):null;
+        paint.setFilterBitmap(true);
+        thumbnail=image && ((ImageView)view).getDrawable()!=null?snapshot(view):null;
     }
 
     private Bitmap snapshot(View source) {

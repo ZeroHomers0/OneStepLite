@@ -2,7 +2,6 @@ package io.github.zerohomers0.onesteplite;
 
 import android.content.Context;
 import android.os.Bundle;
-import java.util.Map;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
@@ -36,9 +35,6 @@ final class PortalHooks {
     private static boolean payload(Object result,boolean image,Bundle out) {
         Object injector=XposedHelpers.callMethod(result,"getInjectorToken");
         Object values=XposedHelpers.callMethod(result,"getParams",image?"image_pick":"text_pick");
-        Object mode=values instanceof Map?((Map<?,?>)values).get(image?"image_pick_mode":"pick_mode")
-                :values instanceof Bundle?values:null;
-        if(mode==null)mode=values;
-        return SystemExtractPayload.append(injector,mode,image,out);
+        return SystemExtractPayload.append(injector,values,image,out);
     }
 }

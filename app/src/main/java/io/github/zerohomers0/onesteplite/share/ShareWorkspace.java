@@ -64,6 +64,7 @@ final class ShareWorkspace extends FrameLayout {
     private int generation, user;
     private ComponentName hovered;
     private String sourcePackage;
+    private java.util.Set<String> windowPackages;
     private long lastFeedback;
     private ShareReadLease pendingRead;
     private DropPermissionContract delegatedRead;
@@ -167,6 +168,10 @@ final class ShareWorkspace extends FrameLayout {
                 handler.postDelayed(expire, 60_000L);
                 WORKER.execute(() -> {
                     try {
+                        java.util.Set<String> packages=ShareTargetCatalog.windowPackages(getContext(),description,itemCount);
+                        post(()->{if(live(token))windowPackages=packages;});
+                    }catch(RuntimeException unavailable){ /* Keep native target resolution available at DROP. */ }
+                    try {
                         List<ShareTarget> entries=ShareTargetCatalog.load(getContext(),description,itemCount,false);
                         post(()->{if(live(token))showTargets(entries);});
                     } catch(RuntimeException unavailable) {
@@ -248,13 +253,21 @@ final class ShareWorkspace extends FrameLayout {
         if (event.getAction() == DragEvent.ACTION_DRAG_STARTED)
             return drag(event);
         if(event.getAction()==DragEvent.ACTION_DRAG_ENDED)return drag(event);
-        if(event.getAction()==DragEvent.ACTION_DRAG_LOCATION)windowHover.move(targetPackage);
+        int action=event.getAction();
+        boolean location=action==DragEvent.ACTION_DRAG_LOCATION;
+        boolean sameSource=targetPackage!=null && targetPackage.equals(sourcePackage);
+        boolean supported=targetPackage!=null && windowPackages!=null && windowPackages.contains(targetPackage);
+        if(location && dragging && !sameSource)windowHover.move(targetPackage);
         else windowHover.close();
-        if (!dragging || targetPackage == null) return false;
-        if (event.getAction() == DragEvent.ACTION_DROP)
-            return !targetPackage.equals(sourcePackage) && live(generation) && drop(event, new ComponentName(targetPackage, ""));
-        if (event.getAction() == DragEvent.ACTION_DRAG_LOCATION) hint.accept("停留切换窗口，松开分享");
-        return true;
+        if (!dragging || targetPackage == null) {
+            hint.accept(null);return false;
+        }
+        if (action==DragEvent.ACTION_DROP)
+            return !sameSource && live(generation) && drop(event,new ComponentName(targetPackage,""));
+        if(location)hint.accept(sameSource?"松开取消":supported?"松开分享到此应用 · 停留切换窗口"
+                :windowPackages==null?"正在查询分享入口 · 停留切换窗口":"无匹配分享入口 · 停留切换窗口");
+        else if(action==DragEvent.ACTION_DRAG_EXITED)hint.accept(null);
+        return !location || !sameSource && supported;
     }
 
     private void showTargets(List<ShareTarget> entries) {
@@ -428,6 +441,7 @@ final class ShareWorkspace extends FrameLayout {
     private void finishVisuals() {
         if(catchment!=null){catchment.close();catchment=null;}
         windowHover.close();
+        windowPackages=null;
         editorOutline.close();
         hasPointer=false;
         dragging = false;

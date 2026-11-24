@@ -32,6 +32,8 @@ final class QuickAppRail extends View {
     }
     private int activeIndex;
     private List<QuickApp> apps;
+    static final String APP_DRAG_MIME="application/vnd.onesteplite.quick-app";
+    private final Runnable pressDrag=this::startAppDrag;
     private boolean down;
     private float downX;
     private float downY;
@@ -83,7 +85,7 @@ final class QuickAppRail extends View {
         setElevation(0f);
         setClickable(true);
         setFocusable(true);
-        setContentDescription("快捷应用栏，点击打开应用");
+        setContentDescription("快捷应用栏，点击打开，长按拖入空小窗");
     }
 
     void setApps(List<QuickApp> next) {
@@ -153,6 +155,7 @@ final class QuickAppRail extends View {
                 velocity.addMovement(event);
                 if (!moved) {
                     activeIndex = indexAt(downX);
+                    if(activeIndex>=0)postDelayed(pressDrag,ViewConfiguration.getLongPressTimeout());
                 }
                 invalidate();
                 return true;
@@ -191,6 +194,7 @@ final class QuickAppRail extends View {
     private void followFinger(float x, float y) {
         float dx = x - downX, dy = y - downY;
         if (!scrolling && Math.max(Math.abs(dx), Math.abs(dy)) > touchSlop && activeIndex >= 0) {
+            removeCallbacks(pressDrag);
             activeIndex = -1;
             invalidate();
         }
@@ -270,7 +274,29 @@ final class QuickAppRail extends View {
         canvas.restoreToCount(save);
     }
 
+    private void startAppDrag() {
+        if(!down || moved || activeIndex<0 || activeIndex>=apps.size())return;
+        QuickApp app=apps.get(activeIndex);
+        if(app.icon==null)return;
+        int edge=Math.max(1,Math.round(iconSize));
+        android.content.ClipData clip=new android.content.ClipData("快捷应用",
+                new String[]{APP_DRAG_MIME},new android.content.ClipData.Item(""));
+        DragShadowBuilder shadow=new DragShadowBuilder(this) {
+            @Override public void onProvideShadowMetrics(android.graphics.Point size,android.graphics.Point touch) {
+                size.set(edge,edge);touch.set(edge/2,edge/2);
+            }
+            @Override public void onDrawShadow(Canvas canvas) {
+                android.graphics.Rect previous=new android.graphics.Rect(app.icon.getBounds());
+                app.icon.setBounds(0,0,edge,edge);app.icon.draw(canvas);app.icon.setBounds(previous);
+            }
+        };
+        if(startDragAndDrop(clip,shadow,app,0)) {
+            resetTouch();performHapticFeedback(android.view.HapticFeedbackConstants.DRAG_START);
+        }
+    }
+
     private void resetTouch() {
+        removeCallbacks(pressDrag);
         if (scrolling && getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
         if (velocity != null) {
             velocity.recycle();

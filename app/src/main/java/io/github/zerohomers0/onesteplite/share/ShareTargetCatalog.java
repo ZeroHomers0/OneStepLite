@@ -56,6 +56,19 @@ final class ShareTargetCatalog {
         return result;
     }
 
+    static Set<String> windowPackages(Context context,ClipDescription content,int count) {
+        String mime=contentMime(content);
+        Set<String> packages=new LinkedHashSet<>();
+        for(String action:new String[]{Intent.ACTION_SEND,Intent.ACTION_SEND_MULTIPLE}) {
+            if(count!=0 && !action.equals(count>1 && !mime.startsWith("text/")
+                    ?Intent.ACTION_SEND_MULTIPLE:Intent.ACTION_SEND))continue;
+            for(ResolveInfo info:context.getPackageManager().queryIntentActivities(new Intent(action).setType(mime),0)) {
+                if(info.activityInfo!=null && info.activityInfo.exported)packages.add(info.activityInfo.packageName);
+            }
+        }
+        return packages;
+    }
+
     static String contentMime(ClipDescription description) {
         String result=null;
         for(int i=0;i<description.getMimeTypeCount();i++){

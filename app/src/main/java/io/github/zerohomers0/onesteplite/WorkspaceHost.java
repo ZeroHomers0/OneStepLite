@@ -3676,7 +3676,8 @@ public final class WorkspaceHost {
         },()->layout!=null && !layout.tabletLandscape && workspaceAlpha<1f && mainSideAnimator!=null
                 ?workspaceTopHole():null);
         topBar=chrome.bar;topStripBacking=chrome.backing;topLiveClip=chrome.clip;
-        root.setOnDragListener((view, event) -> onWindowContentDrag(event));
+        root.setOnDragListener((view, event) -> event.getLocalState() instanceof QuickApp
+                ? onQuickAppDrag(view,event,(QuickApp)event.getLocalState()) : onWindowContentDrag(event));
         refreshQuickApps();
         createTopPresentation();
         videoPane=topPresentation.video();
@@ -5780,15 +5781,22 @@ public final class WorkspaceHost {
 
     String contentHoverKeyFor(String pkg) {
         if(pkg==null || scene!=ACTIVE || promotion!=null || transferBusy || !screenOn || keyguardLocked || taskCellsCovered){
-            contentDropHighlight.close();return null;
+            return null;
         }
-        for(Slot slot:slots)if(slot.index>SLOT_MAIN && slot.index<CELL_SLOT_COUNT && slot.occupied && !slot.parked && !slot.frozen && !slot.carrier
-                && pkg.equals(slot.pkg) && slot.taskId>=0 && slot.taskToken!=null && slot.windowMode==6
-                && controllerOwns(slot,slot.taskId,slot.taskToken) && mayWriteSideSurface(slot) && slot.view!=null && slot.view.isShown()) {
-            contentDropHighlight.show(slot.view);
-            return pkg+"\n"+slot.taskId+":"+slot.taskEpoch+":"+sceneEpoch+":"+currentUserId();
-        }
-        contentDropHighlight.close();return null;
+        Slot slot=contentDropSlot;
+        return slot!=null && pkg.equals(slot.pkg)?contentDropKey(slot):null;
+    }
+
+    private Slot contentDropSlot;
+    private String contentDropIdentity;
+
+    private String contentDropKey(Slot slot) {
+        if(!isActive(slot) || !slot.occupied || slot.parked || slot.frozen || slot.carrier
+                || slot.launching || slot.promoting || slot.closing || slot.pkg==null
+                || slot.taskId<0 || slot.taskToken==null || slot.windowMode!=6
+                || !controllerOwns(slot,slot.taskId,slot.taskToken) || !mayWriteSideSurface(slot)
+                || slot.view==null || !slot.view.isShown())return null;
+        return slot.pkg+"\n"+slot.taskId+":"+slot.taskEpoch+":"+sceneEpoch+":"+currentUserId();
     }
 
     void promoteContentHover(String key) {
@@ -5798,22 +5806,105 @@ public final class WorkspaceHost {
         contentDropHighlight.close();promoteForNotification(pkg,currentUserId(),()->{});
     }
 
-    private boolean onWindowContentDrag(android.view.DragEvent event) {
-        if(topBar!=null && event.getAction()==android.view.DragEvent.ACTION_DRAG_ENDED)
-            return topBar.onWindowContentDrag(event,null);
-        if (topBar == null || scene != ACTIVE || !screenOn || keyguardLocked
-                || promotion != null || transferBusy || taskCellsCovered) return false;
-        if (event.getAction() == android.view.DragEvent.ACTION_DRAG_STARTED)
-            return topBar.onWindowContentDrag(event, null);
-        if(event.getAction()==android.view.DragEvent.ACTION_DRAG_EXITED)return topBar.onWindowContentDrag(event,null);
-        for (int i = 1; i < CELL_SLOT_COUNT; i++) {
-            Slot slot = slots[i];
-            if (!slot.occupied || slot.parked || slot.frozen || slot.carrier || slot.rect == null) continue;
-            if (event.getX() >= slot.rect[0] && event.getX() < slot.rect[2]
-                    && event.getY() >= slot.rect[1] && event.getY() < slot.rect[3])
-                return topBar.onWindowContentDrag(event, slot.pkg);
+    private android.graphics.drawable.GradientDrawable quickDropOutline;
+    private int quickDropIndex=-1;
+
+    private boolean onQuickAppDrag(View target,android.view.DragEvent event,QuickApp app) {
+        int action=event.getAction();
+        if(action==android.view.DragEvent.ACTION_DRAG_ENDED || action==android.view.DragEvent.ACTION_DRAG_EXITED) {
+            showQuickDrop(target,null);return true;
         }
-        return topBar.onWindowContentDrag(event,null);
+        if(scene!=ACTIVE || !screenOn || keyguardLocked || !boundsHooksReady
+                || promotion!=null || transferBusy || taskCellsCovered) {
+            showQuickDrop(target,null);return false;
+        }
+        if(action==android.view.DragEvent.ACTION_DRAG_STARTED) {
+            return event.getClipDescription()!=null
+                    && event.getClipDescription().hasMimeType(QuickAppRail.APP_DRAG_MIME);
+        }
+        String pkg=app.component.getPackageName();
+        int user=currentUserId();
+        for(Slot slot:slots) {
+            if(slot.index>SLOT_MAIN && pkg.equals(slot.pkg)
+                    && (slot.launching || sideTaskMatchesEntry(slot,user,app.component))) {
+                showQuickDrop(target,null);return false;
+            }
+        }
+        Slot match=null;
+        for(int index=1;index<CELL_SLOT_COUNT;index++) {
+            Slot slot=slots[index];
+            if(!isActive(slot) || slot.occupied || slot.launching || slot.promoting
+                    || slot.closing || slot.rect==null || slot.view==null || !slot.view.isShown())continue;
+            int[] rect=slot.rect;
+            if(event.getX()>=rect[0] && event.getX()<rect[2]
+                    && event.getY()>=rect[1] && event.getY()<rect[3]){match=slot;break;}
+        }
+        if(action!=android.view.DragEvent.ACTION_DROP){showQuickDrop(target,match);return true;}
+        showQuickDrop(target,null);
+        if(match==null)return false;
+        Intent launch=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                .setComponent(app.component);
+        launchIntoSlot(match.index,launch,app.label);
+        return true;
+    }
+
+    private void showQuickDrop(View target,Slot slot) {
+        int index=slot==null?-1:slot.index;
+        if(index==quickDropIndex) {
+            if(slot!=null && quickDropOutline!=null) {
+                int[] rect=slot.rect;quickDropOutline.setBounds(rect[0],rect[1],rect[2],rect[3]);
+            }
+            return;
+        }
+        if(quickDropOutline!=null)target.getOverlay().remove(quickDropOutline);
+        quickDropOutline=null;
+        if(slot!=null) {
+            float density=target.getResources().getDisplayMetrics().density;
+            android.graphics.drawable.GradientDrawable outline=new android.graphics.drawable.GradientDrawable();
+            outline.setColor(0x1834c759);outline.setCornerRadius(14*density);
+            outline.setStroke(Math.max(1,Math.round(2*density)),0xff34c759);
+            int[] rect=slot.rect;outline.setBounds(rect[0],rect[1],rect[2],rect[3]);
+            quickDropOutline=outline;target.getOverlay().add(outline);
+            if(index!=quickDropIndex)target.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+        }
+        quickDropIndex=index;
+    }
+
+    private boolean onWindowContentDrag(android.view.DragEvent event) {
+        if(root==null)return false;
+        int action=event.getAction();
+        if(action==android.view.DragEvent.ACTION_DRAG_ENDED
+                || action==android.view.DragEvent.ACTION_DRAG_EXITED) {
+            contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();showQuickDrop(root,null);
+            return topBar!=null && topBar.onWindowContentDrag(event,null);
+        }
+        if(topBar==null || scene!=ACTIVE || !screenOn || keyguardLocked
+                || promotion!=null || transferBusy || taskCellsCovered) {
+            contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();showQuickDrop(root,null);
+            return false;
+        }
+        if(action==android.view.DragEvent.ACTION_DRAG_STARTED){
+            contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();
+            return topBar.onWindowContentDrag(event,null);
+        }
+        Slot hit=null;String identity=null;
+        for(int index=1;index<CELL_SLOT_COUNT;index++) {
+            Slot slot=slots[index];int[] rect=slot.rect;
+            if(rect==null || event.getX()<rect[0] || event.getX()>=rect[2]
+                    || event.getY()<rect[1] || event.getY()>=rect[3])continue;
+            identity=contentDropKey(slot);if(identity!=null)hit=slot;
+            break;
+        }
+        if(action==android.view.DragEvent.ACTION_DRAG_LOCATION){
+            contentDropSlot=hit;contentDropIdentity=identity;
+            boolean accepted=topBar.onWindowContentDrag(event,hit==null?null:hit.pkg);
+            contentDropHighlight.show(accepted && hit!=null?hit.view:null);
+            return accepted;
+        }
+        if(action!=android.view.DragEvent.ACTION_DROP)return false;
+        String target=hit!=null && hit==contentDropSlot && identity.equals(contentDropIdentity)?hit.pkg:null;
+        contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();showQuickDrop(root,null);
+        return topBar.onWindowContentDrag(event,target);
     }
 
     private boolean parkMainForQuickLaunch(QuickApp entry) {

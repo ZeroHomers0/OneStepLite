@@ -22,7 +22,14 @@ final class ClipboardRow extends LinearLayout {
         TextView text=new TextView(context);text.setText(entry.label);text.setTextSize(12);
         text.setTextColor(HyperOsStyle.textPrimary(context));text.setMaxLines(2);text.setIncludeFontPadding(false);
         text.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        LayoutParams label=new LayoutParams(0,-2,1);label.setMarginStart(dp(10));addView(text,label);
+        LinearLayout body=new LinearLayout(context);body.setOrientation(VERTICAL);body.addView(text);
+        if(entry.addedAt>0) {
+            TextView time=new TextView(context);
+            time.setText(RecentFilePolicy.age(entry.addedAt,System.currentTimeMillis()));
+            time.setTextColor(HyperOsStyle.textSecondary(context));time.setTextSize(10);
+            time.setIncludeFontPadding(false);body.addView(time);
+        }
+        LayoutParams label=new LayoutParams(0,-2,1);label.setMarginStart(dp(10));addView(body,label);
         setContentDescription(entry.label+"，点击选词，长按拖曳全文");
     }
     private int dp(int value){return HyperOsStyle.dp(getContext(),value);}
