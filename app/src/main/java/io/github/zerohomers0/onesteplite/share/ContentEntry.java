@@ -7,7 +7,7 @@ import android.net.Uri;
 /** A content row retains a URI or plain text, never an Activity or source View. */
 final class ContentEntry {
     final String key, label, mime, text;
-    final Uri uri;
+    final Uri uri, originalUri;
     final Bitmap thumbnail;
     final long bytes,addedAt;
 
@@ -16,8 +16,13 @@ final class ContentEntry {
     }
 
     ContentEntry(String key,String label,String mime,String text,Uri uri,Bitmap thumbnail,long bytes,long addedAt) {
+        this(key,label,mime,text,uri,thumbnail,bytes,addedAt,uri);
+    }
+
+    ContentEntry(String key,String label,String mime,String text,Uri uri,Bitmap thumbnail,long bytes,long addedAt,
+            Uri originalUri) {
         this.key=key;this.label=label;this.mime=mime;this.text=text;this.uri=uri;this.thumbnail=thumbnail;
-        this.bytes=bytes;this.addedAt=addedAt;
+        this.bytes=bytes;this.addedAt=addedAt;this.originalUri=originalUri;
     }
 
     ClipData clip() {

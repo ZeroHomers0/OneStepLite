@@ -25,8 +25,10 @@ files={
 'android/os/Looper.java':'package android.os;public class Looper{public static Looper getMainLooper(){return new Looper();}}',
 'android/os/Handler.java':'''package android.os;public class Handler{public static java.util.List<Runnable> jobs=new java.util.ArrayList<>();public Handler(Looper l){}
 public void postDelayed(Runnable r,long delay){if(delay!=60000&&delay!=350)throw new AssertionError("bound");jobs.add(r);}public void removeCallbacks(Runnable r){jobs.remove(r);}}''',
-'android/view/MotionEvent.java':'''package android.view;public record MotionEvent(int action,float y){public static final int ACTION_UP=1,ACTION_MOVE=2,ACTION_CANCEL=3;
-public int getActionMasked(){return action;}public int getPointerCount(){return 1;}public float getRawX(){return 0;}public float getRawY(){return y;}}''',
+'android/view/MotionEvent.java':'''package android.view;public record MotionEvent(int action,float y){public static final int ACTION_DOWN=0,ACTION_UP=1,ACTION_MOVE=2,ACTION_CANCEL=3,ACTION_POINTER_DOWN=5,ACTION_POINTER_UP=6;
+public int getActionMasked(){return action;}public int getActionIndex(){return 0;}public long getDownTime(){return 1L;}
+public int getPointerId(int index){return index;}public int findPointerIndex(int id){return id==0?0:-1;}
+public float getRawX(int index){return 0;}public float getRawY(int index){return y;}}''',
 'android/view/View.java':'''package android.view;public class View{public int updates;public boolean attached=true;public void updateDragShadow(Object s){updates++;}
 public boolean isAttachedToWindow(){return attached;}public Resources getResources(){return new Resources();}public static class Resources{public Metrics getDisplayMetrics(){return new Metrics();}}
 public static class Metrics{public float density=1;public int heightPixels=1000;}}''',

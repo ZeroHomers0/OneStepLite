@@ -128,6 +128,9 @@ final class ShareWorkspace extends FrameLayout {
         scroll = new HorizontalScrollView(context);
         scroll.setClipChildren(false);scroll.setClipToPadding(false);
         scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setOnScrollChangeListener((view,x,y,oldX,oldY)->{
+            if(dragging && hasPointer)updateHovered(lastX,lastY);
+        });
         targets = new LinearLayout(context);targets.setClipChildren(false);targets.setClipToPadding(false);
         scroll.addView(targets, new FrameLayout.LayoutParams(-2, -1));
         LayoutParams row = new LayoutParams(-1, -1);
@@ -197,6 +200,7 @@ final class ShareWorkspace extends FrameLayout {
                 return drop(event, hovered);
             case DragEvent.ACTION_DRAG_ENDED:
                 if(!dragging)return true;
+                ContentDragMotion.close();
                 boolean consumed = event.getResult();
                 finishVisuals();
                 panel.dragEnded(consumed);
@@ -354,7 +358,6 @@ final class ShareWorkspace extends FrameLayout {
         if(direction!=0){
             int before=scroll.getScrollX();
             scroll.scrollBy(dp(edge.step(lastX,0,getWidth(),Math.max(dp(24),dragHalfWidth),android.os.SystemClock.uptimeMillis())),0);
-            updateHovered(lastX,lastY);
             if(scroll.getScrollX()==before){edge.reset();return;}
         }
         edgeQueued=true;handler.postDelayed(edgeTick,16L);

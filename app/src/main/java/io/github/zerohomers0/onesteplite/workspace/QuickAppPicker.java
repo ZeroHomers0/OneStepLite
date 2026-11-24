@@ -175,6 +175,7 @@ final class QuickAppPicker {
             panel.addView(editor, 2, new LinearLayout.LayoutParams(-1, dp(context, 56)));
             FrameLayout listArea = new FrameLayout(context);
             list = new ListView(context);
+            list.setVerticalScrollBarEnabled(false);
             list.setAdapter(adapter);
             list.setDivider(new ColorDrawable(Color.TRANSPARENT));
             list.setDividerHeight(dp(context, 5));

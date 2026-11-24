@@ -281,6 +281,8 @@ final class ContentPanel {
         if(page==1 && !signal.isCanceled())rows.addAll(inboxRows(token,page,hidden,signal));
         if(signal.isCanceled()){releaseRows(rows);return;}
         rows.sort(java.util.Comparator.comparingLong((ContentEntry row)->row.addedAt).reversed());
+        deduplicateRows(rows,page==0,signal);
+        if(signal.isCanceled()){releaseRows(rows);return;}
         boolean denied=unavailable;
         if(!anchor.post(()->applyMedia(token,user,page,rows,refresh,denied)))releaseRows(rows);
     }
@@ -311,7 +313,8 @@ final class ContentPanel {
         args.putInt(android.content.ContentResolver.QUERY_ARG_LIMIT,60);
         Uri collection=MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
         try(Cursor cursor=context.getContentResolver().query(collection,new String[]{
-                MediaStore.Images.Media._ID,MediaStore.Images.Media.MIME_TYPE,MediaStore.Images.Media.DATE_ADDED},args,signal)) {
+                MediaStore.Images.Media._ID,MediaStore.Images.Media.MIME_TYPE,
+                MediaStore.Images.Media.DATE_ADDED,MediaStore.Images.Media.SIZE},args,signal)) {
             int count=0;
             while(cursor!=null && cursor.moveToNext() && count++<60 && !signal.isCanceled()) {
                 Uri uri=ContentUris.withAppendedId(collection,cursor.getLong(0));
@@ -319,7 +322,7 @@ final class ContentPanel {
                 String mime=cursor.getString(1);
                 Bitmap thumbnail=thumbnail(uri,signal);
                 if(thumbnail!=null)rows.add(new ContentEntry(uri.toString(),"近期图片",mime==null?"image/*":mime,
-                        null,uri,thumbnail,-1,cursor.getLong(2)*1000L));
+                        null,uri,thumbnail,cursor.isNull(3)?-1:cursor.getLong(3),cursor.getLong(2)*1000L));
             }
         }
     }
@@ -332,6 +335,56 @@ final class ContentPanel {
 
     private void releaseRows(java.util.Collection<ContentEntry> rows) {
         for(ContentEntry row:rows)if(row.thumbnail!=null && !row.thumbnail.isRecycled())row.thumbnail.recycle();
+    }
+
+    private void deduplicateRows(java.util.List<ContentEntry> rows,boolean compareCopies,CancellationSignal signal) {
+        java.util.Set<Uri> uris=new java.util.HashSet<>();
+        java.util.Set<String> texts=new java.util.HashSet<>(),digests=new java.util.HashSet<>();
+        int[] remaining={32*1024*1024};
+        byte[] buffer=compareCopies?new byte[32*1024]:null;
+        for(java.util.Iterator<ContentEntry> iterator=rows.iterator();iterator.hasNext();) {
+            if(signal!=null && signal.isCanceled())return;
+            ContentEntry entry=iterator.next();
+            boolean duplicate=entry.text!=null && !texts.add(entry.text);
+            if(entry.originalUri!=null && !duplicate)duplicate=!uris.add(mediaIdentity(entry.originalUri));
+            if(!duplicate && compareCopies && entry.bytes<8*1024*1024
+                    && entry.uri!=null && entry.uri.equals(entry.originalUri)) {
+                String digest=contentDigest(entry.uri,buffer,remaining,signal);
+                duplicate=digest!=null && !digests.add(digest);
+            }
+            if(duplicate){iterator.remove();if(entry.thumbnail!=null)entry.thumbnail.recycle();}
+        }
+    }
+
+    private Uri mediaIdentity(Uri uri) {
+        try {
+            if(android.provider.DocumentsContract.isDocumentUri(context,uri)){
+                Uri media=MediaStore.getMediaUri(context,uri);
+                if(media!=null)uri=media;
+            }
+            if("media".equals(uri.getAuthority()) && uri.getPathSegments().size()>=3)
+                return ContentUris.withAppendedId(MediaStore.Files.getContentUri(uri.getPathSegments().get(0)),ContentUris.parseId(uri));
+        }catch(RuntimeException unavailable){/* The original URI still identifies this document. */}
+        return uri;
+    }
+
+    private String contentDigest(Uri uri,byte[] buffer,int[] remaining,CancellationSignal signal) {
+        int limit=Math.min(8*1024*1024,remaining[0]);
+        if(limit==0)return null;
+        try(java.io.InputStream stream=context.getContentResolver().openInputStream(uri)) {
+            if(stream==null)return null;
+            java.security.MessageDigest digest=java.security.MessageDigest.getInstance("SHA-256");
+            int count=0;
+            while(count<limit && (signal==null || !signal.isCanceled())) {
+                int read=stream.read(buffer,0,Math.min(buffer.length,limit-count));
+                if(read<0)return android.util.Base64.encodeToString(digest.digest(),android.util.Base64.NO_WRAP);
+                if(read==0)return null;
+                digest.update(buffer,0,read);count+=read;remaining[0]-=read;
+            }
+        }catch(java.io.IOException | java.security.NoSuchAlgorithmException | RuntimeException unavailable){
+            // Keep an entry when its bytes could not be verified.
+        }
+        return null;
     }
 
     private boolean valid(int token, int user) {
@@ -389,8 +442,12 @@ final class ContentPanel {
         java.util.List<ContentEntry> rows=inboxRows(token,2,java.util.Collections.emptySet(),null);
         anchor.post(()->{
             if(!valid(token,user))return;
-            if(!rows.isEmpty())shell.heading("应用分享的文字",contentWidth);
-            for(ContentEntry entry:rows)addEntry(entry);
+            boolean heading=false;
+            for(ContentEntry entry:rows) {
+                if(entries.values().stream().anyMatch(row->entry.text.equals(row.text)))continue;
+                if(!heading){shell.heading("应用分享的文字",contentWidth);heading=true;}
+                addEntry(entry);
+            }
             restorePosition(token,user);
         });
     }
@@ -415,7 +472,7 @@ final class ContentPanel {
                 if(hidden.contains(key))continue;
                 String label=text?row.getString("text"):row.optString("name","导入内容");
                 entries.add(new ContentEntry(key,label,mime,text?label:null,uri,image?thumbnail(uri,signal):null,
-                        -1,row.optLong("time")));
+                        -1,row.optLong("time"),row.has("document_uri")?Uri.parse(row.getString("document_uri")):uri));
             }
         } catch(Exception unavailable) { /* The module inbox may not yet be installed on the device. */ }
         return entries;
@@ -444,8 +501,11 @@ final class ContentPanel {
                 org.json.JSONObject row=rows.getJSONObject(i);boolean text=row.has("text");String mime=row.optString("mime","application/octet-stream");
                 Uri uri=text?null:ContentInboxProvider.uri(row.getString("id"));Bitmap thumb=null;
                 if(mime.startsWith("image/"))try{int side=Math.max(160,Math.min(512,imageSize));thumb=context.getContentResolver().loadThumbnail(uri,new Size(side,side),null);}catch(Exception ignored){}
-                items.add(new ContentEntry("shelf:"+row.getString("id"),row.optString("name","暂存内容"),mime,text?row.getString("text"):null,uri,thumb));
+                items.add(new ContentEntry("shelf:"+row.getString("id"),row.optString("name","暂存内容"),mime,text?row.getString("text"):null,uri,thumb,
+                        -1,row.optLong("time"),row.has("document_uri")?Uri.parse(row.getString("document_uri")):uri));
             }
+            if(token!=generation){releaseRows(items);return;}
+            deduplicateRows(items,true,null);
             anchor.post(()->{
                 if(!valid(token,user)){for(ContentEntry item:items)if(item.thumbnail!=null)item.thumbnail.recycle();return;}
                 for(ContentEntry item:items)addEntry(item);

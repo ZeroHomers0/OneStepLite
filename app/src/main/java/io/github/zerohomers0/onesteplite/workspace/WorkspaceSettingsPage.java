@@ -21,12 +21,12 @@ import android.widget.Toast;
 
 /** Settings use the installed system Settings resources and layout proportions. */
 final class WorkspaceSettingsPage extends FrameLayout {
-    private static final int HOME = 0, SWAP = 3, GESTURE = 5, LANDSCAPE = 6, APPS = 7, SHARE = 8, APP_DRAG = 9, IMAGE_DRAG = 10;
+    private static final int HOME = 0, SWAP = 3, GESTURE = 5, LANDSCAPE = 6, APPS = 7, SHARE = 8, APP_DRAG = 9;
     private static final int BLUE = HyperOsStyle.CONTROL_ACCENT;
     private final SettingsActivity activity;
     private final boolean dark;
     private final int primary, secondary, surface;
-    private final int[] scrollPositions = new int[IMAGE_DRAG + 1];
+    private final int[] scrollPositions = new int[APP_DRAG + 1];
     private ShortcutManagementPage shortcutPage;
     private Bundle shortcutDraft;
     private final android.database.ContentObserver gestureObserver =
@@ -56,7 +56,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
         int restored = state == null ? HOME : state.getInt("settings_page", HOME);
         shortcutDraft=state==null?null:state.getBundle("shortcuts");
         show(restored == SWAP || restored == GESTURE || restored == LANDSCAPE
-                || restored == APPS || restored == SHARE || restored == APP_DRAG || restored == IMAGE_DRAG ? restored : HOME, false);
+                || restored == APPS || restored == SHARE || restored == APP_DRAG ? restored : HOME, false);
     }
 
     void save(Bundle state) {
@@ -103,12 +103,11 @@ final class WorkspaceSettingsPage extends FrameLayout {
         activity.setPageTitle(next == SWAP ? "主窗与小窗交换方式"
                 : next == GESTURE ? "打开工作区的手势"
                 : next == LANDSCAPE ? "横屏应用显示位置"
-                : next == APP_DRAG ? "拖入空小窗" : next == IMAGE_DRAG ? "长按提起图片" : "OneStepLite");
+                : next == APP_DRAG ? "拖入空小窗" : "OneStepLite");
         if (next == SWAP) swap();
         else if (next == GESTURE) gesture();
         else if (next == LANDSCAPE) landscape();
         else if(next==APP_DRAG)appDragDiagram();
-        else if(next==IMAGE_DRAG)previewImageDrag();
         else home();
         int restoreY = scrollPositions[next];
         scroll.post(() -> scroll.scrollTo(0, restoreY));
@@ -150,8 +149,6 @@ final class WorkspaceSettingsPage extends FrameLayout {
         LinearLayout sharing=card();
         switchOption(sharing,"分享后清理临时图片","截取、提取的图片默认保留24小时；开启后缩短为交付10分钟，不删除相册原图",options.deleteSharedImages,
                 checked->persist(WorkspaceSettingsStore.read(activity).withDeleteSharedImages(checked)));
-        divider(sharing);
-        menu(sharing,"长按提起图片","长按后移动提起，原地松手取消",()->show(IMAGE_DRAG,true));
         add(sharing,0,12);
 
         section("窗口与操作");
@@ -401,52 +398,6 @@ final class WorkspaceSettingsPage extends FrameLayout {
         addDiagram(group,SwapModeDiagram.insertIntoEmptySlot(
                 activity,secondary,dark?0xff353840:0xffe9e9e9,BLUE),true);
         add(group,0,14);
-    }
-
-    private void previewImageDrag() {
-        LinearLayout group=card();
-        ImageDragPreview preview=new ImageDragPreview();
-        addDiagram(group,preview,true);
-        divider(group);
-        menu(group,"重播示范","长按后移动提起，原地松手取消",preview::play);
-        add(group,0,14);preview.post(preview::play);
-    }
-
-    private final class ImageDragPreview extends View {
-        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
-        private android.animation.ValueAnimator animation;
-        private float progress;
-        ImageDragPreview(){super(activity);}
-
-        void play(){
-            if(animation!=null)animation.cancel();
-            animation=android.animation.ValueAnimator.ofFloat(0f,1f);
-            animation.setDuration(850);
-            animation.addUpdateListener(value->{progress=(float)value.getAnimatedValue();invalidate();});
-            animation.start();
-        }
-
-        @Override protected void onDraw(Canvas canvas){
-            super.onDraw(canvas);
-            int save=canvas.save();
-            canvas.translate(0,(getHeight()-dp(144))/2f);
-            float width=getWidth();
-            paint.setColor(dark?0xff353840:0xffe9e9e9);
-            canvas.drawRoundRect(width*.14f,dp(30),width*.58f,dp(124),dp(8),dp(8),paint);
-            paint.setColor(progress>.75f?BLUE:secondary);paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(dp(1.5f));
-            canvas.drawRoundRect(width*.64f,dp(53),width*.85f,dp(108),dp(8),dp(8),paint);
-            paint.setStyle(Paint.Style.FILL);paint.setColor(BLUE);
-            float x=width*(.34f+progress*.40f);
-            float y=dp(75)+progress*dp(4);
-            canvas.drawRoundRect(x-dp(14),y-dp(10),x+dp(14),y+dp(10),dp(4),dp(4),paint);
-            canvas.restoreToCount(save);
-        }
-
-        @Override protected void onDetachedFromWindow(){
-            if(animation!=null)animation.cancel();
-            super.onDetachedFromWindow();
-        }
     }
 
     private TextView text(String value, int size, int color) {

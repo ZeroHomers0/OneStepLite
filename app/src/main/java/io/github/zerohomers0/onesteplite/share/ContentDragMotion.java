@@ -12,6 +12,8 @@ final class ContentDragMotion {
     private static ContentDragShadow shadow;
     private static String geometry;
     private static int offset;
+    private static int pointerId=-1;
+    private static long downTime=-1;
     private static long releasedAt=-1;
     private static boolean sampled;
     private static float rawX,rawY;
@@ -40,19 +42,40 @@ final class ContentDragMotion {
     }
 
     static void stage(View view,ContentDragShadow card){
-        close();source=new WeakReference<>(view);shadow=card;MAIN.postDelayed(expiry,60_000L);
+        int id=pointerId;long started=downTime;
+        close();pointerId=id;downTime=started;
+        source=new WeakReference<>(view);shadow=card;MAIN.postDelayed(expiry,60_000L);
     }
     static void motion(MotionEvent event){
-        if(shadow==null && geometry==null)return;
         int action=event.getActionMasked();
-        if(action==MotionEvent.ACTION_CANCEL){close();return;}
-        if(action==MotionEvent.ACTION_UP && geometry==null){close();return;}
-        if(geometry!=null && event.getPointerCount()==1 && (action==MotionEvent.ACTION_MOVE || action==MotionEvent.ACTION_UP)){
-            rawX=event.getRawX();rawY=event.getRawY();sampled=true;
-            if(action==MotionEvent.ACTION_UP){releasedAt=android.os.SystemClock.uptimeMillis();
-                MAIN.removeCallbacks(expiry);MAIN.postDelayed(expiry,350);return;}
+        if(action==MotionEvent.ACTION_DOWN && geometry==null){
+            pointerId=event.getPointerId(0);downTime=event.getDownTime();
+            return;
+        }
+        if(geometry==null && (action==MotionEvent.ACTION_CANCEL || action==MotionEvent.ACTION_UP)){
+            close();return;
+        }
+        if(shadow==null && geometry==null || releasedAt>=0)return;
+        if(geometry!=null && pointerId<0 && action==MotionEvent.ACTION_MOVE){
+            pointerId=event.getPointerId(0);downTime=event.getDownTime();
+        }
+        if(geometry!=null && event.getDownTime()==downTime){
+            int index=event.findPointerIndex(pointerId);
+            boolean lift=index>=0 && (action==MotionEvent.ACTION_UP
+                    || action==MotionEvent.ACTION_POINTER_UP && event.getActionIndex()==index);
+            if(index>=0 && (lift || action==MotionEvent.ACTION_MOVE
+                    || action==MotionEvent.ACTION_POINTER_DOWN || action==MotionEvent.ACTION_POINTER_UP)){
+                rawX=event.getRawX(index);rawY=event.getRawY(index);sampled=true;
+            }
+            if(lift || action==MotionEvent.ACTION_CANCEL){
+                releasedAt=android.os.SystemClock.uptimeMillis();pointerId=-1;downTime=-1;
+                MAIN.removeCallbacks(expiry);MAIN.postDelayed(expiry,350);return;
+            }
         }
         View view=source.get();if(view==null || !view.isAttachedToWindow())close();
     }
-    static void close(){MAIN.removeCallbacks(expiry);source.clear();if(shadow!=null)shadow.recycleThumbnail();shadow=null;geometry=null;offset=0;sampled=false;releasedAt=-1;}
+    static void close(){
+        MAIN.removeCallbacks(expiry);source.clear();if(shadow!=null)shadow.recycleThumbnail();
+        shadow=null;geometry=null;offset=0;sampled=false;releasedAt=-1;pointerId=-1;downTime=-1;
+    }
 }

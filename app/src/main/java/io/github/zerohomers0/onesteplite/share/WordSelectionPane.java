@@ -39,6 +39,7 @@ final class WordSelectionPane extends LinearLayout {
         statusBar.addView(status,new LayoutParams(0,-2,1));
         addView(statusBar,new LayoutParams(-1,-2));
         scroll=new WordScroll(context);scroll.setPadding(0,dp(6),0,dp(6));scroll.setClipToPadding(false);
+        scroll.setVerticalScrollBarEnabled(false);
         words=new FlowPane(context);
         scroll.addView(words);addView(scroll,new LayoutParams(-1,0,1));
 

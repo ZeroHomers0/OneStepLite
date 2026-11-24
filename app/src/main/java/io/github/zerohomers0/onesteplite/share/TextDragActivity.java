@@ -37,7 +37,8 @@ public final class TextDragActivity extends Activity {
             pointerActive=event.getPointerCount()==1 && action!=android.view.MotionEvent.ACTION_UP && action!=android.view.MotionEvent.ACTION_CANCEL;
             if(pointerActive){pointerX=event.getRawX();pointerY=event.getRawY();}return false;
         });
-        ScrollView scroll=new ScrollView(this);scroll.addView(text);body.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(text);body.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         text.setOnLongClickListener(v->{
             if(!pointerActive)return false;
             try {

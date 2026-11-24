@@ -57,6 +57,7 @@ final class ShortcutEditor extends LinearLayout {
         search.setPadding(dp(12),0,dp(12),0);search.setBackground(HyperOsStyle.controlButton(context,false,10));
         LayoutParams searchBounds=new LayoutParams(-1,dp(44));searchBounds.bottomMargin=dp(8);addView(search,searchBounds);
         List<ShareTarget> rows=new ArrayList<>(targets);ListView list=new ListView(context);list.setDivider(null);
+        list.setVerticalScrollBarEnabled(false);
         BaseAdapter adapter=adapter(rows,editor);adapter.notifyDataSetChanged();list.setAdapter(adapter);addView(list,new LayoutParams(-1,0,1));
         search.addTextChangedListener(new TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int count,int after){}
