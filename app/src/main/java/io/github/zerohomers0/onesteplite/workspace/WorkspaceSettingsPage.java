@@ -133,13 +133,15 @@ final class WorkspaceSettingsPage extends FrameLayout {
         LinearLayout shortcuts=card();
         menu(shortcuts,"管理快捷应用","选择常用应用并调整顺序",()->show(APPS,true));
         divider(shortcuts);
-        menu(shortcuts,"管理分享入口","选择拖曳分享功能并调整顺序",()->show(SHARE,true));
+        menu(shortcuts,"管理分享入口","应用功能、操作与可用会话入口",()->show(SHARE,true));
         add(shortcuts,0,12);
 
         section("内容分享");
         LinearLayout sharing=card();
         switchOption(sharing,"分享后清理临时图片","仅清理一步生成的图片，保留相册原图；交付后留出10分钟读取时间",options.deleteSharedImages,
                 checked->persist(WorkspaceSettingsStore.read(activity).withDeleteSharedImages(checked)));
+        divider(sharing);
+        menu(sharing,"图片搜索应用","选择拍立淘、识图等应用提供的分享入口",()->ImageSearchPicker.show(activity));
         add(sharing,0,12);
 
         section("窗口与操作");

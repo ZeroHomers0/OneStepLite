@@ -23,7 +23,7 @@ final class CaptureInboxStore {
                 JSONArray rows=ContentInboxProvider.rows(context);boolean changed=false;
                 for(int i=0;i<rows.length();i++) {
                     JSONObject row=rows.optJSONObject(i);
-                    if(row==null || !ContentCapturePolicy.cleanupAfterShare(true,row.optBoolean("captured"),
+                    if(row==null || row.optBoolean("staged") || !ContentCapturePolicy.cleanupAfterShare(true,row.optBoolean("captured"),
                             row.has("document_uri"),row.optString("mime"))
                             || !delivered.contains(ContentInboxProvider.uri(row.optString("id"))))continue;
                     try{row.put("delete_after",System.currentTimeMillis()+10*60_000L);changed=true;}

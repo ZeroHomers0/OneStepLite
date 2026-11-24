@@ -16,7 +16,9 @@ final class ShareTargetCatalog {
     private ShareTargetCatalog() {}
 
     static List<ShareTarget> load(Context context,ClipDescription content,int count,boolean editing) {
-        return load(context,content,count,editing,QuickAppOrder.decode(ContentAccessCompat.pins(context)));
+        String saved=ContentAccessCompat.pins(context);
+        if(!editing && saved!=null && saved.trim().isEmpty())return new ArrayList<>();
+        return load(context,content,count,editing,QuickAppOrder.decode(saved));
     }
 
     static List<ShareTarget> load(Context context,ClipDescription content,int count,boolean editing,List<String> pins) {
@@ -29,15 +31,22 @@ final class ShareTargetCatalog {
                     collect(context,new Intent(action).setType(content.getMimeType(i)),all,matching);
         }
         List<String> keys=pins.isEmpty()?new ArrayList<>(all.keySet()):new ArrayList<>(pins);
+        java.util.Map<String,ShareTarget> extra=new LinkedHashMap<>();
+        for(ShareTarget action:ShareActions.load(context,content,count,editing))extra.put(action.key(),action);
+        for(ShareTarget action:ConversationShareCompat.load(context,content,count,editing))extra.put(action.key(),action);
+        if(editing || pins.isEmpty())for(String key:extra.keySet())if(!keys.contains(key))keys.add(key);
         if(editing)for(String key:all.keySet())if(!keys.contains(key))keys.add(key);
         List<ShareTarget> result=new ArrayList<>();
         for(String key:keys) {
+            if(extra.containsKey(key)){result.add(extra.get(key));continue;}
             ComponentName component=ComponentName.unflattenFromString(key);if(component==null)continue;
+            if(!editing && (!ShareActions.operation(component).isEmpty() || !ShareRoutes.activity(component).equals(component)))continue;
             ResolveInfo info=all.get(key);
+            if(info==null && !editing)continue;
             String label=info==null?component.getPackageName()+"（入口已失效）":info.loadLabel(context.getPackageManager()).toString();
             android.graphics.drawable.Drawable icon=info==null?context.getDrawable(android.R.drawable.ic_menu_share)
                     :info.loadIcon(context.getPackageManager());
-            result.add(new ShareTarget(component,label,icon,info!=null && (editing || matching.contains(key))));
+            result.add(new ShareTarget(component,label,icon,info!=null && (editing || matching.contains(key)),info==null?"应用未安装或入口已失效":""));
         }
         if(pins.isEmpty())result.sort((a,b)->{
             int label=a.label.compareToIgnoreCase(b.label);return label!=0?label:a.key().compareTo(b.key());

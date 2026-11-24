@@ -34,7 +34,7 @@ final class ContentPanelLayout extends LinearLayout {
         thumb=new android.view.View(context);GradientDrawable face=new GradientDrawable();
         face.setColor(HyperOsStyle.page(context));face.setCornerRadius(dp(8));thumb.setBackground(face);
         this.track.addView(thumb,new android.widget.FrameLayout.LayoutParams(1,-1));
-        String[] names={"近期图片","最近文件","剪贴板"};
+        String[] names={"近期图片","最近文件","剪贴板","暂存"};
         for(int i=0;i<names.length;i++) {
             final int index=i;TextView tab=new TextView(context);tab.setText(names[i]);tab.setTextSize(12);
             tab.setMinHeight(dp(36));tab.setMaxLines(1);tab.setIncludeFontPadding(false);
@@ -55,7 +55,7 @@ final class ContentPanelLayout extends LinearLayout {
     void status(String text){empty.setText(text);empty.setVisibility(VISIBLE);scroll.setVisibility(INVISIBLE);}
     void clearStatus(){empty.setVisibility(GONE);scroll.setVisibility(VISIBLE);}
     private void positionThumb(boolean animate) {
-        int width=Math.max(1,(track.getWidth()-dp(6))/3);
+        int width=Math.max(1,(track.getWidth()-dp(6))/tabs.size());
         thumb.getLayoutParams().width=width;thumb.getLayoutParams().height=Math.max(1,track.getHeight()-dp(6));thumb.requestLayout();
         thumb.setY(dp(3));float x=dp(3)+Math.max(0,current)*width;thumb.animate().cancel();
         if(animate)thumb.animate().translationX(x).setDuration(240).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();

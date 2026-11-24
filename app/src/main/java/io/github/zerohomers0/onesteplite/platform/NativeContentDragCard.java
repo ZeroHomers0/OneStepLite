@@ -67,9 +67,7 @@ final class NativeContentDragCard {
     }
     private static void replace(XC_MethodHook.MethodHookParam call,Object display) {
         ClipData original=(ClipData)call.args[12];String text=plainText(original);
-        boolean image=original.getItemCount()==1 && original.getDescription().hasMimeType("image/*")
-                && original.getItemAt(0).getIntent()==null && original.getItemAt(0).getUri()!=null
-                && "content".equals(original.getItemAt(0).getUri().getScheme());
+        boolean image=images(original);
         if(display==null || text==null && !image || ContentDragShadow.offset(original.getDescription())>0
                 || (((Integer)call.args[3])&View.DRAG_FLAG_GLOBAL)==0)return;
         Object wm=XposedHelpers.getObjectField(display,"mWmService");Context context;
@@ -87,18 +85,27 @@ final class NativeContentDragCard {
             if(task==null || !Integer.valueOf(1).equals(XposedHelpers.callMethod(task,"getWindowingMode")))return;
             context=(Context)XposedHelpers.getObjectField(wm,"mContext");
         }
-        ContentDragShadow card=text!=null?new ContentDragShadow(text,context.getResources().getDisplayMetrics().density)
-                :imageCard((SurfaceControl)call.args[4],context);
+        ContentDragShadow card=text!=null?new ContentDragShadow(text,context.getResources().getDisplayMetrics().density,original.getItemCount())
+                :imageCard((SurfaceControl)call.args[4],context,original.getItemCount());
         if(card==null)return;
         Point size=new Point(),touch=new Point();card.onProvideShadowMetrics(size,touch);
         SurfaceControl surface;
         try{surface=draw(card,size);}finally{card.recycleThumbnail();}
         ClipData clip=new ClipData(new ClipDescription(original.getDescription()),original.getItemAt(0));
+        for(int i=1;i<original.getItemCount();i++)clip.addItem(original.getItemAt(i));
         card.mark(clip);call.setObjectExtra(ORIGINAL,call.args[4]);call.setObjectExtra(REPLACEMENT,surface);
         call.args[4]=surface;call.args[10]=(float)touch.x;call.args[11]=(float)touch.y;call.args[12]=clip;
         android.util.Log.i(Tags.PROBE,"native content drag card applied");
     }
-    static ContentDragShadow imageCard(SurfaceControl source,Context context) {
+    static boolean images(ClipData clip) {
+        if(clip.getItemCount()<1 || clip.getItemCount()>ContentSharePolicy.MAX_ITEMS || !clip.getDescription().hasMimeType("image/*"))return false;
+        for(int i=0;i<clip.getItemCount();i++) {
+            ClipData.Item item=clip.getItemAt(i);
+            if(item.getIntent()!=null || item.getUri()==null || !"content".equals(item.getUri().getScheme()))return false;
+        }
+        return true;
+    }
+    static ContentDragShadow imageCard(SurfaceControl source,Context context,int count) {
         Object hardware=null;android.graphics.Bitmap bitmap=null,copy=null;SurfaceControl mirror=null;
         try {
             // Never show or reparent the application's surface. Only the short-lived mirror is made visible,
@@ -129,7 +136,7 @@ final class NativeContentDragCard {
             copy=bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888,false);
             if(copy==null)return null;
             android.graphics.Bitmap preview=trim(copy);return preview==null?null:new ContentDragShadow(preview,
-                    context.getResources().getDisplayMetrics().density);
+                    context.getResources().getDisplayMetrics().density,count);
         }catch(InterruptedException interrupted){Thread.currentThread().interrupt();return null;}
         catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"native image shadow retained",unavailable);return null;}
         finally{
@@ -149,10 +156,15 @@ final class NativeContentDragCard {
         return cropped==bitmap?bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888,false):cropped;
     }
     private static String plainText(ClipData clip) {
-        if(clip.getItemCount()!=1 || !clip.getDescription().hasMimeType("text/plain"))return null;
-        ClipData.Item item=clip.getItemAt(0);CharSequence text=item.getText();
-        if(item.getIntent()!=null || item.getUri()!=null || text==null || text.length()==0 || text.length()>ContentSharePolicy.MAX_TEXT)return null;
-        return text.toString();
+        if(clip.getItemCount()<1 || clip.getItemCount()>ContentSharePolicy.MAX_ITEMS || !clip.getDescription().hasMimeType("text/plain"))return null;
+        StringBuilder result=new StringBuilder();
+        for(int i=0;i<clip.getItemCount();i++) {
+            ClipData.Item item=clip.getItemAt(i);CharSequence text=item.getText();
+            if(item.getIntent()!=null || item.getUri()!=null || text==null || text.length()==0
+                    || text.length()>ContentSharePolicy.MAX_TEXT-result.length()-(i>0?1:0))return null;
+            if(i>0)result.append('\n');result.append(text);
+        }
+        return result.toString();
     }
     private static SurfaceControl draw(ContentDragShadow card,Point size) {
         SurfaceControl control=new SurfaceControl.Builder().setName("OneStepLiteTextDragCard")

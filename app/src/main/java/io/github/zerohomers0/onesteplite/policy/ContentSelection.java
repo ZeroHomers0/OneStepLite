@@ -7,8 +7,8 @@ import java.util.Set;
 
 /** Ordered bounded selection and independent page positions survive cancelled drags. */
 final class ContentSelection {
-    private final List<Set<String>> pages = List.of(new LinkedHashSet<>(), new LinkedHashSet<>(), new LinkedHashSet<>());
-    private final int[] positions = new int[3];
+    private final List<Set<String>> pages = List.of(new LinkedHashSet<>(), new LinkedHashSet<>(), new LinkedHashSet<>(),new LinkedHashSet<>());
+    private final int[] positions = new int[4];
 
     boolean toggle(int page, String key) {
         Set<String> selected = pages.get(page);
@@ -23,5 +23,5 @@ final class ContentSelection {
     void clear(int page) { pages.get(page).clear(); }
     void position(int page, int y) { positions[page] = Math.max(0, y); }
     int position(int page) { return positions[page]; }
-    void reset() { for (int i=0;i<3;i++) { clear(i);positions[i]=0; } }
+    void reset() { for (int i=0;i<pages.size();i++) { clear(i);positions[i]=0; } }
 }

@@ -92,11 +92,15 @@ final class ShortcutEditor extends LinearLayout {
                 ImageView icon=new ImageView(getContext());icon.setImageDrawable(target.icon);
                 row.addView(icon,new LayoutParams(dp(32),dp(32)));
                 TextView name=label(target.label,14);name.setMaxLines(1);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                LayoutParams text=new LayoutParams(0,-2,1);text.setMarginStart(dp(10));text.setMarginEnd(dp(16));row.addView(name,text);
+                LinearLayout labels=new LinearLayout(getContext());labels.setOrientation(VERTICAL);labels.addView(name);
+                if(!target.unavailableReason.isEmpty()){TextView reason=label(target.unavailableReason,11);
+                    reason.setTextColor(HyperOsStyle.textSecondary(getContext()));reason.setMaxLines(2);labels.addView(reason);}
+                LayoutParams text=new LayoutParams(0,-2,1);text.setMarginStart(dp(10));text.setMarginEnd(dp(16));row.addView(labels,text);
                 Switch check=WorkspaceSwitch.create(getContext(),target.label,chosen.contains(target.key()));row.addView(check,new LayoutParams(-2,dp(46)));
+                check.setEnabled(target.enabled || chosen.contains(target.key()));row.setAlpha(target.enabled?1f:.5f);
                 check.setOnCheckedChangeListener((button,enabled)->{
                     if(enabled)chosen.add(target.key());else chosen.remove(target.key());editor.refresh();refreshCount();notifyDataSetChanged();changed.run();
-                });row.setOnClickListener(v->check.toggle());return row;
+                });row.setOnClickListener(v->{if(check.isEnabled())check.toggle();});return row;
             }
             @Override public void notifyDataSetChanged(){
                 java.util.Map<String,Integer> order=new java.util.HashMap<>();int index=0;
@@ -108,7 +112,7 @@ final class ShortcutEditor extends LinearLayout {
     }
 
     private final boolean applications;
-    private void refreshCount(){count.setText(chosen.isEmpty()?(applications?"未固定 · 按使用情况显示应用":"未固定 · 拖曳时显示全部入口")
+    private void refreshCount(){count.setText(chosen.isEmpty()?(applications?"未固定 · 按使用情况显示应用":"未选择分享入口")
             :"已固定 "+chosen.size()+" 项 · 长按图标调整顺序");}
     private void addAction(LinearLayout actions,String text,boolean primary,Runnable action) {
         TextView button=label(text,14);button.setGravity(Gravity.CENTER);

@@ -51,6 +51,25 @@ final class ContentPanel {
     private volatile int generation;
     private int imageSize,contentWidth;
     private boolean dragging;
+    private ClipData recent;
+    boolean isDragging(){return dragging;}
+    void delivery(boolean success,ClipData retained,boolean ownSource) {
+        boolean sensitive=retained!=null && retained.getDescription().getExtras()!=null
+                && retained.getDescription().getExtras().getBoolean("android.content.extra.IS_SENSITIVE");
+        if(retained!=null && !sensitive){if(owner!=CurrentUser.id()){selection.reset();selecting=false;owner=CurrentUser.id();}recent=retained;}
+        if(success)return;
+        if(ownSource){if(dialog==null)open();return;}
+        if(retained==null)return;
+        if(sensitive){if(dialog==null)open();replay(retained);return;}
+        final int user=CurrentUser.id();
+        WORKER.execute(()->{
+            try{Bundle input=new Bundle();input.putParcelable("clip",retained);
+                context.getContentResolver().call(ContentInboxProvider.ROOT,"shelf_add",null,input);
+                anchor.post(()->{if(user==CurrentUser.id() && anchor.isShown()){tab=3;if(dialog==null)open();else load();}});
+            }catch(RuntimeException unavailable){anchor.post(()->{if(user==CurrentUser.id() && anchor.isShown()){
+                if(dialog==null)open();replay();}});}
+        });
+    }
     private CancellationSignal query;
     private ModalIslandLease island;
     private final java.util.ArrayList<TextView> tabButtons = new java.util.ArrayList<>();
@@ -70,7 +89,7 @@ final class ContentPanel {
     void open() {
         if (dialog != null) { close(); return; }
         if (!ContentAccessCompat.currentProcessUser()) { message("暂不支持此用户的内容访问"); return; }
-        if(owner!=CurrentUser.id()) { selection.reset();selecting=false;owner=CurrentUser.id(); }
+        if(owner!=CurrentUser.id()) { selection.reset();selecting=false;recent=null;owner=CurrentUser.id(); }
         Context windowContext = context.createDisplayContext(anchor.getDisplay())
                 .createWindowContext(WindowTypes.SYSTEM_UI_DIALOG, null);
         Context themed=new android.view.ContextThemeWrapper(windowContext,HyperOsStyle.dark(context)
@@ -121,7 +140,7 @@ final class ContentPanel {
         panelActions=new ContentPanelActions(context,()->{
             selecting=!selecting;if(!selecting)selection.clear(tab);refreshSelection();
         },this::clearRecords,this::historyOptions,this::chooseSystemFiles);
-        selectionButton=panelActions.selection;return panelActions;
+        selectionButton=panelActions.selection;if(recent!=null)panelActions.recent(this::replay);return panelActions;
     }
 
     private void chooseSystemFiles() {
@@ -139,6 +158,7 @@ final class ContentPanel {
     }
 
     private void clearRecords() {
+        if(tab==3){removeShelf();return;}
         if(tab==2) { history.clear();selection.clear(tab);load();message("已清空历史，系统当前剪贴板保留");return; }
         java.util.LinkedHashSet<String> hidden=new java.util.LinkedHashSet<>(
                 preferences().getStringSet("hidden_"+tab,java.util.Collections.emptySet()));
@@ -170,6 +190,7 @@ final class ContentPanel {
         shell.select(tab);panelActions.page(tab);
         shell.clearStatus();grid.removeAllViews();
         entries.clear();tiles.clear();refreshSelection();
+        if(tab==3){int token=generation,user=CurrentUser.id();shell.status("正在读取暂存…");WORKER.execute(()->shelf(token,user));return;}
         if (tab == 2) {
             clipboard();final int token=generation,user=CurrentUser.id();
             WORKER.execute(()->inbox(token,user,2));return;
@@ -246,9 +267,9 @@ final class ContentPanel {
         shell.clearStatus();if(entries.isEmpty())grid.removeAllViews();
         entries.put(entry.key,entry);
         View view;
-        if(tab==2) {
+        if(tab==2 || tab==3 && (entry.text!=null || entry.mime.startsWith("image/"))) {
             view=new ClipboardRow(context,entry);
-        } else if(tab==1 && entry.uri!=null) {
+        } else if((tab==1 || tab==3) && entry.uri!=null) {
             view=new RecentFileRow(context,entry);
         } else if(entry.thumbnail!=null) {
             ImageView image=new ImageView(context);image.setImageBitmap(entry.thumbnail);
@@ -264,7 +285,7 @@ final class ContentPanel {
             if(selecting) {
                 if(!selection.toggle(tab,entry.key))message("一次最多选择32项");refreshSelection();
             } else if(tab==2 && entry.text!=null && EditorPasteCompat.paste(context,entry.text))close();
-            else if(tab!=1)preview(entry);
+            else if(tab!=1 && (entry.text!=null || entry.mime.startsWith("image/")))preview(entry);
         });
         view.setOnLongClickListener(v->beginEntry(v,entry));
         GridLayout.LayoutParams params=new GridLayout.LayoutParams(
@@ -285,6 +306,7 @@ final class ContentPanel {
             for(int i=0;i<rows.length();i++) {
                 if(token!=generation)return;
                 org.json.JSONObject row=rows.getJSONObject(i);String mime=row.optString("mime","application/octet-stream");
+                if(row.optBoolean("staged") || row.optBoolean("shelf_removed"))continue;
                 boolean text=row.has("text"),image=mime.startsWith("image/");
                 if(page==2?!text:page==0?!image:image || text)continue;
                 if(page==1 && !row.has("document_uri"))continue;
@@ -313,6 +335,56 @@ final class ContentPanel {
             tile.getValue().setForeground(mark);
             tile.getValue().setSelected(selection.contains(tab,tile.getKey()));
         }
+    }
+
+    private void shelf(int token,int user) {
+        try{
+            Bundle result=context.getContentResolver().call(ContentInboxProvider.ROOT,"shelf_list",null,null);
+            if(result==null)throw new IllegalStateException("Missing shelf");
+            ClipData last=result.getParcelable("recent",ClipData.class);
+            org.json.JSONArray rows=new org.json.JSONArray(result.getString("rows","[]"));
+            java.util.List<ContentEntry> items=new java.util.ArrayList<>();
+            for(int i=0;i<rows.length() && token==generation;i++){
+                org.json.JSONObject row=rows.getJSONObject(i);boolean text=row.has("text");String mime=row.optString("mime","application/octet-stream");
+                Uri uri=text?null:ContentInboxProvider.uri(row.getString("id"));Bitmap thumb=null;
+                if(mime.startsWith("image/"))try{thumb=context.getContentResolver().loadThumbnail(uri,new Size(160,160),null);}catch(Exception ignored){}
+                items.add(new ContentEntry("shelf:"+row.getString("id"),row.optString("name","暂存内容"),mime,text?row.getString("text"):null,uri,thumb));
+            }
+            anchor.post(()->{
+                if(!valid(token,user)){for(ContentEntry item:items)if(item.thumbnail!=null)item.thumbnail.recycle();return;}
+                recent=last;if(recent!=null)panelActions.recent(this::replay);
+                for(ContentEntry item:items)addEntry(item);
+                if(items.isEmpty())shell.status("将内容拖到顶栏“暂存”\n临时内容保留24小时");restorePosition(token,user);
+            });
+        }catch(Exception unavailable){anchor.post(()->{if(valid(token,user))shell.status("暂时无法读取暂存");});}
+    }
+
+    private void removeShelf() {
+        Bundle input=new Bundle();java.util.ArrayList<String> ids=new java.util.ArrayList<>();
+        for(String key:selection.keys(3))if(key.startsWith("shelf:"))ids.add(key.substring(6));
+        if(!ids.isEmpty())input.putStringArrayList("ids",ids);
+        int token=generation,user=CurrentUser.id();
+        WORKER.execute(()->{try{
+            context.getContentResolver().call(ContentInboxProvider.ROOT,"shelf_remove",null,input);
+            anchor.post(()->{if(valid(token,user)){selection.clear(3);load();}});
+        }catch(RuntimeException unavailable){anchor.post(()->{if(valid(token,user))message("暂存移除失败，请重试");});}});
+    }
+
+    private void replay() {
+        replay(recent);
+    }
+    private void replay(ClipData clip) {
+        if(clip==null || dialog==null)return;
+        SharePayload payload;
+        try{payload=new SharePayload(clip);}catch(RuntimeException invalid){return;}
+        LinearLayout body=new LinearLayout(context);body.setOrientation(LinearLayout.VERTICAL);WorkspacePopupStyle.decorate(body,null);
+        WorkspacePopupStyle.heading(body,"上次分享 · "+clip.getItemCount()+"项",this::closePreview);
+        TextView summary=label(payload.uris.isEmpty()?payload.text:payload.mime.startsWith("image/")?"图片 · "+payload.uris.size()+"张":"文件 · "+payload.uris.size()+"项");
+        summary.setMaxLines(4);summary.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        body.addView(summary,new LinearLayout.LayoutParams(-1,0,1));
+        TextView drag=WorkspacePopupStyle.action(context,"长按再次拖曳",true,()->{});
+        drag.setOnLongClickListener(v->begin(v,clip));body.addView(drag,new LinearLayout.LayoutParams(-1,dp(44)));
+        summary.setOnLongClickListener(v->begin(v,clip));showPreview(body);
     }
 
     private boolean beginEntry(View source,ContentEntry entry) {
@@ -457,15 +529,18 @@ final class ContentPanel {
             return event.getAction()!=android.view.DragEvent.ACTION_DROP;
         });
         final boolean started;
+        dragging=true;
         try {
             ContentDragShadow shadow=new ContentDragShadow(source,clip.getItemCount(),clip.getItemCount()==1?clip.getItemAt(0).getText():null);
             shadow.mark(clip);
             started = source.startDragAndDrop(clip, shadow, new SharePayload(clip),
                     View.DRAG_FLAG_GLOBAL | View.DRAG_FLAG_GLOBAL_URI_READ);
         } catch (RuntimeException denied) {
+            dragging=false;
             message("此内容暂时无法拖曳，请使用应用原有分享");
             return false;
         }
+        if(!started)dragging=false;
         if (started && dialog != null) {
             dragging = true;
             Window window = dialog.getWindow();

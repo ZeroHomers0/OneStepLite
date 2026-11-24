@@ -14,15 +14,15 @@ def member(signature):
     while depth:
         depth+=(source[end]=='{')-(source[end]=='}');end+=1
     return source[start:end]
-methods='\n'.join(member(x) for x in ['    private static void replace(', '    private static String plainText('])
+methods='\n'.join(member(x) for x in ['    private static void replace(', '    private static String plainText(', '    static boolean images('])
 files={
 'android/os/IBinder.java':'package android.os;public interface IBinder{}',
 'android/os/IInterface.java':'package android.os;public interface IInterface{IBinder asBinder();}',
 'android/content/ClipDescription.java':'''package android.content;public class ClipDescription{public boolean text=true;public int offset;
 public ClipDescription(){}public ClipDescription(ClipDescription d){text=d.text;offset=d.offset;}public boolean hasMimeType(String t){return "image/*".equals(t)?!text:text;}}''',
-'android/content/ClipData.java':'''package android.content;public class ClipData{public ClipDescription d;public Item item;public int count=1;
-public ClipData(ClipDescription d,Item item){this.d=d;this.item=item;}public ClipDescription getDescription(){return d;}
-public int getItemCount(){return count;}public Item getItemAt(int i){return item;}
+'android/content/ClipData.java':'''package android.content;public class ClipData{public ClipDescription d;public Item item;public int count=1;java.util.List<Item> items=new java.util.ArrayList<>();
+public ClipData(ClipDescription d,Item item){this.d=d;this.item=item;items.add(item);}public ClipDescription getDescription(){return d;}
+public void addItem(Item i){items.add(i);count++;}public int getItemCount(){return count;}public Item getItemAt(int i){return i<items.size()?items.get(i):item;}
 public static class Item{public String text;public android.net.Uri uri;public Object intent;public Item(String t){text=t;}
 public CharSequence getText(){return text;}public android.net.Uri getUri(){return uri;}public Object getIntent(){return intent;}}}''',
 'android/content/Context.java':'''package android.content;public class Context{public static class Metrics{public float density=3;}
@@ -45,11 +45,11 @@ import android.content.*;import android.graphics.Point;import android.view.*;imp
 import de.robv.android.xposed.XC_MethodHook;import de.robv.android.xposed.XposedHelpers;
 class Tags{static final String PROBE="test";}class Packages{static final String SYSTEM_UI="com.android.systemui";}
 class ContentInboxProvider{static final String MODULE="module";}
-class ContentDragShadow{ContentDragShadow(String t,float d){}static int offset(ClipDescription d){return d.offset;}
+class ContentDragShadow{ContentDragShadow(String t,float d,int n){}static int offset(ClipDescription d){return d.offset;}
 void recycleThumbnail(){}void mark(ClipData c){c.d.offset=86;}void onProvideShadowMetrics(Point size,Point touch){size.x=128;size.y=92;touch.x=64;touch.y=89;}}
 public class NativeTextRegression{
 static final String ORIGINAL="original",REPLACEMENT="replacement";
-static int imageCalls;static ContentDragShadow imageCard(SurfaceControl s,Context c){imageCalls++;return new ContentDragShadow("image",3);}
+static int imageCalls;static ContentDragShadow imageCard(SurfaceControl s,Context c,int n){imageCalls++;return new ContentDragShadow("image",3,n);}
 static SurfaceControl draw(ContentDragShadow c,Point s){return new SurfaceControl();}
 __METHODS__
 public static class Token implements IBinder{}public static class Client implements IInterface{public IBinder token=new Token();public IBinder asBinder(){return token;}}
@@ -66,7 +66,7 @@ static void reject(Display d,Client client,ClipData clip){XC_MethodHook.MethodHo
 public static void main(String[] args){
 Display d=new Display();Client client=new Client();Win win=new Win();win.display=d;d.mWmService.mWindowMap.put(client.token,win);
 ClipData clip=new ClipData(new ClipDescription(),new ClipData.Item("你好 😀"));
-check(plainText(clip).equals("你好 😀"));clip.count=2;check(plainText(clip)==null);clip.count=1;
+check(plainText(clip).equals("你好 😀"));clip.count=2;check(plainText(clip).equals("你好 😀\\n你好 😀"));clip.count=1;
 clip.item.uri=new android.net.Uri();check(plainText(clip)==null);clip.item.uri=null;
 clip.item.intent=new Object();check(plainText(clip)==null);clip.item.intent=null;
 clip.d.text=false;check(plainText(clip)==null);clip.d.text=true;
@@ -84,6 +84,14 @@ check(((ClipData)call.args[12]).item==clip.item);
 clip.d.text=false;clip.item.uri=new android.net.Uri();win.mAttrs.flags=8192;reject(d,client,clip);check(imageCalls==0);
 win.mAttrs.flags=0;clip.item.uri.scheme="file";reject(d,client,clip);check(imageCalls==0);
 clip.item.uri.scheme="content";call=call(client,clip);old=call.args[4];replace(call,d);check(imageCalls==1&&call.args[4]!=old);
+clip.count=32;check(images(clip));call=call(client,clip);replace(call,d);check(((ClipData)call.args[12]).getItemCount()==32);
+clip.count=33;check(!images(clip));clip.d.text=true;clip.item.uri=null;check(plainText(clip)==null);
+clip.count=32;clip.item.text="a";check(plainText(clip).split("\\n").length==32);
+ClipData words=new ClipData(new ClipDescription(),new ClipData.Item("第一条"));ClipData.Item second=new ClipData.Item("第二条");words.addItem(second);
+check(plainText(words).equals("第一条\\n第二条"));call=call(client,words);replace(call,d);
+check(((ClipData)call.args[12]).getItemAt(1)==second&&((ClipData)call.args[12]).getItemCount()==2);
+words.d.text=false;words.item.uri=new android.net.Uri();check(!images(words));second.uri=new android.net.Uri();check(images(words));
+second.intent=new Object();check(!images(words));
 System.out.println("Production native text card checks="+checks+" passed (surface rendering requires device)");
 }}
 '''.replace('__METHODS__',methods)

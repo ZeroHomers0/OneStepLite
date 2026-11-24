@@ -3651,6 +3651,8 @@ public final class WorkspaceHost {
             @Override public void onContentShare(ComponentName target, Runnable launch) {
                 shareContentInMain(target, launch);
             }
+            @Override public String contentHoverKey(String pkg){return contentHoverKeyFor(pkg);}
+            @Override public void onContentHover(String key){promoteContentHover(key);}
             @Override public Rect contentBounds() {
                 if (layout == null) return null;
                 int[] bounds = layout.mainBounds();
@@ -5774,6 +5776,28 @@ public final class WorkspaceHost {
     }
 
     /** Only the Host-owned occupied side cells accept fallback content shares. */
+    private final DropTargetHighlight contentDropHighlight=new DropTargetHighlight();
+
+    String contentHoverKeyFor(String pkg) {
+        if(pkg==null || scene!=ACTIVE || promotion!=null || transferBusy || !screenOn || keyguardLocked || taskCellsCovered){
+            contentDropHighlight.close();return null;
+        }
+        for(Slot slot:slots)if(slot.index>SLOT_MAIN && slot.index<CELL_SLOT_COUNT && slot.occupied && !slot.parked && !slot.frozen && !slot.carrier
+                && pkg.equals(slot.pkg) && slot.taskId>=0 && slot.taskToken!=null && slot.windowMode==6
+                && controllerOwns(slot,slot.taskId,slot.taskToken) && mayWriteSideSurface(slot) && slot.view!=null && slot.view.isShown()) {
+            contentDropHighlight.show(slot.view);
+            return pkg+"\n"+slot.taskId+":"+slot.taskEpoch+":"+sceneEpoch+":"+currentUserId();
+        }
+        contentDropHighlight.close();return null;
+    }
+
+    void promoteContentHover(String key) {
+        int split=key==null?-1:key.indexOf('\n');if(split<1)return;
+        String pkg=key.substring(0,split);
+        if(!key.equals(contentHoverKeyFor(pkg)))return;
+        contentDropHighlight.close();promoteForNotification(pkg,currentUserId(),()->{});
+    }
+
     private boolean onWindowContentDrag(android.view.DragEvent event) {
         if(topBar!=null && event.getAction()==android.view.DragEvent.ACTION_DRAG_ENDED)
             return topBar.onWindowContentDrag(event,null);
@@ -5781,6 +5805,7 @@ public final class WorkspaceHost {
                 || promotion != null || transferBusy || taskCellsCovered) return false;
         if (event.getAction() == android.view.DragEvent.ACTION_DRAG_STARTED)
             return topBar.onWindowContentDrag(event, null);
+        if(event.getAction()==android.view.DragEvent.ACTION_DRAG_EXITED)return topBar.onWindowContentDrag(event,null);
         for (int i = 1; i < CELL_SLOT_COUNT; i++) {
             Slot slot = slots[i];
             if (!slot.occupied || slot.parked || slot.frozen || slot.carrier || slot.rect == null) continue;
@@ -5788,7 +5813,7 @@ public final class WorkspaceHost {
                     && event.getY() >= slot.rect[1] && event.getY() < slot.rect[3])
                 return topBar.onWindowContentDrag(event, slot.pkg);
         }
-        return false;
+        return topBar.onWindowContentDrag(event,null);
     }
 
     private boolean parkMainForQuickLaunch(QuickApp entry) {

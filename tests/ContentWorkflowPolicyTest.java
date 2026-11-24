@@ -11,7 +11,10 @@ public final class ContentWorkflowPolicyTest {
         selection.position(0,80);selection.position(1,140);
         check(selection.position(0)==80&&selection.position(1)==140,"page scroll independent");
         selection.keys(0).clear();check(selection.keys(0).size()==31,"selection snapshots cannot mutate owner");
+        check(selection.toggle(3,"shelf")&&selection.keys(0).size()==31,"shelf selection independent of media");
+        selection.position(3,250);check(selection.position(3)==250,"shelf keeps scroll position");
         selection.reset();check(selection.keys(1).isEmpty()&&selection.position(1)==0,"user reset clears records");
+        check(selection.keys(3).isEmpty()&&selection.position(3)==0,"user reset clears shelf position and selection");
         ShareEdgePolicy edge=new ShareEdgePolicy();
         check(edge.update(99,0,100,10,0)==0,"edge does not jump immediately");
         check(edge.update(99,0,100,10,349)==0,"dwell threshold");

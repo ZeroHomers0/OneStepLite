@@ -9,9 +9,13 @@ final class ShareTarget {
     final String label;
     final Drawable icon;
     final boolean enabled;
+    final String unavailableReason;
 
     ShareTarget(ComponentName component,String label,Drawable icon,boolean enabled) {
-        this.component=component;this.label=label;this.icon=icon;this.enabled=enabled;
+        this(component,label,icon,enabled,"");
+    }
+    ShareTarget(ComponentName component,String label,Drawable icon,boolean enabled,String reason) {
+        this.component=component;this.label=label;this.icon=icon;this.enabled=enabled;unavailableReason=reason;
     }
     String key(){return component.flattenToString();}
 }

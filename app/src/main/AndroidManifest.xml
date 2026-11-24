@@ -7,6 +7,12 @@
     <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
     <intent><action android:name="android.intent.action.SEND" /><data android:mimeType="*/*" /></intent>
     <intent><action android:name="android.intent.action.SEND_MULTIPLE" /><data android:mimeType="*/*" /></intent>
+    <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="https" /></intent>
+    <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="geo" /></intent>
+    <intent><action android:name="android.intent.action.WEB_SEARCH" /></intent>
+    <intent><action android:name="android.intent.action.TRANSLATE" /></intent>
+    <intent><action android:name="android.intent.action.CREATE_NOTE" /></intent>
+    <intent><action android:name="android.intent.action.EDIT" /><data android:mimeType="image/*" /></intent>
   </queries>
   <application android:hasCode="true" android:extractNativeLibs="false" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:label="OneStepLite">
     <provider android:name=".WorkspaceSettingsProvider" android:authorities="io.github.zerohomers0.onesteplite.settings" android:directBootAware="true" android:exported="true" />

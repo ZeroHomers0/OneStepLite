@@ -26,6 +26,8 @@ final class TopBar extends FrameLayout {
         default Rect contentBounds() { return null; }
         default boolean canShareContent(){return canCustomizeApps();}
         default boolean contentRailCovered(){return false;}
+        default String contentHoverKey(String packageName){return null;}
+        default void onContentHover(String key){}
     }
     private Listener listener;
     private final Header header;
@@ -99,6 +101,7 @@ final class TopBar extends FrameLayout {
         addView(shareWorkspace, new LayoutParams(-1, 1));
         shareWorkspace.setMainOnRight(mainOnRight);quickRail.setMainOnRight(mainOnRight);
         shareWorkspace.setCoveredSource(()->!isShown() || this.listener.contentRailCovered());
+        shareWorkspace.setWindowHover(pkg->this.listener.contentHoverKey(pkg),key->this.listener.onContentHover(key));
     }
 
     void applyOptions(WorkspaceOptions options) { clock.setShowLunar(options.showLunar); }

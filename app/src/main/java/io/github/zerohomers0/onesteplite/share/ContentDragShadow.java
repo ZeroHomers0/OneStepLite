@@ -24,11 +24,17 @@ final class ContentDragShadow extends View.DragShadowBuilder {
         this(view,count,null);
     }
     ContentDragShadow(String text,float density) {
-        super();count=1;unit=density;width=100*unit;height=110*unit;top=12*unit;
+        this(text,density,1);
+    }
+    ContentDragShadow(String text,float density,int items) {
+        super();count=items;unit=density;width=100*unit;height=110*unit;top=12*unit;
         textContent=true;caption=text.replace('\n',' ');thumbnail=null;paint.setFilterBitmap(true);
     }
     ContentDragShadow(Bitmap image,float density) {
-        super();count=1;unit=density;width=100*unit;height=110*unit;top=12*unit;
+        this(image,density,1);
+    }
+    ContentDragShadow(Bitmap image,float density,int items) {
+        super();count=items;unit=density;width=100*unit;height=110*unit;top=12*unit;
         textContent=false;caption="图片";thumbnail=image;paint.setFilterBitmap(true);
     }
     void recycleThumbnail(){if(thumbnail!=null && !thumbnail.isRecycled())thumbnail.recycle();}
@@ -60,6 +66,7 @@ final class ContentDragShadow extends View.DragShadowBuilder {
         android.os.PersistableBundle extras=clip.getDescription().getExtras();
         extras=extras==null?new android.os.PersistableBundle():new android.os.PersistableBundle(extras);
         extras.putInt(TIP_OFFSET,Math.round(height-6*unit));
+        extras.putInt("onesteplite_item_count",clip.getItemCount());
         extras.putInt("onesteplite_shadow_touch_y",Math.round(height-3*unit));clip.getDescription().setExtras(extras);
     }
     static int offset(android.content.ClipDescription description) {
@@ -70,6 +77,11 @@ final class ContentDragShadow extends View.DragShadowBuilder {
         paint.setStyle(Paint.Style.FILL);paint.setColor(0xeef6faff);
         paint.setShadowLayer(4*unit,0,2*unit,0x55000000);
         RectF card=new RectF(4*unit,top,width-4*unit,height-6*unit);
+        if(count>1){
+            paint.clearShadowLayer();paint.setColor(0xbbe0effa);
+            canvas.drawRoundRect(card.left+3*unit,card.top+5*unit,card.right,card.bottom+3*unit,12*unit,12*unit,paint);
+            paint.setColor(0xeef6faff);paint.setShadowLayer(4*unit,0,2*unit,0x55000000);
+        }
         float corner=12*unit;
         outline.reset();outline.moveTo(card.left+corner,card.top);
         outline.lineTo(width/2-9*unit,top);outline.lineTo(width/2,3*unit);outline.lineTo(width/2+9*unit,top);

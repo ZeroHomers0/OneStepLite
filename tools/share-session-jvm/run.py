@@ -34,7 +34,7 @@ static int checks;static void check(boolean value,String message){checks++;if(!v
 static final class DragEvent {static final int ACTION_DRAG_STARTED=1,ACTION_DRAG_LOCATION=2,ACTION_DROP=3,ACTION_DRAG_ENDED=4;
 int action;DragEvent(int value){action=value;}int getAction(){return action;}Object getClipDescription(){return this;}}
 static final class ComponentName {String pkg;ComponentName(String p,String name){pkg=p;}}
-static final class Counter implements AutoCloseable {int closes,stops;public void close(){closes++;}void stop(){stops++;}}
+static class Counter implements AutoCloseable {int closes,stops;public void close(){closes++;}void stop(){stops++;}boolean isDragging(){return false;}}
 static class Base {int detaches;protected void onDetachedFromWindow(){detaches++;}}
 static class View {}
 static class ShareTargetButton extends View {boolean hovered=true;void setDragHovered(boolean value){hovered=value;}}
@@ -44,9 +44,11 @@ static class Transition {int resets,returns;void show(boolean value){if(!value)r
 static class ShareRailOverlay {boolean open;int events,closes;String target;
 ShareRailOverlay(Object view,BooleanSupplier ready,Object dispatch,Object hint,Object bounds){}
 boolean isOpen(){return open;}boolean onDrag(DragEvent event,String name){events++;target=name;open=event.action!=4;return true;}
-void close(){open=false;closes++;}}
+void setWindowHover(Function<String,String> identity,Consumer<String> activate){}void close(){open=false;closes++;}}
 static class Replay extends Base {
 BooleanSupplier ready=()->true;Object dispatch,bounds,hovered;Consumer<String> hint=value->{};ShareRailOverlay overlay;
+boolean panelSource;Object transferClip;Counter receipt;Function<String,String> hoverIdentity=value->value;Consumer<String> hoverActivate=value->{};
+static class Hover extends Counter {void move(String value){}}Hover windowHover=new Hover();
 boolean dragging,dropped,deliveryPending,retainingDelivery,shareOnly;int generation,starts,ends,stops,drops;String lastTarget;
 Handler handler=new Handler();Runnable expire=()->{},deliverySettled=()->{};
 Counter pendingRead,delegatedRead,catchment;Counter panel=new Counter(),history=new Counter(),picker=new Counter(),capture=new Counter(),portal=new Counter();Runnable afterDrag=()->{};

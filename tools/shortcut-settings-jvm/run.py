@@ -42,6 +42,7 @@ public abstract String getType(android.net.Uri uri);public abstract android.data
 public abstract android.net.Uri insert(android.net.Uri u,ContentValues v);public abstract int delete(android.net.Uri u,String s,String[] a);
 public abstract int update(android.net.Uri u,ContentValues v,String s,String[] a);}''',
 'io/github/zerohomers0/onesteplite/Packages.java': 'package io.github.zerohomers0.onesteplite;class Packages {static final String SYSTEM_UI="com.android.systemui";}',
+'io/github/zerohomers0/onesteplite/ShareActions.java': 'package io.github.zerohomers0.onesteplite;class ShareActions {static android.os.Bundle settings(android.content.Context c){return new android.os.Bundle();}}',
 'io/github/zerohomers0/onesteplite/WorkspaceSettingsStore.java': '''package io.github.zerohomers0.onesteplite;class WorkspaceSettingsStore {
 static final String READ="read";static final android.net.Uri URI=android.net.Uri.parse("options");
 static Object read(android.content.Context c){return null;}static android.os.Bundle bundle(Object options){return new android.os.Bundle();}}''',

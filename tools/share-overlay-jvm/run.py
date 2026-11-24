@@ -13,6 +13,7 @@ out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
 files = {
 'android/content/ComponentName.java':'package android.content;public class ComponentName {}',
+'android/content/ClipData.java':'package android.content;public class ClipData {}',
 'android/content/Context.java':'''package android.content;public class Context {
 public android.view.WindowManager windows=new android.view.WindowManager();public Context createDisplayContext(Object display){return this;}
 public Context createWindowContext(int type,Object options){return this;}public <T>T getSystemService(Class<T> type){return type.cast(windows);}}''',
@@ -53,6 +54,9 @@ void start(){if(!started){active++;started=true;}}void close(){if(started){activ
 class ShareWorkspace extends android.view.View {
 static ShareWorkspace latest;static boolean accepts=true;boolean pending,mainRight;int closes,events;String target;Runnable settled;
 void setMainOnRight(boolean right){mainRight=right;}
+void setWindowHover(java.util.function.Function<String,String> identity,java.util.function.Consumer<String> activate){}
+void setResultSink(java.util.function.BiConsumer<Boolean,android.content.ClipData> sink){}
+void onDeliveryResult(boolean success,android.content.ClipData retained){}
 ShareWorkspace(android.content.Context c,android.view.View n,java.util.function.BooleanSupplier ready,
 java.util.function.BiConsumer<android.content.ComponentName,Runnable> dispatch,java.util.function.Consumer<String> hint,
 java.util.function.Supplier<android.graphics.Rect> bounds,boolean only){super(c);latest=this;if(!only)throw new AssertionError("share-only expected");}

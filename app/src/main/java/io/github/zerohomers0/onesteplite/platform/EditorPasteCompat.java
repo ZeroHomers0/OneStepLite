@@ -25,6 +25,10 @@ final class EditorPasteCompat {
     private static IBinder host;
     private static final Binder REGISTRY=new Binder();
     private EditorPasteCompat(){}
+    static boolean available(Context context) {
+        try{return context.getContentResolver().call(ContentInboxProvider.ROOT,"paste_status",null,null)!=null;}
+        catch(RuntimeException unavailable){return false;}
+    }
     static boolean paste(Context context,String text) {
         try {
             Bundle state=context.getContentResolver().call(ContentInboxProvider.ROOT,"paste_status",null,null);
@@ -42,7 +46,7 @@ final class EditorPasteCompat {
         }
         IBinder target;synchronized(EditorPasteCompat.class){target=host;}
         if(target==null || !target.isBinderAlive())return null;
-        int code="paste_status".equals(method)?1:"paste_commit".equals(method)?2:0;
+        int code="paste_status".equals(method)?1:"paste_commit".equals(method)?2:"conversation_list".equals(method)?3:0;
         if(code==0)throw new IllegalArgumentException("Unknown paste operation");
         Parcel data=Parcel.obtain(),reply=Parcel.obtain();
         try {
@@ -84,7 +88,7 @@ final class EditorPasteCompat {
         private volatile IBinder registry;
         private final Binder endpoint=new Binder(){
             @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags) throws android.os.RemoteException {
-                if(code!=1 && code!=2)return super.onTransact(code,data,reply,flags);
+                if(code!=1 && code!=2 && code!=3)return super.onTransact(code,data,reply,flags);
                 data.enforceInterface(DESCRIPTOR);
                 try{if(Binder.getCallingUid()!=context.getPackageManager().getApplicationInfo(ContentInboxProvider.MODULE,0).uid)
                     throw new SecurityException("Not module paste relay");}
@@ -145,6 +149,7 @@ final class EditorPasteCompat {
             }
         }
         private Bundle handle(int code,Bundle input) {
+            if(code==3)return ConversationShareCompat.query(context,input);
             try {
                 Bundle current=snapshot();if(code==1)return current;
                 Bundle reply=new Bundle();String text=input==null?null:input.getString("text");

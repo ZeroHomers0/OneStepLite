@@ -40,6 +40,12 @@ public final class ContentInboxProvider extends ContentProvider {
         if(method!=null && method.startsWith("portal_"))return PortalRelay.call(getContext(),method,extras);
         if("paste_register".equals(method))return EditorPasteCompat.relay(getContext(),method,extras);
         enforceHost();
+        if(Binder.getCallingUid()/100000!=android.os.Process.myUid()/100000)throw new SecurityException("Different content user");
+        if("conversation_list".equals(method))return EditorPasteCompat.relay(getContext(),method,extras);
+        if(method!=null && method.startsWith("shelf_")) {
+            if(Binder.getCallingUid()/100000!=android.os.Process.myUid()/100000)throw new SecurityException("Different shelf user");
+            return ContentShelfStore.call(getContext(),method,extras);
+        }
         if(method!=null && method.startsWith("paste_"))return EditorPasteCompat.relay(getContext(),method,extras);
         if("capture_image".equals(method) || "discard_capture".equals(method)) {
             if(Binder.getCallingUid()/100000!=android.os.Process.myUid()/100000)throw new SecurityException("Different capture user");
@@ -68,10 +74,13 @@ public final class ContentInboxProvider extends ContentProvider {
         if(payload.uris.isEmpty())throw new IllegalArgumentException("No external files");
         android.content.ComponentName target=requested.getComponent()==null
                 ?new android.content.ComponentName(requested.getPackage(),""):requested.getComponent();
-        if(MODULE.equals(target.getPackageName()))throw new SecurityException("Recursive share");
+        String operation=extras.getString("operation","");
+        if(!operation.isEmpty() && !ShareActions.known(operation))throw new SecurityException("Unknown operation");
+        if(MODULE.equals(target.getPackageName()) && operation.isEmpty())throw new SecurityException("Recursive share");
         Intent clean=payload.intent(target);
+        clean.setClipData(payload.clip);ShareRoutes.copyShortcut(requested,clean);
         String token=UUID.randomUUID().toString();
-        long now=android.os.SystemClock.uptimeMillis();LAUNCHES.put(token,new Launch(clean,now,grant),now);
+        long now=android.os.SystemClock.uptimeMillis();LAUNCHES.put(token,new Launch(clean,now,grant,extras.getBinder("receipt"),operation),now);
         Bundle result=new Bundle();result.putString("token",token);return result;
     }
 
@@ -86,13 +95,16 @@ public final class ContentInboxProvider extends ContentProvider {
         }
         android.content.ComponentName target=requested.getComponent()==null
                 ?new android.content.ComponentName(requested.getPackage(),""):requested.getComponent();
-        if(MODULE.equals(target.getPackageName()))throw new SecurityException("Recursive inbox share");
+        String operation=extras.getString("operation","");
+        if(!operation.isEmpty() && !ShareActions.known(operation))throw new SecurityException("Unknown operation");
+        if(MODULE.equals(target.getPackageName()) && operation.isEmpty())throw new SecurityException("Recursive inbox share");
         Intent share=payload.intent(target);
+        share.setClipData(payload.clip);ShareRoutes.copyShortcut(requested,share);
         java.util.List<ResolveInfo> receivers=getContext().getPackageManager().queryIntentActivities(share,0);
-        if(receivers.isEmpty())
+        if(receivers.isEmpty() && operation.isEmpty())
             throw new IllegalArgumentException("Unavailable receiver");
         String token=UUID.randomUUID().toString();
-        long now=android.os.SystemClock.uptimeMillis();LAUNCHES.put(token,new Launch(share,now),now);
+        long now=android.os.SystemClock.uptimeMillis();LAUNCHES.put(token,new Launch(share,now,null,extras.getBinder("receipt"),operation),now);
         Bundle result=new Bundle();result.putString("token",token);return result;
     }
 
@@ -190,7 +202,11 @@ public final class ContentInboxProvider extends ContentProvider {
     @Override public int delete(Uri uri,String where,String[] args){throw new UnsupportedOperationException();}
     static final class Launch {
         final Intent intent;final long time;final android.os.IBinder grant;
-        Launch(Intent intent,long time){this(intent,time,null);}
-        Launch(Intent intent,long time,android.os.IBinder grant){this.intent=intent;this.time=time;this.grant=grant;}
+        final android.os.IBinder receipt;final String operation;
+        Launch(Intent intent,long time){this(intent,time,null,null,"");}
+        Launch(Intent intent,long time,android.os.IBinder grant){this(intent,time,grant,null,"");}
+        Launch(Intent intent,long time,android.os.IBinder grant,android.os.IBinder receipt,String operation){
+            this.intent=intent;this.time=time;this.grant=grant;this.receipt=receipt;this.operation=operation;
+        }
     }
 }

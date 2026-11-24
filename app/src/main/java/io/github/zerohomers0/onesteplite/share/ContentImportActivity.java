@@ -21,7 +21,9 @@ public final class ContentImportActivity extends Activity {
     private boolean importing;
     private Intent pendingShare;
     private Intent externalTarget;
-    private android.os.IBinder delegatedRead;
+    private android.os.IBinder delegatedRead,receipt;
+    private String operation="";
+    private final AtomicBoolean reported=new AtomicBoolean();
     private static final AtomicBoolean BUSY=new AtomicBoolean();
     private final android.os.CancellationSignal ioSignal=new android.os.CancellationSignal();
 
@@ -32,6 +34,7 @@ public final class ContentImportActivity extends Activity {
         String token=getIntent().getStringExtra("launch_token");
         if(token!=null) {
             ContentInboxProvider.Launch request=ContentInboxProvider.consumeRequest(token);
+            if(request!=null){receipt=request.receipt;operation=request.operation;}
             if(request!=null && request.grant!=null) {
                 externalTarget=request.intent;delegatedRead=request.grant;importContent(request.intent);return;
             }
@@ -58,9 +61,32 @@ public final class ContentImportActivity extends Activity {
         Intent share=pendingShare;pendingShare=null;
         getWindow().getDecorView().postDelayed(()->{
             if(isFinishing() || isDestroyed())return;
-            try{startActivity(share);CaptureInboxStore.shared(this,share);}catch(RuntimeException error){message("无法打开分享入口");}
-            finish();
+            new Thread(()->deliverPrepared(share.getClipData()==null?fromExtras(share):share.getClipData(),share),"ContentShareDelivery").start();
         },80L);
+    }
+
+    private void deliverPrepared(ClipData owned,Intent base) {
+        try {
+            if(cancelled.get() || !ShareDelivery.active(receipt)){runOnUiThread(this::finish);return;}
+            ContentShelfStore.remember(this,owned);
+            if(ShareActions.STAGE.equals(operation)) {
+                ContentShelfStore.stage(this,owned);outcome(true,owned);runOnUiThread(this::finish);return;
+            }
+            SharePayload payload=new SharePayload(owned);
+            android.content.ComponentName target=base.getComponent()==null
+                    ?new android.content.ComponentName(base.getPackage(),""):base.getComponent();
+            Intent share=operation.isEmpty()?payload.intent(target):ShareActions.intent(this,payload,operation);
+            ShareRoutes.copyShortcut(base,share);share.setClipData(owned);
+            runOnUiThread(()->{
+                if(isFinishing() || isDestroyed() || cancelled.get() || !ShareDelivery.active(receipt)){outcome(false,owned);finish();return;}
+                try{startActivity(share);CaptureInboxStore.shared(this,share);outcome(true,owned);}
+                catch(RuntimeException unavailable){outcome(false,owned);message("目标暂时无法接收，内容已保留，可换个入口重试");}
+                finish();
+            });
+        }catch(RuntimeException unavailable){outcome(false,owned);runOnUiThread(()->{message("无法准备此操作，内容已保留");finish();});}
+    }
+    private void outcome(boolean success,ClipData clip) {
+        if(reported.compareAndSet(false,true))ShareDelivery.report(receipt,success,clip);
     }
 
     @Override protected void onActivityResult(int request,int result,Intent data) {
@@ -141,17 +167,12 @@ public final class ContentImportActivity extends Activity {
                         JSONObject row=rows.getJSONObject(i);
                         ClipData.Item item=row.has("text")?new ClipData.Item(row.getString("text"))
                                 :new ClipData.Item(ContentInboxProvider.uri(row.getString("id")));
-                        if(owned==null)owned=new ClipData("内容",new String[]{payload.mime},item);else owned.addItem(item);
+                        if(owned==null)owned=new ClipData(new android.content.ClipDescription(payload.clip.getDescription()),item);else owned.addItem(item);
                     }
-                    android.content.ComponentName target=externalTarget.getComponent()==null
-                            ?new android.content.ComponentName(externalTarget.getPackage(),""):externalTarget.getComponent();
-                    Intent share=new SharePayload(owned).intent(target);
-                    runOnUiThread(()->{
-                        try{startActivity(share);}catch(RuntimeException denied){message("内容已导入，但目标分享启动失败");}
-                        finish();
-                    });
+                    deliverPrepared(owned,externalTarget);
                 } else runOnUiThread(()->{message("已加入一步内容面板，导入内容保留24小时");finish();});
             } catch(Exception error) {
+                outcome(false,null);
                 for(File file:created)if(file.exists() && !file.delete())android.util.Log.w(Tags.PROBE,"partial inbox cleanup failed");
                 runOnUiThread(()->{if(!cancelled.get())message("导入失败：内容不可读、过大或临时区已满");finish();});
             } finally {DropPermissionContract.release(delegatedRead);delegatedRead=null;BUSY.set(false);}
@@ -190,6 +211,6 @@ public final class ContentImportActivity extends Activity {
         return data;
     }
 
-    @Override protected void onDestroy(){cancelled.set(true);ioSignal.cancel();DropPermissionContract.release(delegatedRead);super.onDestroy();}
+    @Override protected void onDestroy(){outcome(false,null);cancelled.set(true);ioSignal.cancel();DropPermissionContract.release(delegatedRead);super.onDestroy();}
     private void message(String text){android.widget.Toast.makeText(this,text,android.widget.Toast.LENGTH_LONG).show();}
 }

@@ -55,6 +55,7 @@ try{return o.getClass().getMethod(n).invoke(o);}catch(Exception e){throw new Run
 import android.os.*;import android.content.*;import android.view.*;import java.util.function.*;
 import de.robv.android.xposed.XposedHelpers;
 class Tags{static final String PROBE="test";}
+class ConversationShareCompat{static Bundle query(Context context,Bundle input){Bundle reply=new Bundle();reply.putBoolean("conversation",true);return reply;}}
 public class PasteRegression{
 public static class Token implements IBinder{}
 public static class Client implements IInterface{public IBinder token=new Token();public IBinder asBinder(){return token;}}

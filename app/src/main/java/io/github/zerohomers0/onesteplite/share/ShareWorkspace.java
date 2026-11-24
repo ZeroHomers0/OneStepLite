@@ -64,13 +64,19 @@ final class ShareWorkspace extends FrameLayout {
     private ComponentName hovered;
     private ShareReadLease pendingRead;
     private DropPermissionContract delegatedRead;
-    private final Runnable expire = this::cancel;
+    private final Runnable expire = ()->{if(deliveryPending)failDelivery(generation,user);else cancel();};
     private static final ComponentName IMAGE_TEXT=new ComponentName(ContentInboxProvider.MODULE,"recognize_image_text");
     private boolean imageDrag;
     private Runnable afterDrag=()->{};
     private ShareDragCatchment catchment;
     private int tipOffset;
-    private boolean mainRight;
+    private boolean mainRight,panelSource;
+    private ShareDelivery receipt;
+    private ClipData transferClip;
+    private final WindowDragHover windowHover;
+    private java.util.function.Function<String,String> hoverIdentity=value->value;
+    private Consumer<String> hoverActivate=value->{};
+    private BiConsumer<Boolean,ClipData> resultSink=this::onDeliveryResult;
 
     ShareWorkspace(Context context, View normalRail, BooleanSupplier ready,
             BiConsumer<ComponentName, Runnable> dispatch, Consumer<String> hint,
@@ -86,6 +92,7 @@ final class ShareWorkspace extends FrameLayout {
         android.graphics.Rect initialBounds=bounds.get();mainRight=initialBounds!=null && initialBounds.left>0;
         this.normalRail = normalRail;
         this.ready = ready;
+        windowHover=new WindowDragHover(this,()->dragging && this.ready.getAsBoolean());
         this.dispatch = dispatch;
         this.hint = hint;
         history=new ClipboardHistory(context);
@@ -129,7 +136,8 @@ final class ShareWorkspace extends FrameLayout {
                         || !accepts(event.getClipDescription())) return false;
                 if(dragging)return true;
                 cancel();
-                dragging = true;
+                dragging = true;panelSource=panel.isDragging();
+                performHapticFeedback(android.view.HapticFeedbackConstants.DRAG_START);
                 tipOffset=ContentAccessCompat.arrowOffset(event);
                 if(tipOffset>0) {
                     catchment=new ShareDragCatchment(this,tipOffset,()->dragging && ready.getAsBoolean());catchment.start();
@@ -142,10 +150,12 @@ final class ShareWorkspace extends FrameLayout {
                         :new ClipDescription("内容",new String[]{local.mime});
                 imageDrag=description.hasMimeType("image/*");
                 int count=local==null?0:Math.max(1,local.uris.size());
+                if(local==null && description.getExtras()!=null)count=description.getExtras().getInt("onesteplite_item_count",0);
+                final int itemCount=count;
                 handler.postDelayed(expire, 60_000L);
                 WORKER.execute(() -> {
                     try {
-                        List<ShareTarget> entries=ShareTargetCatalog.load(getContext(),description,count,false);
+                        List<ShareTarget> entries=ShareTargetCatalog.load(getContext(),description,itemCount,false);
                         post(()->{if(live(token))showTargets(entries);});
                     } catch(RuntimeException unavailable) {
                         post(()->{if(live(token))message("无法查询分享入口");});
@@ -184,6 +194,16 @@ final class ShareWorkspace extends FrameLayout {
     }
 
     boolean onTipDrag(DragEvent event){return drag(event);}
+    void setWindowHover(java.util.function.Function<String,String> identity,Consumer<String> activate) {
+        hoverIdentity=identity;hoverActivate=activate;windowHover.bind(identity,activate);
+        if(overlay!=null)overlay.setWindowHover(identity,activate);
+    }
+    void setResultSink(BiConsumer<Boolean,ClipData> sink){resultSink=sink;}
+    void onDeliveryResult(boolean success,ClipData retained) {
+        if(!ready.getAsBoolean() || !isAttachedToWindow())return;
+        panel.delivery(success,retained,panelSource);
+        if(!success)message(retained!=null || panelSource?"内容已保留，可换个入口重试":"未能读取来源内容，请重新提起");
+    }
 
     void captureMain(){if(ready.getAsBoolean() && !dragging){panel.close();capture.open();}}
     void setMainOnRight(boolean right){
@@ -200,23 +220,26 @@ final class ShareWorkspace extends FrameLayout {
 
     boolean onWindowDrag(DragEvent event, String targetPackage,boolean covered) {
         if(covered || overlay!=null && overlay.isOpen()) {
-            if(overlay==null)overlay=new ShareRailOverlay(this,ready,dispatch,hint,bounds);
+            if(event.getAction()==DragEvent.ACTION_DRAG_STARTED)panelSource=panel.isDragging();
+            if(overlay==null){overlay=new ShareRailOverlay(this,ready,dispatch,hint,bounds);overlay.setWindowHover(hoverIdentity,hoverActivate);}
             return overlay.onDrag(event,targetPackage);
         }
         if (event.getAction() == DragEvent.ACTION_DRAG_STARTED)
             return drag(event);
         if(event.getAction()==DragEvent.ACTION_DRAG_ENDED)return drag(event);
+        if(event.getAction()==DragEvent.ACTION_DRAG_LOCATION)windowHover.move(targetPackage);
+        else windowHover.close();
         if (!dragging || targetPackage == null) return false;
         if (event.getAction() == DragEvent.ACTION_DROP)
             return live(generation) && drop(event, new ComponentName(targetPackage, ""));
-        if (event.getAction() == DragEvent.ACTION_DRAG_LOCATION) hint.accept("松开分享到 " + targetPackage);
+        if (event.getAction() == DragEvent.ACTION_DRAG_LOCATION) hint.accept("停留切换窗口，松开分享");
         return true;
     }
 
     private void showTargets(List<ShareTarget> entries) {
         targets.removeAllViews();
         if(imageDrag && !shareOnly) {
-            ShareTarget recognize=new ShareTarget(IMAGE_TEXT,"识别文字",getContext().getDrawable(android.R.drawable.ic_menu_edit),true);
+            ShareTarget recognize=new ShareTarget(IMAGE_TEXT,"识别文字",new ShareActionIcon("recognize"),true);
             ShareTargetButton icon=new ShareTargetButton(getContext(),recognize);icon.setMainOnRight(mainRight);
             targets.addView(icon,new LinearLayout.LayoutParams(dp(50),-1));
         }
@@ -239,7 +262,7 @@ final class ShareWorkspace extends FrameLayout {
         lastX=x;lastY=y;
         updateHovered(x,y);
         edge.update(x,0,getWidth(),dp(24),android.os.SystemClock.uptimeMillis());
-        if(x>=0 && (x<dp(24) || x>getWidth()-dp(24))) {
+        if(y>=0 && y<getHeight() && x>=0 && (x<dp(24) || x>getWidth()-dp(24))) {
             if(!edgeQueued){edgeQueued=true;handler.postDelayed(edgeTick,16L);}
         } else stopEdge();
     }
@@ -257,8 +280,8 @@ final class ShareWorkspace extends FrameLayout {
             View view = targets.getChildAt(i);
             ShareTarget target=view.getTag() instanceof ShareTarget?(ShareTarget)view.getTag():null;
             float inset=dp(6);
-            boolean hit=target!=null && target.enabled && position>=view.getLeft()+inset && position<view.getRight()-inset
-                    && pointer[1]>=inset && pointer[1]<scroll.getHeight()-inset;
+            boolean hit=target!=null && target.enabled && ShareTargetHitPolicy.hit(position,pointer[1],view.getLeft(),view.getRight(),
+                    scroll.getHeight(),inset,target.component.equals(previous)?dp(3):0);
             view.setAlpha(target!=null && !target.enabled?.3f:1f);
             if(view instanceof ShareTargetButton)((ShareTargetButton)view).setDragHovered(hit);
             if(hit){hovered=target.component;hint.accept(target.label);}
@@ -278,79 +301,63 @@ final class ShareWorkspace extends FrameLayout {
     private void stopEdge(){handler.removeCallbacks(edgeTick);edgeQueued=false;edge.reset();}
 
     private boolean drop(DragEvent event, ComponentName target) {
-        if (dropped) return false;
-        ShareReadLease readLease = null;
+        if(dropped)return false;
         try {
-            SharePayload payload = new SharePayload(event.getClipData());
+            SharePayload payload=new SharePayload(event.getClipData());transferClip=payload.clip;
             if(IMAGE_TEXT.equals(target))return recognizeDrop(event,payload);
-            Intent intent = payload.intent(target);
-            if (getContext().getPackageManager().queryIntentActivities(intent, 0).isEmpty())
-                throw new IllegalArgumentException("Target does not accept this content count");
-            deliveryPending=true;handler.removeCallbacks(expire);handler.postDelayed(expire,60_000L);
-            if(!payload.uris.isEmpty() && payload.uris.stream().allMatch(uri->ContentInboxProvider.AUTHORITY.equals(uri.getAuthority()))) {
-                dropped=true;launchInbox(target,intent,generation,user);return true;
+            String operation=ShareActions.operation(target);
+            if(ShareActions.PASTE.equals(operation)) {
+                if(!payload.uris.isEmpty() || !EditorPasteCompat.paste(getContext(),payload.text))return false;
+                dropped=true;return true;
             }
-            if (!payload.uris.isEmpty()) {
-                ClipData files=new ClipData("文件",new String[]{payload.mime},new ClipData.Item(payload.uris.get(0)));
-                for(int i=1;i<payload.uris.size();i++)files.addItem(new ClipData.Item(payload.uris.get(i)));
-                delegatedRead=ContentAccessCompat.delegate(event,files);
-                dropped=true;
-                launchExternal(target,intent,delegatedRead,generation,user);return true;
-            }
-            dropped = true;
-            final int owner = user;
-            final int token = generation;
-            final ShareReadLease lease = readLease;
-            dispatch.accept(target, () -> {
-                try {
-                    if (token != generation || owner != CurrentUser.id() || !ready.getAsBoolean()
-                        || lease != null && !lease.isOpen()) {
-                        if (lease != null) lease.close();return;
-                    }
-                    getContext().startActivity(intent);
-                }
-                catch (RuntimeException failure) { message("无法打开分享入口或交付读取权限"); }
-                finally {
-                    if (lease != null) lease.close();
-                    if (pendingRead == lease) pendingRead = null;
-                    finishDelivery(token);
-                }
+            Intent intent=ShareRoutes.intent(payload,target);
+            if(operation.isEmpty() && getContext().getPackageManager().queryIntentActivities(intent,0).isEmpty())return false;
+            int token=generation,owner=user;deliveryPending=true;
+            receipt=new ShareDelivery(getContext(),(success,retained)->{
+                if(token!=generation || owner!=CurrentUser.id())return;
+                finishDelivery(token);resultSink.accept(success,retained);
             });
-            return true;
-        } catch (Exception error) {
-            if (readLease != null) readLease.close();
-            dropped=false;
-            finishDelivery(generation);
-            message("无法交付内容或读取权限，请尝试应用原有分享");
-            android.util.Log.w(Tags.PROBE, "content drop rejected", error);
-            return false;
-        }
+            handler.removeCallbacks(expire);handler.postDelayed(expire,60_000L);
+            if(payload.uris.isEmpty() || payload.uris.stream().allMatch(uri->ContentInboxProvider.AUTHORITY.equals(uri.getAuthority()))) {
+                dropped=true;prepareDelivery(target,intent,null,token,owner);return true;
+            }
+            ClipData files=new ClipData("文件",new String[]{payload.mime},new ClipData.Item(payload.uris.get(0)));
+            for(int i=1;i<payload.uris.size();i++)files.addItem(new ClipData.Item(payload.uris.get(i)));
+            delegatedRead=ContentAccessCompat.delegate(event,files);dropped=true;
+            prepareDelivery(target,intent,delegatedRead,token,owner);return true;
+        }catch(Exception unavailable){dropped=false;finishDelivery(generation);message("无法交付内容，原内容保留");return false;}
     }
-
-    private void launchExternal(ComponentName target,Intent share,DropPermissionContract grant,int token,int owner) {
+    private void prepareDelivery(ComponentName target,Intent intent,DropPermissionContract grant,int token,int owner) {
+        android.os.IBinder callback=receipt.token;
         WORKER.execute(()->{
             try {
-                android.os.Bundle data=new android.os.Bundle();data.putParcelable("intent",share);data.putBinder("grant",grant.token);
-                android.os.Bundle reply=getContext().getContentResolver().call(ContentInboxProvider.ROOT,"prepare_external",null,data);
-                String capability=reply==null?null:reply.getString("token");
-                if(capability==null)throw new SecurityException("No delegated launch");
-                handler.post(()->{
-                    if(token!=generation || owner!=CurrentUser.id() || !ready.getAsBoolean()){grant.close();finishDelivery(token);return;}
-                    try{dispatch.accept(target,()->{
-                        try {
-                            if(token!=generation || owner!=CurrentUser.id() || !ready.getAsBoolean()){grant.close();return;}
-                            getContext().startActivity(new Intent().setComponent(new ComponentName(ContentInboxProvider.MODULE,
-                                    ContentImportActivity.class.getName())).putExtra("launch_token",capability).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                            if(delegatedRead==grant)delegatedRead=null;
-                        } catch(RuntimeException denied){grant.close();message("无法交接外部内容");}
-                        finally{finishDelivery(token);}
-                    });}catch(RuntimeException rejected){grant.close();finishDelivery(token);message("目标窗口暂时无法分享");}
-                });
-            } catch(RuntimeException failure) {
-                android.util.Log.w(Tags.PROBE,"external drop preparation failed",failure);
-                grant.close();handler.post(()->{if(token==generation)message("外部内容权限交接失败");finishDelivery(token);});
-            }
+                android.os.Bundle data=new android.os.Bundle();data.putParcelable("intent",intent);data.putBinder("receipt",callback);
+                data.putString("operation",ShareActions.operation(target));if(grant!=null)data.putBinder("grant",grant.token);
+                android.os.Bundle reply=getContext().getContentResolver().call(ContentInboxProvider.ROOT,
+                        grant==null?"prepare_share":"prepare_external",null,data);
+                String capability=reply==null?null:reply.getString("token");if(capability==null)throw new IllegalStateException("Missing delivery capability");
+                handler.post(()->startDelivery(target,capability,grant,token,owner));
+            }catch(RuntimeException unavailable){if(grant!=null)grant.close();handler.post(()->failDelivery(token,owner));}
         });
+    }
+    private void startDelivery(ComponentName target,String capability,DropPermissionContract grant,int token,int owner) {
+        if(token!=generation || owner!=CurrentUser.id() || !ready.getAsBoolean()){if(grant!=null)grant.close();return;}
+        Runnable launch=()->{
+            if(token!=generation || owner!=CurrentUser.id() || !ready.getAsBoolean()){if(grant!=null)grant.close();return;}
+            try{getContext().startActivity(new Intent().setComponent(new ComponentName(ContentInboxProvider.MODULE,
+                    ContentImportActivity.class.getName())).putExtra("launch_token",capability).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                if(delegatedRead==grant)delegatedRead=null;
+            }catch(RuntimeException unavailable){if(grant!=null)grant.close();failDelivery(token,owner);}
+        };
+        try{if(ShareActions.operation(target).isEmpty())dispatch.accept(ShareRoutes.activity(target),launch);else launch.run();}
+        catch(RuntimeException unavailable){failDelivery(token,owner);}
+    }
+    private void failDelivery(int token,int owner) {
+        if(token!=generation || owner!=CurrentUser.id())return;
+        ClipData retained=transferClip;
+        try{if(retained!=null && new SharePayload(retained).uris.stream().anyMatch(uri->!ContentInboxProvider.AUTHORITY.equals(uri.getAuthority())))retained=null;}
+        catch(RuntimeException unavailable){retained=null;}
+        finishDelivery(token);resultSink.accept(false,retained);
     }
 
     private boolean recognizeDrop(DragEvent event,SharePayload payload) {
@@ -364,31 +371,6 @@ final class ShareWorkspace extends FrameLayout {
             catch(RuntimeException unavailable){read.close();panel.close();message("无法打开图片识字");}
         };
         return true;
-    }
-
-    private void launchInbox(ComponentName target,Intent share,int token,int owner) {
-        WORKER.execute(()->{
-            try {
-                android.os.Bundle input=new android.os.Bundle();input.putParcelable("intent",share);
-                android.os.Bundle reply=getContext().getContentResolver().call(ContentInboxProvider.ROOT,"prepare_share",null,input);
-                String capability=reply==null?null:reply.getString("token");
-                if(capability==null)throw new IllegalStateException("No inbox launch capability");
-                handler.post(()->{
-                    if(token!=generation || owner!=CurrentUser.id() || !ready.getAsBoolean()){finishDelivery(token);return;}
-                    try{dispatch.accept(target,()->{
-                        try {
-                            if(token!=generation || owner!=CurrentUser.id() || !ready.getAsBoolean())return;
-                            Intent proxy=new Intent().setComponent(new ComponentName(ContentInboxProvider.MODULE,
-                                    ContentImportActivity.class.getName())).putExtra("launch_token",capability)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);getContext().startActivity(proxy);
-                        } catch(RuntimeException blocked){message("无法打开内容的分享入口");}
-                        finally{finishDelivery(token);}
-                    });}catch(RuntimeException rejected){finishDelivery(token);message("目标窗口暂时无法分享");}
-                });
-            } catch(RuntimeException failure) {
-                handler.post(()->{if(token==generation && owner==CurrentUser.id())message("内容已失效或无法分享");finishDelivery(token);});
-            }
-        });
     }
 
     void editTargets() {
@@ -416,6 +398,7 @@ final class ShareWorkspace extends FrameLayout {
 
     private void finishVisuals() {
         if(catchment!=null){catchment.close();catchment=null;}
+        windowHover.close();
         dragging = false;
         hovered = null;
         clearTargetHover();
@@ -433,6 +416,7 @@ final class ShareWorkspace extends FrameLayout {
 
     void cancel() {
         generation++;
+        if(receipt!=null){receipt.close();receipt=null;}transferClip=null;
         afterDrag=()->{};
         handler.removeCallbacks(expire);
         if (pendingRead != null) { pendingRead.close(); pendingRead = null; }
@@ -462,6 +446,8 @@ final class ShareWorkspace extends FrameLayout {
     private void finishDelivery(int token) {
         if(token!=generation)return;
         deliveryPending=false;retainingDelivery=false;handler.removeCallbacks(expire);
+        transferClip=null;
+        if(receipt!=null){receipt.close();receipt=null;}
         if(delegatedRead!=null){delegatedRead.close();delegatedRead=null;}
         Runnable settled=deliverySettled;deliverySettled=()->{};settled.run();
     }
