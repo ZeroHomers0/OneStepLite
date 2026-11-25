@@ -15,6 +15,8 @@ public final class RecentFilePolicyTest {
         check(RecentFilePolicy.visible("voice.m4a","audio/mp4",1),"audio included");
         check(!RecentFilePolicy.visible(".secret","application/pdf",1),"hidden file excluded");
         check(!RecentFilePolicy.visible("photo.jpg","image/jpeg",1),"photo belongs to image page");
+        check(!RecentFilePolicy.visible("photo.HEIC","application/octet-stream",1),"image extension handles generic MIME");
+        check(!RecentFilePolicy.visible("picture","IMAGE/PNG",1),"image MIME comparison ignores case");
         check(!RecentFilePolicy.visible("report.pdf","application/pdf",0),"undated item excluded");
         check(!RecentFilePolicy.visible(null,null,1),"invalid name");
         check(RecentFilePolicy.age(1,1).equals("刚刚"),"just added");

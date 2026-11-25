@@ -216,8 +216,20 @@ final class ContentPanel {
 
     private void clearRecords() {
         if(tab==3){removeShelf();return;}
-        if(tab==2) { history.clear();selection.clear(tab);load();message("已清空历史，系统当前剪贴板保留");return; }
+        if(tab==2){clearClipboard();return;}
         clearMediaRecords();
+    }
+
+    private void clearClipboard() {
+        history.clear();
+        preferences().edit().putLong("clipboard_cleared_at",System.currentTimeMillis()).apply();
+        boolean cleared=false;
+        try {
+            ClipboardManager manager=context.getSystemService(ClipboardManager.class);
+            if(manager!=null){manager.clearPrimaryClip();cleared=!manager.hasPrimaryClip();}
+        }catch(RuntimeException unavailable){ /* The platform may restrict clipboard writes. */ }
+        selection.clear(tab);load();
+        message(cleared?"已清空剪贴板和历史":"已清空历史，系统剪贴板清除失败");
     }
 
     private void clearMediaRecords() {
@@ -299,8 +311,9 @@ final class ContentPanel {
         if (tab == 2) {
             if(history.enabled())history.start();
             int token=generation,user=CurrentUser.id();
+            long clearedAt=preferences().getLong("clipboard_cleared_at",0L);
             WORKER.execute(()->clipboard(token,user));
-            WORKER.execute(()->loadImportedClipboard(token,user));return;
+            WORKER.execute(()->loadImportedClipboard(token,user,clearedAt));return;
         }
         loadMedia(false);
     }
@@ -396,13 +409,20 @@ final class ContentPanel {
     private void readImages(CancellationSignal signal,java.util.Set<String> hidden,
             java.util.List<ContentEntry> rows) {
         Bundle args=new Bundle();
-        args.putStringArray(android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS,
-                new String[]{MediaStore.Images.Media.DATE_ADDED,MediaStore.Images.Media._ID});
-        args.putInt(android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION,
-                android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING);
+        args.putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER,"date_added DESC, _id DESC");
         args.putInt(android.content.ContentResolver.QUERY_ARG_LIMIT,60);
         Uri collection=MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
-        try(Cursor cursor=context.getContentResolver().query(collection,new String[]{
+        try{readImageCollection(collection,collection,args,signal,hidden,rows);}
+        catch(IllegalArgumentException | SecurityException unsupported){ /* Try the indexed images in the Files collection. */ }
+        if(!rows.isEmpty() || signal.isCanceled())return;
+        args.putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION,"media_type=1");
+        readImageCollection(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL),collection,args,signal,hidden,rows);
+    }
+
+    private void readImageCollection(Uri queryUri,Uri collection,Bundle args,CancellationSignal signal,
+            java.util.Set<String> hidden,java.util.List<ContentEntry> rows) {
+        Context app=context.getApplicationContext();
+        try(Cursor cursor=(app==null?context:app).getContentResolver().query(queryUri,new String[]{
                 MediaStore.Images.Media._ID,MediaStore.Images.Media.MIME_TYPE,
                 MediaStore.Images.Media.DATE_ADDED,MediaStore.Images.Media.SIZE},args,signal)) {
             int count=0;
@@ -533,12 +553,13 @@ final class ContentPanel {
                 :date.equals(java.time.LocalDate.now().minusDays(1))?"昨天":date.toString(),contentWidth);
     }
 
-    private void loadImportedClipboard(int token,int user) {
+    private void loadImportedClipboard(int token,int user,long clearedAt) {
         java.util.List<ContentEntry> rows=inboxRows(token,2,java.util.Collections.emptySet(),null);
         anchor.post(()->{
             if(!valid(token,user))return;
             boolean heading=false;
             for(ContentEntry entry:rows) {
+                if(entry.addedAt<=clearedAt)continue;
                 if(entries.values().stream().anyMatch(row->entry.text.equals(row.text)))continue;
                 if(!heading){shell.heading("应用分享的文字",contentWidth);heading=true;}
                 addEntry(entry);
@@ -558,14 +579,15 @@ final class ContentPanel {
                 org.json.JSONObject row=rows.getJSONObject(i);
                 String mime=row.optString("mime","application/octet-stream");
                 if(row.optBoolean("staged") || row.optBoolean("shelf_removed"))continue;
-                boolean text=row.has("text"),image=mime.startsWith("image/");
+                boolean text=row.has("text");
+                String name=row.optString("name","导入内容");
                 if(page==2?!text:page!=1 || text || row.optBoolean("captured")
-                        || !image && !row.has("document_uri"))continue;
+                        || RecentFilePolicy.image(name,mime) || !row.has("document_uri"))continue;
                 String id=row.getString("id");
                 Uri uri=text?null:ContentInboxProvider.uri(id);
                 String key=text?"inbox:"+id:uri.toString();
                 if(hidden.contains(key))continue;
-                String label=text?row.getString("text"):row.optString("name","导入内容");
+                String label=text?row.getString("text"):name;
                 entries.add(new ContentEntry(key,label,mime,text?label:null,uri,null,
                         -1,row.optLong("time"),row.has("document_uri")?Uri.parse(row.getString("document_uri")):uri));
             }

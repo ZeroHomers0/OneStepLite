@@ -26,7 +26,14 @@ final class RecentFilePolicy {
     }
     static boolean visible(String name,String mime,long added) {
         return name!=null && !name.isBlank() && !name.startsWith(".") && added>0
-                && (mime==null || !mime.startsWith("image/"));
+                && !image(name,mime);
+    }
+    static boolean image(String name,String mime) {
+        if(mime!=null && mime.toLowerCase(Locale.ROOT).startsWith("image/"))return true;
+        return switch(type(name,mime)){
+            case "JPG","JPEG","PNG","WEBP","GIF","HEIC","HEIF","AVIF","BMP","DNG","TIF","TIFF","SVG","ICO"->true;
+            default->false;
+        };
     }
     static String age(long added,long now) {
         if(added<=0)return "时间未知";
