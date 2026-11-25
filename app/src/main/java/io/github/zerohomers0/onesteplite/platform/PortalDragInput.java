@@ -1,7 +1,9 @@
 package io.github.zerohomers0.onesteplite;
 
 import android.os.IBinder;
+import android.view.MotionEvent;
 import android.view.WindowManager;
+import java.lang.reflect.Proxy;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
@@ -12,6 +14,9 @@ import de.robv.android.xposed.XposedHelpers;
 /** The native drag takes the original application's touch stream, never fabricated input. */
 final class PortalDragInput {
     static final String TITLE="OneStepLitePortalSource";
+    private static Object observedDisplay,listener;
+    private static volatile Touch touch;
+    private record Touch(Object display,IBinder input,long down,int device,int pointer) {}
     private PortalDragInput(){}
     static void install(ClassLoader loader,Supplier<Object> display,BooleanSupplier active) {
         try {
@@ -31,6 +36,56 @@ final class PortalDragInput {
             }).isEmpty())throw new IllegalStateException("Native drag input method missing");
         } catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"portal native input unavailable",unavailable);}
     }
+
+    static void observeDisplay(Object display,ClassLoader loader,BooleanSupplier active) {
+        if(observedDisplay==display)return;
+        if(listener!=null){
+            try{XposedHelpers.callMethod(observedDisplay,"unregisterPointerEventListener",listener);}
+            catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"portal touch observer retirement failed",unavailable);}
+        }
+        observedDisplay=display;listener=null;touch=null;
+        try {
+            Class<?> type=Class.forName("android.view.WindowManagerPolicyConstants$PointerEventListener",false,loader);
+            Object observer=Proxy.newProxyInstance(type.getClassLoader(),new Class<?>[]{type},(proxy,method,args)->{
+                switch(method.getName()){
+                    case "onPointerEvent" -> {
+                        if(active.getAsBoolean() && args[0] instanceof MotionEvent event)observeTouch(display,event);
+                        else touch=null;
+                    }
+                    case "hashCode" -> {return System.identityHashCode(proxy);}
+                    case "equals" -> {return proxy==args[0];}
+                    case "toString" -> {return "OneStepLitePortalTouch";}
+                }
+                return null;
+            });
+            XposedHelpers.callMethod(display,"registerPointerEventListener",observer);listener=observer;
+        }catch(Exception unavailable){android.util.Log.w(Tags.PROBE,"portal touch observer unavailable",unavailable);}
+    }
+
+    static void observeTouch(Object display,MotionEvent event) {
+        int action=event.getActionMasked();
+        if(action==MotionEvent.ACTION_UP || action==MotionEvent.ACTION_CANCEL || action==MotionEvent.ACTION_POINTER_DOWN){
+            touch=null;return;
+        }
+        if(action!=MotionEvent.ACTION_DOWN)return;
+        touch=null;
+        if(event.getPointerCount()!=1 || !event.isFromSource(android.view.InputDevice.SOURCE_TOUCHSCREEN))return;
+        try {
+            Object wm=XposedHelpers.getObjectField(display,"mWmService");
+            synchronized(XposedHelpers.getObjectField(wm,"mGlobalLock")){
+                Object winner=XposedHelpers.callMethod(display,"getTouchableWinAtPointLocked",event.getRawX(),event.getRawY());
+                Object task=winner==null?null:XposedHelpers.callMethod(winner,"getTask");
+                if(task!=null && Integer.valueOf(1).equals(XposedHelpers.callMethod(task,"getWindowingMode"))
+                        && XposedHelpers.getObjectField(winner,"mInputChannelToken") instanceof IBinder input
+                        && !subWindow((WindowManager.LayoutParams)XposedHelpers.getObjectField(winner,"mAttrs")))
+                    touch=new Touch(display,input,event.getDownTime(),event.getDeviceId(),event.getPointerId(0));
+            }
+        }catch(RuntimeException unavailable){ /* The established focused-window route remains available. */ }
+    }
+
+    static String identity(String pkg,MotionEvent event) {
+        return pkg+"\n"+event.getDownTime()+":"+event.getDeviceId()+":"+event.getPointerId(0);
+    }
     private static IBinder source(Object wm,Object display,Object token) {
         Object source=null;
         for(Object window:((Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap")).values()) {
@@ -39,11 +94,22 @@ final class PortalDragInput {
         if(source==null || !WindowIdentity.ownsPicker(source,display))return null;
         WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(source,"mAttrs");
         if(!TITLE.contentEquals(attrs.getTitle()))return null;
+        Object label=XposedHelpers.getObjectField(attrs,"accessibilityTitle");
+        if(!(label instanceof CharSequence identity))return null;
+        String[] parts=identity.toString().split("\n",2);
+        String expected=parts[0];
+        Touch activeTouch=touch;
+        if(parts.length==2 && activeTouch!=null && activeTouch.display()==display
+                && (activeTouch.down()+":"+activeTouch.device()+":"+activeTouch.pointer()).equals(parts[1])){
+            for(Object window:((Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap")).values())
+                if(activeTouch.input().equals(XposedHelpers.getObjectField(window,"mInputChannelToken")))
+                    return eligible(window,source,expected)?activeTouch.input():null;
+            return null;
+        }
         Object focus=XposedHelpers.getObjectField(display,"mCurrentFocus");
         if(focus==null || focus==source || !Boolean.TRUE.equals(XposedHelpers.callMethod(focus,"isVisible")))return null;
         WindowManager.LayoutParams focused=(WindowManager.LayoutParams)XposedHelpers.getObjectField(focus,"mAttrs");
-        Object expected=XposedHelpers.getObjectField(attrs,"accessibilityTitle");
-        if(!(expected instanceof CharSequence) || !expected.toString().equals(focused.packageName))return null;
+        if(!expected.equals(focused.packageName))return null;
         if(subWindow(focused)){
             Object parent=XposedHelpers.callMethod(focus,"getParentWindow");
             if(parent==null || parent==source || !Boolean.TRUE.equals(XposedHelpers.callMethod(parent,"isVisible"))
@@ -53,11 +119,18 @@ final class PortalDragInput {
             if(subWindow(parentAttrs) || !focused.packageName.equals(parentAttrs.packageName))return null;
             focus=parent;
         }
-        Object task=XposedHelpers.callMethod(focus,"getTask");
-        if(task==null || !Integer.valueOf(1).equals(XposedHelpers.callMethod(task,"getWindowingMode")))return null;
-        int uid=XposedHelpers.getIntField(focus,"mOwnerUid"),owner=XposedHelpers.getIntField(source,"mOwnerUid");
-        if(uid/100000!=owner/100000)return null;
-        return (IBinder)XposedHelpers.getObjectField(focus,"mInputChannelToken");
+        return eligible(focus,source,expected)?(IBinder)XposedHelpers.getObjectField(focus,"mInputChannelToken"):null;
+    }
+
+    private static boolean eligible(Object window,Object source,String expected) {
+        if(window==source || !Boolean.TRUE.equals(XposedHelpers.callMethod(window,"isVisible")))return false;
+        WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(window,"mAttrs");
+        if(!expected.equals(attrs.packageName) || subWindow(attrs)
+                || (attrs.flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)return false;
+        Object task=XposedHelpers.callMethod(window,"getTask");
+        if(task==null || !Integer.valueOf(1).equals(XposedHelpers.callMethod(task,"getWindowingMode")))return false;
+        int uid=XposedHelpers.getIntField(window,"mOwnerUid"),owner=XposedHelpers.getIntField(source,"mOwnerUid");
+        return uid>=0 && uid/100000==owner/100000;
     }
 
     private static boolean subWindow(WindowManager.LayoutParams attrs) {

@@ -15,7 +15,6 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.TextView;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -220,8 +219,9 @@ final class PortalSource implements AutoCloseable {
             fallbackCapture.open(rect);
             done.countDown();return;
         }
-        if(uri==null && !request.getBoolean("lift")) {
-            boolean accepted=deferWords(text);Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);
+        if(uri==null) {
+            boolean accepted=showExtractedWords(text,request.getBoolean("lift"));
+            Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);
             result[0]=reply;done.countDown();return;
         }
         if(pointer.getPointerCount()!=1) {
@@ -230,22 +230,19 @@ final class PortalSource implements AutoCloseable {
             if(pointer!=null){pointer.recycle();pointer=null;}
             Bundle reply=new Bundle();reply.putBoolean("accepted",true);result[0]=reply;done.countDown();return;
         }
-        ClipData clip=uri==null?ClipData.newPlainText("选中文字",text):new ClipData("提取图片",new String[]{"image/jpeg"},
+        ClipData clip=new ClipData("提取图片",new String[]{"image/jpeg"},
                 new ClipData.Item(android.net.Uri.parse(uri)));
         Context display=context.createDisplayContext(anchor.getDisplay()).createWindowContext(WindowTypes.SYSTEM_UI_DIALOG,null);
-        window=new FrameLayout(display);View source;
-        if(uri!=null){
-            ImageView image=new ImageView(display);
-            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            image.setImageBitmap(request.getParcelable("preview",android.graphics.Bitmap.class));source=image;
-        }
-        else {TextView words=new TextView(display);words.setText(text);source=words;}
-        source.setContentDescription(uri==null?text:"提取图片");window.addView(source,new FrameLayout.LayoutParams(240,240));
+        window=new FrameLayout(display);
+        ImageView source=new ImageView(display);
+        source.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        source.setImageBitmap(request.getParcelable("preview",android.graphics.Bitmap.class));
+        source.setContentDescription("提取图片");window.addView(source,new FrameLayout.LayoutParams(240,240));
         WindowManager.LayoutParams attrs=new WindowManager.LayoutParams(240,240,WindowTypes.SYSTEM_UI_DIALOG,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,android.graphics.PixelFormat.TRANSLUCENT);
         attrs.setTitle(PortalDragInput.TITLE);attrs.gravity=android.view.Gravity.TOP|android.view.Gravity.LEFT;
-        try{PortalInputCompat.bindSource(attrs,request.getString("source"));}
-        catch(RuntimeException unavailable){finishRejectedLift(uri,text,!expired.get() && live());done.countDown();return;}
+        try{PortalInputCompat.bindSource(attrs,request.getString("source"),pointer);}
+        catch(RuntimeException unavailable){finishRejectedLift(uri,!expired.get() && live());done.countDown();return;}
         HostWindowPolicy.configure(attrs);window.setAlpha(0f);
         window.setOnDragListener((view,event)->{
             if(event.getAction()==DragEvent.ACTION_DRAG_ENDED)main.post(this::clearWindow);
@@ -255,18 +252,22 @@ final class PortalSource implements AutoCloseable {
             FrameLayout sourceWindow=window;
             startingDrag=true;
             display.getSystemService(WindowManager.class).addView(sourceWindow,attrs);
-            startWhenReady(sourceWindow,source,clip,uri,text,generation,3,result,done,expired);
-        } catch(RuntimeException unavailable){finishRejectedLift(uri,text,!expired.get() && live());done.countDown();}
+            startWhenReady(sourceWindow,source,clip,uri,generation,3,result,done,expired);
+        } catch(RuntimeException unavailable){finishRejectedLift(uri,!expired.get() && live());done.countDown();}
     }
 
-    private void startWhenReady(FrameLayout sourceWindow,View source,ClipData clip,String uri,String text,
+    private boolean showExtractedWords(String text,boolean moving) {
+        return moving?openWords(text):deferWords(text);
+    }
+
+    private void startWhenReady(FrameLayout sourceWindow,View source,ClipData clip,String uri,
             int token,int frames,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
         source.postOnAnimation(()->{
             if(window!=sourceWindow){done.countDown();return;}
             boolean current=!expired.get() && token==generation && live();
             boolean readySurface=current && PortalInputCompat.surfaceReady(source);
             if(current && !readySurface && frames>1){
-                startWhenReady(sourceWindow,source,clip,uri,text,token,frames-1,result,done,expired);
+                startWhenReady(sourceWindow,source,clip,uri,token,frames-1,result,done,expired);
                 return;
             }
             boolean accepted=false;
@@ -275,7 +276,7 @@ final class PortalSource implements AutoCloseable {
             startingDrag=false;
             Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);result[0]=reply;
             ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,accepted?ShareDiagnostics.Code.STARTED:ShareDiagnostics.Code.FAILED);
-            if(!accepted)finishRejectedLift(uri,text,current && token==generation && live());
+            if(!accepted)finishRejectedLift(uri,current && token==generation && live());
             else main.postDelayed(expire,60_000L);
             done.countDown();
         });
@@ -306,11 +307,9 @@ final class PortalSource implements AutoCloseable {
         return mainBounds!=null && !rect.isEmpty() && mainBounds.contains(rect)?rect:null;
     }
 
-    private void finishRejectedLift(String uri,String text,boolean current) {
+    private void finishRejectedLift(String uri,boolean current) {
         clearWindow();
-        if(!current || !ready.getAsBoolean())return;
-        if(uri!=null)imagePreview.accept(android.net.Uri.parse(uri));
-        else if(text!=null)openWords(text);
+        if(current && ready.getAsBoolean())imagePreview.accept(android.net.Uri.parse(uri));
     }
     private void prepareLiftPreview(Bundle candidate,android.net.Uri uri) {
         android.content.ContentResolver resolver=anchor.getContext().getContentResolver();

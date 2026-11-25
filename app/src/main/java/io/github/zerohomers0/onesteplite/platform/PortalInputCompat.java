@@ -65,8 +65,8 @@ final class PortalInputCompat implements AutoCloseable {
         }catch(Throwable unavailable){ContentDragMotion.close();throw new IllegalStateException("Native source input unavailable",unavailable);}
         finally{dragTouch.remove();dragRoot.remove();}
     }
-    static void bindSource(android.view.WindowManager.LayoutParams attrs,String source) {
-        try{XposedHelpers.setObjectField(attrs,"accessibilityTitle",source);}
+    static void bindSource(android.view.WindowManager.LayoutParams attrs,String source,MotionEvent event) {
+        try{XposedHelpers.setObjectField(attrs,"accessibilityTitle",PortalDragInput.identity(source,event));}
         catch(Throwable unavailable){throw new IllegalStateException("Source identity field unavailable",unavailable);}
     }
     @Override public void close() {

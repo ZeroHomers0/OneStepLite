@@ -213,6 +213,8 @@ public class HostEntry implements IXposedHookLoadPackage {
                             return;
                         }
                         sDisplayContent = self;
+                        PortalDragInput.observeDisplay(self,cl,
+                                ()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
                         Object service = XposedHelpers.getObjectField(self, "mWmService");
                         Object lock = XposedHelpers.getObjectField(service, "mGlobalLock");
                         Object handler = XposedHelpers.getObjectField(service, "mH");
