@@ -45,6 +45,7 @@ public void setTitle(String value){title=value;}public void setFitInsetsTypes(in
 'io/github/zerohomers0/onesteplite/HyperOsStyle.java':'''package io.github.zerohomers0.onesteplite;
 class HyperOsStyle {static int dp(android.content.Context c,int value){return value;}}''',
 'io/github/zerohomers0/onesteplite/WindowTypes.java':'package io.github.zerohomers0.onesteplite;class WindowTypes {static final int SYSTEM_UI_DIALOG=2017;}',
+'io/github/zerohomers0/onesteplite/WindowIdentity.java':'package io.github.zerohomers0.onesteplite;class WindowIdentity {static final String SHARE_RECEIVER_TITLE="OneStepLiteShareReceiver";}',
 'io/github/zerohomers0/onesteplite/HostWindowPolicy.java':'''package io.github.zerohomers0.onesteplite;
 class HostWindowPolicy {static int checks;static void configure(android.view.WindowManager.LayoutParams p){checks++;}}''',
 'io/github/zerohomers0/onesteplite/Tags.java':'package io.github.zerohomers0.onesteplite;class Tags {static final String PROBE="test";}',

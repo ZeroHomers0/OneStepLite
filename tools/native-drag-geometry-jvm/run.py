@@ -29,13 +29,14 @@ public static Object callMethod(Object o,String n,Object...args){try{for(var m:o
 'io/github/zerohomers0/onesteplite/NativeGeometryRegression.java':'''package io.github.zerohomers0.onesteplite;
 import android.graphics.*;import android.os.*;import android.view.*;import de.robv.android.xposed.*;import java.util.*;
 class ContentDragShadow{int recycled;void recycleThumbnail(){recycled++;}}
-class WindowIdentity{static boolean ownsPicker(Object w,Object d){return false;}}
+class WindowIdentity{static boolean ownsPicker(Object w,Object d){return false;}
+static boolean ownsShareReceiver(Object w){return ((NativeGeometryRegression.Target)w).shareReceiver;}}
 class Tags{static final String PROBE="test";}
 public class NativeGeometryRegression{
 public static class State{public Object mLocalWin=new Object();public SurfaceControl mSurfaceControl=new SurfaceControl();public float mThumbOffsetY=107,mCurrentX=500,mCurrentY=870;public Set<Object> mNotifiedWindows=new HashSet<>();public Wm mService=new Wm();public android.content.ClipData mData;public int mFlags,ended;public void endDragLocked(boolean consumed,boolean relinquish){if(consumed||relinquish)throw new AssertionError("cancel must not report success");ended++;}}
 public static class RomState extends State{public float mCurrentDisplayX=500,mCurrentDisplayY=870;}
 public static class Wm{public Map<Object,Object> mWindowMap=new HashMap<>(),mInputToWindowMap=new HashMap<>();public Object mGlobalLock=new Object();public Handler mH=new Handler();public android.content.Context mContext=new android.content.Context();}
-public static class Target{public Object mInputChannelToken=new Object();public int mOwnerUid=12345;public String pkg="com.tencent.mobileqq";public String getOwningPackage(){return pkg;}public float translateToWindowX(float x){return x*.75f-20;}public float translateToWindowY(float y){return y*.75f-200;}}
+public static class Target{public Object mInputChannelToken=new Object();public int mOwnerUid=12345;public boolean shareReceiver;public String pkg="com.tencent.mobileqq";public String getOwningPackage(){return pkg;}public float translateToWindowX(float x){return x*.75f-20;}public float translateToWindowY(float y){return y*.75f-200;}}
 public static class Display{public Wm mWmService=new Wm();public Object mInputMethodWindow;public Target target=new Target();public Display(){target.pkg="other";}public Object getTouchableWinAtPointLocked(float x,float y){return y>=940&&y<1000?target:null;}}
 public static class Controller{public State mDragState=new State();}
 static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
@@ -94,6 +95,35 @@ state.mData=null;
 same=event(state,second.mInputChannelToken,0f,0f,500f,850f);
 XposedBridge.hooks.get("reportDropWindowLockInner").fire(same);
 check(Boolean.FALSE.equals(same.result)&&state.ended==4,"QQ same-source native drag can carry private local state only");
+controller=new Controller();state=controller.mDragState;display=new Display();
+source=new Target();source.pkg="com.android.systemui";source.mOwnerUid=10228;
+Target rail=new Target();rail.pkg=source.pkg;rail.mOwnerUid=source.mOwnerUid;rail.shareReceiver=true;
+Target anotherPanel=new Target();anotherPanel.pkg=source.pkg;anotherPanel.mOwnerUid=source.mOwnerUid;
+state.mData=new android.content.ClipData();state.mFlags=256;
+state.mService=display.mWmService;
+state.mService.mWindowMap.put(state.mLocalWin,source);
+state.mService.mInputToWindowMap.put(rail.mInputChannelToken,rail);
+state.mNotifiedWindows.add(rail);state.mNotifiedWindows.add(anotherPanel);
+NativeDragGeometry.attach(controller,display,new ContentDragShadow(),state.mSurfaceControl,()->true);
+for(String mime:List.of("text","image")){
+    state.mData.mime=mime;
+    var railDrop=event(state,rail.mInputChannelToken,100f,926f);
+    XposedBridge.hooks.get("reportDropWindowLock").fire(railDrop);
+    check(railDrop.result==null&&state.ended==0,"SystemUI share receiver keeps the native "+mime+" DROP");
+}
+var fileDrop=event(state,rail.mInputChannelToken,52f,422f,100f,926f);
+state.mData.mime="application";
+XposedBridge.hooks.get("reportDropWindowLockInner").fire(fileDrop);
+check(fileDrop.result==null&&state.ended==0&&fileDrop.args[0]==rail.mInputChannelToken
+        && (Float)fileDrop.args[2]==422f&&(Float)fileDrop.args[4]==926f,
+        "HyperOS direct route and shadow-session fallback preserve the share receiver and coordinates");
+state.mData.mime="image";
+var panelDrop=event(state,anotherPanel.mInputChannelToken,100f,926f);
+XposedBridge.hooks.get("reportDropWindowLockInner").fire(panelDrop);
+check(Boolean.FALSE.equals(panelDrop.result)&&state.ended==1,"other same-UID panels still reject a return to source");
+var sourceDrop=event(state,source.mInputChannelToken,100f,926f);
+XposedBridge.hooks.get("reportDropWindowLock").fire(sourceDrop);
+check(Boolean.FALSE.equals(sourceDrop.result)&&state.ended==2,"true original source window still cancels");
 System.out.println("Production native drag geometry checks="+checks+" passed (WM doubles; device pending)");}}
 '''
 }

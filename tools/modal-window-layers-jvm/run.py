@@ -60,6 +60,14 @@ public class ModalLayersRegression {
   fresh();apply();modal.surface.valid=false;shot.visible=false;apply();check(modal.restores==0,"destroyed surfaces must not be restored");
   fresh();apply();modal.surface=new Surface();modal.mLastLayer=99;modal.mLastRelativeToLayer=null;apply();shot.visible=false;apply();check(modal.mLastLayer==99,"replacement modal surface must use its own native restore point");
   fresh();apply();Display second=new Display();layers.reconcile(second,tx);check(modal.mLastRelativeToLayer==shot.surface,"another display traversal must not retire this display's modal lease");shot.visible=false;apply();check(modal.mLastLayer==77,"original display still restores its lease");
+  fresh();check(!WindowIdentity.ownsShareReceiver(modal),"content source panel is not a share receiver");
+  modal.mAttrs.title=WindowIdentity.SHARE_RECEIVER_TITLE;apply();
+  check(WindowIdentity.ownsShareReceiver(modal)&&modal.mLastRelativeToLayer==shot.surface,
+        "share receiver is authenticated and keeps the screenshot-safe modal lease");
+  modal.mSession.mUid=2000;check(!WindowIdentity.ownsShareReceiver(modal),"receiver title cannot override session ownership");
+  modal.mSession.mUid=1000;modal.mOwnerUid=2000;check(!WindowIdentity.ownsShareReceiver(modal),"receiver title cannot override package ownership");
+  modal.mOwnerUid=1000;modal.mAttrs.type=2038;modal.mAttrs.title="WorkspaceHost";
+  check(WindowIdentity.ownsShareReceiver(modal),"authenticated workspace host accepts forwarded drops");
   System.out.println("Modal screenshot layering checks="+checks+" passed (WM doubles; visual/input acceptance pending)");
  }
 }'''

@@ -36,7 +36,7 @@ final class ShareDragCatchment implements AutoCloseable {
                 PixelFormat.TRANSLUCENT);
         attrs.gravity=Gravity.TOP|Gravity.LEFT;attrs.x=screen.left;attrs.y=screen.top;attrs.setFitInsetsTypes(0);
         attrs.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-        attrs.setTitle("OneStepLiteContentPanel");HostWindowPolicy.configure(attrs);
+        attrs.setTitle(WindowIdentity.SHARE_RECEIVER_TITLE);HostWindowPolicy.configure(attrs);
         context.getSystemService(WindowManager.class).addView(view,attrs);plate=view;
         }
         catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"share arrow reach unavailable",unavailable);}

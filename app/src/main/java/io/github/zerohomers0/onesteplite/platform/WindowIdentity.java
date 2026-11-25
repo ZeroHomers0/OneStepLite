@@ -7,6 +7,18 @@ import de.robv.android.xposed.XposedHelpers;
 
 /** WM lock only: resolve the registered window's native session and package owner. */
 final class WindowIdentity {
+    static final String SHARE_RECEIVER_TITLE="OneStepLiteShareReceiver";
+
+    static boolean ownsShareReceiver(Object window) {
+        if(window==null)return false;
+        try {
+            Object display=XposedHelpers.callMethod(window,"getDisplayContent");
+            WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(window,"mAttrs");
+            if(SHARE_RECEIVER_TITLE.contentEquals(attrs.getTitle()))return ownsPicker(window,display);
+            return ownsHost(window,display);
+        }catch(RuntimeException unavailable){return false;}
+    }
+
     static boolean ownsHost(Object window, Object display) {
         return owns(window, display, 0);
     }
@@ -31,7 +43,7 @@ final class WindowIdentity {
             String title = String.valueOf(attrs.getTitle());
             if (scope==2) {
                 if (!"OneStepLiteContentPanel".equals(title)
-                        && !"OneStepLitePortalSource".equals(title)) return false;
+                        && !"OneStepLitePortalSource".equals(title) && !SHARE_RECEIVER_TITLE.equals(title)) return false;
             } else if (!"WorkspaceHost".equals(title) && (scope!=1
                     || (!"OneStepLiteMirrorLayer".equals(title) && !"OneStepLiteTransition".equals(title)))) return false;
             int uid = XposedHelpers.getIntField(window, "mOwnerUid");

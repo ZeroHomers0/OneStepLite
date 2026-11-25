@@ -76,7 +76,8 @@ final class NativeDragGeometry {
         try {
             return XposedHelpers.getIntField(origin,"mOwnerUid")==XposedHelpers.getIntField(target,"mOwnerUid")
                     && java.util.Objects.equals(XposedHelpers.callMethod(origin,"getOwningPackage"),
-                            XposedHelpers.callMethod(target,"getOwningPackage"));
+                            XposedHelpers.callMethod(target,"getOwningPackage"))
+                    && !WindowIdentity.ownsShareReceiver(target);
         }catch(RuntimeException unavailable){return false;}
     }
 
