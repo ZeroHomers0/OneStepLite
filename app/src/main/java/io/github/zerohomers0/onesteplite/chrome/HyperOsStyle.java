@@ -171,44 +171,49 @@ final class HyperOsStyle {
     }
 
     private static void boxBlur(int[] source, int[] target, int width, int height, int radius) {
+        // Preserve the legacy truncated windows: the sample count grows and shrinks only as edges enter or leave.
         int[] horizontal = new int[source.length];
         for (int y = 0; y < height; y++) {
             int row = y * width, red = 0, green = 0, blue = 0;
-            for (int x = -radius; x <= radius; x++) {
-                int pixel = source[row + Math.max(0, Math.min(width - 1, x))];
+            int count = Math.min(width, radius + 1);
+            for (int x = 0; x < count; x++) {
+                int pixel = source[row + x];
                 red += Color.red(pixel); green += Color.green(pixel); blue += Color.blue(pixel);
             }
             for (int x = 0; x < width; x++) {
-                int count = Math.min(width - 1, x + radius) - Math.max(0, x - radius) + 1;
                 horizontal[row + x] = Color.rgb(red / count, green / count, blue / count);
                 int removeX = x - radius, addX = x + radius + 1;
                 if (removeX >= 0) {
                     int pixel = source[row + removeX];
                     red -= Color.red(pixel); green -= Color.green(pixel); blue -= Color.blue(pixel);
+                    count--;
                 }
                 if (addX < width) {
                     int pixel = source[row + addX];
                     red += Color.red(pixel); green += Color.green(pixel); blue += Color.blue(pixel);
+                    count++;
                 }
             }
         }
         for (int x = 0; x < width; x++) {
             int red = 0, green = 0, blue = 0;
-            for (int y = -radius; y <= radius; y++) {
-                int pixel = horizontal[Math.max(0, Math.min(height - 1, y)) * width + x];
+            int count = Math.min(height, radius + 1);
+            for (int y = 0; y < count; y++) {
+                int pixel = horizontal[y * width + x];
                 red += Color.red(pixel); green += Color.green(pixel); blue += Color.blue(pixel);
             }
             for (int y = 0; y < height; y++) {
-                int count = Math.min(height - 1, y + radius) - Math.max(0, y - radius) + 1;
                 target[y * width + x] = Color.rgb(red / count, green / count, blue / count);
                 int removeY = y - radius, addY = y + radius + 1;
                 if (removeY >= 0) {
                     int pixel = horizontal[removeY * width + x];
                     red -= Color.red(pixel); green -= Color.green(pixel); blue -= Color.blue(pixel);
+                    count--;
                 }
                 if (addY < height) {
                     int pixel = horizontal[addY * width + x];
                     red += Color.red(pixel); green += Color.green(pixel); blue += Color.blue(pixel);
+                    count++;
                 }
             }
         }
