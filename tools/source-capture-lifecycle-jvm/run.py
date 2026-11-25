@@ -34,7 +34,7 @@ static class Anchor {boolean attached=true;boolean isAttachedToWindow(){return a
 static class CurrentUser {static int user;static int id(){return user;}}
 static class Capture implements AutoCloseable {
 final Object pixels=new Object();Anchor anchor=new Anchor();BooleanSupplier ready=()->true;Supplier<Object> bounds=()->this.requested;
-Object requested=new Object(),crop=new Object();boolean closed,busy=true,dragging=true,consumed;int generation=42,discards,owner;
+Object requested=new Object(),crop=new Object(),initialCrop=new Object();boolean closed,busy=true,dragging=true,consumed;int generation=42,discards,owner;
 Bitmap snapshot=new Bitmap(),result=new Bitmap();Dialog dialog=new Dialog();Lease island=new Lease();String storedId="pending";
 Object textResult;Lease recognition;
 void discard(String id){discards++;}

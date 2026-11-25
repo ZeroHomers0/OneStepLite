@@ -9,6 +9,8 @@
     <package android:name="com.miui.contentextension" />
     <package android:name="com.miui.contentcatcher" />
     <package android:name="com.tencent.mm" />
+    <package android:name="com.ss.android.lark" />
+    <package android:name="com.miui.home" />
     <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
     <intent><action android:name="android.intent.action.SEND" /><data android:mimeType="*/*" /></intent>
     <intent><action android:name="android.intent.action.SEND_MULTIPLE" /><data android:mimeType="*/*" /></intent>
@@ -45,6 +47,6 @@
     <meta-data android:name="xposedmodule" android:value="true" />
     <meta-data android:name="xposeddescription" android:value="OneStepLite：系统主窗缩放与三个真实小窗。" />
     <meta-data android:name="xposedminversion" android:value="82" />
-    <meta-data android:name="xposedscope" android:value="android;com.android.systemui;com.android.settings" />
+    <meta-data android:name="xposedscope" android:value="android;com.android.systemui;com.android.settings;com.miui.contentcatcher;com.miui.contentextension" />
   </application>
 </manifest>

@@ -35,7 +35,7 @@ final class SourceCaptureController implements AutoCloseable {
     private final Handler main=new Handler(Looper.getMainLooper());
     private Dialog dialog;
     private Bitmap snapshot,result;
-    private Rect requested;
+    private Rect requested,initialCrop;
     private CaptureCropView crop;
     private String storedId;
     private ModalIslandLease island;
@@ -50,10 +50,19 @@ final class SourceCaptureController implements AutoCloseable {
     }
 
     void open() {
+        open(null);
+    }
+
+    void open(Rect suggested) {
         close();Rect mainBounds=bounds.get();
         if(!ready.getAsBoolean() || mainBounds==null || mainBounds.isEmpty() || !ContentAccessCompat.currentProcessUser())return;
+        if(suggested!=null && (!mainBounds.contains(suggested)
+                || !ContentCapturePolicy.validCrop(suggested.left-mainBounds.left,suggested.top-mainBounds.top,
+                suggested.right-mainBounds.left,suggested.bottom-mainBounds.top,mainBounds.width(),mainBounds.height())))return;
         if((long)mainBounds.width()*mainBounds.height()>ContentCapturePolicy.MAX_CAPTURE_PIXELS){message("主窗画面过大，暂时无法截取");return;}
         owner=CurrentUser.id();closed=false;consumed=false;requested=new Rect(mainBounds);int token=++generation;
+        initialCrop=suggested==null?null:new Rect(suggested);
+        if(initialCrop!=null)initialCrop.offset(-requested.left,-requested.top);
         Rect region=new Rect(requested);
         // OEM WMS can retain a dismissed dialog surface beyond the next two UI frames.
         // This is a one-shot settling delay, not a compositor-commit acknowledgement.
@@ -95,8 +104,8 @@ final class SourceCaptureController implements AutoCloseable {
         Context themed=new android.view.ContextThemeWrapper(windowContext,HyperOsStyle.dark(context)
                 ?android.R.style.Theme_Material_Dialog_NoActionBar:android.R.style.Theme_Material_Light_Dialog_NoActionBar);
         dialog=new Dialog(themed);dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        LinearLayout body=body(themed,"框选主窗画面 · 截取结果为图片");
-        crop=new CaptureCropView(themed,snapshot);body.addView(crop,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout body=body(themed,initialCrop==null?"框选主窗画面 · 截取结果为图片":"截图预览 · 确认或调整选区");
+        crop=new CaptureCropView(themed,snapshot,initialCrop);body.addView(crop,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout actions=new LinearLayout(themed);button(actions,"取消",this::close);button(actions,"使用选区",this::prepare);
         body.addView(actions,new LinearLayout.LayoutParams(-1,-2));dialog.setContentView(body);
         dialog.setOnDismissListener(d->close());Window window=dialog.getWindow();if(window==null){close();return;}
@@ -208,7 +217,7 @@ final class SourceCaptureController implements AutoCloseable {
         if(island!=null){island.close();island=null;}
         synchronized(pixels){if(snapshot!=null){snapshot.recycle();snapshot=null;}}
         if(result!=null){result.recycle();result=null;}
-        if(storedId!=null && !consumed)discard(storedId);storedId=null;crop=null;
+        if(storedId!=null && !consumed)discard(storedId);storedId=null;crop=null;initialCrop=null;
     }
     private int dp(int value){return HyperOsStyle.dp(context,value);}
     private void message(String text){android.widget.Toast.makeText(context,text,android.widget.Toast.LENGTH_SHORT).show();}

@@ -63,10 +63,10 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
-        if (WechatImageSource.PACKAGE.equals(lpparam.packageName)) {
+        if (ViewImageSource.supports(lpparam.packageName)) {
             if(lpparam.packageName.equals(lpparam.processName)) {
-                try{WechatImageSource.install();}
-                catch(Throwable unavailable){log("WeChat image source unavailable: "+unavailable);}
+                try{ViewImageSource.install();}
+                catch(Throwable unavailable){log("View image source unavailable: "+unavailable);}
             }
             return;
         }

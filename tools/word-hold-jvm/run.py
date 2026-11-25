@@ -31,8 +31,14 @@ public class WordHoldRegression{
  void removeCallbacks(Runnable r){queue.remove(r);}void drain(){var copy=new ArrayList<>(queue.keySet());queue.clear();for(Runnable r:copy)r.run();}}
  static class Anchor{Object getContext(){return this;}}
  Object window,selection;MotionEvent pointer;Runnable pendingWords,fallbackJob;float wordX,wordY,fallbackX,fallbackY;boolean validGesture,fallbackIssued,selectingDrag;
- Bundle liftCandidate;float liftX,liftY;int lifts;void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired){if(request.lift)lifts++;}
- static class Capture{void close(){}void extractText(java.util.function.Consumer<String> callback){callback.accept("screen OCR");}}Capture fallbackCapture=new Capture();
+ Bundle liftCandidate;float liftX,liftY,downX,downY;long liftAt;boolean imageLiftEligible,startingDrag;
+ int lifts;void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired){if(request.lift)lifts++;}
+ void clearWindow(){window=null;startingDrag=false;validGesture=false;}
+ static class Capture{
+ boolean deferred;java.util.function.Consumer<String> result;
+ void close(){}
+ void extractText(java.util.function.Consumer<String> callback){if(deferred)result=callback;else callback.accept("screen OCR");}
+ }Capture fallbackCapture=new Capture();
  Handler main=new Handler();Anchor anchor=new Anchor();int generation,opens,wordPointers;boolean active=true;
  BooleanSupplier ready=()->active;boolean live(){return pointer!=null&&validGesture&&active;}
  boolean openWords(String text){opens++;return true;}
@@ -65,10 +71,22 @@ public class WordHoldRegression{
  h=fresh();h.liftCandidate=new Bundle();h.motion(new MotionEvent(0));check(h.liftCandidate==null,"new DOWN cannot reuse an earlier gesture's content");
  h=fresh();int previous=h.generation;h.motion(new MotionEvent(0));check(h.generation!=previous,"a new press invalidates preceding extraction offers");
  h=fresh();h.selection=new Object();two=new MotionEvent(2);two.count=2;h.motion(two);check(h.fallbackJob==null,"word selection owns its touch stream");
+ h=fresh();android.os.SystemClock.now=1800;move=new MotionEvent(2);move.x=90;h.motion(move);
+ h.liftCandidate=new Bundle();h.liftX=h.downX;h.liftY=h.downY;h.moveLiftCandidate(h.pointer);
+ check(h.lifts==1,"a late image can use movement already observed after the hold");
+ h=fresh();h.motion(move);check(!h.imageLiftEligible,"scrolling before long press invalidates a later image offer");
+ h=fresh();h.window=new Object();h.startingDrag=true;h.motion(new MotionEvent(1));
+ check(h.window==null&&!h.startingDrag&&h.pointer==null,"release retires a source waiting for its first frame");
+ h=fresh();h.liftCandidate=new Bundle();h.liftX=h.liftY=50;h.liftAt=1900;
+ android.os.SystemClock.now=1800;h.motion(move);check(h.lifts==0,"fallback waits briefly for a preferred image");
+ android.os.SystemClock.now=1900;h.moveLiftCandidate(h.pointer);check(h.lifts==1,"fallback lifts without another move once its wait ends");
+ h=fresh();h.fallbackCapture.deferred=true;two=new MotionEvent(2);two.count=2;
+ h.motion(two);h.main.drain();h.motion(new MotionEvent(0));h.fallbackCapture.result.accept("old OCR");
+ check(h.opens==0,"OCR from a previous press cannot open word selection");
  System.out.println("Production word hold cancellation checks="+checks+" passed");
  }
 }
-'''.replace('__METHODS__',member('    private void motion(')+'\n'+member('    private boolean deferWords('))}
+'''.replace('__METHODS__',member('    private void motion(')+'\n'+member('    private void moveLiftCandidate(')+'\n'+member('    private boolean deferWords('))}
 paths=[]
 for name,text in files.items():
     path=out/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(text,encoding='utf-8');paths.append(str(path))

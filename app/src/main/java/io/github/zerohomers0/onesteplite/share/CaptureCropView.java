@@ -12,14 +12,16 @@ import android.view.View;
 /** User-drawn region on one frozen main-window frame, without touching the source application's UI. */
 final class CaptureCropView extends View {
     private final Bitmap image;
+    private final Rect initial;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
     private final RectF fit=new RectF(),selection=new RectF();
     private float startX,startY;
-    CaptureCropView(Context context,Bitmap image){super(context);this.image=image;
+    CaptureCropView(Context context,Bitmap image,Rect initial){super(context);this.image=image;
+        this.initial=initial==null?null:new Rect(initial);
         setContentDescription("拖动框选主窗图片区域");setFocusable(true);}
 
     @Override protected void onSizeChanged(int width,int height,int oldWidth,int oldHeight) {
-        Rect previous=fit.width()>0 && fit.height()>0?selectedPixels():null;
+        Rect previous=fit.width()>0 && fit.height()>0?selectedPixels():initial;
         float scale=Math.min(width/(float)image.getWidth(),height/(float)image.getHeight());
         float w=image.getWidth()*scale,h=image.getHeight()*scale;
         fit.set((width-w)/2,(height-h)/2,(width+w)/2,(height+h)/2);

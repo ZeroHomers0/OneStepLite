@@ -37,7 +37,7 @@ public final class ContentInboxProvider extends ContentProvider {
     }
 
     @Override public Bundle call(String method,String arg,Bundle extras) {
-        if(method!=null && method.startsWith("portal_"))return PortalRelay.call(getContext(),method,extras);
+        if(method!=null && method.startsWith("portal_"))return PortalRelay.call(getContext(),method,arg,extras);
         if("paste_register".equals(method))return EditorPasteCompat.relay(getContext(),method,extras);
         enforceHost();
         if(Binder.getCallingUid()/100000!=android.os.Process.myUid()/100000)throw new SecurityException("Different content user");

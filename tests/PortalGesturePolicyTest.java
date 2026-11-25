@@ -18,6 +18,18 @@ public final class PortalGesturePolicyTest {
         check(!PortalGesturePolicy.offer(100,100,500,1701));
         check(!PortalGesturePolicy.offer(100,100,500,499));
         check(!PortalGesturePolicy.offer(100,100,0,500));
+        check(PortalGesturePolicy.replaces(PortalGesturePolicy.VIEW_IMAGE,PortalGesturePolicy.PORTAL_IMAGE,false));
+        check(PortalGesturePolicy.replaces(PortalGesturePolicy.PORTAL_IMAGE,PortalGesturePolicy.SYSTEM_IMAGE,false));
+        check(PortalGesturePolicy.replaces(PortalGesturePolicy.SYSTEM_TEXT,PortalGesturePolicy.VIEW_IMAGE,true));
+        check(!PortalGesturePolicy.replaces(PortalGesturePolicy.PORTAL_IMAGE,PortalGesturePolicy.VIEW_IMAGE,false));
+        check(!PortalGesturePolicy.replaces(PortalGesturePolicy.SYSTEM_IMAGE,PortalGesturePolicy.SYSTEM_TEXT,false));
+        check(!PortalGesturePolicy.replaces(PortalGesturePolicy.PORTAL_TEXT,PortalGesturePolicy.PORTAL_TEXT,true));
+        check(PortalGesturePolicy.replaces(PortalGesturePolicy.PORTAL_TEXT,PortalGesturePolicy.SYSTEM_TEXT,false));
+        check(!PortalGesturePolicy.replaces(PortalGesturePolicy.SYSTEM_TEXT,PortalGesturePolicy.PORTAL_TEXT,false));
+        check(PortalGesturePolicy.sameTouch(new float[]{105,102},100,100,8));
+        check(!PortalGesturePolicy.sameTouch(new float[]{140,100},100,100,8));
+        check(!PortalGesturePolicy.sameTouch(new float[]{Float.NaN,100},100,100,8));
+        check(PortalGesturePolicy.replaces(PortalGesturePolicy.REGION,PortalGesturePolicy.VIEW_IMAGE,false));
         System.out.println("Portal gesture policy checks="+checks+" passed");
     }
 }

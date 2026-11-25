@@ -59,7 +59,11 @@ final class SystemExtractHooks {
             boolean image=((String)entry.getKey()).endsWith("#image_pick_mode");
             try{
                 Bundle candidate=new Bundle(state);
-                if(!SystemExtractPayload.append(injector,entry.getValue(),image,candidate))continue;
+                if(!SystemExtractPayload.append(injector,entry.getValue(),image,candidate)){
+                    if(image && SystemExtractPayload.appendRegion(injector,entry.getValue(),candidate))
+                        context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_offer",null,candidate);
+                    continue;
+                }
                 Bundle reply=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_offer",null,candidate);
                 if(reply!=null && reply.getBoolean("accepted")){
                     ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.ACCEPTED);return true;
