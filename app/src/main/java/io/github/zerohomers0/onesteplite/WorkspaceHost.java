@@ -147,8 +147,6 @@ public final class WorkspaceHost {
     private VideoPane videoPane;
     private final TopTaskState topTaskState = new TopTaskState();
     private final java.util.Map<TopTaskState.Key, TopDirection> topDirections = new java.util.HashMap<>();
-    private record TopDirection(boolean landscape, String page, int request, int mode,
-            int viewportOrientation) {}
     private final WideVideoPolicy wideVideoPolicy = new WideVideoPolicy();
     /** Scratch main hole: every consumer copies it before the next frame. */
     private final android.graphics.RectF workspaceHole = new android.graphics.RectF();
@@ -165,18 +163,6 @@ public final class WorkspaceHost {
     private boolean topPortrait;
     private volatile TopTaskTransition topTransition;
 
-    private static final class TopCandidate {
-        final LiveTask task;
-        final TopTaskState.Key key;
-        final Slot source;
-        final boolean landscape;
-        final boolean tryLandscape;
-        TopCandidate(LiveTask task, TopTaskState.Key key, Slot source, boolean landscape,
-                boolean tryLandscape) {
-            this.task=task; this.key=key; this.source=source; this.landscape=landscape;
-            this.tryLandscape=tryLandscape;
-        }
-    }
     /** 侧栏按格分段的不透明底板；承载格需要把它藏起来让下面的真实任务画面透出来。 */
     private final View[] sideBackingViews = new View[SLOT_COUNT];
     private boolean mainOnRight;
@@ -211,11 +197,6 @@ public final class WorkspaceHost {
     private CellMotion cellMotion;
     private SideDismiss sideDismiss;
     private Slot sideDismissSlot;
-    private static final class CellMovePlan {
-        final Slot slot;
-        final Rect from;
-        CellMovePlan(Slot slot, Rect from) { this.slot = slot; this.from = from; }
-    }
     private volatile boolean liveSwapInputBlocked;
     private TransitionInput transitionInput;
     private View transitionInputWindow;
@@ -227,101 +208,9 @@ public final class WorkspaceHost {
 
     private final java.util.Map<Object, OwnedTask> ownedTasks = new java.util.HashMap<>();
 
-    private static final class Slot implements SlotPositions.Entry {
-        int index;
-        View view;
-        View hint;
-        Object controller;
-        int taskId = -1;
-        Object taskToken;
-        int[] rect;
-        int sideRow = -1;
-        volatile boolean sideShown, sidePrepared;
-        Object sideViewportParent, sideViewportSurface;
-        int windowMode = -1;
-        TaskWindowState windowState;
-        boolean occupied;
-        boolean taskVisible;
-        boolean reassertPending;
-        long modeGuardUntil;
-        int modeRepairAttempts;
-        boolean modeAdmissionPending;
-        final VisibilityRepair visibilityRepair = new VisibilityRepair();
-        // v0.9 缩放渲染：任务按满屏排版，靠矩阵缩到格子里
-        Object scaleSurface;
-        Object cellBackground;
-        Object cellBackgroundParent;
-        int cellBackgroundWidth;
-        int cellBackgroundHeight;
-        boolean scaleOnLeash;
-        int scaleTaskId = Integer.MIN_VALUE;
-        float scaleApplied = -1f;
-        int scaleAttempts;
-        int taskUid;
-        String pkg;
-        // A tap swaps; an outward swipe releases this exact task to the background.
-        MotionEvent bufferedDown;
-        long touchTaskEpoch, touchSceneEpoch;
-        boolean injecting;
-        int touchAxis;
-        volatile boolean promoting;
-        boolean launching;
-        int retiredTaskId = -1;
-        long taskEpoch;
-        int removalCheckTask = -1;
-        volatile boolean parked;
-        volatile boolean frozen;
-        volatile boolean closing;
-        volatile boolean nativeReleasePending;
-        // fullscreen-only 应用的 mirror 承载：任务仍是满屏前台，画面被移出屏幕，
-        // 副本镜像显示在格子里；点击格子把原任务移回主区。
-        int carrierTaskId = -1;
-        Object carrierLeash;
-        Object carrierMirror;
-        View carrierTapView;
-        boolean carrier;
-        PendingSidePromotion pendingSidePromotion;
 
-        Slot(int index) {
-            this.index = index;
-        }
 
-        public int position() { return index; }
-        public void position(int value) { index = value; }
-    }
 
-    private static final class PendingSidePromotion {
-        final Slot slot;
-        final int taskId;
-        final Object token;
-        final long sceneEpoch;
-        final long bindingEpoch;
-        final long deadline;
-        final String pkg;
-        boolean desktopLaunch;
-        int attempts;
-
-        PendingSidePromotion(Slot slot, long sceneEpoch, boolean desktopLaunch, long deadline) {
-            this.slot = slot;
-            taskId = slot.taskId;
-            token = slot.taskToken;
-            this.sceneEpoch = sceneEpoch;
-            bindingEpoch = slot.taskEpoch;
-            pkg = slot.pkg;
-            this.desktopLaunch = desktopLaunch;
-            this.deadline = deadline;
-        }
-    }
-
-    private static final class OwnedTask {
-        final int id;
-        final Object token;
-        Object surface;
-        Object recoveryController;
-        int userId = -1;
-        boolean recoveryCandidate;
-        OwnedTask(int id, Object token) { this.id = id; this.token = token; }
-    }
 
     private final FinishTransactions<NativeObservation> nativeObservations = new FinishTransactions<>(16);
     private volatile NativeObservation pendingNativeObservation;
@@ -338,156 +227,7 @@ public final class WorkspaceHost {
         if (observation != null) observation.cancel();
     }
 
-    private static final class Promotion {
-        final Slot slot;
-        final int taskId;
-        final Object token;
-        final java.util.List<Object> otherSideTokens = new java.util.ArrayList<>();
-        volatile boolean cancelled;
-        volatile boolean handoffAttempted;
-        volatile boolean handoffComplete;
-        boolean background;
-        boolean externalLaunch;
-        boolean nativeSwap;
-        boolean nativeFlip;
-        boolean nativeHome;
-        boolean nativeCollect;
-        Runnable notificationLaunch;
-        Runnable collectionLaunch;
-        long liveZoomGuardUntil;
-        WorkspaceLayout previousLayout;
-        WorkspaceLayout targetLayout;
-        boolean candidateRecovery;
-        boolean liveMainReveal;
-        boolean restoreMainOpacityAfterHandoff;
-        Object liveRevealSurface;
-        volatile boolean nativeSubmitted;
-        volatile boolean cancelRequested;
-        volatile boolean nativeCompleting;
-        boolean liveMainFocusPrepared;
-        int liveMainUserId = -1;
-        FocusResult liveMainFocusResult;
-        LiveSwapVisualLease liveVisual;
-        LiveBackdrop liveBackdrop;
-        final java.util.List<LiveSwapVisualLease> peerVisuals = new java.util.ArrayList<>();
-        final java.util.List<LivePeerBinding> livePeers = new java.util.ArrayList<>();
-        OwnedTask previousMainCandidate;
-        LiveTask previousMain;
-        LiveTask homeBeforeCover;
-        LiveTask collectionHome;
-        boolean previousMainOnRight;
-        boolean targetMainOnRight;
-        LiveLiftPreview liveLift;
-        /** 交换时主任务（previousMain）的真实 leash：桥上给它挖洞做 view 级缩小动画。 */
-        Object mainLeash;
-        Bitmap compactSnapshot;
-        Rect compactSnapshotRect;
-        long sceneEpoch;
-        long bindingEpoch;
 
-        Promotion(Slot slot, Slot[] slots) {
-            this.slot = slot;
-            this.taskId = slot.taskId;
-            this.token = slot.taskToken;
-            for (Slot other : slots) {
-                // A parked/frozen or already hidden cell is not a live peer that can
-                // block promotion. Requiring it visible caused spurious rollbacks
-                // after the user returned from Home with a stale side binding.
-                if (other != slot && (other.sideRow < 0 || other.sideShown)
-                        && other.occupied && !other.parked && !other.frozen
-                        && other.taskVisible && other.taskToken != null) {
-                    otherSideTokens.add(other.taskToken);
-                }
-            }
-        }
-    }
-
-    private static final class LivePeerBinding {
-        final Slot slot;
-        final long epoch;
-        final int id;
-        final Object token, controller;
-        LivePeerBinding(Slot slot) {
-            this.slot = slot; epoch = slot.taskEpoch; id = slot.taskId;
-            token = slot.taskToken; controller = slot.controller;
-        }
-    }
-
-    /** Hide only the selected cell's Host drawings; its SurfaceView stays attached. */
-    private static final class LiveSwapVisualLease {
-        private static final class AlphaHold {
-            int count;
-            float alpha;
-            AlphaHold(float alpha) { this.alpha = alpha; }
-        }
-        private static final java.util.IdentityHashMap<View, AlphaHold> held = new java.util.IdentityHashMap<>();
-        final View backing, hint;
-        final float backingAlpha, hintAlpha;
-        final int backingVisibility, hintVisibility;
-        boolean restored;
-        LiveSwapVisualLease(View backing, View hint) {
-            this.backing = backing; this.hint = hint;
-            backingAlpha = backing == null ? 1f : backing.getAlpha();
-            hintAlpha = hint == null ? 1f : hint.getAlpha();
-            backingVisibility = backing == null ? View.GONE : backing.getVisibility();
-            hintVisibility = hint == null ? View.GONE : hint.getVisibility();
-            acquire(backing);
-            acquire(hint);
-        }
-        private static void acquire(View view) {
-            if (view == null) return;
-            AlphaHold hold = held.get(view);
-            if (hold == null) { hold = new AlphaHold(view.getAlpha()); held.put(view, hold); }
-            hold.count++; view.setAlpha(0f);
-        }
-        static void writeAlpha(View view, float alpha) {
-            if (view == null) return;
-            AlphaHold hold = held.get(view);
-            if (hold != null) hold.alpha = alpha;
-            else view.setAlpha(alpha);
-        }
-        private static void release(View view) {
-            if (view == null) return;
-            AlphaHold hold = held.get(view);
-            if (hold != null && --hold.count == 0) {
-                held.remove(view); view.setAlpha(hold.alpha);
-            }
-        }
-        void restore() {
-            if (restored) return;
-            restored = true;
-            // Nested handoffs and late fade callbacks cannot resurrect shared chrome.
-            // Restore the latest requested alpha only when the last owner releases it.
-            release(backing);
-            release(hint);
-        }
-    }
-
-    private static final class LiveTask {
-        final int id;
-        final Object token;
-        final String pkg;
-        LiveTask(Object info) {
-            id = XposedHelpers.getIntField(info, "taskId");
-            token = XposedHelpers.getObjectField(info, "token");
-            ComponentName base = (ComponentName) XposedHelpers.getObjectField(info, "baseActivity");
-            pkg = base == null ? null : base.getPackageName();
-        }
-        LiveTask(Slot slot) {
-            this.id = slot.taskId;
-            this.token = slot.taskToken;
-            this.pkg = slot.pkg;
-        }
-        LiveTask(int id, Object token, String pkg) {
-            this.id = id;
-            this.token = token;
-            this.pkg = pkg;
-        }
-        boolean matches(Object info) {
-            return info != null && id == XposedHelpers.getIntField(info, "taskId")
-                    && token != null && token.equals(XposedHelpers.getObjectField(info, "token"));
-        }
-    }
 
     private WorkspaceHost(Context ctx, Executor executor, Object factory, Object transitions) {
         // Keep the workspace on the physical portrait window configuration while
@@ -2784,17 +2524,6 @@ public final class WorkspaceHost {
                 failure.accept(detail);
             }
         }).observe(attempt);
-    }
-
-    private static final class RenderBinding {
-        final Slot slot;
-        final int id;
-        final Object token, leash, parent;
-        final long scene, binding;
-        RenderBinding(Slot slot, long scene, Object leash, Object parent) {
-            this.slot = slot; id = slot.taskId; token = slot.taskToken;
-            this.scene = scene; binding = slot.taskEpoch; this.leash = leash; this.parent = parent;
-        }
     }
 
     private void installRetainedSurfaces(ClassLoader cl) {

@@ -14,8 +14,12 @@ def method(t,s):
   i+=1
  return t[a:i]
 host=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-parts=['    private void completeHomePromotion(', '    private void clearSlot(', '    private void compactCells()', '    private void compactCellsAfterCollection()', '    private static final class CellMovePlan', '    private void syncSlotWindowState(', '    private void onTaskIdKnown(', '    private void queueSidePromotion(', '    private void retrySidePromotion(', '    private void beginExternalPromotion(', '    private boolean externalPromotionCurrent(', '    private void afterExternalTransitionIdle(']
-methods='\n'.join(method(host,s) for s in parts)+'\n'+method(host,'    private static final class PendingSidePromotion')
+parts=['    private void completeHomePromotion(', '    private void clearSlot(', '    private void compactCells()', '    private void compactCellsAfterCollection()', '    private void syncSlotWindowState(', '    private void onTaskIdKnown(', '    private void queueSidePromotion(', '    private void retrySidePromotion(', '    private void beginExternalPromotion(', '    private boolean externalPromotionCurrent(', '    private void afterExternalTransitionIdle(']
+methods='\n'.join(method(host,s) for s in parts)
+cell_source=(package_dir(root)/'CellMovePlan.java').read_text(encoding='utf-8-sig')
+methods+='\n'+method(cell_source,'final class CellMovePlan {')
+source=(package_dir(root)/'PendingSidePromotion.java').read_text(encoding='utf-8-sig')
+methods+='\n'+method(source,'final class PendingSidePromotion')
 parts=['    private boolean compactScrollingSideRows()', '    private void mapSideSlots(',
        '    private int maxSideOffset()', '    private void finishSideScroll()',
        '    private void commitSideScrollPosition()', '    private boolean nearSideViewport(']

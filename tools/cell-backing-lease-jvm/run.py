@@ -53,7 +53,7 @@ check('view.setAlpha(' not in backing,
       'updateWorkspaceBacking must not write the leased View alpha directly: a leased cell placeholder would flash its page colour')
 
 # The lease must still be the only place that can make a held View visible.
-lease = member('    private static final class LiveSwapVisualLease')
+lease = (package_dir(root)/'LiveSwapVisualLease.java').read_text(encoding='utf-8-sig')
 check('view.setAlpha(0f)' in lease, 'lease still hides on acquire')
 check('hold.alpha = alpha' in lease, 'writeAlpha still defers while held')
 check('view.setAlpha(hold.alpha)' in lease, 'release still restores the last requested alpha')

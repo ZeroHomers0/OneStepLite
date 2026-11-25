@@ -17,7 +17,6 @@ def extract(signature):
     return source[start:pos]
 
 actual = '\n'.join(extract(s) for s in (
-    '    private static final class RenderBinding {',
     '    private void appendRetainedSurfaces(',
     '    private void appendSlotViewport(',
     '    private void trackRetainedSurfaces(',
@@ -29,6 +28,14 @@ actual = '\n'.join(extract(s) for s in (
 if '    private void stageSideViewport(' in source:
     actual += '\n' + extract('    private void stageSideViewport(')
 actual += '\n' + extract('    private void syncSideViewportFocus(')
+render_source=(package_dir(root)/'RenderBinding.java').read_text(encoding='utf-8-sig')
+render_start=render_source.index('final class RenderBinding {')
+render_brace=render_source.index('{',render_start);render_depth=1;render_end=render_brace+1
+while render_depth:
+    if render_source[render_end]=='{':render_depth+=1
+    elif render_source[render_end]=='}':render_depth-=1
+    render_end+=1
+actual += '\n' + render_source[render_start:render_end].replace('final class RenderBinding','static final class RenderBinding',1)
 focus_stub = r'''package android.window;
 public class WindowContainerTransaction {
  public final java.util.Map<Object,Boolean> focusable=new java.util.HashMap<>();

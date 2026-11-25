@@ -23,7 +23,6 @@ def member(signature):
     return text[start:end]
 
 methods = '\n'.join(member(s) for s in [
-    '    private static final class LiveSwapVisualLease',
     '    private void finishLiveSwap(',
     '    private void finishLiveCollect(',
     '    private void completeLiveCollect(',
@@ -39,11 +38,11 @@ import java.util.*;
 public class LiveHostRegression {
  static int checks;
  static void check(boolean value, String reason) { checks++; if(!value)throw new AssertionError(reason); }
- static class View {
+ static class View extends android.view.View {
   static final int VISIBLE=0, INVISIBLE=4, GONE=8;
   float alpha=1; int visibility=0, layouts, invalidates;
-  float getAlpha(){return alpha;} void setAlpha(float a){alpha=a;}
-  int getVisibility(){return visibility;} void setVisibility(int v){visibility=v;}
+  public float getAlpha(){return alpha;} public void setAlpha(float a){alpha=a;}
+  public int getVisibility(){return visibility;} public void setVisibility(int v){visibility=v;}
   void requestLayout(){layouts++;} void invalidate(){invalidates++;}
  }
  static class LiveTask { int id; Object token; String pkg; LiveTask(int i,Object t){id=i;token=t;pkg="main";} }
@@ -235,6 +234,9 @@ java.write_text(body, encoding='utf8')
 sparse = out / 'android/util/SparseArray.java'
 sparse.parent.mkdir(parents=True, exist_ok=True)
 sparse.write_text('package android.util; public class SparseArray<T> {private final java.util.Map<Integer,T> map=new java.util.HashMap<>(); public T get(int k){return map.get(k);} public void put(int k,T v){map.put(k,v);}}',encoding='utf8')
+view_stub = out / 'android/view/View.java'
+view_stub.parent.mkdir(parents=True, exist_ok=True)
+view_stub.write_text('package android.view; public class View {public static final int VISIBLE=0,INVISIBLE=4,GONE=8; float alpha=1; int visibility; public float getAlpha(){return alpha;} public void setAlpha(float v){alpha=v;} public int getVisibility(){return visibility;}}',encoding='utf8')
 jdk = Path(os.environ["ONESTEPLITE_JAVA_BIN"])
-subprocess.run([str(jdk/'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(out), str(sparse), str(src/'TaskHandoffPolicy.java'), str(src/'HandoffOwner.java'), str(java)],check=True)
+subprocess.run([str(jdk/'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(out), str(sparse), str(view_stub), str(src/'TaskHandoffPolicy.java'), str(src/'HandoffOwner.java'), str(src/'LiveSwapVisualLease.java'), str(java)],check=True)
 subprocess.run([str(jdk/'java.exe'), '-cp', str(out), 'io.github.zerohomers0.onesteplite.LiveHostRegression'],check=True)

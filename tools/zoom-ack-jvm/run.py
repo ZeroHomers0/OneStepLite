@@ -9,12 +9,12 @@ root = Path(__file__).resolve().parents[2]
 src=package_dir(root)
 out = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'build/tests/zoom-ack-jvm'
 out.mkdir(parents=True, exist_ok=True)
-source = (src / 'HostEntry.java').read_text(encoding='utf8')
-start = source.index('    private static final class ZoomCommit {')
-end = source.index('    /** Snapshot operations only.', start)
-actual = source[start:end].replace('private static final class ZoomCommit', 'static final class ZoomCommit')
+source = (src / 'ZoomCommit.java').read_text(encoding='utf8')
+start = source.index('final class ZoomCommit {')
+actual = source[start:].replace('final class ZoomCommit', 'static final class ZoomCommit', 1)
 wrapper = r'''package io.github.zerohomers0.onesteplite;
 import java.util.*;
+import java.util.function.*;
 public final class ZoomAckRegression {
  static final String SYSTEMUI="com.android.systemui";
  static ZoomTarget sZoomTarget;static ZoomCommit sLiveZoomCommit;
@@ -41,7 +41,7 @@ public final class ZoomAckRegression {
   public int describeContents(){return 0;}public void writeToParcel(android.os.Parcel p,int flags){}
  }
  ACTUAL
- static ZoomCommit commit(Context context){ZoomTarget target=new ZoomTarget();sZoomTarget=target;LiveSwapZoom.Zoom z=new LiveSwapZoom.Zoom(7,.747f,273,622);ZoomCommit c=new ZoomCommit(context,target,z);sLiveZoomCommit=c;c.transactionId=99;c.actualScale=.747f;c.actualX=273;c.actualY=622;return c;}
+ static ZoomCommit commit(Context context){ZoomTarget target=new ZoomTarget();sZoomTarget=target;LiveSwapZoom.Zoom z=new LiveSwapZoom.Zoom(7,.747f,273,622);ZoomCommit c=new ZoomCommit(context,target,z,()->target==sZoomTarget&&z.sameTuple(sZoomScale,sZoomOffsetX,sZoomOffset),ZoomAckRegression::createMagnificationFinishReplay,value->{if(sLiveZoomCommit==value)sLiveZoomCommit=null;},ZoomAckRegression::log);sLiveZoomCommit=c;c.transactionId=99;c.actualScale=.747f;c.actualX=273;c.actualY=622;return c;}
  public static void main(String[] args){
   Context context=new Context();ZoomCommit c=commit(context);c.finish(true,null);Replay sender=latest;
   check(sender.mNativeObject!=0&&sender.closes==0,"native snapshot released at send return");
@@ -64,6 +64,6 @@ target.write_text(wrapper, encoding='utf8')
 jdk = Path(os.environ["ONESTEPLITE_JAVA_BIN"])
 android = Path(os.environ["ONESTEPLITE_ANDROID_JAR"])
 subprocess.run([str(jdk / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-cp', str(android),
-                '-d', str(out), str(src / 'LiveSwapZoom.java'), str(src / 'LiveSwapZoomProtocol.java'), str(src / 'Actions.java'), str(target)], check=True)
+                '-d', str(out), str(src / 'LiveSwapZoom.java'), str(src / 'LiveSwapZoomProtocol.java'), str(src / 'Actions.java'), str(src / 'Packages.java'), str(target)], check=True)
 subprocess.run([str(jdk / 'java.exe'), '-cp', str(out) + ';' + str(android),
                 'io.github.zerohomers0.onesteplite.ZoomAckRegression'], check=True)

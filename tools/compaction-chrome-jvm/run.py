@@ -24,9 +24,17 @@ def member(signature):
     return host[start:end]
 
 
-methods = '\n'.join(member(s) for s in [
-    '    private static final class LiveSwapVisualLease',
-    '    private static final class CellMovePlan',
+cell_source = (package_dir(root)/'CellMovePlan.java').read_text(encoding='utf-8-sig')
+cell_start = cell_source.index('final class CellMovePlan {')
+cell_brace = cell_source.index('{', cell_start)
+cell_depth = 1
+cell_end = cell_brace + 1
+while cell_depth:
+    if cell_source[cell_end] == '{': cell_depth += 1
+    elif cell_source[cell_end] == '}': cell_depth -= 1
+    cell_end += 1
+cell_class = cell_source[cell_start:cell_end].replace('final class CellMovePlan','static final class CellMovePlan',1)
+methods = cell_class + '\n' + '\n'.join(member(s) for s in [
     '    private static int compactionHintMask(',
     '    private void animateCellMoves(',
 ]).replace('WorkspaceHost::log', 'CompactionChromeRegression::log')
@@ -36,10 +44,10 @@ import java.util.*;
 import java.util.function.*;
 public class CompactionChromeRegression {
  static int checks;static void check(boolean v,String why){checks++;if(!v)throw new AssertionError(why);}
- static class View {
+ static class View extends android.view.View {
   static final int GONE=8;float alpha=1;int visibility;
-  float getAlpha(){return alpha;}void setAlpha(float v){alpha=v;}
-  int getVisibility(){return visibility;}void invalidate(){}
+  public float getAlpha(){return alpha;}public void setAlpha(float v){alpha=v;}
+  public int getVisibility(){return visibility;}void invalidate(){}
  }
  static class FrameLayout extends View {}
  static class Rect {int left,top;Rect(int l,int t){left=l;top=t;}}
@@ -115,6 +123,9 @@ public class CompactionChromeRegression {
 '''.replace('__METHODS__', methods)
 source = out / 'CompactionChromeRegression.java'
 source.write_text(body, encoding='utf-8')
+view_stub = out / 'android/view/View.java'
+view_stub.parent.mkdir(parents=True, exist_ok=True)
+view_stub.write_text('package android.view; public class View {public static final int VISIBLE=0,INVISIBLE=4,GONE=8; float alpha=1; int visibility; public float getAlpha(){return alpha;} public void setAlpha(float v){alpha=v;} public int getVisibility(){return visibility;}}',encoding='utf-8')
 jdk = Path(os.environ['ONESTEPLITE_JAVA_BIN'])
-subprocess.run([str(jdk / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(out), str(source)], check=True)
+subprocess.run([str(jdk / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(out), str(view_stub), str(source), str(package_dir(root)/'LiveSwapVisualLease.java')], check=True)
 subprocess.run([str(jdk / 'java.exe'), '-cp', str(out), 'io.github.zerohomers0.onesteplite.CompactionChromeRegression'], check=True)

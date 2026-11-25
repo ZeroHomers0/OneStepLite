@@ -23,7 +23,7 @@ def member(signature):
 
 
 methods = '\n'.join(member(s) for s in (
-    '    private void startZoomAnimation(', '    void cancelZoomAnimation('))
+    '    void startZoomAnimation(', '    void cancelZoomAnimation('))
 files = {
     'android/os/SystemClock.java': '''package android.os;
 public class SystemClock {public static long now=1000;public static long uptimeMillis(){return now;}}''',

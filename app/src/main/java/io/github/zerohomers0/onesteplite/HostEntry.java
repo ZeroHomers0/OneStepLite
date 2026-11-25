@@ -226,40 +226,6 @@ public class HostEntry implements IXposedHookLoadPackage {
         sHostZoomed = zoomed;
     }
 
-    private static final class ZoomTarget {
-        final HostEntry owner;
-        final Object display;
-        final Object globalLock;
-        final Handler handler;
-        final ZoomDispatch dispatch;
-
-        ZoomTarget(HostEntry owner, Object display, Object globalLock, Handler handler) {
-            this.owner = owner;
-            this.display = display;
-            this.globalLock = java.util.Objects.requireNonNull(globalLock);
-            this.handler = handler;
-            this.dispatch = new ZoomDispatch(handler::post, globalLock,
-                    (identity, scale, offsetY, offsetX) -> {
-                        if (sZoomTarget == identity) {
-                            // 静态状态请求优先于动画：先取消动画，避免结束回调把旧目标写回去。
-                            owner.cancelZoomAnimation(this);
-                            owner.applyDisplayZoomLocked(this, scale, offsetY, offsetX);
-                        }
-                    }, error -> {
-                        log("WM zoom request stopped; no same-state retry: " + error);
-                        XposedBridge.log(error);
-                    });
-        }
-
-        /** 动画命令必须回到 WM handler 上创建，与普通请求共用同一串行化路径。 */
-        void submitAnim(ZoomAnimCommand.Plan plan, String key) {
-            handler.post(() -> {
-                if (sZoomTarget != this) return;
-                owner.startZoomAnimation(this, plan, key);
-            });
-        }
-    }
-
     /**
      * 系统框架作用域（LSPosed 里要勾"系统框架"）：
      * 捕获默认显示器的 DisplayContent，收到 io.github.zerohomers0.onesteplite.ZOOM 广播时调用
@@ -292,7 +258,11 @@ public class HostEntry implements IXposedHookLoadPackage {
                         // New identity invalidates deduplication after a real surface rebuild.
                         cancelZoomAnimation(null);
                         sZoomAnimKey = null;
-                        sZoomTarget = new ZoomTarget(HostEntry.this, self, lock, (Handler) handler);
+                        sZoomTarget = new ZoomTarget(HostEntry.this, self, lock, (Handler) handler,
+                                () -> sZoomTarget, error -> {
+                                    log("WM zoom request stopped; no same-state retry: " + error);
+                                    XposedBridge.log(error);
+                                });
                         // Lock entry must be able to hide the opening main task in the
                         // same WM transaction that restores physical geometry, without
                         // waiting for the Host broadcast round trip.
@@ -801,63 +771,6 @@ public class HostEntry implements IXposedHookLoadPackage {
             log("zoom broadcast bridge failed: " + error);
         }
     }
-    /** The captured transaction is the one DisplayContent applies, never a separate crop transaction. */
-    private static final class ZoomCommit {
-        final Context context;
-        final ZoomTarget target;
-        final LiveSwapZoom.Zoom zoom;
-        long transactionId;
-        float actualScale = Float.NaN, actualX = Float.NaN, actualY = Float.NaN;
-        boolean complete;
-        boolean applied;
-
-        ZoomCommit(Context context, ZoomTarget target, LiveSwapZoom.Zoom zoom) {
-            this.context = context; this.target = target; this.zoom = zoom;
-        }
-
-        void finish(boolean committed, String error) {
-            if (complete) return;
-            Object replay = null;
-            if (committed) {
-                try {
-                    synchronized (target.globalLock) {
-                        if (target != sZoomTarget || !zoom.sameTuple(sZoomScale, sZoomOffsetX, sZoomOffset))
-                            throw new IllegalStateException("zoom changed before finish snapshot");
-                        replay = createMagnificationFinishReplay(target.display);
-                    }
-                } catch (Throwable failure) {
-                    LiveSwapZoom.closeReplay(replay); replay = null;
-                    committed = false; error = "WMS finish snapshot failed: " + failure.getClass().getSimpleName();
-                }
-            }
-            complete = true;
-            if (sLiveZoomCommit == this) sLiveZoomCommit = null;
-            Intent ack = new Intent(LiveSwapZoomProtocol.ACK).setPackage(SYSTEMUI);
-            ack.putExtra(LiveSwapZoomProtocol.GENERATION, zoom.generation);
-            ack.putExtra(LiveSwapZoomProtocol.TRANSACTION, transactionId);
-            ack.putExtra(LiveSwapZoomProtocol.SCALE, Float.floatToIntBits(actualScale));
-            ack.putExtra(LiveSwapZoomProtocol.X, Float.floatToIntBits(actualX));
-            ack.putExtra(LiveSwapZoomProtocol.Y, Float.floatToIntBits(actualY));
-            ack.putExtra(LiveSwapZoomProtocol.COMMITTED, committed);
-            if (replay != null) ack.putExtra(LiveSwapZoomProtocol.FINISH_REPLAY, (android.os.Parcelable) replay);
-            if (error != null) ack.putExtra(LiveSwapZoomProtocol.ERROR, error);
-            final Object sentReplay = replay;
-            try {
-                // We run inside system_server: AMS can retain the Intent locally and parcel
-                // it later. Keep native operations alive until actual receiver dispatch ends.
-                context.sendOrderedBroadcast(ack, LiveSwapZoomProtocol.PERMISSION,
-                        new BroadcastReceiver() {
-                            @Override public void onReceive(Context c, Intent result) {
-                                LiveSwapZoom.closeReplay(sentReplay);
-                            }
-                        }, target.handler, 0, null, null);
-            } catch (Throwable failure) {
-                LiveSwapZoom.closeReplay(sentReplay);
-                log("live zoom acknowledgement failed: " + failure);
-            }
-        }
-    }
-
     /** Snapshot operations only. Shell merges and applies them with the task handoff. */
     private static Object createMagnificationFinishReplay(Object display) throws Exception {
         Object replay = Class.forName("android.view.SurfaceControl$Transaction")
@@ -901,7 +814,11 @@ public class HostEntry implements IXposedHookLoadPackage {
                 issued, System.currentTimeMillis())) return;
         LiveSwapZoom.Zoom zoom = new LiveSwapZoom.Zoom(generation, scale, x, y);
         target.handler.post(() -> {
-            ZoomCommit commit = new ZoomCommit(context, target, zoom);
+            ZoomCommit commit = new ZoomCommit(context, target, zoom,
+                    () -> target == sZoomTarget && zoom.sameTuple(sZoomScale, sZoomOffsetX, sZoomOffset),
+                    HostEntry::createMagnificationFinishReplay,
+                    value -> { if (sLiveZoomCommit == value) sLiveZoomCommit = null; },
+                    message -> log(message));
             try {
                 synchronized (target.globalLock) {
                     if (target != sZoomTarget || issued < sLiveZoomIssued) {
@@ -3693,7 +3610,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private void applyDisplayZoomLocked(ZoomTarget target, float scale,
+    void applyDisplayZoomLocked(ZoomTarget target, float scale,
             float offsetY, float offsetX) throws Throwable {
         applyDisplayZoomLocked(target, scale, offsetY, offsetX, null);
     }
@@ -3844,7 +3761,7 @@ public class HostEntry implements IXposedHookLoadPackage {
      * 动画会在中途分离：Host chrome 不参与 display 放大（HostWindowPolicy 的
      * NOT_MAGNIFIABLE），所以它一旦领先就会直接画在还没缩小的应用画面上。
      */
-    private void startZoomAnimation(ZoomTarget target, ZoomAnimCommand.Plan plan, String key) {
+    void startZoomAnimation(ZoomTarget target, ZoomAnimCommand.Plan plan, String key) {
         if (target == null || plan == null || key == null) return;
         if (sZoomTarget != target) return;
         if (Looper.myLooper() != target.handler.getLooper()) {
@@ -4182,100 +4099,11 @@ public class HostEntry implements IXposedHookLoadPackage {
      * 先确保宿主已启动，再转给 WorkspaceHost。
      */
     private void handleDebugBroadcast(android.content.Intent intent) {
-
-        if (intent.getBooleanExtra("stopInputTrace", false)) {
-            InputTrace.stop();
-            if (sContext != null) sContext.sendBroadcast(new Intent(InputTrace.ACTION)
-                    .setPackage("android").putExtra("stopInputTrace", true));
-            return;
-        }
-        if (!EntryGuard.canOpen(sContext)) return;
-        if (intent.hasExtra("legacyBottomSign")) {
-            HotZoneGesture.completeBottomReplay(intent.getIntExtra("legacyBottomSign", 0),
-                    intent.getLongExtra("legacyBottomDown", -1),
-                    intent.getLongExtra("legacyBottomTime", -1));
-            return;
-        }
-        if (intent.getBooleanExtra("traceInput", false)) {
-            InputTrace.arm(sContext, false, sContext.getClassLoader());
-            sContext.sendBroadcast(new Intent(InputTrace.ACTION).setPackage("android"));
-            return;
-        }
-        if (intent.getBooleanExtra("traceNextSwap", false)) {
-            WorkspaceHost.debugTraceNextSwap();
-            return;
-        }
-        int slot = intent.getIntExtra("slot", -1);
-        String pkg = intent.getStringExtra("pkg");
-        boolean swap = intent.getBooleanExtra("swap", false);
-        if (intent.getBooleanExtra("dumpViews", false)) {
-            log("broadcast DEBUG dumpViews");
-            WorkspaceHost.debugDumpViews();
-            return;
-        }
-        if (intent.getBooleanExtra("roots", false)) {
-            log("broadcast DEBUG roots");
-            WorkspaceHost.debugRoots();
-            return;
-        }
-        if (intent.getBooleanExtra("leashAnim", false)) {
-            final int animSlot = intent.getIntExtra("slot", -1);
-            final int duration = intent.getIntExtra("durationMs", 400);
-            final String animPkg = intent.getStringExtra("pkg");
-            log("broadcast DEBUG leashAnim slot=" + animSlot + " duration=" + duration
-                    + " pkg=" + animPkg);
-            if (sTaskViewFactory == null || sShellExecutor == null || sTaskViewTransitions == null) {
-                log("broadcast DEBUG leashAnim: capabilities not ready, ignored");
-                return;
-            }
-            WorkspaceHost.toggleOrStartIfNeeded(sContext, sShellExecutor, sTaskViewFactory,
-                    sTaskViewTransitions);
-            new Handler(Looper.getMainLooper()).postDelayed(
-                    () -> WorkspaceHost.debugLeashAnim(animSlot, duration, animPkg), 1500L);
-            return;
-        }
-        if (intent.hasExtra("mirrorTask") || intent.getBooleanExtra("mirror", false)) {
-            final int task = intent.getIntExtra("mirrorTask", -1);
-            final int x = intent.getIntExtra("mirrorX", 0);
-            final int y = intent.getIntExtra("mirrorY", 622);
-            final int w = intent.getIntExtra("mirrorW", 400);
-            final int h = intent.getIntExtra("mirrorH", 912);
-            final int hold = intent.getIntExtra("mirrorHoldMs", 6000);
-            final boolean hideSource = intent.getBooleanExtra("mirrorHideSource", false);
-            final int hideModeExtra = intent.getIntExtra("mirrorHideMode", -1);
-            final int hideMode = hideModeExtra >= 0 ? hideModeExtra : (hideSource ? 1 : 0);
-            log("broadcast DEBUG mirror task=" + task + " rect=" + x + "," + y + "," + w + "x" + h
-                    + " hold=" + hold + " hideMode=" + hideMode);
-            if (sTaskViewFactory == null || sShellExecutor == null || sTaskViewTransitions == null) {
-                log("broadcast DEBUG mirror: capabilities not ready, ignored");
-                return;
-            }
-            WorkspaceHost.toggleOrStartIfNeeded(sContext, sShellExecutor, sTaskViewFactory,
-                    sTaskViewTransitions);
-            new Handler(Looper.getMainLooper()).postDelayed(
-                    () -> WorkspaceHost.debugMirror(task, x, y, w, h, hold, hideMode), 1500L);
-            return;
-        }
-        log("broadcast DEBUG slot=" + slot + " pkg=" + pkg + " swap=" + swap);
-        if (slot < 0) {
-            return;
-        }
-        if (sTaskViewFactory == null || sShellExecutor == null || sTaskViewTransitions == null) {
-            log("broadcast DEBUG: capabilities not ready, ignored");
-            return;
-        }
-        WorkspaceHost.toggleOrStartIfNeeded(sContext, sShellExecutor, sTaskViewFactory, sTaskViewTransitions);
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (swap) {
-                    WorkspaceHost.debugSwap(slot);
-                } else if (pkg != null) {
-                    WorkspaceHost.debugLaunch(slot, pkg);
-                }
-            }
-        }, 1500L);
+        if (sContext == null) return;
+        DebugConsole.handle(intent, sContext, sTaskViewFactory, sShellExecutor,
+                sTaskViewTransitions, HostEntry::log);
     }
+
 
     private static void log(String msg) {
         if (!RoutineLog.allow(msg)) return;

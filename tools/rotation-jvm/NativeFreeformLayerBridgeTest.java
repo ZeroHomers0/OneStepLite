@@ -170,7 +170,7 @@ public final class NativeFreeformLayerBridgeTest {
     static Object fakeTarget(Display display, Object lock) throws Exception {
         var field = sun.misc.Unsafe.class.getDeclaredField("theUnsafe"); field.setAccessible(true);
         var unsafe = (sun.misc.Unsafe) field.get(null);
-        Class<?> type = Class.forName("io.github.zerohomers0.onesteplite.HostEntry$ZoomTarget");
+        Class<?> type = Class.forName("io.github.zerohomers0.onesteplite.ZoomTarget");
         Object target = unsafe.allocateInstance(type);
         for (var entry : java.util.Map.<String,Object>of("display", display,
                 "globalLock", lock, "handler", new android.os.Handler()).entrySet()) {
