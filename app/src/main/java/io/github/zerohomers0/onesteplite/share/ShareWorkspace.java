@@ -194,8 +194,13 @@ final class ShareWorkspace extends FrameLayout {
                 hasPointer=false;stopEdge();hovered = null; clearTargetHover();hint.accept(null); return dragging;
             case DragEvent.ACTION_DROP:
                 if (!live(generation)) return false;
+                ComponentName selected=hovered;
                 locateDragTip(event,plate);
-                if (hovered == null) return false;
+                // The icon was already visibly selected; a late window-coordinate miss must not
+                // turn that selection into a silent cancellation.
+                if (hovered == null) hovered = selected;
+                if (hovered == null) { ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,
+                        ShareDiagnostics.Code.REJECTED); message("请将内容拖到分享入口后松手"); return false; }
                 return drop(event, hovered);
             case DragEvent.ACTION_DRAG_ENDED:
                 if(!dragging)return true;
@@ -379,7 +384,9 @@ final class ShareWorkspace extends FrameLayout {
             if(IMAGE_TEXT.equals(target))return recognizeDrop(event,payload);
             String operation=ShareActions.operation(target);
             Intent intent=ShareRoutes.intent(payload,target);
-            if(operation.isEmpty() && getContext().getPackageManager().queryIntentActivities(intent,0).isEmpty())return false;
+            // The target catalog already filtered this enabled icon. Re-querying here made a
+            // transient PackageManager miss return false and silently cancel an accepted DROP.
+            // Provider preparation still resolves the receiver and reports failures.
             int token=generation,owner=user;deliveryPending=true;
             receipt=new ShareDelivery(getContext(),(success,retained)->{
                 if(token!=generation || owner!=CurrentUser.id())return;
