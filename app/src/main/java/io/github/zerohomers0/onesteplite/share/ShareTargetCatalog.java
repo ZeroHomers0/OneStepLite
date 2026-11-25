@@ -16,20 +16,36 @@ final class ShareTargetCatalog {
     private ShareTargetCatalog() {}
 
     static List<ShareTarget> load(Context context,ClipDescription content,int count,boolean editing) {
+        return loadConfigured(context,content,count,editing,null);
+    }
+
+    static List<ShareTarget> loadForDrag(Context context,ClipDescription content,int count,Matches matches) {
+        return loadConfigured(context,content,count,false,matches);
+    }
+
+    private static List<ShareTarget> loadConfigured(Context context,ClipDescription content,int count,boolean editing,Matches matches) {
         String saved=ContentAccessCompat.pins(context);
         if(!editing && saved!=null && saved.trim().isEmpty())return new ArrayList<>();
-        return load(context,content,count,editing,QuickAppOrder.decode(saved));
+        return load(context,content,count,editing,QuickAppOrder.decode(saved),matches);
     }
 
     static List<ShareTarget> load(Context context,ClipDescription content,int count,boolean editing,List<String> pins) {
+        return load(context,content,count,editing,pins,null);
+    }
+
+    private static List<ShareTarget> load(Context context,ClipDescription content,int count,boolean editing,List<String> pins,Matches matches) {
         String mime=contentMime(content);
         ClipDescription effective=editing?content:new ClipDescription("内容",new String[]{mime});
         LinkedHashMap<String,ResolveInfo> all=new LinkedHashMap<>();
-        Set<String> matching=new LinkedHashSet<>();
-        for(String action:new String[]{Intent.ACTION_SEND,Intent.ACTION_SEND_MULTIPLE}) {
-            collect(context,new Intent(action).setType("*/*"),all,null);
-            if(!editing && (count==0 || action.equals(count>1 && !mime.startsWith("text/")?Intent.ACTION_SEND_MULTIPLE:Intent.ACTION_SEND)))
-                collect(context,new Intent(action).setType(mime),all,matching);
+        Set<String> matching=Set.of();
+        if(!editing && matches==null)matches=queryMatches(context,content,count);
+        collect(context,new Intent(Intent.ACTION_SEND).setType("*/*"),all);
+        if(matches!=null)all.putAll(matches.single());
+        collect(context,new Intent(Intent.ACTION_SEND_MULTIPLE).setType("*/*"),all);
+        if(matches!=null){
+            all.putAll(matches.multiple());
+            matching=new LinkedHashSet<>(matches.single().keySet());
+            matching.addAll(matches.multiple().keySet());
         }
         List<String> keys=pins.isEmpty()?new ArrayList<>(all.keySet()):new ArrayList<>(pins);
         java.util.Map<String,ShareTarget> extra=new LinkedHashMap<>();
@@ -56,17 +72,25 @@ final class ShareTargetCatalog {
         return result;
     }
 
-    static Set<String> windowPackages(Context context,ClipDescription content,int count) {
+    record Matches(Set<String> packages,
+            LinkedHashMap<String,ResolveInfo> single, LinkedHashMap<String,ResolveInfo> multiple) {}
+
+    static Matches queryMatches(Context context,ClipDescription content,int count) {
         String mime=contentMime(content);
         Set<String> packages=new LinkedHashSet<>();
+        LinkedHashMap<String,ResolveInfo> single=new LinkedHashMap<>(),multiple=new LinkedHashMap<>();
         for(String action:new String[]{Intent.ACTION_SEND,Intent.ACTION_SEND_MULTIPLE}) {
             if(count!=0 && !action.equals(count>1 && !mime.startsWith("text/")
                     ?Intent.ACTION_SEND_MULTIPLE:Intent.ACTION_SEND))continue;
             for(ResolveInfo info:context.getPackageManager().queryIntentActivities(new Intent(action).setType(mime),0)) {
-                if(info.activityInfo!=null && info.activityInfo.exported)packages.add(info.activityInfo.packageName);
+                if(info.activityInfo==null || !info.activityInfo.exported)continue;
+                packages.add(info.activityInfo.packageName);
+                if(ContentInboxProvider.MODULE.equals(info.activityInfo.packageName))continue;
+                String key=new ComponentName(info.activityInfo.packageName,info.activityInfo.name).flattenToString();
+                (Intent.ACTION_SEND.equals(action)?single:multiple).put(key,info);
             }
         }
-        return packages;
+        return new Matches(packages,single,multiple);
     }
 
     static String contentMime(ClipDescription description) {
@@ -74,21 +98,17 @@ final class ShareTargetCatalog {
         for(int i=0;i<description.getMimeTypeCount();i++){
             String type=description.getMimeType(i);
             if(type.equals("text/plain") || type.equals("text/uri-list"))continue;
-            if(result==null)result=type;
-            else if(!result.equals(type)){
-                int slash=result.indexOf('/');String family=slash>0?result.substring(0,slash):"*";
-                result=type.startsWith(family+"/")?family+"/*":"*/*";
-            }
+            result=ContentSharePolicy.commonMime(result,type);
         }
         return result!=null?(result.startsWith("text/")?"text/plain":result):description.hasMimeType("text/plain")?"text/plain":"application/octet-stream";
     }
 
-    private static void collect(Context context,Intent intent,LinkedHashMap<String,ResolveInfo> all,Set<String> matched) {
+    private static void collect(Context context,Intent intent,LinkedHashMap<String,ResolveInfo> all) {
         for(ResolveInfo info:context.getPackageManager().queryIntentActivities(intent,0)) {
             if(info.activityInfo==null || !info.activityInfo.exported)continue;
             if(ContentInboxProvider.MODULE.equals(info.activityInfo.packageName))continue;
             String key=new ComponentName(info.activityInfo.packageName,info.activityInfo.name).flattenToString();
-            all.put(key,info);if(matched!=null)matched.add(key);
+            all.put(key,info);
         }
     }
 }

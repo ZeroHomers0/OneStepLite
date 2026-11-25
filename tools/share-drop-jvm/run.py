@@ -40,12 +40,13 @@ public class ShareDropRegression {
  static final class ShareDiagnostics {enum Stage{DRAG}enum Code{REJECTED}static void event(Stage s,Code c){}}
  static final class ContentAccessCompat {static boolean currentProcessUser(){return true;}static int arrowOffset(DragEvent e){return 0;}static float shadowHalfWidth(DragEvent e){return 0;}}
  static final class ContentDragMotion {static void managed(Object owner,ClipDescription description){}static void close(){}}
- static final class ShareTargetCatalog {static Set<String> windowPackages(Object context,ClipDescription content,int count){return Set.of();}static List<ShareTarget> load(Object context,ClipDescription content,int count,boolean editing){return List.of();}}
+ static final class ShareTargetCatalog {record Matches(Set<String> packages){}static Matches queryMatches(Object c,ClipDescription d,int n){return new Matches(Set.of());}static List<ShareTarget> loadForDrag(Object c,ClipDescription d,int n,Matches matches){return List.of();}}
  static final class Replay extends View {
   BooleanSupplier ready=()->true,covered=()->false;ShareRailOverlay overlay;boolean shareOnly,dragging,dropped,panelSource,imageDrag,hasPointer;Object transferClip;
   ComponentName hovered;Set<String> windowPackages;String sourcePackage;Consumer<String> hint=value->{};Portal portal=new Portal();Runnable expire=()->{};
   Panel panel=new Panel();static Handler handler=new Handler();static final Worker WORKER=new Worker();ShareDragCatchment catchment;int tipOffset,generation,user,drops,rejections;float dragHalfWidth;
-  Runnable afterDrag=()->{};String lastMessage;
+  Runnable afterDrag=()->{},dragFinished=()->{};String lastMessage;AutoCloseableFixture windowHover=new AutoCloseableFixture();
+  static final class AutoCloseableFixture {void close(){}}
   boolean accepts(ClipDescription description){return true;}boolean live(int token){return dragging;}boolean onWindowDrag(DragEvent e,Object target,boolean covered,View origin){return true;}
   void cancel(){dragging=false;}void locateDragTip(DragEvent event,View plate){hovered=null;}
   boolean drop(DragEvent event,ComponentName target){drops++;dropped=true;return true;}

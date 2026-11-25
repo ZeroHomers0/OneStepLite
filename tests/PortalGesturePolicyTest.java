@@ -30,6 +30,8 @@ public final class PortalGesturePolicyTest {
         check(!PortalGesturePolicy.sameTouch(new float[]{140,100},100,100,8));
         check(!PortalGesturePolicy.sameTouch(new float[]{Float.NaN,100},100,100,8));
         check(PortalGesturePolicy.replaces(PortalGesturePolicy.REGION,PortalGesturePolicy.VIEW_IMAGE,false));
+        check(PortalGesturePolicy.replaces(PortalGesturePolicy.REGION,PortalGesturePolicy.PORTAL_TEXT,false));
+        check(!PortalGesturePolicy.replaces(PortalGesturePolicy.SYSTEM_TEXT,PortalGesturePolicy.REGION,false));
         System.out.println("Portal gesture policy checks="+checks+" passed");
     }
 }

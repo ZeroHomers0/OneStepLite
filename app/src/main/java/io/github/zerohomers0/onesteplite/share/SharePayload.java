@@ -50,11 +50,7 @@ final class SharePayload {
             String type = description.getMimeType(i);
             if (type.equals("text/uri-list") || type.equals("text/plain")) continue;
             if (!ContentSharePolicy.accepts(type)) throw new IllegalArgumentException("Unsupported MIME");
-            if (result == null) result = type;
-            else if (!result.equals(type)) {
-                String family=result.substring(0,result.indexOf('/'));
-                result=type.startsWith(family+"/")?family+"/*":"*/*";
-            }
+            result=ContentSharePolicy.commonMime(result,type);
         }
         return result == null ? "application/octet-stream" : result;
     }

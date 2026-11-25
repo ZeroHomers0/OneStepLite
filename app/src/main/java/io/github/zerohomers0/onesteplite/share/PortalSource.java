@@ -37,10 +37,9 @@ final class PortalSource implements AutoCloseable {
                     new java.util.concurrent.ArrayBlockingQueue<>(1),
                     new java.util.concurrent.ThreadPoolExecutor.DiscardOldestPolicy());
     private volatile Bundle liftCandidate;
-    private float liftX,liftY;
     private long liftAt;
     private float downX,downY;
-    private boolean imageLiftEligible,startingDrag;
+    private boolean liftEligible,startingDrag;
     private final Handler main=new Handler(Looper.getMainLooper());
     private PortalInputCompat input;
     private MotionEvent pointer;
@@ -53,7 +52,6 @@ final class PortalSource implements AutoCloseable {
     private long issued;
     private boolean validGesture;
     private Runnable pendingWords;
-    private int wordPointers;
     private float wordX,wordY;
     private final IBinder endpoint=new Binder(){
         @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags) throws android.os.RemoteException {
@@ -71,7 +69,7 @@ final class PortalSource implements AutoCloseable {
     void start() {
         if(input!=null)return;
         try {
-            input=new PortalInputCompat(anchor.getContext().getClassLoader(),this::observeMotion);
+            input=new PortalInputCompat(anchor.getContext().getClassLoader(),this::motion);
             Bundle request=new Bundle();request.putBinder("host",endpoint);
             anchor.getContext().getContentResolver().call(ContentInboxProvider.ROOT,"portal_register",null,request);
             ShareDiagnostics.event(ShareDiagnostics.Stage.POINTER,ShareDiagnostics.Code.READY);
@@ -89,18 +87,25 @@ final class PortalSource implements AutoCloseable {
     }
     private void motion(MotionEvent event) {
         int action=event.getActionMasked();
-        if(window!=null && startingDrag && (action==MotionEvent.ACTION_UP || action==MotionEvent.ACTION_CANCEL
-                || action==MotionEvent.ACTION_DOWN || event.getPointerCount()!=1))clearWindow();
+        if(window!=null && startingDrag){
+            if(action==MotionEvent.ACTION_UP || action==MotionEvent.ACTION_CANCEL
+                    || action==MotionEvent.ACTION_DOWN || event.getPointerCount()!=1)clearWindow();
+            else if(action==MotionEvent.ACTION_MOVE && pointer!=null){
+                if(event.getDownTime()!=pointer.getDownTime() || event.getDeviceId()!=pointer.getDeviceId()
+                        || event.getPointerId(0)!=pointer.getPointerId(0))clearWindow();
+                else {pointer.recycle();pointer=MotionEvent.obtainNoHistory(event);}
+            }
+        }
         if(window!=null || selection!=null || selectingDrag)return;
-        if(event.getActionMasked()==MotionEvent.ACTION_DOWN || event.getActionMasked()==MotionEvent.ACTION_UP
-                || event.getActionMasked()==MotionEvent.ACTION_CANCEL || event.getPointerCount()!=1)liftCandidate=null;
+        if(action==MotionEvent.ACTION_DOWN || action==MotionEvent.ACTION_UP
+                || action==MotionEvent.ACTION_CANCEL || event.getPointerCount()!=1)clearLiftCandidate();
         if(fallbackJob!=null && (event.getPointerCount()!=2 || event.getActionMasked()==MotionEvent.ACTION_UP
                 || event.getActionMasked()==MotionEvent.ACTION_POINTER_UP || event.getActionMasked()==MotionEvent.ACTION_CANCEL || Math.hypot(event.getRawX()-fallbackX,event.getRawY()-fallbackY)>
                 android.view.ViewConfiguration.get(anchor.getContext()).getScaledTouchSlop())){
             main.removeCallbacks(fallbackJob);fallbackJob=null;
         }
         if(pendingWords!=null && (event.getActionMasked()==MotionEvent.ACTION_UP
-                || event.getActionMasked()==MotionEvent.ACTION_CANCEL || event.getPointerCount()!=wordPointers
+                || event.getActionMasked()==MotionEvent.ACTION_CANCEL || event.getPointerCount()!=2
                 || event.getActionMasked()==MotionEvent.ACTION_POINTER_UP
                 || Math.hypot(event.getRawX()-wordX,event.getRawY()-wordY)>
                         android.view.ViewConfiguration.get(anchor.getContext()).getScaledTouchSlop())) {
@@ -109,9 +114,9 @@ final class PortalSource implements AutoCloseable {
         if(pointer!=null){pointer.recycle();pointer=null;}
         if(event.getActionMasked()==MotionEvent.ACTION_DOWN){
             generation++;validGesture=event.getPointerCount()==1;fallbackIssued=false;
-            imageLiftEligible=validGesture;downX=event.getRawX();downY=event.getRawY();
+            liftEligible=validGesture;downX=event.getRawX();downY=event.getRawY();
         }
-        if(event.getPointerCount()!=1)imageLiftEligible=false;
+        if(event.getPointerCount()!=1)liftEligible=false;
         if(event.getPointerCount()>2)validGesture=false;
         if(event.getActionMasked()==MotionEvent.ACTION_UP || event.getActionMasked()==MotionEvent.ACTION_CANCEL
                 || event.getActionMasked()==MotionEvent.ACTION_POINTER_UP)return;
@@ -132,17 +137,12 @@ final class PortalSource implements AutoCloseable {
         long held=android.os.SystemClock.uptimeMillis()-event.getDownTime();
         int longPress=android.view.ViewConfiguration.getLongPressTimeout();
         if(held<longPress && Math.hypot(event.getRawX()-downX,event.getRawY()-downY)>slop)
-            imageLiftEligible=false;
-        if(liftCandidate==null || Math.hypot(event.getRawX()-liftX,event.getRawY()-liftY)<=slop)return;
-        if(held<longPress){liftCandidate=null;return;}
+            liftEligible=false;
+        if(liftCandidate==null || Math.hypot(event.getRawX()-downX,event.getRawY()-downY)<=slop)return;
+        if(held<longPress){clearLiftCandidate();return;}
         if(held<longPress+150L || android.os.SystemClock.uptimeMillis()<liftAt || !live())return;
         Bundle request=liftCandidate;liftCandidate=null;
         request.putBoolean("lift",true);offer(request,new Bundle[1],new CountDownLatch(1),new AtomicBoolean());
-    }
-    private void observeMotion(MotionEvent event) {
-        Bundle candidate=liftCandidate;
-        motion(event);
-        if(candidate!=liftCandidate && candidate!=null && !candidate.getBoolean("lift"))discardLiftCandidate(candidate);
     }
 
     private void clearLiftCandidate() {
@@ -167,7 +167,7 @@ final class PortalSource implements AutoCloseable {
         return pointer!=null && input!=null && ContentAccessCompat.currentProcessUser()
                 && PortalGesturePolicy.live(ready.getAsBoolean(),anchor.isAttachedToWindow(),pointer.getPointerCount(),
                         pointer.getDownTime(),android.os.SystemClock.uptimeMillis())
-                && mainBounds!=null && mainBounds.contains((int)pointer.getRawX(),(int)pointer.getRawY());
+                && mainBounds!=null && mainBounds.contains((int)downX,(int)downY);
     }
     private Bundle dispatch(int code,Bundle request) {
         CountDownLatch done=new CountDownLatch(1);AtomicBoolean expired=new AtomicBoolean();Bundle[] result={null};
@@ -193,9 +193,8 @@ final class PortalSource implements AutoCloseable {
         state.putLong("down",pointer.getDownTime());state.putInt("generation",generation);
         state.putBoolean("prefer_image",pointer.getPointerCount()==1);return state;
     }
-    @android.annotation.SuppressLint("RtlHardcoded") // Physical display coordinates, not layout direction.
     private void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
-        Context context=anchor.getContext();String uri=request.getString("uri"),text=request.getString("text");
+        String uri=request.getString("uri"),text=request.getString("text");
         boolean region=request.getBoolean("region_only");
         if(request.getBoolean("view_image") && pointer.getPointerCount()!=1){done.countDown();return;}
         if(!region && uri==null && (text==null || text.isEmpty() || text.length()>ContentSharePolicy.MAX_TEXT)){done.countDown();return;}
@@ -204,7 +203,7 @@ final class PortalSource implements AutoCloseable {
             done.countDown();return;
         }
         if(pointer.getPointerCount()==1 && !request.getBoolean("lift")){
-            if((region || uri!=null) && !imageLiftEligible){done.countDown();return;}
+            if(!liftEligible){done.countDown();return;}
             int priority=request.getInt("source_priority");
             if(liftCandidate!=null && !PortalGesturePolicy.replaces(liftCandidate.getInt("source_priority"),priority,
                     java.util.Objects.equals(liftCandidate.getString("text"),text))){
@@ -230,43 +229,52 @@ final class PortalSource implements AutoCloseable {
             if(pointer!=null){pointer.recycle();pointer=null;}
             Bundle reply=new Bundle();reply.putBoolean("accepted",true);result[0]=reply;done.countDown();return;
         }
-        ClipData clip=uri==null?ClipData.newPlainText("选中文字",text):new ClipData("提取图片",new String[]{"image/jpeg"},
+        try{startNativeLift(request,uri,text,result,done,expired);}
+        catch(RuntimeException unavailable){
+            android.util.Log.w(Tags.PROBE,"native source window unavailable",unavailable);
+            finishRejectedLift(!expired.get() && live());done.countDown();
+        }
+    }
+
+    private android.graphics.Bitmap nativePreview;
+
+    @android.annotation.SuppressLint("RtlHardcoded") // Physical display coordinates, not layout direction.
+    private void startNativeLift(Bundle request,String uri,String text,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
+        nativePreview=request.getParcelable("preview",android.graphics.Bitmap.class);
+        ClipData clip=uri==null?ClipData.newPlainText("提取文字",text):new ClipData("提取图片",new String[]{"image/jpeg"},
                 new ClipData.Item(android.net.Uri.parse(uri)));
-        Context display=context.createDisplayContext(anchor.getDisplay()).createWindowContext(WindowTypes.SYSTEM_UI_DIALOG,null);
+        Context display=anchor.getContext().createDisplayContext(anchor.getDisplay()).createWindowContext(WindowTypes.SYSTEM_UI_DIALOG,null);
         window=new FrameLayout(display);View source;
         if(uri!=null){
             ImageView image=new ImageView(display);
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            image.setImageBitmap(request.getParcelable("preview",android.graphics.Bitmap.class));source=image;
+            image.setImageBitmap(nativePreview);source=image;
         }
         else {TextView words=new TextView(display);words.setText(text);source=words;}
         source.setContentDescription(uri==null?text:"提取图片");window.addView(source,new FrameLayout.LayoutParams(240,240));
         WindowManager.LayoutParams attrs=new WindowManager.LayoutParams(240,240,WindowTypes.SYSTEM_UI_DIALOG,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,android.graphics.PixelFormat.TRANSLUCENT);
         attrs.setTitle(PortalDragInput.TITLE);attrs.gravity=android.view.Gravity.TOP|android.view.Gravity.LEFT;
-        try{PortalInputCompat.bindSource(attrs,request.getString("source"),pointer);}
-        catch(RuntimeException unavailable){finishRejectedLift(uri,text,!expired.get() && live());done.countDown();return;}
+        PortalInputCompat.bindSource(attrs,request.getString("source"),pointer);
         HostWindowPolicy.configure(attrs);window.setAlpha(0f);
         window.setOnDragListener((view,event)->{
             if(event.getAction()==DragEvent.ACTION_DRAG_ENDED)main.post(this::clearWindow);
             return event.getAction()!=DragEvent.ACTION_DROP;
         });
-        try {
-            FrameLayout sourceWindow=window;
-            startingDrag=true;
-            display.getSystemService(WindowManager.class).addView(sourceWindow,attrs);
-            startWhenReady(sourceWindow,source,clip,uri,text,generation,3,result,done,expired);
-        } catch(RuntimeException unavailable){finishRejectedLift(uri,text,!expired.get() && live());done.countDown();}
+        FrameLayout sourceWindow=window;
+        startingDrag=true;
+        display.getSystemService(WindowManager.class).addView(sourceWindow,attrs);
+        startWhenReady(sourceWindow,source,clip,generation,8,result,done,expired);
     }
 
-    private void startWhenReady(FrameLayout sourceWindow,View source,ClipData clip,String uri,String text,
+    private void startWhenReady(FrameLayout sourceWindow,View source,ClipData clip,
             int token,int frames,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
         source.postOnAnimation(()->{
             if(window!=sourceWindow){done.countDown();return;}
             boolean current=!expired.get() && token==generation && live();
             boolean readySurface=current && PortalInputCompat.surfaceReady(source);
             if(current && !readySurface && frames>1){
-                startWhenReady(sourceWindow,source,clip,uri,text,token,frames-1,result,done,expired);
+                startWhenReady(sourceWindow,source,clip,token,frames-1,result,done,expired);
                 return;
             }
             boolean accepted=false;
@@ -274,9 +282,11 @@ final class PortalSource implements AutoCloseable {
             catch(RuntimeException failure){android.util.Log.w(Tags.PROBE,"portal drag start rejected",failure);}
             startingDrag=false;
             Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);result[0]=reply;
-            ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,accepted?ShareDiagnostics.Code.STARTED:ShareDiagnostics.Code.FAILED);
-            if(!accepted)finishRejectedLift(uri,text,current && token==generation && live());
-            else main.postDelayed(expire,60_000L);
+            if(!accepted)finishRejectedLift(current && token==generation && live());
+            else {
+                ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,ShareDiagnostics.Code.STARTED);
+                main.postDelayed(expire,60_000L);
+            }
             done.countDown();
         });
     }
@@ -285,7 +295,6 @@ final class PortalSource implements AutoCloseable {
         clearLiftCandidate();
         Bundle candidate=new Bundle(request);liftCandidate=candidate;
         boolean image=uri!=null || request.getBoolean("region_only");
-        liftX=image?downX:pointer.getRawX();liftY=image?downY:pointer.getRawY();
         long now=android.os.SystemClock.uptimeMillis();
         liftAt=pointer.getDownTime()+android.view.ViewConfiguration.getLongPressTimeout()+150L;
         if(image && priority<PortalGesturePolicy.SYSTEM_IMAGE)
@@ -306,11 +315,11 @@ final class PortalSource implements AutoCloseable {
         return mainBounds!=null && !rect.isEmpty() && mainBounds.contains(rect)?rect:null;
     }
 
-    private void finishRejectedLift(String uri,String text,boolean current) {
+    private void finishRejectedLift(boolean current) {
+        ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,current?ShareDiagnostics.Code.FAILED:ShareDiagnostics.Code.CANCELLED);
         clearWindow();
-        if(!current || !ready.getAsBoolean())return;
-        if(uri!=null)imagePreview.accept(android.net.Uri.parse(uri));
-        else if(text!=null)openWords(text);
+        if(current && ready.getAsBoolean())android.widget.Toast.makeText(anchor.getContext(),
+                "未能提起内容，请松手后重试",android.widget.Toast.LENGTH_SHORT).show();
     }
     private void prepareLiftPreview(Bundle candidate,android.net.Uri uri) {
         android.content.ContentResolver resolver=anchor.getContext().getContentResolver();
@@ -328,27 +337,27 @@ final class PortalSource implements AutoCloseable {
 
     private boolean deferWords(String text) {
         if(fallbackJob!=null){main.removeCallbacks(fallbackJob);fallbackJob=null;}fallbackCapture.close();
-        if(!live() || selection!=null)return false;
+        if(!live() || selection!=null || pointer.getPointerCount()!=2)return false;
         if(pendingWords!=null)return true;
         long down=pointer.getDownTime();int token=generation;
-        wordX=pointer.getRawX();wordY=pointer.getRawY();wordPointers=pointer.getPointerCount();
-        // Two-finger extraction is explicit; ordinary long-press menus retain their original timing.
-        long hold=Math.max(1100,android.view.ViewConfiguration.getLongPressTimeout()+350L);
-        long wait=pointer.getPointerCount()==1?Math.max(0,hold-(android.os.SystemClock.uptimeMillis()-down)):0;
+        wordX=pointer.getRawX();wordY=pointer.getRawY();
         pendingWords=()->{
             pendingWords=null;
             if(token==generation && live() && pointer.getDownTime()==down)openWords(text);
         };
-        main.postDelayed(pendingWords,wait);return true;
+        main.postDelayed(pendingWords,0L);return true;
     }
     private void clearWindow() {
         main.removeCallbacks(expire);
         startingDrag=false;
-        if(window==null)return;FrameLayout old=window;window=null;
+        android.graphics.Bitmap preview=nativePreview;nativePreview=null;
+        if(window==null){if(preview!=null)preview.recycle();return;}
+        FrameLayout old=window;window=null;
         generation++;issued=0;validGesture=false;
         if(pointer!=null){pointer.recycle();pointer=null;}
         try{old.getContext().getSystemService(WindowManager.class).removeViewImmediate(old);}
         catch(RuntimeException detached){android.util.Log.w(Tags.PROBE,"portal source detached",detached);}
+        finally{if(preview!=null)preview.recycle();}
     }
     @Override public void close() {
         clearLiftCandidate();

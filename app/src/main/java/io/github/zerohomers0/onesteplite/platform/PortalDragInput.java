@@ -76,8 +76,7 @@ final class PortalDragInput {
                 Object winner=XposedHelpers.callMethod(display,"getTouchableWinAtPointLocked",event.getRawX(),event.getRawY());
                 Object task=winner==null?null:XposedHelpers.callMethod(winner,"getTask");
                 if(task!=null && Integer.valueOf(1).equals(XposedHelpers.callMethod(task,"getWindowingMode"))
-                        && XposedHelpers.getObjectField(winner,"mInputChannelToken") instanceof IBinder input
-                        && !subWindow((WindowManager.LayoutParams)XposedHelpers.getObjectField(winner,"mAttrs")))
+                        && XposedHelpers.getObjectField(winner,"mInputChannelToken") instanceof IBinder input)
                     touch=new Touch(display,input,event.getDownTime(),event.getDeviceId(),event.getPointerId(0));
             }
         }catch(RuntimeException unavailable){ /* The established focused-window route remains available. */ }
@@ -103,7 +102,7 @@ final class PortalDragInput {
                 && (activeTouch.down()+":"+activeTouch.device()+":"+activeTouch.pointer()).equals(parts[1])){
             for(Object window:((Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap")).values())
                 if(activeTouch.input().equals(XposedHelpers.getObjectField(window,"mInputChannelToken")))
-                    return eligible(window,source,expected)?activeTouch.input():null;
+                    return eligibleTouch(window,source,expected)?activeTouch.input():null;
             return null;
         }
         Object focus=XposedHelpers.getObjectField(display,"mCurrentFocus");
@@ -111,15 +110,21 @@ final class PortalDragInput {
         WindowManager.LayoutParams focused=(WindowManager.LayoutParams)XposedHelpers.getObjectField(focus,"mAttrs");
         if(!expected.equals(focused.packageName))return null;
         if(subWindow(focused)){
-            Object parent=XposedHelpers.callMethod(focus,"getParentWindow");
-            if(parent==null || parent==source || !Boolean.TRUE.equals(XposedHelpers.callMethod(parent,"isVisible"))
-                    || XposedHelpers.getIntField(parent,"mOwnerUid")!=XposedHelpers.getIntField(focus,"mOwnerUid")
-                    || XposedHelpers.callMethod(parent,"getTask")!=XposedHelpers.callMethod(focus,"getTask"))return null;
-            WindowManager.LayoutParams parentAttrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(parent,"mAttrs");
-            if(subWindow(parentAttrs) || !focused.packageName.equals(parentAttrs.packageName))return null;
-            focus=parent;
+            if(!eligibleTouch(focus,source,expected))return null;
+            focus=XposedHelpers.callMethod(focus,"getParentWindow");
         }
         return eligible(focus,source,expected)?(IBinder)XposedHelpers.getObjectField(focus,"mInputChannelToken"):null;
+    }
+
+    private static boolean eligibleTouch(Object window,Object source,String expected) {
+        WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(window,"mAttrs");
+        if(!subWindow(attrs))return eligible(window,source,expected);
+        if(window==source || !expected.equals(attrs.packageName) || (attrs.flags&WindowManager.LayoutParams.FLAG_SECURE)!=0
+                || !Boolean.TRUE.equals(XposedHelpers.callMethod(window,"isVisible")))return false;
+        Object parent=XposedHelpers.callMethod(window,"getParentWindow");
+        return parent!=null && eligible(parent,source,expected)
+                && XposedHelpers.getIntField(parent,"mOwnerUid")==XposedHelpers.getIntField(window,"mOwnerUid")
+                && XposedHelpers.callMethod(parent,"getTask")==XposedHelpers.callMethod(window,"getTask");
     }
 
     private static boolean eligible(Object window,Object source,String expected) {

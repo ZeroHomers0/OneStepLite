@@ -35,9 +35,10 @@ public String getStringExtra(String k){return (String)extras.get(k);}}''',
 'android/os/Bundle.java':'''package android.os;public class Bundle{java.util.Map<String,String> values=new java.util.HashMap<>();public void putString(String k,String v){values.put(k,v);}public String getString(String k,String d){return values.getOrDefault(k,d);}}''',
 'android/content/pm/ResolveInfo.java':'''package android.content.pm;public class ResolveInfo{public ActivityInfo activityInfo=new ActivityInfo();
 public static class ActivityInfo{public boolean exported=true;public String packageName="installed",name="Share";}
-public CharSequence loadLabel(PackageManager p){return "应用分享";}public android.graphics.drawable.Drawable loadIcon(PackageManager p){return new android.graphics.drawable.Drawable();}}''',
+public CharSequence loadLabel(PackageManager p){return "搴旂敤鍒嗕韩";}public android.graphics.drawable.Drawable loadIcon(PackageManager p){return new android.graphics.drawable.Drawable();}}''',
 'android/content/pm/PackageManager.java':'''package android.content.pm;import java.util.*;import android.content.*;public class PackageManager{
-public Set<String> available=new HashSet<>();public List<ResolveInfo> queryIntentActivities(Intent i,int f){
+public Set<String> available=new HashSet<>();public int exactTextQueries;public List<ResolveInfo> queryIntentActivities(Intent i,int f){
+if(Intent.ACTION_SEND.equals(i.action) && "text/plain".equals(i.type))exactTextQueries++;
 String key=i.component!=null?i.component.flattenToString():i.pkg!=null?i.pkg+":"+i.action:i.action.equals(Intent.ACTION_VIEW)?i.data.toString().split(":")[0]:i.action;
 return available.contains(key)?List.of(new ResolveInfo()):List.of();}}''',
 'android/content/Context.java':'''package android.content;public class Context{public static final int MODE_PRIVATE=0;public String selected="";public boolean paste;
@@ -62,7 +63,7 @@ Intent intent(ComponentName target){return new Intent(Intent.ACTION_SEND).setTyp
 public class ShareActionsRegression{
 static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
 static ShareTarget find(List<ShareTarget> values,String op){for(ShareTarget t:values)if(ShareActions.operation(t.component).equals(op))return t;return null;}
-public static void main(String[] args){Context c=new Context();SharePayload text=new SharePayload(ClipData.newPlainText("t","上海 虹桥 &?"));
+public static void main(String[] args){Context c=new Context();SharePayload text=new SharePayload(ClipData.newPlainText("t","涓婃捣 铏规ˉ &?"));
 c.pm.available.add("https");Intent map=ShareActions.intent(c,text,ShareActions.MAP);
 check(map.data.toString().startsWith("https://www.bing.com/maps?q="),"missing map uses browser");
 check(map.data.toString().contains("%20")&&map.data.toString().contains("%26%3F"),"query safely encoded");
@@ -84,15 +85,19 @@ check(ShareActions.intent(c,image,ShareActions.IMAGE_SEARCH).component.getClassN
 check(!find(ShareActions.load(c,imageType,2,false),ShareActions.EDIT).enabled,"multi image cannot invoke single editor");
 check(find(ShareActions.load(c,imageType,1,false),ShareActions.EDIT).enabled,"single image editor available");
 check((ShareActions.intent(c,image,ShareActions.EDIT).flags&2)!=0,"image editor receives read grant");
-ComponentName activity=new ComponentName("chat","Share");ComponentName conversation=ShareRoutes.conversation(activity,"会话/1:😀");
+ComponentName activity=new ComponentName("chat","Share");ComponentName conversation=ShareRoutes.conversation(activity,"浼氳瘽/1:馃榾");
 check(ShareRoutes.activity(conversation).equals(activity),"conversation keeps real activity");
-Intent routed=ShareRoutes.intent(text,conversation);check(routed.getStringExtra(Intent.EXTRA_SHORTCUT_ID).equals("会话/1:😀"),"shortcut identity round trips");
+Intent routed=ShareRoutes.intent(text,conversation);check(routed.getStringExtra(Intent.EXTRA_SHORTCUT_ID).equals("浼氳瘽/1:馃榾"),"shortcut identity round trips");
 check(routed.clip==text.clip,"conversation keeps full clip");
-Intent copied=new Intent("send");ShareRoutes.copyShortcut(routed,copied);check(copied.getStringExtra(Intent.EXTRA_SHORTCUT_ID).equals("会话/1:😀"),"shortcut survives module proxy");
+Intent copied=new Intent("send");ShareRoutes.copyShortcut(routed,copied);check(copied.getStringExtra(Intent.EXTRA_SHORTCUT_ID).equals("浼氳瘽/1:馃榾"),"shortcut survives module proxy");
 boolean rejected=false;try{ShareRoutes.conversation(activity,"x".repeat(257));}catch(IllegalArgumentException expected){rejected=true;}check(rejected,"bounded conversation ID");
 List<String> missing=List.of("removed/Share");check(ShareTargetCatalog.load(c,types,1,false,missing).isEmpty(),"uninstalled pins hidden");
 check(!ShareTargetCatalog.load(c,types,1,true,missing).get(0).enabled,"uninstalled pin remains removable in manager");
 c.pm.available.remove(c.selected);check(ShareTargetCatalog.load(c,imageType,1,false,List.of("module/drag_operation_image_search")).size()==1,"web image search does not depend on removed app");
+ContentAccessCompat.saved=null;
+var matches=ShareTargetCatalog.queryMatches(c,types,1);int before=c.pm.exactTextQueries;
+ShareTargetCatalog.loadForDrag(c,types,1,matches);
+check(c.pm.exactTextQueries==before,"share rail reuses the exact queries used for small-window packages");
 ContentAccessCompat.saved="";check(ShareTargetCatalog.load(c,types,1,false).isEmpty(),"explicit empty configuration stays empty");
 check(!ShareActions.known("custom_rule"),"no configurable rule route");
 Context empty=new Context();check(find(ShareActions.load(empty,types,1,false),ShareActions.SEARCH)==null,"no browser or search handler hides operation");
@@ -108,7 +113,7 @@ System.out.println("Production share actions checks="+checks+" passed");}}
 paths=[]
 for name,body in files.items():
     path=out/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(body,encoding='utf-8');paths.append(str(path))
-paths += [str(src/'ShareActions.java'),str(src/'ShareRoutes.java'),str(src/'ShareTargetCatalog.java'),str(src/'ShareTarget.java')]
+paths += [str(src/'ShareActions.java'),str(src/'ShareRoutes.java'),str(src/'ShareTargetCatalog.java'),str(src/'ShareTarget.java'),str(src/'ContentSharePolicy.java')]
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.ShareActionsRegression'],check=True)

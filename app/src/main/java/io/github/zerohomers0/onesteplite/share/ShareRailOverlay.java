@@ -28,7 +28,6 @@ final class ShareRailOverlay implements AutoCloseable {
     private boolean mainRight;
     private java.util.function.Function<String,String> hoverIdentity=value->value;
     private Consumer<String> hoverActivate=value->{};
-    private final Runnable retireAfterDrag=this::hide;
     void setWindowHover(java.util.function.Function<String,String> identity,Consumer<String> activate) {
         hoverIdentity=identity;hoverActivate=activate;if(rail!=null)rail.setWindowHover(identity,activate);
     }
@@ -48,12 +47,6 @@ final class ShareRailOverlay implements AutoCloseable {
         ShareWorkspace current=rail;if(current==null)return false;
         boolean accepted=current.onWindowDrag(event,targetPackage,false,origin);
         if(event.getAction()==DragEvent.ACTION_DRAG_STARTED && !accepted){hide();return false;}
-        if(event.getAction()==DragEvent.ACTION_DRAG_ENDED) {
-            // ShareWorkspace defers a DROP-less ENDED briefly so a late cross-window DROP can
-            // still start delivery. Removing this overlay immediately would cancel that session.
-            current.removeCallbacks(retireAfterDrag);
-            current.postDelayed(retireAfterDrag,96L);
-        }
         return accepted;
     }
 
@@ -65,6 +58,8 @@ final class ShareRailOverlay implements AutoCloseable {
             windows=context.getSystemService(WindowManager.class);
             plate=new FrameLayout(context);View normal=new View(context);plate.addView(normal,new FrameLayout.LayoutParams(-1,-1));
             rail=new ShareWorkspace(context,normal,ready,dispatch,hint,bounds,true);
+            FrameLayout mounted=plate;
+            rail.setDragFinished(()->{if(plate==mounted)hide();});
             rail.setMainOnRight(mainRight);
             rail.setWindowHover(hoverIdentity,hoverActivate);
             if(owner instanceof ShareWorkspace)rail.setResultSink(((ShareWorkspace)owner)::onDeliveryResult);

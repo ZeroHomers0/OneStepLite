@@ -53,16 +53,16 @@ class ModalIslandLease {static int active;boolean started;ModalIslandLease(andro
 void start(){if(!started){active++;started=true;}}void close(){if(started){active--;started=false;}}}''',
 'io/github/zerohomers0/onesteplite/ShareWorkspace.java':'''package io.github.zerohomers0.onesteplite;
 class ShareWorkspace extends android.view.View {
-static ShareWorkspace latest;static boolean accepts=true;static final java.util.List<Runnable> delayed=new java.util.ArrayList<>();boolean pending,mainRight;int closes,events;String target;Runnable settled;
+static ShareWorkspace latest;static boolean accepts=true;static final java.util.List<Runnable> delayed=new java.util.ArrayList<>();boolean pending,mainRight;int closes,events;String target;Runnable settled,dragFinished;
 void setMainOnRight(boolean right){mainRight=right;}
-void postDelayed(Runnable r,long delay){delayed.add(r);}void removeCallbacks(Runnable r){delayed.removeIf(x->x==r);}static void runDelayed(){var copy=new java.util.ArrayList<>(delayed);delayed.clear();for(Runnable r:copy)r.run();}
+void setDragFinished(Runnable finished){dragFinished=finished;}static void runDelayed(){var copy=new java.util.ArrayList<>(delayed);delayed.clear();for(Runnable r:copy)r.run();}
 void setWindowHover(java.util.function.Function<String,String> identity,java.util.function.Consumer<String> activate){}
 void setResultSink(java.util.function.BiConsumer<Boolean,android.content.ClipData> sink){}
 void onDeliveryResult(boolean success,android.content.ClipData retained){}
 ShareWorkspace(android.content.Context c,android.view.View n,java.util.function.BooleanSupplier ready,
 java.util.function.BiConsumer<android.content.ComponentName,Runnable> dispatch,java.util.function.Consumer<String> hint,
 java.util.function.Supplier<android.graphics.Rect> bounds,boolean only){super(c);latest=this;if(!only)throw new AssertionError("share-only expected");}
-android.view.View origin;boolean onWindowDrag(android.view.DragEvent e,String name,boolean covered,android.view.View source){events++;target=name;origin=source;return accepts;}
+android.view.View origin;boolean onWindowDrag(android.view.DragEvent e,String name,boolean covered,android.view.View source){events++;target=name;origin=source;if(e.getAction()==4)delayed.add(dragFinished);return accepts;}
 boolean retainDelivery(Runnable done){settled=done;return pending;}
 void close(){closes++;pending=false;if(settled!=null)settled.run();}
 void deliver(){pending=false;if(settled!=null)settled.run();}

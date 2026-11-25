@@ -49,7 +49,7 @@ View origin;
 boolean isOpen(){return open;}boolean onDrag(DragEvent event,String name,View source){events++;target=name;origin=source;open=event.action!=4;return true;}
 void setWindowHover(Function<String,String> identity,Consumer<String> activate){}void setMainOnRight(boolean right){}void close(){open=false;closes++;}}
 static class Replay extends Base {
-BooleanSupplier ready=()->true;Object dispatch,bounds,hovered;Consumer<String> hint=value->{};ShareRailOverlay overlay;
+BooleanSupplier ready=()->true;Object dispatch,bounds;ComponentName hovered;Consumer<String> hint=value->{};ShareRailOverlay overlay;
 boolean panelSource,hasPointer,mainRight;Object transferClip;Counter receipt;Function<String,String> hoverIdentity=value->value;Consumer<String> hoverActivate=value->{};
 String sourcePackage;Set<String> windowPackages;
 static class Hover extends Counter {void move(String value){}}Hover windowHover=new Hover();
@@ -59,7 +59,8 @@ Counter pendingRead,delegatedRead,catchment;Counter panel=new Counter(),history=
 Transition transition=new Transition();float alpha=1;
 Targets targets=new Targets();
 boolean accepts(Object description){return true;}boolean live(int token){return dragging&&ready.getAsBoolean();}
-final View root=new View();Object dragOrigin;
+final View root=new View();Object dragOrigin;ComponentName arrowTarget;
+void locateDragTip(DragEvent event,View origin){dragOrigin=origin;hovered=arrowTarget;}
 View getRootView(){return root;}
 boolean drag(DragEvent event,Object plate){dragOrigin=plate;if(event.action==1){starts++;dragging=true;}if(event.action==3){drops++;lastTarget="share.icon";return true;}if(event.action==4){ends++;finishVisuals();}return true;}
 boolean drop(DragEvent event,ComponentName target){drops++;lastTarget=target.pkg;return true;}
@@ -73,7 +74,7 @@ check(rail.onWindowDrag(new DragEvent(2),"chat.pkg",false),"known compatible win
 check(!rail.onWindowDrag(new DragEvent(2),"other.pkg",false),"unknown window does not advertise an app share");
 rail.sourcePackage="chat.pkg";check(!rail.onWindowDrag(new DragEvent(2),"chat.pkg",false),"source window never highlights");
 rail.sourcePackage=null;
-rail.hovered=new Object();
+rail.hovered=new ComponentName("share.icon","");
 check(rail.onWindowDrag(new DragEvent(3),"chat.pkg",false)&&rail.drops==1&&"share.icon".equals(rail.lastTarget),
       "selected share icon owns DROP even when the finger is over a side window");
 rail.hovered=null;
@@ -110,9 +111,15 @@ rail=new Replay();rail.catchment=new Counter();Counter reach=rail.catchment;rail
 check(reach.closes==1&&rail.catchment==null,"detach removes the temporary arrow hit region");
 check(rail.transition.resets==1,"ordinary detach clears cube animation");
 rail=new Replay();rail.dragging=true;rail.sourcePackage="chat.pkg";check(!rail.onWindowDrag(new DragEvent(3),"chat.pkg",false)&&rail.drops==0,"same-app window release must not send the source message again");
-rail=new Replay();rail.dragging=true;rail.sourcePackage="chat.pkg";rail.hovered=new Object();
+rail=new Replay();rail.dragging=true;rail.sourcePackage="chat.pkg";rail.hovered=new ComponentName("share.icon","");
 check(rail.onWindowDrag(new DragEvent(3),"chat.pkg",false)&&rail.drops==1&&"share.icon".equals(rail.lastTarget),
       "selected share icon overrides same-source window cancellation");
+rail=new Replay();rail.dragging=true;rail.sourcePackage="chat.pkg";rail.arrowTarget=new ComponentName("share.icon","");
+check(rail.onWindowDrag(new DragEvent(3),"chat.pkg",false)&&rail.drops==1&&"share.icon".equals(rail.lastTarget),
+      "the final arrow hit can select a share icon without a prior hover");
+rail.windowPackages=Set.of("other.pkg");
+check(!rail.onWindowDrag(new DragEvent(2),"other.pkg",false)&&rail.hovered==rail.arrowTarget,
+      "arrow hit suppresses the small-window outline");
 rail=new Replay();rail.dragging=true;rail.cancel();check(rail.panel.restores==1,"cancel restores an active source popup");
 rail=new Replay();rail.cancel();check(rail.panel.restores==0,"idle reset must not end a newly staged source drag");
 System.out.println("Production share session checks="+checks+" passed");

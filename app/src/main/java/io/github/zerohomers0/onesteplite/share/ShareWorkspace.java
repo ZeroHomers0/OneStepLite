@@ -175,12 +175,14 @@ final class ShareWorkspace extends FrameLayout {
                 final int itemCount=count;
                 handler.postDelayed(expire, 60_000L);
                 WORKER.execute(() -> {
+                    ShareTargetCatalog.Matches matches=null;
                     try {
-                        java.util.Set<String> packages=ShareTargetCatalog.windowPackages(getContext(),description,itemCount);
+                        matches=ShareTargetCatalog.queryMatches(getContext(),description,itemCount);
+                        java.util.Set<String> packages=matches.packages();
                         post(()->{if(live(token))windowPackages=packages;});
                     }catch(RuntimeException unavailable){ /* Keep native target resolution available at DROP. */ }
                     try {
-                        List<ShareTarget> entries=ShareTargetCatalog.load(getContext(),description,itemCount,false);
+                        List<ShareTarget> entries=ShareTargetCatalog.loadForDrag(getContext(),description,itemCount,matches);
                         post(()->{if(live(token))showTargets(entries);});
                     } catch(RuntimeException unavailable) {
                         post(()->{if(live(token))message("无法查询分享入口");});
@@ -188,6 +190,7 @@ final class ShareWorkspace extends FrameLayout {
                 });
                 return true;
             case DragEvent.ACTION_DRAG_LOCATION:
+                windowHover.close();
                 if(dragging)locateDragTip(event,plate);
                 return dragging;
             case DragEvent.ACTION_DRAG_EXITED:
@@ -221,6 +224,8 @@ final class ShareWorkspace extends FrameLayout {
                         finishVisuals();
                         panel.dragEnded(consumed);
                         Runnable next=afterDrag;afterDrag=()->{};handler.post(next);
+                        int finishedGeneration=generation;
+                        handler.post(()->{if(!dragging && generation==finishedGeneration)dragFinished.run();});
                     },64L);
                     return true;
                 }
@@ -228,6 +233,8 @@ final class ShareWorkspace extends FrameLayout {
                 finishVisuals();
                 panel.dragEnded(true);
                 Runnable next=afterDrag;afterDrag=()->{};handler.post(next);
+                int finishedGeneration=generation;
+                handler.post(()->{if(!dragging && generation==finishedGeneration)dragFinished.run();});
                 return true;
             default: return dragging;
         }
@@ -315,20 +322,28 @@ final class ShareWorkspace extends FrameLayout {
         if(targetPackage==null)return drag(event,origin);
         int action=event.getAction();
         boolean location=action==DragEvent.ACTION_DRAG_LOCATION;
-        boolean sameSource=targetPackage!=null && targetPackage.equals(sourcePackage);
-        boolean supported=targetPackage!=null && windowPackages!=null && windowPackages.contains(targetPackage);
-        if(location && dragging && !sameSource)windowHover.move(targetPackage);
-        else windowHover.close();
+        boolean sameSource=targetPackage.equals(sourcePackage);
+        boolean supported=windowPackages!=null && windowPackages.contains(targetPackage);
         if (!dragging) {
-            hint.accept(null);return false;
+            windowHover.close();hint.accept(null);return false;
         }
         if (action==DragEvent.ACTION_DROP) {
-            // The finger can remain over a side window while the card's arrow tip selects a
-            // share icon. The visible icon selection owns that DROP; only fall back to a
-            // directly hit window when no icon is selected.
-            if (hovered != null) return drag(event, origin);
-            return !sameSource && live(generation) && drop(event,new ComponentName(targetPackage,""));
+            windowHover.close();
+            if(!live(generation))return false;
+            ComponentName selected=hovered;
+            locateDragTip(event,origin);
+            // Keep a visible selection if the final cross-window coordinate conversion misses.
+            if(hovered==null)hovered=selected;
+            if(hovered!=null)return drop(event,hovered);
+            return !sameSource && drop(event,new ComponentName(targetPackage,""));
         }
+        if(location){
+            locateDragTip(event,origin);
+            // The host uses this result for the small-window outline.
+            if(hovered!=null){windowHover.close();return false;}
+        }
+        if(location && !sameSource)windowHover.move(targetPackage);
+        else windowHover.close();
         if(location)hint.accept(sameSource?"松开取消":supported?"松开分享到此应用 · 停留切换窗口"
                 :windowPackages==null?"正在查询分享入口 · 停留切换窗口":"无匹配分享入口 · 停留切换窗口");
         else if(action==DragEvent.ACTION_DRAG_EXITED)hint.accept(null);
@@ -415,7 +430,6 @@ final class ShareWorkspace extends FrameLayout {
         try {
             SharePayload payload=new SharePayload(event.getClipData());transferClip=payload.clip;
             if(IMAGE_TEXT.equals(target))return recognizeDrop(event,payload);
-            String operation=ShareActions.operation(target);
             Intent intent=ShareRoutes.intent(payload,target);
             ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.ACCEPTED);
             // The target catalog already filtered this enabled icon. Re-querying here made a
@@ -490,6 +504,9 @@ final class ShareWorkspace extends FrameLayout {
         };
         return true;
     }
+
+    private Runnable dragFinished=()->{};
+    void setDragFinished(Runnable finished){dragFinished=finished;}
 
     private void finishVisuals() {
         if(catchment!=null){catchment.close();catchment=null;}

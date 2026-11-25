@@ -85,7 +85,15 @@ parent.task=new Task();check(XposedBridge.transfer(source.mInputChannelToken)==s
 parent.task=focus.task;parent.mOwnerUid++;check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);
 parent.mOwnerUid=focus.mOwnerUid;parent.mAttrs.packageName="another.app";
 check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);
-focus.mAttrs.type=2;focus.parent=null;
+parent.mAttrs.packageName="source.app";
+display.touched=focus;PortalDragInput.observeTouch(display,down);display.mCurrentFocus=popup;
+check(XposedBridge.transfer(source.mInputChannelToken)==focus.mInputChannelToken);
+parent.mAttrs.flags=WindowManager.LayoutParams.FLAG_SECURE;
+check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);
+parent.mAttrs.flags=0;parent.mOwnerUid++;
+check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);
+PortalDragInput.observeTouch(display,new MotionEvent(MotionEvent.ACTION_UP));
+display.mCurrentFocus=focus;focus.mAttrs.type=2;focus.parent=null;
 active[0]=false;check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);active[0]=true;
 source.authorized=false;check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);source.authorized=true;
 source.mAttrs.title="other";check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);source.mAttrs.title=PortalDragInput.TITLE;

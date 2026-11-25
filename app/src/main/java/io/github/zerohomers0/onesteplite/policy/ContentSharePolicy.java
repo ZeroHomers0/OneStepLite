@@ -17,6 +17,13 @@ final class ContentSharePolicy {
                 || mime.startsWith("application/");
     }
 
+    static String commonMime(String current,String next) {
+        if(current==null || current.equals(next))return next;
+        int slash=current.indexOf('/');
+        String family=slash>0?current.substring(0,slash):"*";
+        return next.startsWith(family+"/")?family+"/*":"*/*";
+    }
+
     static boolean validSize(int count, int textLength) {
         return count > 0 && count <= MAX_ITEMS && textLength >= 0 && textLength <= MAX_TEXT;
     }
