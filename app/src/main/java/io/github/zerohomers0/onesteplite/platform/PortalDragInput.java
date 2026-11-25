@@ -42,13 +42,25 @@ final class PortalDragInput {
         Object focus=XposedHelpers.getObjectField(display,"mCurrentFocus");
         if(focus==null || focus==source || !Boolean.TRUE.equals(XposedHelpers.callMethod(focus,"isVisible")))return null;
         WindowManager.LayoutParams focused=(WindowManager.LayoutParams)XposedHelpers.getObjectField(focus,"mAttrs");
-        if(focused.type>=WindowManager.LayoutParams.FIRST_SUB_WINDOW && focused.type<=WindowManager.LayoutParams.LAST_SUB_WINDOW)return null;
         Object expected=XposedHelpers.getObjectField(attrs,"accessibilityTitle");
         if(!(expected instanceof CharSequence) || !expected.toString().equals(focused.packageName))return null;
+        if(subWindow(focused)){
+            Object parent=XposedHelpers.callMethod(focus,"getParentWindow");
+            if(parent==null || parent==source || !Boolean.TRUE.equals(XposedHelpers.callMethod(parent,"isVisible"))
+                    || XposedHelpers.getIntField(parent,"mOwnerUid")!=XposedHelpers.getIntField(focus,"mOwnerUid")
+                    || XposedHelpers.callMethod(parent,"getTask")!=XposedHelpers.callMethod(focus,"getTask"))return null;
+            WindowManager.LayoutParams parentAttrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(parent,"mAttrs");
+            if(subWindow(parentAttrs) || !focused.packageName.equals(parentAttrs.packageName))return null;
+            focus=parent;
+        }
         Object task=XposedHelpers.callMethod(focus,"getTask");
         if(task==null || !Integer.valueOf(1).equals(XposedHelpers.callMethod(task,"getWindowingMode")))return null;
         int uid=XposedHelpers.getIntField(focus,"mOwnerUid"),owner=XposedHelpers.getIntField(source,"mOwnerUid");
         if(uid/100000!=owner/100000)return null;
         return (IBinder)XposedHelpers.getObjectField(focus,"mInputChannelToken");
+    }
+
+    private static boolean subWindow(WindowManager.LayoutParams attrs) {
+        return attrs.type>=WindowManager.LayoutParams.FIRST_SUB_WINDOW && attrs.type<=WindowManager.LayoutParams.LAST_SUB_WINDOW;
     }
 }

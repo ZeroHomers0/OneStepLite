@@ -43,8 +43,8 @@ public static class Task {public int mode=1;public int getWindowingMode(){return
 public static class Win {
 public IBinder mInputChannelToken=new Token();public int mOwnerUid=10100;
 public WindowManager.LayoutParams mAttrs=new WindowManager.LayoutParams();
-public boolean visible=true,authorized=true;public Task task=new Task();
-public boolean isVisible(){return visible;}public Task getTask(){return task;}}
+public boolean visible=true,authorized=true;public Task task=new Task();public Win parent;
+public boolean isVisible(){return visible;}public Task getTask(){return task;}public Win getParentWindow(){return parent;}}
 public static class Wm {public Object mGlobalLock=new Object();public Map<Object,Object> mWindowMap=new LinkedHashMap<>();}
 public static class Display {public Wm mWmService=new Wm();public Win mCurrentFocus;}
 static int checks;static void check(boolean yes){checks++;if(!yes)throw new AssertionError("check "+checks);}
@@ -54,7 +54,14 @@ source.mAttrs.title=PortalDragInput.TITLE;source.mAttrs.accessibilityTitle="sour
 display.mWmService.mWindowMap.put("source",source);display.mWmService.mWindowMap.put("focus",focus);
 boolean[] active={true};PortalDragInput.install(PortalInputRegression.class.getClassLoader(),()->display,()->active[0]);
 check(XposedBridge.transfer(source.mInputChannelToken)==focus.mInputChannelToken);
-focus.mAttrs.type=1002;check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);focus.mAttrs.type=2;
+focus.mAttrs.type=1002;check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);
+Win parent=new Win();parent.task=focus.task;parent.mAttrs.packageName="source.app";focus.parent=parent;
+check(XposedBridge.transfer(source.mInputChannelToken)==parent.mInputChannelToken);
+parent.task=new Task();check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);
+parent.task=focus.task;parent.mOwnerUid++;check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);
+parent.mOwnerUid=focus.mOwnerUid;parent.mAttrs.packageName="another.app";
+check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);
+focus.mAttrs.type=2;focus.parent=null;
 active[0]=false;check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);active[0]=true;
 source.authorized=false;check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);source.authorized=true;
 source.mAttrs.title="other";check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);source.mAttrs.title=PortalDragInput.TITLE;

@@ -49,6 +49,13 @@ final class PortalInputCompat implements AutoCloseable {
             });
         installed=true;
     }
+    static boolean surfaceReady(View source) {
+        try{
+            Object root=XposedHelpers.callMethod(source,"getViewRootImpl");
+            Object surface=root==null?null:XposedHelpers.getObjectField(root,"mSurface");
+            return surface instanceof android.view.Surface && ((android.view.Surface)surface).isValid();
+        }catch(RuntimeException unavailable){return true;}
+    }
     static boolean start(View source,android.content.ClipData clip,MotionEvent event) {
         ContentDragShadow shadow=new ContentDragShadow(source,1);shadow.mark(clip);
         try{

@@ -200,8 +200,9 @@ final class PortalSource implements AutoCloseable {
         if(request.getBoolean("view_image") && pointer.getPointerCount()!=1){done.countDown();return;}
         if(!region && uri==null && (text==null || text.isEmpty() || text.length()>ContentSharePolicy.MAX_TEXT)){done.countDown();return;}
         Rect rect=sourceRect(request);
-        if(region && (pointer.getPointerCount()!=1 || rect==null)
-                || rect!=null && !rect.contains((int)downX,(int)downY)){done.countDown();return;}
+        if(region && (pointer.getPointerCount()!=1 || rect==null || !rect.contains((int)downX,(int)downY))){
+            done.countDown();return;
+        }
         if(pointer.getPointerCount()==1 && !request.getBoolean("lift")){
             if((region || uri!=null) && !imageLiftEligible){done.countDown();return;}
             int priority=request.getInt("source_priority");
@@ -254,22 +255,30 @@ final class PortalSource implements AutoCloseable {
             FrameLayout sourceWindow=window;
             startingDrag=true;
             display.getSystemService(WindowManager.class).addView(sourceWindow,attrs);
-            int token=generation;
-            source.postOnAnimation(()->{
-                if(window!=sourceWindow){done.countDown();return;}
-                boolean accepted=false;
-                boolean current=!expired.get() && token==generation && live();
-                try{if(current)accepted=PortalInputCompat.start(source,clip,pointer);}
-                catch(RuntimeException failure){android.util.Log.w(Tags.PROBE,"portal drag start rejected",failure);}
-                startingDrag=false;
-                Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);result[0]=reply;
-                ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,accepted?ShareDiagnostics.Code.STARTED:ShareDiagnostics.Code.FAILED);
-                if(!accepted) {
-                    finishRejectedLift(uri,text,current && token==generation && live());
-                } else main.postDelayed(expire,60_000L);
-                done.countDown();
-            });
+            startWhenReady(sourceWindow,source,clip,uri,text,generation,3,result,done,expired);
         } catch(RuntimeException unavailable){finishRejectedLift(uri,text,!expired.get() && live());done.countDown();}
+    }
+
+    private void startWhenReady(FrameLayout sourceWindow,View source,ClipData clip,String uri,String text,
+            int token,int frames,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
+        source.postOnAnimation(()->{
+            if(window!=sourceWindow){done.countDown();return;}
+            boolean current=!expired.get() && token==generation && live();
+            boolean readySurface=current && PortalInputCompat.surfaceReady(source);
+            if(current && !readySurface && frames>1){
+                startWhenReady(sourceWindow,source,clip,uri,text,token,frames-1,result,done,expired);
+                return;
+            }
+            boolean accepted=false;
+            try{if(readySurface)accepted=PortalInputCompat.start(source,clip,pointer);}
+            catch(RuntimeException failure){android.util.Log.w(Tags.PROBE,"portal drag start rejected",failure);}
+            startingDrag=false;
+            Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);result[0]=reply;
+            ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,accepted?ShareDiagnostics.Code.STARTED:ShareDiagnostics.Code.FAILED);
+            if(!accepted)finishRejectedLift(uri,text,current && token==generation && live());
+            else main.postDelayed(expire,60_000L);
+            done.countDown();
+        });
     }
 
     private void stageLift(Bundle request,String uri,int priority) {
@@ -279,7 +288,7 @@ final class PortalSource implements AutoCloseable {
         liftX=image?downX:pointer.getRawX();liftY=image?downY:pointer.getRawY();
         long now=android.os.SystemClock.uptimeMillis();
         liftAt=pointer.getDownTime()+android.view.ViewConfiguration.getLongPressTimeout()+150L;
-        if(priority<PortalGesturePolicy.SYSTEM_IMAGE)
+        if(image && priority<PortalGesturePolicy.SYSTEM_IMAGE)
             liftAt=Math.max(liftAt,now+PortalGesturePolicy.PREFERRED_SOURCE_WAIT_MS);
         if(priority==PortalGesturePolicy.REGION)liftAt=Math.max(liftAt,now+350L);
         if(uri!=null)prepareLiftPreview(candidate,android.net.Uri.parse(uri));
