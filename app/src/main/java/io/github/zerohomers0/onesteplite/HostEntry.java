@@ -992,38 +992,27 @@ public class HostEntry implements IXposedHookLoadPackage {
             @Override public float zoomOffsetX() { return sZoomOffsetX; }
             @Override public float zoomOffsetY() { return sZoomOffset; }
         }, HostEntry::log);
+        TransitionMagnificationFinishHooks.install(cl, new TransitionMagnificationFinishHooks.Host() {
+            @Override public ZoomTarget zoomTarget() { return sZoomTarget; }
+            @Override public boolean zoomed() { return sZoomed; }
+            @Override public java.util.Map<Object, Object> homeTransitionInfos() {
+                return sHomeTransitionInfos;
+            }
+            @Override public java.util.Map<Object, Object> magnificationFinishReplays() {
+                return sMagnificationFinishReplays;
+            }
+            @Override public void reapplyFinalMagnification(
+                    Object display, Object transaction, Object info) {
+                HostEntry.reapplyFinalMagnification(display, transaction, info);
+            }
+            @Override public void layerWorkspaceWithNativeFreeforms(
+                    Object display, Object transaction) {
+                HostEntry.layerWorkspaceWithNativeFreeforms(display, transaction);
+            }
+        }, HostEntry::log);
         try {
             Class<?> transition = XposedHelpers.findClass(
                     "com.android.server.wm.Transition", cl);
-            XposedBridge.hookAllMethods(transition, "buildFinishTransaction", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (p.hasThrowable()) return;
-                    ZoomTarget target = sZoomTarget;
-                        if (target == null) return;
-                    try {
-                        Object[] participantDisplays = TransitionMagnificationCompat.finishDisplays(
-                                p.thisObject, p.args);
-                        if (participantDisplays == null) return;
-                        if (HomeTransitionMagnification.hasInfo(p.args[1]))
-                            sHomeTransitionInfos.put(p.thisObject, p.args[1]);
-                        boolean replayed = TransitionMagnificationReplay.reapplyIfActive(
-                                sZoomed, target.display, Thread.holdsLock(target.globalLock),
-                                participantDisplays, p.args[0],
-                                (display, transaction) -> reapplyFinalMagnification(
-                                        display, transaction, p.args[1]));
-                        if (replayed) {
-                            // A closing native task can stop normal child-layer assignment.
-                            // Detach our windows before its leash becomes hidden, and include
-                            // the same restoration in the transition's finish transaction.
-                            layerWorkspaceWithNativeFreeforms(target.display, p.args[0]);
-                            sMagnificationFinishReplays.put(p.thisObject, target.display);
-                            log("display magnification reasserted in transition finish");
-                        }
-                    } catch (Throwable error) {
-                        log("transition magnification replay unavailable: " + error);
-                    }
-                }
-            });
             XposedBridge.hookAllMethods(transition, "finishTransition", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     ZoomTarget target = sZoomTarget;
@@ -1062,29 +1051,23 @@ public class HostEntry implements IXposedHookLoadPackage {
                     });
                 }
             });
-            XC_MethodHook topRotationEnd = new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (!p.hasThrowable()) onTopRotationTransitionEnd();
+            TopRotationTransitionHooks.install(cl, new TopRotationTransitionHooks.Host() {
+                @Override public void onTransitionEnd() {
+                    HostEntry.this.onTopRotationTransitionEnd();
                 }
-            };
-            XposedBridge.hookAllMethods(transition, "finishTransition", topRotationEnd);
-            XposedBridge.hookAllMethods(transition, "abort", topRotationEnd);
-            XposedBridge.hookAllMethods(transition, "getLeashSurface", new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    if (p.args.length != 2 || p.args[0] == null) return;
-                    Object page = p.args[0];
-                    if (!RotationAnimation.owns(page) || !sTopRotationBounds.containsKey(page))
-                        return;
-                    try {
-                        if (!ownsTaskRotationTransform(page)
-                                || !isUpperLandscapeTask(XposedHelpers.callMethod(page, "getTask"))
-                                || !RotationAnimation.inTransition(page)) return;
-                        // Give the native transition the fixed carrier before it builds its reparent.
-                        topRotationHandoffs.add(page);
-                        RotationAnimation.cancel(page);
-                    } catch (Throwable error) { log("TOP native surface handoff unavailable: " + error); }
+                @Override public java.util.Map<Object, android.graphics.Rect> rotationBounds() {
+                    return sTopRotationBounds;
                 }
-            });
+                @Override public boolean ownsTaskRotationTransform(Object page) {
+                    return HostEntry.this.ownsTaskRotationTransform(page);
+                }
+                @Override public boolean isUpperLandscapeTask(Object task) {
+                    return HostEntry.isUpperLandscapeTask(task);
+                }
+                @Override public void handoffSurface(Object page) {
+                    topRotationHandoffs.add(page);
+                }
+            }, HostEntry::log);
             log("Transition#buildFinishTransaction magnification replay hooked");
         } catch (Throwable error) {
             log("transition magnification replay hook unavailable: " + error);
