@@ -53,8 +53,9 @@ class ModalIslandLease {static int active;boolean started;ModalIslandLease(andro
 void start(){if(!started){active++;started=true;}}void close(){if(started){active--;started=false;}}}''',
 'io/github/zerohomers0/onesteplite/ShareWorkspace.java':'''package io.github.zerohomers0.onesteplite;
 class ShareWorkspace extends android.view.View {
-static ShareWorkspace latest;static boolean accepts=true;boolean pending,mainRight;int closes,events;String target;Runnable settled;
+static ShareWorkspace latest;static boolean accepts=true;static final java.util.List<Runnable> delayed=new java.util.ArrayList<>();boolean pending,mainRight;int closes,events;String target;Runnable settled;
 void setMainOnRight(boolean right){mainRight=right;}
+void postDelayed(Runnable r,long delay){delayed.add(r);}void removeCallbacks(Runnable r){delayed.removeIf(x->x==r);}static void runDelayed(){var copy=new java.util.ArrayList<>(delayed);delayed.clear();for(Runnable r:copy)r.run();}
 void setWindowHover(java.util.function.Function<String,String> identity,java.util.function.Consumer<String> activate){}
 void setResultSink(java.util.function.BiConsumer<Boolean,android.content.ClipData> sink){}
 void onDeliveryResult(boolean success,android.content.ClipData retained){}
@@ -90,12 +91,14 @@ check(HostWindowPolicy.checks==1&&ModalIslandLease.active==1,"window uses owned 
 overlay.setMainOnRight(true);check(first.mainRight&&first.closes==0,"side change mirrors icons without cancelling live drag");
 overlay.onDrag(event(1),null);check(context.windows.adds==1,"duplicate start never creates a second window");
 overlay.onDrag(event(3),"target.pkg");check("target.pkg".equals(first.target),"occupied small-window share remains routed to same session");
-overlay.onDrag(event(4),null);check(!overlay.isOpen()&&context.windows.removes==1,"drag end immediately removes visual window");
+overlay.onDrag(event(4),null);check(overlay.isOpen()&&context.windows.removes==0,"drag end defers visual removal for a late DROP");
+ShareWorkspace.runDelayed();check(!overlay.isOpen()&&context.windows.removes==1,"deferred drag end removes visual window");
 check(first.closes==1&&ModalIslandLease.active==0,"ordinary cancel releases rail and lease");
 check(!overlay.onDrag(event(3),"late.pkg"),"late drop cannot recreate closed overlay");
 overlay.onDrag(event(1),null);ShareWorkspace pending=ShareWorkspace.latest;pending.pending=true;
 check(pending.mainRight,"new overlay inherits the configured badge side");
-overlay.onDrag(event(4),null);check(!overlay.isOpen()&&pending.closes==0,"accepted async delivery survives visual window removal");
+overlay.onDrag(event(4),null);check(overlay.isOpen(),"accepted delivery also defers visual removal");
+ShareWorkspace.runDelayed();check(!overlay.isOpen()&&pending.closes==0,"accepted async delivery survives visual window removal");
 check(ModalIslandLease.active==0,"pending delivery never keeps island hidden");
 overlay.setMainOnRight(true);check(pending.mainRight&&pending.closes==0,"side change preserves accepted detached delivery");pending.deliver();overlay.close();
 check(pending.closes==0,"completed detached delivery is released without double cancellation");

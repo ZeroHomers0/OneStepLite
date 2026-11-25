@@ -191,6 +191,10 @@ final class ShareWorkspace extends FrameLayout {
                 if(dragging)locateDragTip(event,plate);
                 return dragging;
             case DragEvent.ACTION_DRAG_EXITED:
+                // The translucent catchment overlaps the rail window during a drag. An EXITED
+                // from the rail can therefore mean the pointer moved into the catchment, not
+                // that it left the share area; the catchment owns the authoritative exit.
+                if(plate==null && catchment!=null)return dragging;
                 hasPointer=false;stopEdge();hovered = null; clearTargetHover();hint.accept(null); return dragging;
             case DragEvent.ACTION_DROP:
                 if (!live(generation)) return false;
@@ -204,10 +208,24 @@ final class ShareWorkspace extends FrameLayout {
                 return drop(event, hovered);
             case DragEvent.ACTION_DRAG_ENDED:
                 if(!dragging)return true;
+                if(!dropped) {
+                    // The underlying rail window can receive ENDED before the catchment window
+                    // dispatches its DROP. Defer retirement one event turn so a late DROP can
+                    // still claim the selected target instead of being invalidated.
+                    final boolean endedAccepted=event.getResult();
+                    handler.postDelayed(()->{
+                        if(!dragging)return;
+                        ContentDragMotion.close();
+                        boolean consumed=dropped || endedAccepted;
+                        finishVisuals();
+                        panel.dragEnded(consumed);
+                        Runnable next=afterDrag;afterDrag=()->{};handler.post(next);
+                    },64L);
+                    return true;
+                }
                 ContentDragMotion.close();
-                boolean consumed = event.getResult();
                 finishVisuals();
-                panel.dragEnded(consumed);
+                panel.dragEnded(true);
                 Runnable next=afterDrag;afterDrag=()->{};handler.post(next);
                 return true;
             default: return dragging;
@@ -285,13 +303,17 @@ final class ShareWorkspace extends FrameLayout {
         if (event.getAction() == DragEvent.ACTION_DRAG_STARTED)
             return drag(event,null);
         if(event.getAction()==DragEvent.ACTION_DRAG_ENDED)return drag(event,null);
+        // No side-window package means the root Host window received the event. It must still
+        // feed LOCATION/DROP back into this session so the arrow can select a share icon and
+        // accept the DROP; returning false here was the silent share-bar cancellation.
+        if(targetPackage==null)return drag(event,null);
         int action=event.getAction();
         boolean location=action==DragEvent.ACTION_DRAG_LOCATION;
         boolean sameSource=targetPackage!=null && targetPackage.equals(sourcePackage);
         boolean supported=targetPackage!=null && windowPackages!=null && windowPackages.contains(targetPackage);
         if(location && dragging && !sameSource)windowHover.move(targetPackage);
         else windowHover.close();
-        if (!dragging || targetPackage == null) {
+        if (!dragging) {
             hint.accept(null);return false;
         }
         if (action==DragEvent.ACTION_DROP)

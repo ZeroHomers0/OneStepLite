@@ -28,6 +28,7 @@ final class ShareRailOverlay implements AutoCloseable {
     private boolean mainRight;
     private java.util.function.Function<String,String> hoverIdentity=value->value;
     private Consumer<String> hoverActivate=value->{};
+    private final Runnable retireAfterDrag=this::hide;
     void setWindowHover(java.util.function.Function<String,String> identity,Consumer<String> activate) {
         hoverIdentity=identity;hoverActivate=activate;if(rail!=null)rail.setWindowHover(identity,activate);
     }
@@ -47,7 +48,12 @@ final class ShareRailOverlay implements AutoCloseable {
         ShareWorkspace current=rail;if(current==null)return false;
         boolean accepted=current.onWindowDrag(event,targetPackage,false);
         if(event.getAction()==DragEvent.ACTION_DRAG_STARTED && !accepted){hide();return false;}
-        if(event.getAction()==DragEvent.ACTION_DRAG_ENDED)hide();
+        if(event.getAction()==DragEvent.ACTION_DRAG_ENDED) {
+            // ShareWorkspace defers a DROP-less ENDED briefly so a late cross-window DROP can
+            // still start delivery. Removing this overlay immediately would cancel that session.
+            current.removeCallbacks(retireAfterDrag);
+            current.postDelayed(retireAfterDrag,96L);
+        }
         return accepted;
     }
 

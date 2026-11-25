@@ -33,7 +33,7 @@ public class ShareDropRegression {
  static final class ShareRailOverlay {boolean isOpen(){return false;}}
  static final class Portal {void dragStarted(){}}
  static final class Panel {boolean isDragging(){return false;}void dragEnded(boolean consumed){}}
- static final class Handler {void post(Runnable r){}void postDelayed(Runnable r,long delay){}void removeCallbacks(Runnable r){}}
+ static final class Handler {final List<Runnable> delayed=new ArrayList<>();void post(Runnable r){r.run();}void postDelayed(Runnable r,long delay){delayed.add(r);}void removeCallbacks(Runnable r){delayed.removeIf(x->x==r);}void runDelayed(){List<Runnable> copy=new ArrayList<>(delayed);delayed.clear();for(Runnable r:copy)r.run();}}
  static final class Worker {void execute(Runnable r){}}
  static final class ShareDragCatchment {ShareDragCatchment(Object owner,int offset,BooleanSupplier live){}void start(){}}
  static final class CurrentUser {static int id(){return 0;}}
@@ -42,13 +42,13 @@ public class ShareDropRegression {
  static final class ContentDragMotion {static void managed(Object owner,ClipDescription description){}static void close(){}}
  static final class ShareTargetCatalog {static Set<String> windowPackages(Object context,ClipDescription content,int count){return Set.of();}static List<ShareTarget> load(Object context,ClipDescription content,int count,boolean editing){return List.of();}}
  static final class Replay {
-  BooleanSupplier ready=()->true,covered=()->false;ShareRailOverlay overlay;boolean shareOnly,dragging,panelSource,imageDrag,hasPointer;Object transferClip;
+  BooleanSupplier ready=()->true,covered=()->false;ShareRailOverlay overlay;boolean shareOnly,dragging,dropped,panelSource,imageDrag,hasPointer;Object transferClip;
   ComponentName hovered;Set<String> windowPackages;String sourcePackage;Consumer<String> hint=value->{};Portal portal=new Portal();Runnable expire=()->{};
   Panel panel=new Panel();static Handler handler=new Handler();static final Worker WORKER=new Worker();ShareDragCatchment catchment;int tipOffset,generation,user,drops,rejections;float dragHalfWidth;
   Runnable afterDrag=()->{};String lastMessage;
   boolean accepts(ClipDescription description){return true;}boolean live(int token){return dragging;}boolean onWindowDrag(DragEvent e,Object target,boolean covered){return true;}
   void cancel(){dragging=false;}void locateDragTip(DragEvent event,View plate){hovered=null;}
-  boolean drop(DragEvent event,ComponentName target){drops++;return true;}
+  boolean drop(DragEvent event,ComponentName target){drops++;dropped=true;return true;}
   void showTargets(List<ShareTarget> entries){}void message(String value){lastMessage=value;}
   void finishVisuals(){dragging=false;}void stopEdge(){}void clearTargetHover(){}
   Replay getContext(){return this;}void post(Runnable r){r.run();}boolean performHapticFeedback(int kind){return true;}
@@ -61,6 +61,20 @@ __DRAG__
   Replay missing=new Replay();missing.dragging=true;
   check(!missing.drag(new DragEvent(DragEvent.ACTION_DROP),null)&&missing.drops==0&&missing.lastMessage!=null,
       "DROP without any selected icon explains why it was rejected");
+  Replay ordered=new Replay();ordered.dragging=true;ordered.hovered=new ComponentName("chat");
+  ordered.catchment=new ShareDragCatchment(ordered,300,()->true);ordered.handler.delayed.clear();
+  DragEvent ended=new DragEvent(DragEvent.ACTION_DRAG_ENDED);ended.result=false;
+  check(ordered.drag(ended,null)&&ordered.dragging&&ordered.handler.delayed.size()==1,
+      "underlying rail defers ENDED until a possibly later catchment DROP");
+  ordered.hovered=new ComponentName("chat");
+  check(ordered.drag(new DragEvent(DragEvent.ACTION_DROP),new View())&&ordered.drops==1,
+      "late catchment DROP still commits before deferred retirement");
+  ordered.handler.runDelayed();
+  check(!ordered.dragging,"deferred retirement completes after the late DROP");
+  Replay crossing=new Replay();crossing.dragging=true;crossing.hovered=new ComponentName("chat");
+  crossing.catchment=new ShareDragCatchment(crossing,300,()->true);
+  crossing.drag(new DragEvent(DragEvent.ACTION_DRAG_EXITED),null);
+  check(crossing.hovered!=null,"rail EXIT into the overlapping catchment keeps the selected target");
   System.out.println("Production share DROP checks="+checks+" passed");
 }}
 '''.replace('__DRAG__',drag)
