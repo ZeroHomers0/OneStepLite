@@ -20,15 +20,15 @@ import io.github.zerohomers0.onesteplite.FrontTest;public class TaskChangeNotifi
  public int calls;public Object last;public boolean fail;public Runnable callback;
  public void notifyTaskMovedToFront(Object info){if(fail)throw new IllegalStateException("native failure");calls++;last=info;
  if(callback!=null)callback.run();FrontTest.nativeObserved(this,info);}}"""
-host=(src/'HostEntry.java').read_text(encoding='utf-8-sig')
-a=host.index('    private void installWorkspaceTopFrontNotifications(ClassLoader cl) {')
-b=host.index('\n    private void ',a+10)
-files['io/github/zerohomers0/onesteplite/HostEntry.java']="""package io.github.zerohomers0.onesteplite;import de.robv.android.xposed.*;
-class HostEntry {static boolean sZoomed=true;static Object sDisplayContent;
- static class ZoomTarget {Object display,globalLock=new Object();ZoomTarget(Object d){display=d;}}
- static ZoomTarget sZoomTarget;final TopFocusNotification topFocusNotification=new TopFocusNotification();
- static void log(String s){}static void install(){new HostEntry().installWorkspaceTopFrontNotifications(HostEntry.class.getClassLoader());}
-"""+host[a:b]+"\n}"
+files['io/github/zerohomers0/onesteplite/HostEntry.java']="""package io.github.zerohomers0.onesteplite;
+class HostEntry {static boolean sZoomed=true;static Object sDisplayContent;static ZoomTarget sZoomTarget;
+ final TopFocusNotification topFocusNotification=new TopFocusNotification();
+ static void log(String s){}
+ static void install(){TopFocusHooks.install(HostEntry.class.getClassLoader(),()->sZoomTarget,
+   ()->sDisplayContent,()->sZoomed,new HostEntry().topFocusNotification,HostEntry::log);}
+}"""
+files['io/github/zerohomers0/onesteplite/ZoomTarget.java']="""package io.github.zerohomers0.onesteplite;
+class ZoomTarget {Object display,globalLock=new Object();ZoomTarget(Object display){this.display=display;}}"""
 files['io/github/zerohomers0/onesteplite/DesktopLaunchBridge.java']="""package io.github.zerohomers0.onesteplite;
 class DesktopLaunchBridge {static Object owned;static boolean alive=true;
 static boolean ownsTopTask(Object t){return t==owned&&alive;}}"""
@@ -47,7 +47,7 @@ public class FrontTest {
  public static class Focus {Task task;Object display;Focus(Task t,Object d){task=t;display=d;}
  public Task getTask(){return task;}public Object getDisplayContent(){return display;}}
  DisplayContent display=new DisplayContent();Atms atms=new Atms();Task top=new Task(87,6,display,atms),main=new Task(2,1,display,atms),side=new Task(80,6,display,atms);
- FrontTest(){HostEntry.sZoomed=true;HostEntry.sDisplayContent=display;HostEntry.sZoomTarget=new HostEntry.ZoomTarget(display);
+ FrontTest(){HostEntry.sZoomed=true;HostEntry.sDisplayContent=display;HostEntry.sZoomTarget=new ZoomTarget(display);
  DesktopLaunchBridge.owned=top;DesktopLaunchBridge.alive=true;HostEntry.install();}
  void focus(Task t){display.mCurrentFocus=new Focus(t,display);display.mFocusedApp=new Focus(t,display);}
  boolean update(boolean lock,boolean failed){var p=new XC_MethodHook.MethodHookParam();p.thisObject=display;p.args=new Object[]{0,true,-1};p.failed=failed;int n=atms.controller.calls;
@@ -116,7 +116,7 @@ public class FrontTest {
 }"""
 for name,data in files.items():
  p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(data,encoding='utf-8')
-production=['TopFocusNotification.java','ImePolicy.java','SideRoleChange.java','ZoomChannelState.java','ZoomCommand.java','ZoomAnimCommand.java']
+production=['TopFocusNotification.java','TopFocusHooks.java','ImePolicy.java','SideRoleChange.java','ZoomChannelState.java','ZoomCommand.java','ZoomAnimCommand.java']
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*[str(out/name) for name in files],*[str(src/name) for name in production]],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.FrontTest'],check=True)

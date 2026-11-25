@@ -3014,32 +3014,10 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private void installWorkspaceTopFrontNotifications(ClassLoader cl) {
-        try {
-            Class<?> display = XposedHelpers.findClass("com.android.server.wm.DisplayContent", cl);
-            XposedBridge.hookAllMethods(display, "updateFocusedWindowLocked", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    ZoomTarget target = sZoomTarget;
-                    if (p.hasThrowable() || target == null || p.thisObject != target.display
-                            || target.display != sDisplayContent || !Thread.holdsLock(target.globalLock)) return;
-                    try {
-                        if (topFocusNotification.reconcile(target.display, DesktopLaunchBridge::ownsTopTask,
-                                () -> sZoomed && target == sZoomTarget && target.display == sDisplayContent))
-                            log("workspace real TOP/main focus synchronized native front-task notification");
-                    } catch (Throwable unavailable) { log("TOP front notification unavailable: " + unavailable); }
-                }
-            });
-            Class<?> controller = XposedHelpers.findClass(
-                    "com.android.server.wm.TaskChangeNotificationController", cl);
-            XposedBridge.hookAllMethods(controller, "notifyTaskMovedToFront", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (p.hasThrowable() || p.args.length != 1) return;
-                    try { topFocusNotification.observed(sDisplayContent, p.args[0]); }
-                    catch (Throwable unavailable) { log("native front notification observation unavailable: " + unavailable); }
-                }
-            });
-            log("workspace native task front follows confirmed TOP/main focus changes");
-        } catch (Throwable unavailable) { log("TOP front notification hook unavailable: " + unavailable); }
+        TopFocusHooks.install(cl, () -> sZoomTarget, () -> sDisplayContent,
+                () -> sZoomed, topFocusNotification, HostEntry::log);
     }
+
 
     private void installWorkspaceFocus(ClassLoader cl) {
         installWorkspaceWindowFocus(cl);
