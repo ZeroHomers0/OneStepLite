@@ -1527,71 +1527,9 @@ public class HostEntry implements IXposedHookLoadPackage {
                 () -> sZoomed, () -> sFullscreenRotationActive,
                 this::ownedSideRotationConfigurationLocked,
                 this::ownedTopRotationConfigurationLocked, HostEntry::log);
-        try {
-            Class<?> activityRecord = XposedHelpers.findClass(
-                    "com.android.server.wm.ActivityRecord", cl);
-            XposedBridge.hookAllMethods(activityRecord, "shouldRelaunchLocked",
-                    new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (p.hasThrowable() || !Boolean.TRUE.equals(p.getResult())
-                            || p.args.length != 2 || !(p.args[0] instanceof Integer)
-                            || !(p.args[1] instanceof android.content.res.Configuration)) return;
-                    try {
-                        TopRelaunchScope scope = sTopRotationRelaunchScopes.get(p.thisObject);
-                        if (scope == null || !keepTopActivityForRotationConfig(p.thisObject,
-                                (Integer) p.args[0], p.args[1])) return;
-                        scope.previous = new android.content.res.Configuration(
-                                (android.content.res.Configuration) p.args[1]);
-                    } catch (Throwable error) {
-                        log("TOP rotation relaunch guard unavailable: " + error);
-                    }
-                }
-            });
-            XposedBridge.hookAllMethods(activityRecord, "updateReportedConfigurationAndSend",
-                    new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    p.setObjectExtra("onesteplite.previousRelaunchScope",
-                            sTopRotationRelaunchScopes.put(p.thisObject, new TopRelaunchScope()));
-                    p.setObjectExtra("onesteplite.relaunchScope", Boolean.TRUE);
-                }
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (!Boolean.TRUE.equals(p.getObjectExtra("onesteplite.relaunchScope"))) return;
-                    TopRelaunchScope previous =
-                            (TopRelaunchScope) p.getObjectExtra("onesteplite.previousRelaunchScope");
-                    if (previous == null) sTopRotationRelaunchScopes.remove(p.thisObject);
-                    else sTopRotationRelaunchScopes.put(p.thisObject, previous);
-                }
-            });
-            XposedBridge.hookAllMethods(activityRecord, "relaunchActivityLocked",
-                    new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    if (p.args.length != 2 || !(p.args[1] instanceof Integer)) return;
-                    try {
-                        if (preserveTopWindowForRelaunch(p.thisObject, (Integer) p.args[1])) {
-                            p.args[0] = true;
-                            log("TOP rebuilds Activity layout with its real Window preserved");
-                        }
-                    } catch (Throwable error) {
-                        log("TOP preserved Window relaunch unavailable: " + error);
-                    }
-                }
-            });
-            XposedBridge.hookAllMethods(activityRecord, "startFreezingScreenLocked",
-                    new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    if (p.args.length < 1 || !(p.args[0] instanceof Integer)) return;
-                    try {
-                        if (preserveTopWindowForRelaunch(p.thisObject, (Integer) p.args[0]))
-                            p.setResult(null);
-                    } catch (Throwable error) {
-                        log("TOP local configuration freeze check unavailable: " + error);
-                    }
-                }
-            });
-            log("TOP owned rotation rebuilds layouts while preserving the real Window");
-        } catch (Throwable error) {
-            log("TOP rotation relaunch hook unavailable: " + error);
-        }
+        FixedRotationRelaunchHooks.install(cl, () -> sTopRotationRelaunchScopes,
+                this::keepTopActivityForRotationConfig,
+                this::preserveTopWindowForRelaunch, HostEntry::log);
         try {
             Class<?> displayContent = XposedHelpers.findClass(
                     "com.android.server.wm.DisplayContent", cl);
