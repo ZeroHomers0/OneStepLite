@@ -322,8 +322,13 @@ final class ShareWorkspace extends FrameLayout {
         if (!dragging) {
             hint.accept(null);return false;
         }
-        if (action==DragEvent.ACTION_DROP)
+        if (action==DragEvent.ACTION_DROP) {
+            // The finger can remain over a side window while the card's arrow tip selects a
+            // share icon. The visible icon selection owns that DROP; only fall back to a
+            // directly hit window when no icon is selected.
+            if (hovered != null) return drag(event, origin);
             return !sameSource && live(generation) && drop(event,new ComponentName(targetPackage,""));
+        }
         if(location)hint.accept(sameSource?"松开取消":supported?"松开分享到此应用 · 停留切换窗口"
                 :windowPackages==null?"正在查询分享入口 · 停留切换窗口":"无匹配分享入口 · 停留切换窗口");
         else if(action==DragEvent.ACTION_DRAG_EXITED)hint.accept(null);

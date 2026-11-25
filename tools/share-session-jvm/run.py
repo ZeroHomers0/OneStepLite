@@ -73,8 +73,12 @@ check(rail.onWindowDrag(new DragEvent(2),"chat.pkg",false),"known compatible win
 check(!rail.onWindowDrag(new DragEvent(2),"other.pkg",false),"unknown window does not advertise an app share");
 rail.sourcePackage="chat.pkg";check(!rail.onWindowDrag(new DragEvent(2),"chat.pkg",false),"source window never highlights");
 rail.sourcePackage=null;
-rail.onWindowDrag(new DragEvent(3),"chat.pkg",false);check(rail.drops==1&&"chat.pkg".equals(rail.lastTarget),"small-window DROP uses target package");
-check(rail.onWindowDrag(new DragEvent(3),null,false)&&rail.drops==2&&"share.icon".equals(rail.lastTarget)&&rail.dragOrigin==rail.root,
+rail.hovered=new Object();
+check(rail.onWindowDrag(new DragEvent(3),"chat.pkg",false)&&rail.drops==1&&"share.icon".equals(rail.lastTarget),
+      "selected share icon owns DROP even when the finger is over a side window");
+rail.hovered=null;
+rail.onWindowDrag(new DragEvent(3),"chat.pkg",false);check(rail.drops==2&&"chat.pkg".equals(rail.lastTarget),"small-window DROP uses target package when no share icon is selected");
+check(rail.onWindowDrag(new DragEvent(3),null,false)&&rail.drops==3&&"share.icon".equals(rail.lastTarget)&&rail.dragOrigin==rail.root,
       "root-window DROP falls back to share-icon mapping");
 rail.onWindowDrag(new DragEvent(4),null,false);check(rail.ends==1&&!rail.dragging,"root drag end always retires session");
 check(!rail.onWindowDrag(new DragEvent(3),"late.pkg",false),"late target DROP rejected");
@@ -106,6 +110,9 @@ rail=new Replay();rail.catchment=new Counter();Counter reach=rail.catchment;rail
 check(reach.closes==1&&rail.catchment==null,"detach removes the temporary arrow hit region");
 check(rail.transition.resets==1,"ordinary detach clears cube animation");
 rail=new Replay();rail.dragging=true;rail.sourcePackage="chat.pkg";check(!rail.onWindowDrag(new DragEvent(3),"chat.pkg",false)&&rail.drops==0,"same-app window release must not send the source message again");
+rail=new Replay();rail.dragging=true;rail.sourcePackage="chat.pkg";rail.hovered=new Object();
+check(rail.onWindowDrag(new DragEvent(3),"chat.pkg",false)&&rail.drops==1&&"share.icon".equals(rail.lastTarget),
+      "selected share icon overrides same-source window cancellation");
 rail=new Replay();rail.dragging=true;rail.cancel();check(rail.panel.restores==1,"cancel restores an active source popup");
 rail=new Replay();rail.cancel();check(rail.panel.restores==0,"idle reset must not end a newly staged source drag");
 System.out.println("Production share session checks="+checks+" passed");
