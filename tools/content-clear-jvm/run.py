@@ -68,10 +68,10 @@ __METHODS__
  public static void main(String[] args){
   Replay images=new Replay(0);images.clearMediaRecords();
   Set<String> imageHidden=images.prefs.values.getOrDefault("hidden_0",Collections.emptySet());
-  check(imageHidden.size()==61,"all image batches and inbox rows are hidden");
+  check(imageHidden.size()==60,"all MediaStore image batches are hidden");
   check(imageHidden.contains("media:0")&&imageHidden.contains("media:59"),"first and last image batches are hidden");
-  check(imageHidden.contains("inbox:0:0"),"imported image is hidden with the page");
-  check(images.prefs.strings.get("hidden_order_0").split("\\n").length==61,"image clear persists ordered identities");
+  check(!imageHidden.contains("inbox:0:0"),"image clear never scans module inbox images");
+  check(images.prefs.strings.get("hidden_order_0").split("\\n").length==60,"image clear persists ordered identities");
   check(images.prefs.strings.get("hidden_order_0").startsWith("media:0\\n")&&
           images.prefs.strings.get("hidden_order_0").endsWith("media:59"),"image clear keeps query order");
   check(images.loads==1&&images.selection.cleared==0,"image page reloads after the full key scan");

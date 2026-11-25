@@ -257,7 +257,6 @@ final class ContentPanel {
     private java.util.Set<String> scanMediaKeys(int token,int page,java.util.Set<String> hidden,
             CancellationSignal signal) {
         java.util.List<ContentEntry> rows=new java.util.ArrayList<>();
-        if(page==0)rows.addAll(inboxRows(token,page,hidden,signal));
         try {
             if(page==1)rows.addAll(RecentFilesSource.load(context,signal,hidden));
             else readImages(signal,hidden,rows);
@@ -322,7 +321,6 @@ final class ContentPanel {
             java.util.Set<String> hidden,boolean refresh,boolean earlyImages) {
         java.util.List<ContentEntry> rows=new java.util.ArrayList<>();
         boolean unavailable=false;
-        if(page==0)rows.addAll(inboxRows(token,page,hidden,signal));
         try {
             if(page==1)rows.addAll(RecentFilesSource.load(context,signal,hidden));
             else readImages(signal,hidden,rows);
@@ -561,8 +559,8 @@ final class ContentPanel {
                 String mime=row.optString("mime","application/octet-stream");
                 if(row.optBoolean("staged") || row.optBoolean("shelf_removed"))continue;
                 boolean text=row.has("text"),image=mime.startsWith("image/");
-                if(page==2?!text:page==0?!image:image || text)continue;
-                if(page==1 && !row.has("document_uri"))continue;
+                if(page==2?!text:page!=1 || text || row.optBoolean("captured")
+                        || !image && !row.has("document_uri"))continue;
                 String id=row.getString("id");
                 Uri uri=text?null:ContentInboxProvider.uri(id);
                 String key=text?"inbox:"+id:uri.toString();
