@@ -7,6 +7,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -37,6 +38,7 @@ final class SourceCaptureController implements AutoCloseable {
     private Bitmap snapshot,result;
     private Rect requested,initialCrop;
     private CaptureCropView crop;
+    private TextView confirmCrop;
     private String storedId;
     private ModalIslandLease island;
     private volatile int generation;
@@ -104,10 +106,8 @@ final class SourceCaptureController implements AutoCloseable {
         Context themed=new android.view.ContextThemeWrapper(windowContext,HyperOsStyle.dark(context)
                 ?android.R.style.Theme_Material_Dialog_NoActionBar:android.R.style.Theme_Material_Light_Dialog_NoActionBar);
         dialog=new Dialog(themed);dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        LinearLayout body=body(themed,initialCrop==null?"框选主窗画面 · 截取结果为图片":"截图预览 · 确认或调整选区");
-        crop=new CaptureCropView(themed,snapshot,initialCrop);body.addView(crop,new LinearLayout.LayoutParams(-1,0,1));
-        LinearLayout actions=new LinearLayout(themed);button(actions,"取消",this::close);button(actions,"使用选区",this::prepare);
-        body.addView(actions,new LinearLayout.LayoutParams(-1,-2));dialog.setContentView(body);
+        LinearLayout body=createCropPage(themed);
+        dialog.setContentView(body);
         dialog.setOnDismissListener(d->close());Window window=dialog.getWindow();if(window==null){close();return;}
         window.setType(WindowTypes.SYSTEM_UI_DIALOG);window.setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
         WindowManager.LayoutParams attrs=window.getAttributes();attrs.setTitle("OneStepLiteContentPanel");
@@ -119,12 +119,24 @@ final class SourceCaptureController implements AutoCloseable {
         island=new ModalIslandLease(body);island.start();
     }
 
+    private LinearLayout createCropPage(Context themed) {
+        crop=new CaptureCropView(themed,snapshot,initialCrop);
+        LinearLayout body=body(themed,"框选主窗",crop);
+        LinearLayout actions=new LinearLayout(themed);
+        confirmCrop=WorkspacePopupStyle.action(themed,"使用选区",true,this::prepare);
+        actions.addView(confirmCrop,WorkspacePopupStyle.actionCell(themed));
+        LinearLayout.LayoutParams footer=new LinearLayout.LayoutParams(-1,-2);
+        footer.topMargin=dp(8);
+        body.addView(actions,footer);
+        return body;
+    }
+
     private void prepare() {
         if(busy || crop==null || closed)return;Rect selection=crop.selectedPixels();
         if(!ContentCapturePolicy.validCrop(selection.left,selection.top,selection.right,selection.bottom,snapshot.getWidth(),snapshot.getHeight())) {
             message("选区太小，请重新框选");return;
         }
-        busy=true;int token=generation;message("正在准备拖曳图片…");
+        setPreparing(true);int token=generation;
         WORKER.execute(()->encode(token,selection));
     }
 
@@ -152,7 +164,7 @@ final class SourceCaptureController implements AutoCloseable {
                 synchronized(pixels){if(snapshot!=null){snapshot.recycle();snapshot=null;}}
             });
         } catch(RuntimeException unavailable) {
-            main.post(()->{if(token==generation){busy=false;message("无法准备图片，请重新框选或使用原有分享");}});
+            main.post(()->{if(token==generation){setPreparing(false);message("无法准备图片，请重新框选或使用原有分享");}});
         } finally {if(picture!=null)picture.recycle();if(created!=null)discard(created);}
     }
 
@@ -168,10 +180,13 @@ final class SourceCaptureController implements AutoCloseable {
     }
 
     private void showResult(Uri uri) {
-        if(dialog==null)return;LinearLayout body=body(dialog.getContext(),"长按图片，拖到分享入口或小窗");
-        ImageView image=new ImageView(dialog.getContext());image.setImageBitmap(result);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        image.setContentDescription("截取的主窗图片，长按拖曳分享");body.addView(image,new LinearLayout.LayoutParams(-1,0,1));
-        LinearLayout actions=new LinearLayout(dialog.getContext());button(actions,"关闭",this::close);body.addView(actions,new LinearLayout.LayoutParams(-1,-2));
+        if(dialog==null)return;
+        Context themed=dialog.getContext();
+        ImageView image=new ImageView(themed);
+        image.setImageBitmap(result);
+        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        image.setContentDescription("截取的主窗图片，长按拖曳分享");
+        LinearLayout body=body(themed,"长按拖曳截图",image);
         image.setOnLongClickListener(view->{
             try {
                 ClipData clip=new ClipData("主窗图片",new String[]{"image/jpeg"},new ClipData.Item(uri));
@@ -190,19 +205,30 @@ final class SourceCaptureController implements AutoCloseable {
             return event.getAction()!=DragEvent.ACTION_DROP;
         });
         dialog.setContentView(body);
+        crop=null;confirmCrop=null;
         if(island!=null)island.close();island=new ModalIslandLease(body);island.start();
     }
 
-    private LinearLayout body(Context themed,String title) {
-        LinearLayout body=new LinearLayout(themed);body.setOrientation(LinearLayout.VERTICAL);body.setPadding(dp(8),dp(8),dp(8),dp(8));
-        WorkspacePopupStyle.decorate(body,null);WorkspacePopupStyle.heading(body,"主窗图片",this::close);
-        TextView text=new TextView(themed);text.setText(title);text.setTextSize(WorkspacePopupStyle.SUPPORT_SP);
-        text.setTextColor(HyperOsStyle.textSecondary(themed));text.setPadding(dp(4),dp(4),dp(4),dp(8));body.addView(text);return body;
+    private LinearLayout body(Context themed,String title,View preview) {
+        LinearLayout body=new LinearLayout(themed);
+        body.setOrientation(LinearLayout.VERTICAL);
+        WorkspacePopupStyle.decorate(body,null);
+        WorkspacePopupStyle.heading(body,title,this::close);
+        GradientDrawable surface=new GradientDrawable();
+        surface.setColor(HyperOsStyle.controlFill(themed,false));
+        surface.setCornerRadius(dp(10));
+        preview.setBackground(surface);
+        preview.setClipToOutline(true);
+        body.addView(preview,new LinearLayout.LayoutParams(-1,0,1));
+        return body;
     }
 
-    private void button(LinearLayout actions,String label,Runnable action) {
-        TextView button=WorkspacePopupStyle.action(actions.getContext(),label,label.equals("使用选区"),action);
-        actions.addView(button,WorkspacePopupStyle.actionCell(actions.getContext()));
+    private void setPreparing(boolean preparing) {
+        busy=preparing;
+        if(confirmCrop!=null){
+            confirmCrop.setEnabled(!preparing);
+            confirmCrop.setText(preparing?"正在准备…":"使用选区");
+        }
     }
 
     private void discard(String id) {WORKER.execute(()->{
@@ -217,7 +243,7 @@ final class SourceCaptureController implements AutoCloseable {
         if(island!=null){island.close();island=null;}
         synchronized(pixels){if(snapshot!=null){snapshot.recycle();snapshot=null;}}
         if(result!=null){result.recycle();result=null;}
-        if(storedId!=null && !consumed)discard(storedId);storedId=null;crop=null;initialCrop=null;
+        if(storedId!=null && !consumed)discard(storedId);storedId=null;crop=null;confirmCrop=null;initialCrop=null;
     }
     private int dp(int value){return HyperOsStyle.dp(context,value);}
     private void message(String text){android.widget.Toast.makeText(context,text,android.widget.Toast.LENGTH_SHORT).show();}

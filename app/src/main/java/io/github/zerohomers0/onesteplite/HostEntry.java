@@ -84,12 +84,10 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
         if ("android".equals(lpparam.packageName)) {
             ContentPermissionBridge.install(lpparam.classLoader,()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
-            PortalDragInput.install(lpparam.classLoader,()->sDisplayContent,
-                    ()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
+            PortalDragInput.install(lpparam.classLoader,()->sDisplayContent,HostEntry::dragShareActive);
             EditorPasteCompat.install(lpparam.classLoader,()->sDisplayContent,
                     ()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
-            NativeContentDragCard.install(lpparam.classLoader,()->sDisplayContent,
-                    ()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
+            NativeContentDragCard.install(lpparam.classLoader,()->sDisplayContent,HostEntry::dragShareActive);
             NativeMultiWindowUnlock.install(lpparam.classLoader, true);
             hookSystemServer(lpparam.classLoader);
             return;
@@ -213,8 +211,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                             return;
                         }
                         sDisplayContent = self;
-                        PortalDragInput.observeDisplay(self,cl,
-                                ()->sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping());
+                        PortalDragInput.observeDisplay(self,cl,HostEntry::dragShareActive);
                         Object service = XposedHelpers.getObjectField(self, "mWmService");
                         Object lock = XposedHelpers.getObjectField(service, "mGlobalLock");
                         Object handler = XposedHelpers.getObjectField(service, "mH");
@@ -432,6 +429,12 @@ public class HostEntry implements IXposedHookLoadPackage {
             log("zoom settings watcher failed: " + error);
         }
     }
+    private static volatile boolean sDragShareEnabled=true;
+
+    private static boolean dragShareActive() {
+        return sDragShareEnabled && sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping();
+    }
+
     /** 文件通道在部分机型被 SELinux/权限挡住；再开一条 SystemUI -> system_server 的广播直投。 */
     private static synchronized void armZoomBridge(Object service) {
         try {
@@ -609,6 +612,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             sZoomBridgeArmed = true;
             BottomReplayInput.install(context, service.getClass().getClassLoader(), handler);
             log("zoom broadcast bridge armed");
+            new WorkspaceSettingsClient(context,handler,options->sDragShareEnabled=options.dragShareEnabled);
         } catch (Throwable error) {
             log("zoom broadcast bridge failed: " + error);
         }

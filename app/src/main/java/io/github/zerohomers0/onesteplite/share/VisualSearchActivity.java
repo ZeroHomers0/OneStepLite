@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.ImageDecoder;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.View;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.LinearLayout;
@@ -46,10 +47,8 @@ public final class VisualSearchActivity extends Activity {
     @android.annotation.SuppressLint("SetJavaScriptEnabled") // Remote image search has no JavaScript bridge or local resource access.
     private void createPage(){
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setBackgroundColor(HyperOsStyle.page(this));
-        LinearLayout actions=new LinearLayout(this);
-        actions.addView(WorkspacePopupStyle.action(this,"返回",false,this::finish),WorkspacePopupStyle.actionCell(this));
-        actions.addView(WorkspacePopupStyle.action(this,"重试",false,()->{if(form!=null)submit();}),WorkspacePopupStyle.actionCell(this));
-        page.addView(actions,new LinearLayout.LayoutParams(-1,-2));
+        View retry=WorkspacePopupStyle.action(this,"重试",false,()->{if(form!=null)submit();});
+        WorkspacePopupStyle.heading(page,"图片搜索",this::finish,retry);
         progress=new android.widget.ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         progress.setIndeterminate(false);
         progress.setContentDescription("正在加载识图结果");

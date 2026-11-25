@@ -34,7 +34,7 @@ static class Anchor {boolean attached=true;boolean isAttachedToWindow(){return a
 static class CurrentUser {static int user;static int id(){return user;}}
 static class Capture implements AutoCloseable {
 final Object pixels=new Object();Anchor anchor=new Anchor();BooleanSupplier ready=()->true;Supplier<Object> bounds=()->this.requested;
-Object requested=new Object(),crop=new Object(),initialCrop=new Object();boolean closed,busy=true,dragging=true,consumed;int generation=42,discards,owner;
+Object requested=new Object(),crop=new Object(),confirmCrop=new Object(),initialCrop=new Object();boolean closed,busy=true,dragging=true,consumed;int generation=42,discards,owner;
 Bitmap snapshot=new Bitmap(),result=new Bitmap();Dialog dialog=new Dialog();Lease island=new Lease();String storedId="pending";
 Object textResult;Lease recognition;
 void discard(String id){discards++;}
@@ -52,7 +52,7 @@ capture.close();check(capture.closed&&!capture.busy&&!capture.dragging&&capture.
 check(original.recycles==1&&selected.recycles==1,"close frees full frame and cropped result");
 check(dialog.dismisses==1&&lease.closes==1,"close dismisses crop window and returns island lease");
 check(capture.discards==1&&capture.storedId==null,"unconsumed capture is deleted from provider");
-check(capture.snapshot==null&&capture.result==null&&capture.crop==null&&capture.dialog==null,"close retains no content views or pixels");
+check(capture.snapshot==null&&capture.result==null&&capture.crop==null&&capture.confirmCrop==null&&capture.dialog==null,"close retains no content views or pixels");
 capture.close();check(original.recycles==1&&selected.recycles==1&&capture.discards==1,"duplicate close never double-frees pixels or records");
 check(!capture.valid(43),"closed capture remains invalid even with current generation");
 capture=new Capture();capture.consumed=true;capture.close();check(capture.discards==0,"accepted drag keeps temporary URI alive for receiver");

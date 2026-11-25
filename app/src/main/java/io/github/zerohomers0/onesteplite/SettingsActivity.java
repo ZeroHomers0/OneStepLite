@@ -11,13 +11,11 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.Gravity;
-import android.view.MenuItem;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toolbar;
 
 /** Workspace settings opened by the native system Settings entry. */
 public final class SettingsActivity extends Activity {
@@ -42,12 +40,8 @@ public final class SettingsActivity extends Activity {
         page.setBackgroundColor(pageBackground);
         getWindow().setBackgroundDrawable(new ColorDrawable(pageBackground));
 
-        Toolbar toolbar = new Toolbar(this);
-        toolbar.setTitle("");
         int barHeight = settingsDimension("miuix_appcompat_action_bar_default_height", 56);
-        toolbar.setMinimumHeight(barHeight);
         FrameLayout titleBar = new FrameLayout(this);
-        titleBar.addView(toolbar, new FrameLayout.LayoutParams(-1, -1));
         pageTitle = new TextView(this);
         pageTitle.setTextSize(WorkspacePopupStyle.TITLE_SP);
         pageTitle.setTypeface(Typeface.create(pageTitle.getTypeface(), Typeface.BOLD));
@@ -60,17 +54,15 @@ public final class SettingsActivity extends Activity {
         FrameLayout.LayoutParams titleBounds = new FrameLayout.LayoutParams(-1, -1);
         titleBounds.leftMargin = titleBounds.rightMargin = barHeight;
         titleBar.addView(pageTitle, titleBounds);
+        titleBar.addView(WorkspacePopupStyle.backButton(this,pageTitle.getCurrentTextColor(),this::navigateBack),
+                new FrameLayout.LayoutParams(barHeight,barHeight,Gravity.START|Gravity.CENTER_VERTICAL));
         page.addView(titleBar, new LinearLayout.LayoutParams(-1, barHeight));
         setContentView(page);
-        setActionBar(toolbar);
-        getActionBar().setDisplayHomeAsUpEnabled(true);
-        toolbar.setNavigationContentDescription("返回");
+
         settings = new WorkspaceSettingsPage(this, savedInstanceState);
         page.addView(settings, new LinearLayout.LayoutParams(-1, 0, 1f));
         getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, () -> {
-                    if (!settings.goBack()) finish();
-                });
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::navigateBack);
 
         page.setOnApplyWindowInsetsListener((view, insets) -> {
             android.graphics.Insets bars = insets.getInsets(
@@ -178,12 +170,7 @@ public final class SettingsActivity extends Activity {
         super.onSaveInstanceState(state);
     }
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == android.R.id.home) {
-            if (!settings.goBack()) finish();
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
+    private void navigateBack() {
+        if (!settings.goBack()) finish();
     }
 }

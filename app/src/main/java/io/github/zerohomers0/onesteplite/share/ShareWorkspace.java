@@ -118,8 +118,7 @@ final class ShareWorkspace extends FrameLayout {
         LayoutParams contentBounds=new LayoutParams(dp(50),-1);contentBounds.leftMargin=dp(6);addView(content,contentBounds);
         if(normalRail instanceof QuickAppRail) {
             content.setTooltipText(null);content.setClickable(false);content.setLongClickable(false);
-            ((QuickAppRail)normalRail).setContentCell(dp(46),content::performClick,
-                    offset->content.setTranslationX(-offset));
+            setFeatureEnabled(true);
         }
         shareFace=new FrameLayout(context);shareFace.setBackground(HyperOsStyle.shareRailBackground(context));
         shareFace.setClipChildren(false);shareFace.setClipToPadding(false);
@@ -548,6 +547,14 @@ final class ShareWorkspace extends FrameLayout {
         cancel(); panel.close();history.stop();
         capture.close();
         if(portal!=null)portal.close();
+    }
+
+    void setFeatureEnabled(boolean enabled) {
+        content.setVisibility(enabled?VISIBLE:INVISIBLE);
+        if(normalRail instanceof QuickAppRail) {
+            ((QuickAppRail)normalRail).setContentCell(enabled?dp(46):0,content::performClick,
+                    offset->content.setTranslationX(-offset));
+        }
     }
 
     void setActive(boolean active) { if(active){history.start();if(portal!=null)portal.start();}else close(); }

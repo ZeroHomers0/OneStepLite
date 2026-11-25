@@ -42,6 +42,7 @@ final class TopBar extends FrameLayout {
     private RectF workspaceMain;
     private TopBarGeometry geometry;
     private boolean workspaceActive = true;
+    private boolean dragShareEnabled=true;
     private final Runnable refreshOpenedApps = new Runnable() {
         @Override public void run() {
             if (!workspaceActive || !isAttachedToWindow() || !isShown()
@@ -59,7 +60,7 @@ final class TopBar extends FrameLayout {
     }
     void setWorkspaceActive(boolean active) {
         workspaceActive = active;
-        if(shareWorkspace!=null)shareWorkspace.setActive(active);
+        if(shareWorkspace!=null)shareWorkspace.setActive(active && dragShareEnabled);
         requestOpenedAppsRefresh();
     }
 
@@ -81,7 +82,7 @@ final class TopBar extends FrameLayout {
                 app->this.listener.onLaunch(app));
         addView(quickRail, new LayoutParams(-1, 1));
         shareWorkspace = new ShareWorkspace(context, quickRail,
-                () -> workspaceActive && this.listener.canShareContent(),
+                () -> workspaceActive && dragShareEnabled && this.listener.canShareContent(),
                 (target, launch) -> this.listener.onContentShare(target, launch),
                 text -> {header.setHint(text);if(tabletHeader!=null)tabletHeader.setHint(text);},
                 () -> this.listener.contentBounds());
@@ -94,6 +95,13 @@ final class TopBar extends FrameLayout {
     private int appliedTheme=-1;
     void applyOptions(WorkspaceOptions options) {
         clock.setShowLunar(options.showLunar);
+        if(dragShareEnabled!=options.dragShareEnabled){
+            dragShareEnabled=options.dragShareEnabled;
+            shareWorkspace.setFeatureEnabled(dragShareEnabled);
+            shareWorkspace.setActive(workspaceActive && dragShareEnabled);
+            header.capture.setVisibility(dragShareEnabled?VISIBLE:INVISIBLE);
+            if(tabletHeader!=null)tabletHeader.capture.setVisibility(dragShareEnabled?VISIBLE:INVISIBLE);
+        }
         if(followTopBarSide!=options.followTopBarSide){
             followTopBarSide=options.followTopBarSide;
             setMainOnRight(mainOnRight);
@@ -139,7 +147,7 @@ final class TopBar extends FrameLayout {
     }
     void closeContentUi() { if (shareWorkspace != null) shareWorkspace.close(); }
     boolean onWindowContentDrag(android.view.DragEvent event, String targetPackage) {
-        return shareWorkspace != null && shareWorkspace.onWindowDrag(event, targetPackage,
+        return dragShareEnabled && shareWorkspace != null && shareWorkspace.onWindowDrag(event, targetPackage,
                 !isShown() || listener.contentRailCovered());
     }
     void setStatusBarInset(int inset) { statusBarInset=Math.max(0,inset);requestLayout(); }
@@ -228,6 +236,7 @@ final class TopBar extends FrameLayout {
             settings=button(IconButton.SETTINGS,"系统设置",()->listener.onOpenSettings());
             expand=button(IconButton.EXPAND_LEFT,"放大为全屏并退出工作区",()->listener.onExit());
             capture=button(IconButton.CAPTURE,"截取主窗图片",()->{if(shareWorkspace!=null)shareWorkspace.captureMain();});
+            capture.setVisibility(dragShareEnabled?VISIBLE:INVISIBLE);
             buttons=new View[]{left,right,topApp,settings,expand,capture};
             icons=new IconButton[]{left,right,topApp,settings,expand,capture};
             updateActions();

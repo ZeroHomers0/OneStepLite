@@ -133,6 +133,14 @@ public class SettingsRegression {
   check(!WorkspaceSettingsStore.decode(new Bundle()).deleteSharedImages,"old provider snapshots never enable cleanup");
   check(WorkspaceSettingsStore.write(c,WorkspaceSettingsStore.read(c).withDeleteSharedImages(false)),"cleanup can be disabled");
   check(!WorkspaceSettingsStore.read(c).deleteSharedImages,"disabled cleanup survives reload");
+  check(old.dragShareEnabled && WorkspaceSettingsStore.decode(new Bundle()).dragShareEnabled,
+       "older settings and provider bundles keep drag share enabled");
+  WorkspaceOptions disabled=WorkspaceSettingsStore.read(c).withDragShareEnabled(false).withThemeMode(1).withShowLunar(false);
+  check(WorkspaceSettingsStore.write(c,disabled),"drag share can be turned off");
+  check(!WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(WorkspaceSettingsStore.read(c))).dragShareEnabled,
+       "disabled drag share survives other settings edits and reaches provider clients");
+  check(WorkspaceSettingsStore.write(c,WorkspaceSettingsStore.read(c).withDragShareEnabled(true))
+          && WorkspaceSettingsStore.read(c).dragShareEnabled,"drag share can be turned back on");
   System.out.println("production settings migration, lock preference and gesture gate checks="+checks+" passed");
  }
 }'''

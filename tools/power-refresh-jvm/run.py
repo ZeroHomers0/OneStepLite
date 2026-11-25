@@ -38,7 +38,7 @@ public class PowerRefreshRegression {
   protected void onWindowVisibilityChanged(int value){windowVisibility=value;}
  }
  static class Rail extends View {
-  boolean workspaceActive=true;int reads,updates,closes;
+  boolean workspaceActive=true,dragShareEnabled=true;int reads,updates,closes;
   class Listener {Set<String> openedAppPackages(){reads++;return Set.of("main");}}
   class QuickRail {void setOpenedPackages(Set<String> p){updates++;}}
   class Picker {void close(){closes++;}}
@@ -70,7 +70,8 @@ __HOST__
   r.onVisibilityChanged(r,0);check(r.pending.size()==1,"showing rail schedules a current snapshot");
   r.setWorkspaceActive(false);r.requestOpenedAppsRefresh();check(r.pending.isEmpty(),"locked workspace has no rail timer");
   check(!r.shareWorkspace.active,"locking also stops content subscriptions");
-  r.setWorkspaceActive(true);r.onWindowVisibilityChanged(8);check(r.pending.isEmpty(),"native hidden window cancels rail work");
+  r.dragShareEnabled=false;r.setWorkspaceActive(true);check(!r.shareWorkspace.active,"disabled drag share does not start on wake");
+  r.dragShareEnabled=true;r.setWorkspaceActive(true);r.onWindowVisibilityChanged(8);check(r.pending.isEmpty(),"native hidden window cancels rail work");
   r.onWindowVisibilityChanged(0);r.onDetachedFromWindow();check(r.pending.isEmpty(),"detaching removes the queued runnable");
   r.onAttachedToWindow();check(r.pending.size()==1,"reattach restarts exactly once");
   Host h=new Host();h.startWorkspaceHeartbeat();h.startWorkspaceHeartbeat();

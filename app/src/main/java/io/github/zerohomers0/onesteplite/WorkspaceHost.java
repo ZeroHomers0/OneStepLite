@@ -285,7 +285,11 @@ public final class WorkspaceHost {
         }
         workspaceSettings = new WorkspaceSettingsClient(this.ctx, main, options -> {
             HyperOsStyle.theme(options.themeMode);
+            boolean sharingDisabled=workspaceOptions.dragShareEnabled && !options.dragShareEnabled;
             workspaceOptions = options;
+            if(sharingDisabled){
+                contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();
+            }
             if (topBar != null) topBar.applyOptions(options);
             if(scene==ACTIVE && screenOn && !keyguardLocked)refreshQuickApps();
             if (root != null) {
@@ -4903,7 +4907,7 @@ public final class WorkspaceHost {
             contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();showQuickDrop(root,null);
             return topBar!=null && topBar.onWindowContentDrag(event,null);
         }
-        if(topBar==null || scene!=ACTIVE || !screenOn || keyguardLocked
+        if(topBar==null || !workspaceOptions.dragShareEnabled || scene!=ACTIVE || !screenOn || keyguardLocked
                 || promotion!=null || transferBusy || taskCellsCovered) {
             contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();showQuickDrop(root,null);
             return false;

@@ -91,16 +91,34 @@ final class WorkspacePopupStyle {
         int gap=dp(context,3);cell.setMargins(gap,gap,gap,gap);return cell;
     }
 
+    static IconButton backButton(Context context,int tint,Runnable back) {
+        IconButton button=new IconButton(context,IconButton.BACK,"返回");
+        button.setIconColor(tint);
+        button.setOnClickListener(view->back.run());
+        return button;
+    }
+
     static void heading(android.widget.LinearLayout body,String title,Runnable back) {
+        heading(body,title,back,null);
+    }
+
+    static void heading(android.widget.LinearLayout body,String title,Runnable back,View trailingAction) {
         Context context=body.getContext();android.widget.LinearLayout row=new android.widget.LinearLayout(context);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        android.widget.TextView previous=action(context,"‹",false,back);previous.setTextSize(24);
-        previous.setContentDescription("返回");row.addView(previous,new android.widget.LinearLayout.LayoutParams(dp(context,ACTION_HEIGHT_DP),dp(context,ACTION_HEIGHT_DP)));
+        int height=dp(context,ACTION_HEIGHT_DP);
+        int tint=HyperOsStyle.textPrimary(context);
+        row.addView(backButton(context,tint,back),new android.widget.LinearLayout.LayoutParams(height,height));
         android.widget.TextView label=new android.widget.TextView(context);label.setText(title);label.setTextSize(TITLE_SP);
-        label.setTypeface(android.graphics.Typeface.DEFAULT,android.graphics.Typeface.BOLD);label.setTextColor(HyperOsStyle.textPrimary(context));
+        label.setTypeface(android.graphics.Typeface.DEFAULT,android.graphics.Typeface.BOLD);label.setTextColor(tint);
         label.setSingleLine(true);label.setEllipsize(android.text.TextUtils.TruncateAt.END);label.setAccessibilityHeading(true);
-        label.setPadding(dp(context,12),0,0,0);row.addView(label,new android.widget.LinearLayout.LayoutParams(0,-2,1));
-        android.widget.LinearLayout.LayoutParams bounds=new android.widget.LinearLayout.LayoutParams(-1,dp(context,44));
+        label.setPaddingRelative(dp(context,4),0,dp(context,8),0);
+        row.addView(label,new android.widget.LinearLayout.LayoutParams(0,-2,1));
+        if(trailingAction!=null){
+            android.widget.LinearLayout.LayoutParams actionBounds=new android.widget.LinearLayout.LayoutParams(-2,height);
+            actionBounds.setMarginEnd(dp(context,8));
+            row.addView(trailingAction,actionBounds);
+        }
+        android.widget.LinearLayout.LayoutParams bounds=new android.widget.LinearLayout.LayoutParams(-1,height);
         bounds.bottomMargin=dp(context,8);body.addView(row,0,bounds);
     }
 

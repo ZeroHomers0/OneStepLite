@@ -8,6 +8,9 @@ public final class HeaderActionsRegression {
     static class View {
         interface Click { void run(View view); }
         interface Touch { boolean run(View view,android.view.MotionEvent event); }
+        static final int VISIBLE=0,INVISIBLE=4;
+        int visibility=VISIBLE;
+        void setVisibility(int value) { visibility=value; }
         Click click;
         boolean enabled=true;
         boolean isEnabled(){return enabled;}
@@ -49,6 +52,7 @@ public final class HeaderActionsRegression {
     static class Bar {
         static class Share {int captures;void captureMain(){captures++;}}
         Share shareWorkspace;
+        boolean dragShareEnabled=true;
         Owner listener;
         Bar(Owner owner) { listener=owner; }
         __BIND__
@@ -80,6 +84,9 @@ public final class HeaderActionsRegression {
             idle=current;
             idle.left=idle.right=idle.pins=idle.settings=idle.exits=0;
         }
+        bar.dragShareEnabled=false;
+        check(bar.new Header(new Context(),null).capture.visibility==View.INVISIBLE,
+                "a header created while sharing is off starts with the screenshot entry hidden");
         System.out.println("Production cached header click checks="+checks+" passed");
     }
 }

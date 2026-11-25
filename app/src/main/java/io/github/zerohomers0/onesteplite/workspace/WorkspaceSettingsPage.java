@@ -151,6 +151,9 @@ final class WorkspaceSettingsPage extends FrameLayout {
 
         section("内容分享");
         LinearLayout sharing=card();
+        switchOption(sharing,"拖曳分享","将文字、图片和文件拖到分享栏或小窗；关闭后隐藏顶栏内容和截图入口",
+                options.dragShareEnabled,checked->persist(WorkspaceSettingsStore.read(activity).withDragShareEnabled(checked)));
+        divider(sharing);
         switchOption(sharing,"分享后清理临时图片","截取、提取的图片默认保留24小时；开启后缩短为交付10分钟，不删除相册原图",options.deleteSharedImages,
                 checked->persist(WorkspaceSettingsStore.read(activity).withDeleteSharedImages(checked)));
         add(sharing,0,12);

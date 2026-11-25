@@ -12,7 +12,7 @@ final class IconButton extends View {
     static final int SETTINGS = 0, CLOSE = 10, SIDE_LEFT = 13, SIDE_RIGHT = 14,
             PLAY = 16, PAUSE = 17, VIDEO_RETURN = 18, TOP_APP = 19, EXPAND_LEFT = 20, EXPAND_RIGHT = 21,
             VIDEO_FIT = 22, VIDEO_FILL = 23, CONTENT = 24, CAPTURE = 25, MORE = 26, CHECK = 27,
-            MORE_VERTICAL = 28;
+            MORE_VERTICAL = 28, BACK = 29;
     private int icon;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** One scratch path: a button paints exactly one glyph per frame. */
@@ -73,6 +73,10 @@ final class IconButton extends View {
             if (icon == MORE_VERTICAL) canvas.rotate(90,12,12);
             canvas.drawCircle(6,12,1.65f,paint);canvas.drawCircle(12,12,1.65f,paint);
             canvas.drawCircle(18,12,1.65f,paint);
+        } else if (icon == BACK) {
+            if(getLayoutDirection()==LAYOUT_DIRECTION_RTL)canvas.scale(-1,1,12,12);
+            canvas.drawLine(14,6,8,12,paint);
+            canvas.drawLine(8,12,14,18,paint);
         } else if (icon == CHECK) {
             canvas.drawLine(5,11,10,16,paint);canvas.drawLine(10,16,19,6,paint);
         } else if (icon == CAPTURE) {

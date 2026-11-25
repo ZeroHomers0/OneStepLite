@@ -19,9 +19,14 @@ public final class TextDragActivity extends Activity {
     @Override protected void onStop(){super.onStop();if(!dragging)finish();}
 
     @Override protected void onCreate(Bundle state) {
-        HyperOsStyle.theme(WorkspaceSettingsStore.read(this).themeMode);
+        WorkspaceOptions options=WorkspaceSettingsStore.read(this);
+        HyperOsStyle.theme(options.themeMode);
         setTheme(HyperOsStyle.dark(this)?android.R.style.Theme_Material_Dialog_NoActionBar:android.R.style.Theme_Material_Light_Dialog_NoActionBar);
         super.onCreate(state);
+        if(!options.dragShareEnabled){
+            android.widget.Toast.makeText(this,"拖曳分享已关闭",android.widget.Toast.LENGTH_SHORT).show();
+            finish();return;
+        }
         requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         CharSequence selected=Intent.ACTION_PROCESS_TEXT.equals(getIntent().getAction())
                 ?getIntent().getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT):null;
@@ -41,7 +46,7 @@ public final class TextDragActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);
         scroll.addView(text);body.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         text.setOnLongClickListener(v->{
-            if(!pointerActive)return false;
+            if(!pointerActive || !WorkspaceSettingsStore.read(this).dragShareEnabled)return false;
             try {
                 ClipData clip=ClipData.newPlainText("选中文字",value);ContentDragShadow shadow=new ContentDragShadow(v,1);shadow.mark(clip);
                 android.os.PersistableBundle metadata=clip.getDescription().getExtras();

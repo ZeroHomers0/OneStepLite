@@ -46,6 +46,7 @@ final class QuickAppRail extends View {
 
     void setContentCell(float width,Runnable click,java.util.function.Consumer<Float> move) {
         prefixWidth=width;prefixClick=click;prefixMove=move;
+        scrollOffset=Math.min(scrollOffset,maxScroll());
         prefixMove.accept(scrollOffset);invalidate();
     }
     private final OverScroller scroller;
