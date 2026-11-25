@@ -2834,76 +2834,10 @@ public class HostEntry implements IXposedHookLoadPackage {
     private static final ThreadLocal<Boolean> sWorkspaceLauncherTaskQuery = new ThreadLocal<>();
 
     private void installWorkspaceRunningTasks(ClassLoader cl) {
-        try {
-            Class<?> running = XposedHelpers.findClass("com.android.server.wm.RunningTasks", cl);
-            Class<?> taskClass = XposedHelpers.findClass("com.android.server.wm.Task", cl);
-            // The ROM passes the original caller at argument 5, before clearing Binder identity.
-            for (java.lang.reflect.Method method : running.getDeclaredMethods()) {
-                if (!method.getName().equals("getTasks") || method.getParameterCount() != 7
-                        || method.getParameterTypes()[5] != int.class) continue;
-                XposedBridge.hookMethod(method, new XC_MethodHook() {
-                    @Override protected void beforeHookedMethod(MethodHookParam p) {
-                        p.setObjectExtra("onesteplitePreviousTaskQuery", sWorkspaceLauncherTaskQuery.get());
-                        boolean launcher = false;
-                        try {
-                            Context context = (Context) sSystemContext;
-                            String[] packages = context == null ? null : context.getPackageManager()
-                                    .getPackagesForUid((Integer) p.args[5]);
-                            launcher = packages != null
-                                    && java.util.Arrays.asList(packages).contains(Packages.LAUNCHER);
-                        } catch (Throwable unavailable) { /* Preserve native queries on lookup failure. */ }
-                        sWorkspaceLauncherTaskQuery.set(sZoomed && launcher);
-                    }
-                    @Override protected void afterHookedMethod(MethodHookParam p) {
-                        Boolean previous = (Boolean) p.getObjectExtra("onesteplitePreviousTaskQuery");
-                        if (previous == null) sWorkspaceLauncherTaskQuery.remove();
-                        else sWorkspaceLauncherTaskQuery.set(previous);
-                    }
-                });
-            }
-            XposedHelpers.findAndHookMethod(running, "accept", taskClass, new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    if (!sZoomed || !Boolean.TRUE.equals(sWorkspaceLauncherTaskQuery.get())) return;
-                    try {
-                        Object task = p.args[0];
-                        if (XposedHelpers.callMethod(task, "getDisplayContent") != sDisplayContent) return;
-                        Object lease = DesktopLaunchBridge.runningTaskLease(task);
-                        // Launcher also queries this list at native Back DOWN. Hiding the focused
-                        // TOP makes it classify the underlying Home and cancel the gesture.
-                        if (lease != null && DesktopLaunchBridge.recentsLeaseAlive(lease)
-                                && !ImePolicy.isFocusedTopTask(task, sDisplayContent,
-                                        DesktopLaunchBridge::ownsTopTask))
-                            p.setResult(null);
-                    } catch (Throwable unavailable) { /* An uncertain task remains a native candidate. */ }
-                }
-            });
-            log("workspace Launcher running-task scan skips passive leases and retains native-focused TOP before maxNum");
-        } catch (Throwable unavailable) { log("workspace running-task hook unavailable: " + unavailable); }
-        try {
-            Class<?> vendor = XposedHelpers.findClass(
-                    "com.android.server.wm.ActivityTaskManagerServiceImpl", cl);
-            XposedBridge.hookMethod(vendor.getDeclaredMethod("getTasksUnlock", int.class, int.class),
-                    new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    if (!sZoomed || !Integer.valueOf(0).equals(p.args[1])) return;
-                    try {
-                        Context context = (Context) sSystemContext;
-                        String[] packages = context == null ? null : context.getPackageManager()
-                                .getPackagesForUid(Binder.getCallingUid());
-                        if (packages == null || !java.util.Arrays.asList(packages)
-                                .contains(Packages.LAUNCHER)) return;
-                        // OS3's shared task cache bypasses RunningTasks.accept and truncates first.
-                        // Native traversal preserves caller permissions and our exact lease filter.
-                        Object atms = XposedHelpers.getObjectField(p.thisObject, "mAtmService");
-                        Object tasks = XposedHelpers.callMethod(atms, "getTasks",
-                                p.args[0], false, false, 0);
-                        if (tasks instanceof java.util.List) p.setResult(tasks);
-                    } catch (Throwable unavailable) { /* Preserve the OEM query on uncertainty. */ }
-                }
-            });
-            log("workspace Launcher cached-task query uses native filtered default-display traversal");
-        } catch (Throwable unavailable) { log("workspace cached-task hook unavailable: " + unavailable); }
+        WorkspaceRunningTasksHooks.install(cl, () -> sSystemContext, () -> sDisplayContent,
+                () -> sZoomed, sWorkspaceLauncherTaskQuery, HostEntry::log);
     }
+
 
     private void installWorkspaceWindowFocus(ClassLoader cl) {
         try {

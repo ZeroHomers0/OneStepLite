@@ -82,15 +82,13 @@ public class ActivityTaskManagerServiceImpl {
  }
 }
 '''
-host = (SRC / 'HostEntry.java').read_text(encoding='utf-8-sig')
-start = host.index('    private void installWorkspaceRunningTasks(ClassLoader cl) {')
-end = host.index('\n    private void ', start + 10)
 files['io/github/zerohomers0/onesteplite/HostEntry.java'] = '''package io.github.zerohomers0.onesteplite;
-import android.content.Context;import android.os.Binder;import de.robv.android.xposed.*;
 class HostEntry {static boolean sZoomed=true;static Object sDisplayContent;
- static Object sSystemContext=new Context();static ThreadLocal<Boolean> sWorkspaceLauncherTaskQuery=new ThreadLocal<>();
- static void log(String s){}static void install(){new HostEntry().installWorkspaceRunningTasks(HostEntry.class.getClassLoader());}
-''' + host[start:end] + '\n}'
+ static Object sSystemContext=new android.content.Context();static ThreadLocal<Boolean> sWorkspaceLauncherTaskQuery=new ThreadLocal<>();
+ static void log(String s){}static void install(){WorkspaceRunningTasksHooks.install(
+  HostEntry.class.getClassLoader(),()->sSystemContext,()->sDisplayContent,()->sZoomed,
+  sWorkspaceLauncherTaskQuery,HostEntry::log);}
+}'''
 files['io/github/zerohomers0/onesteplite/RunningTasksTest.java'] = '''package io.github.zerohomers0.onesteplite;
 import android.os.*;import android.content.*;import com.android.server.wm.*;import de.robv.android.xposed.*;import java.util.*;
 public class RunningTasksTest {
@@ -218,7 +216,8 @@ for name, source in files.items():
     path.write_text(source, encoding='utf-8')
 jdk = Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 production = ['DesktopLaunchBridge.java', 'DesktopIconLaunchPolicy.java', 'TaskLaunchIdentity.java', 'SideRoleChange.java',
-              'ImePolicy.java', 'ZoomChannelState.java', 'ZoomCommand.java', 'ZoomAnimCommand.java', 'Actions.java', 'Packages.java']
+              'ImePolicy.java', 'ZoomChannelState.java', 'ZoomCommand.java', 'ZoomAnimCommand.java', 'Actions.java',
+              'Packages.java', 'WorkspaceRunningTasksHooks.java']
 subprocess.run([str(jdk / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(OUT)]
                + [str(OUT / name) for name in files] + [str(SRC / name) for name in production], check=True)
 subprocess.run([str(jdk / 'java.exe'), '-cp', str(OUT), 'io.github.zerohomers0.onesteplite.RunningTasksTest'], check=True)
