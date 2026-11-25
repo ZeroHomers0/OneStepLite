@@ -57,7 +57,9 @@ Counter pendingRead,delegatedRead,catchment;Counter panel=new Counter(),history=
 Transition transition=new Transition();float alpha=1;
 Targets targets=new Targets();
 boolean accepts(Object description){return true;}boolean live(int token){return dragging&&ready.getAsBoolean();}
-boolean drag(DragEvent event,Object plate){if(event.action==1){starts++;dragging=true;}if(event.action==3){drops++;lastTarget="share.icon";return true;}if(event.action==4){ends++;finishVisuals();}return true;}
+final View root=new View();Object dragOrigin;
+View getRootView(){return root;}
+boolean drag(DragEvent event,Object plate){dragOrigin=plate;if(event.action==1){starts++;dragging=true;}if(event.action==3){drops++;lastTarget="share.icon";return true;}if(event.action==4){ends++;finishVisuals();}return true;}
 boolean drop(DragEvent event,ComponentName target){drops++;lastTarget=target.pkg;return true;}
 void stopEdge(){stops++;}void setAlpha(float value){alpha=value;}
 __METHODS__
@@ -70,7 +72,7 @@ check(!rail.onWindowDrag(new DragEvent(2),"other.pkg",false),"unknown window doe
 rail.sourcePackage="chat.pkg";check(!rail.onWindowDrag(new DragEvent(2),"chat.pkg",false),"source window never highlights");
 rail.sourcePackage=null;
 rail.onWindowDrag(new DragEvent(3),"chat.pkg",false);check(rail.drops==1&&"chat.pkg".equals(rail.lastTarget),"small-window DROP uses target package");
-check(rail.onWindowDrag(new DragEvent(3),null,false)&&rail.drops==2&&"share.icon".equals(rail.lastTarget),
+check(rail.onWindowDrag(new DragEvent(3),null,false)&&rail.drops==2&&"share.icon".equals(rail.lastTarget)&&rail.dragOrigin==rail.root,
       "root-window DROP falls back to share-icon mapping");
 rail.onWindowDrag(new DragEvent(4),null,false);check(rail.ends==1&&!rail.dragging,"root drag end always retires session");
 check(!rail.onWindowDrag(new DragEvent(3),"late.pkg",false),"late target DROP rejected");

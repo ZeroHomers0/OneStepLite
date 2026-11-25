@@ -32,7 +32,7 @@ final class ContentPanelActions extends FrameLayout {
             addAction(menu,"多选",dismiss,select);
             if(page==1)addAction(menu,"更多文件",dismiss,browse);
             if(page==2)addAction(menu,"历史设置",dismiss,record);
-            addAction(menu,page==3?"移除暂存":"清除记录",dismiss,clear);
+            addAction(menu,page==3?"移除暂存":page==2?"清空历史":"清除记录",dismiss,clear);
             menuHost.accept(menu);
         });
     }

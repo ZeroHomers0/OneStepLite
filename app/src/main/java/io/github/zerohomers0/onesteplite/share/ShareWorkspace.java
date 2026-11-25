@@ -306,7 +306,7 @@ final class ShareWorkspace extends FrameLayout {
         // No side-window package means the root Host window received the event. It must still
         // feed LOCATION/DROP back into this session so the arrow can select a share icon and
         // accept the DROP; returning false here was the silent share-bar cancellation.
-        if(targetPackage==null)return drag(event,null);
+        if(targetPackage==null)return drag(event,getRootView());
         int action=event.getAction();
         boolean location=action==DragEvent.ACTION_DRAG_LOCATION;
         boolean sameSource=targetPackage!=null && targetPackage.equals(sourcePackage);

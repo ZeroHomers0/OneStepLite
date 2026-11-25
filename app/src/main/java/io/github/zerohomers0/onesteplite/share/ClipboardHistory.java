@@ -80,9 +80,9 @@ final class ClipboardHistory {
     }
 
     private void capture(String value,int expectedOwner,int expectedGeneration) {
-        if(owner!=expectedOwner || generation!=expectedGeneration
-                || !ContentAccessCompat.currentProcessUser() || CurrentUser.id()!=expectedOwner)return;
         synchronized(lock) {
+            if(owner!=expectedOwner || generation!=expectedGeneration
+                    || !ContentAccessCompat.currentProcessUser() || CurrentUser.id()!=expectedOwner)return;
             try {
                 List<Record> records=records(expectedOwner);boolean pinned=false;
                 for(Record row:records)if(row.text.equals(value))pinned=row.pinned;
@@ -131,7 +131,10 @@ final class ClipboardHistory {
 
     void clear() {
         int user=CurrentUser.id();
-        synchronized(lock) { preferences(user).edit().remove("records").apply(); }
+        synchronized(lock) {
+            generation++;
+            preferences(user).edit().remove("records").apply();
+        }
     }
 
     private void save(List<Record> records,int user) {
