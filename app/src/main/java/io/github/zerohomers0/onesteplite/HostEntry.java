@@ -1516,53 +1516,9 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private void installTopSystemBarReturn(ClassLoader cl) {
-        try {
-            Class<?> controller = XposedHelpers.findClass("com.android.server.wm.MiuiStatusBarController", cl);
-            if (!TopSystemBars.supported(controller)) {
-                log("upper native system bar return uses ROM transition lifecycle; no task-owner replay API");
-                return;
-            }
-            Class<?> follow = XposedHelpers.findClass("com.android.server.wm.BarFollowAnimationImpl", cl);
-            XposedBridge.hookAllMethods(follow, "onTaskInfoChanedForCaptionBar", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (p.hasThrowable() || p.args.length != 1) return;
-                    topSystemBarsChanged(XposedHelpers.getObjectField(p.thisObject, "mStatusBarController"), p.args[0]);
-                }
-            });
-            XposedBridge.hookAllMethods(controller, "resetStatusBarState", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (!p.hasThrowable()) topSystemBarsChanged(p.thisObject,
-                            XposedHelpers.getObjectField(p.thisObject, "mCurrentTopTask"));
-                }
-            });
-            Class<?> display = XposedHelpers.findClass("com.android.server.wm.DisplayContent", cl);
-            XposedBridge.hookAllMethods(display, "updateFocusedWindowLocked", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    ZoomTarget target = sZoomTarget;
-                    if (p.hasThrowable() || target == null || p.thisObject != target.display
-                            || !sZoomed || !sFullscreenRotationActive) return;
-                    synchronized (target.globalLock) {
-                        sTopSystemBars.focused(target.display, target.globalLock,
-                                () -> sZoomed && sFullscreenRotationActive && sZoomTarget == target,
-                                HostEntry::log);
-                    }
-                }
-            });
-            log("upper native system bar return follows task/focus/transition lifecycle");
-        } catch (Throwable unavailable) { log("upper native system bar return hooks unavailable: " + unavailable); }
+        TopSystemBarReturnHooks.install(cl, sTopSystemBars, () -> sZoomTarget,
+                () -> sZoomed, () -> sFullscreenRotationActive, HostEntry::log);
     }
-
-    private static void topSystemBarsChanged(Object controller, Object task) {
-        ZoomTarget target = sZoomTarget;
-        if (target == null || !sZoomed || !sFullscreenRotationActive) return;
-        synchronized (target.globalLock) {
-            if (sZoomTarget != target) return;
-            sTopSystemBars.changed(controller, task, target.display, target.globalLock,
-                    () -> sZoomed && sFullscreenRotationActive && sZoomTarget == target,
-                    HostEntry::log);
-        }
-    }
-
     /** Hold the workspace portrait; app transforms must never announce display rotation. */
     private void installFixedMainRotationHooks(ClassLoader cl) {
         try {
