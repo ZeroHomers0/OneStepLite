@@ -7,19 +7,20 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 
 root = Path(__file__).resolve().parents[2]
 src=package_dir(root)
-source = (src / 'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+source = (src / 'WorkspaceWallpaperController.java').read_text(encoding='utf-8-sig')
+host_source = (src / 'WorkspaceHost.java').read_text(encoding='utf-8-sig')
 
 
-def method(signature):
-    start = source.find(signature)
+def method(signature, text=source):
+    start = text.find(signature)
     if start < 0:
         return ''
-    brace = source.index('{', start)
+    brace = text.index('{', start)
     depth, end = 1, brace + 1
     while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
+        depth += (text[end] == '{') - (text[end] == '}')
         end += 1
-    return source[start:end]
+    return text[start:end]
 
 
 out = Path(sys.argv[1])
@@ -133,12 +134,12 @@ public class WallpaperLayoutRegression {
   System.out.println("actual Host wallpaper layout checks="+checks+" passed");
  }
 }
-'''.replace('__METHOD__', '\n'.join(map(method, (
-    '    private void applyWallpaperBackdrops() {',
-    '    private void refreshEmptyHintBackdrop(Slot slot) {',
-    '    private void updateHint(Slot slot) {',
-    '    private boolean presentsSlot(Slot slot) {',
-))))
+'''.replace('__METHOD__', '\n'.join([
+    method('    void applyWallpaperBackdrops() {'),
+    method('    void refreshEmptyHintBackdrop(Slot slot) {'),
+    method('    private void updateHint(Slot slot) {', host_source),
+    method('    private boolean presentsSlot(Slot slot) {', host_source),
+])).replace('host.','').replace('WorkspaceHost.','').replace('log.accept(','log(').replace('coordinatorTopGeometry()','topGeometry()').replace('coordinatorSideSegmentTop(','sideSegmentTop(').replace('coordinatorWorkspaceMainHole()','workspaceMainHole()').replace('coordinatorUpdateWorkspaceBacking(','updateWorkspaceBacking(').replace('coordinatorPresentsSlot(','presentsSlot(').replace('coordinatorSlotTop()','SLOT_TOP')
 java = out / 'WallpaperLayoutRegression.java'
 java.write_text(body, encoding='utf-8')
 typed_value = out / 'android/util/TypedValue.java'

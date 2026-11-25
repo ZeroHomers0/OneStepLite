@@ -20,7 +20,10 @@ $identitySources=Join-Path $root 'build\generated\buildIdentity'
 if($LASTEXITCODE -ne 0){throw 'Build identity generation failed.'}
 $production += Join-Path $identitySources 'io\github\zerohomers0\onesteplite\BuildIdentity.java'
 New-Item -ItemType Directory -Force -Path $classes | Out-Null
-& (Join-Path $jdk 'javac.exe') -encoding UTF-8 -nowarn --release 17 -cp "$android;$(Join-Path $root 'libs\xposed-api-82.jar')" -d $classes @production
+$productionArgFile = Join-Path $out 'production-sources.args'
+$productionArgs = @($production | ForEach-Object { '"' + ($_ -replace '\\','/' -replace '"','\"') + '"' })
+[IO.File]::WriteAllLines($productionArgFile, $productionArgs, [Text.UTF8Encoding]::new($false))
+& (Join-Path $jdk 'javac.exe') -encoding UTF-8 -nowarn --release 17 -cp "$android;$(Join-Path $root 'libs\xposed-api-82.jar')" -d $classes "@$productionArgFile"
 if($LASTEXITCODE -ne 0){throw 'Production compilation failed.'}
 $tests=@(Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Filter '*.java' | ForEach-Object FullName)
 $cp="$classes;$android;$(Join-Path $root 'libs\xposed-api-82.jar')"

@@ -14,11 +14,11 @@ final class WorkspaceDebugController {
     }
 
     void debugLaunch(int slot, String pkg) {
-        host.main.post(() -> host.launchWhenReady(slot, pkg, 0));
+        host.main.post(() -> host.coordinatorLaunchWhenReady(slot, pkg, 0));
     }
 
     void debugSwap(int slot) {
-        host.main.post(() -> host.swapWithMain(slot));
+        host.main.post(() -> host.coordinatorSwapWithMain(slot));
     }
 
     void debugTraceNextSwap() {
@@ -42,7 +42,7 @@ final class WorkspaceDebugController {
                     new java.io.File(host.ctx.getFilesDir(), "onesteplite-swap-traces"),
                     WorkspaceHost::log, previous == null ? -1 : previous.id,
                     previous == null ? null : previous.token, ticket.taskId, ticket.token,
-                    ticket.slot.controller, host.shellOrganizer(), host.layout.describe(),
+                    ticket.slot.controller, host.coordinatorShellOrganizer(), host.layout.describe(),
                     closed -> { if (swapTrace == closed) swapTrace = null; });
         } catch (Throwable error) {
             WorkspaceHost.log("passive trace unavailable: " + error);
@@ -70,16 +70,16 @@ final class WorkspaceDebugController {
             WorkspaceHost.log("debugMirror: bad rect " + w + "x" + h);
             return;
         }
-        host.main.post(() -> host.startMirrorPoc(taskId,
+        host.main.post(() -> host.coordinatorStartMirrorPoc(taskId,
                 new Rect(x, y, x + w, y + h), Math.max(1000, holdMs), hideMode));
     }
 
     void debugLeashAnim(int slotIndex, int durationMs, String pkg) {
-        host.main.post(() -> host.runLeashAnimPoc(slotIndex, Math.max(150, durationMs), pkg));
+        host.main.post(() -> host.coordinatorRunLeashAnimPoc(slotIndex, Math.max(150, durationMs), pkg));
     }
 
     void debugRoots() {
-        if (!host.executeOnShell(() -> host.dumpRoots("debug")))
+        if (!host.coordinatorExecuteOnShell(() -> host.coordinatorDumpRoots("debug")))
             WorkspaceHost.log("debugRoots skipped: no shell queue");
     }
 

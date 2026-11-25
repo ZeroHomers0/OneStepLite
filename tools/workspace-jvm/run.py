@@ -7,14 +7,19 @@ import sys
 root=Path(__file__).resolve().parents[2]; src=package_dir(root)
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 host=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-def member(signature):
- a=host.index(signature);b=host.index('{',a);d=1;i=b+1
+wallpaper=(src/'WorkspaceWallpaperController.java').read_text(encoding='utf-8-sig')
+def member(signature, text=host):
+ a=text.index(signature);b=text.index('{',a);d=1;i=b+1
  while d:
-  if host[i]=='{':d+=1
-  elif host[i]=='}':d-=1
+  if text[i]=='{':d+=1
+  elif text[i]=='}':d-=1
   i+=1
- return host[a:i]
-methods='\n'.join(member(s) for s in ['    private void prepareWorkspaceBackdrop(', '    private void releaseWorkspaceBackdrop(', '    private void retireWorkspaceBackdrop(', '    private void placeSideView(', '    private void beginWorkspaceEntry(', '    private void awaitWorkspaceFrame(', '    private void setWorkspaceAlpha(', '    private void stageCellPresentation(', '    private Rect workspaceCellCrop(Slot slot)', '    private Rect workspaceCellCrop(int[] rect,', '    private android.graphics.RectF workspaceMainHole(', '    private android.graphics.RectF workspaceMainHoleAt(', '    private android.graphics.RectF workspaceTopHole(', '    private android.graphics.RectF workspaceSideHole(', '    private void updateWorkspaceBacking(', '    private void updateWorkspaceBackdropVisibility(', '    private void updateChromeClip(', '    private void clipChromeBesideMain(', '    private int[] sideBackingBounds(', '    private int sideSegmentTop(', '    private int sideSegmentHeight(', '    private void playWorkspaceFade(', '    private void suspendSession(', '    private void finishPendingSuspend(', '    private boolean ownsCellPresentation(', '    private boolean cellPresentationVisible(', '    private void updateCellSurfaceVisibility('])
+ return text[a:i]
+base_signatures=['    private void prepareWorkspaceBackdrop(', '    private void releaseWorkspaceBackdrop(', '    private void retireWorkspaceBackdrop(', '    private void placeSideView(', '    private void beginWorkspaceEntry(', '    private void awaitWorkspaceFrame(', '    private void setWorkspaceAlpha(', '    private void stageCellPresentation(', '    private Rect workspaceCellCrop(Slot slot)', '    private Rect workspaceCellCrop(int[] rect,', '    private android.graphics.RectF workspaceMainHole(', '    private android.graphics.RectF workspaceMainHoleAt(', '    private android.graphics.RectF workspaceTopHole(', '    private android.graphics.RectF workspaceSideHole(', '    private void updateWorkspaceBacking(', '    private void updateChromeClip(', '    private void clipChromeBesideMain(', '    private int[] sideBackingBounds(', '    private int sideSegmentTop(', '    private int sideSegmentHeight(', '    private void playWorkspaceFade(', '    private void suspendSession(', '    private void finishPendingSuspend(', '    private boolean ownsCellPresentation(', '    private boolean cellPresentationVisible(', '    private void updateCellSurfaceVisibility(']
+methods='\n'.join(member(s) for s in base_signatures)
+wallpaper_method=member('    void updateWorkspaceBackdropVisibility() {', wallpaper)
+wallpaper_method=wallpaper_method.replace('host.','').replace('WorkspaceHost.','').replace('coordinatorWorkspaceMainHole()','workspaceMainHole()').replace('coordinatorUpdateWorkspaceBacking(','updateWorkspaceBacking(').replace('coordinatorSlotCount()','SLOT_COUNT')
+methods+='\n'+wallpaper_method
 methods=methods.replace('WorkspaceHost::log','WorkspaceRegression::log')
 files={
 'android/os/SystemClock.java':'package android.os;public class SystemClock {public static long uptimeMillis(){return 10000;}}',

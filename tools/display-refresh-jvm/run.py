@@ -6,10 +6,10 @@ import subprocess
 import sys
 
 root = Path(__file__).resolve().parents[2]
-source = (package_dir(root)/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+source = (package_dir(root)/'WorkspaceDisplayController.java').read_text(encoding='utf-8-sig')
 out = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'build/tests/standalone'
 out.mkdir(parents=True, exist_ok=True)
-start = source.index('    private void refreshDisplayGeometry() {')
+start = source.index('    void refreshDisplayGeometry() {')
 brace = source.index('{', start)
 depth, end = 1, brace + 1
 while depth:
@@ -102,7 +102,7 @@ public class DisplayRefreshRegression {
   System.out.println("actual Host display refresh checks="+checks+" passed");
  }
 }
-'''.replace('__METHOD__', source[start:end])
+'''.replace('__METHOD__', source[start:end].replace('host.','').replace('WorkspaceHost.','').replace('log.accept(','log(').replace('coordinatorFailPromotion(','failPromotion(').replace('coordinatorSuspendSession(','suspendSession(').replace('coordinatorResumeSession()','resumeSession()').replace('coordinatorMakeAdaptiveLayout(','makeAdaptiveLayout(').replace('coordinatorSlotTop()','SLOT_TOP').replace('coordinatorSlotMain()','SLOT_MAIN').replace('coordinatorClearSlot(','clearSlot(').replace('coordinatorEnsureSideViewport()','ensureSideViewport()').replace('coordinatorSlotBounds(','slotBounds(').replace('coordinatorApplyRect(','applyRect(').replace('coordinatorUpdateTouchRegion(','updateTouchRegion(').replace('coordinatorUpdateHint(','updateHint(').replace('coordinatorSlotCount()','SLOT_COUNT').replace('coordinatorSideSegmentHeight(','sideSegmentHeight(').replace('coordinatorSideSegmentTop(','sideSegmentTop(').replace('coordinatorConfigureTabletTools()','configureTabletTools()').replace('coordinatorUpdateTopTaskGeometry()','updateTopTaskGeometry()').replace('coordinatorApplyWallpaperBackdrops()','applyWallpaperBackdrops()').replace('coordinatorReassertCarrier()','reassertCarrier()').replace('coordinatorWriteZoom(','writeZoom(').replace('coordinatorExecuteOnShell(','executeOnShell(').replace('coordinatorApplyFullscreenBounds(','applyFullscreenBounds(').replace('coordinatorReapplyScale(','reapplyScale('))
 java = out / 'DisplayRefreshRegression.java'
 java.write_text(body, encoding='utf8')
 jdk = Path(os.environ["ONESTEPLITE_JAVA_BIN"])

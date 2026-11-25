@@ -56,7 +56,7 @@ public final class WorkspaceHost {
 
     private static final String TAG = Tags.PROBE;
     private static final int SLOT_MAIN = 0;
-    private int CELL_SLOT_COUNT = 1 + WorkspaceLayout.CELL_COUNT;
+    int CELL_SLOT_COUNT = 1 + WorkspaceLayout.CELL_COUNT;
     private static final int SLOT_TOP = 1 + WorkspaceLayout.MAX_CELL_COUNT;
     private static final int SLOT_COUNT = SLOT_TOP + 1;
     private FrameLayout tabletTools;
@@ -69,7 +69,6 @@ public final class WorkspaceHost {
     private static volatile WorkspaceHost sInstance;
     final WorkspaceDebugController debug = new WorkspaceDebugController(this);
     /** Resolved once: the leash POC builds a transaction on every animation frame. */
-    private static volatile java.lang.reflect.Constructor<?> surfaceTransactionConstructor;
 
     final Context ctx;
     private final Executor executor;
@@ -77,8 +76,8 @@ public final class WorkspaceHost {
     private final Object transitions;
     final Handler main = new Handler(Looper.getMainLooper());
 
-    private volatile Slot[] slots = new Slot[SLOT_COUNT];
-    private final SideRowOrder<Slot> sideOrder=new SideRowOrder<>();
+    volatile Slot[] slots = new Slot[SLOT_COUNT];
+    final SideRowOrder<Slot> sideOrder=new SideRowOrder<>();
     private boolean sideScrolling, sideArmed, sideCaptured, creatingSideView;
     private float sideDownX, sideDownY, sideLastY, sideOffset, savedSideOffset;
     private final java.util.ArrayList<Slot> sideAttached = new java.util.ArrayList<>();
@@ -93,18 +92,18 @@ public final class WorkspaceHost {
 
     volatile WorkspaceLayout layout;
     FrameLayout root;
-    private WindowManager wm;
-    private WindowManager.LayoutParams lp;
-    private DisplayManager displayManager;
-    private DisplayManager.DisplayListener displayListener;
-    private volatile int displayRotation = -1;
-    private boolean geometryRefreshQueued;
-    private int geometryRefreshDeferrals;
-    private boolean geometryRefreshAfterLive;
+    WindowManager wm;
+    WindowManager.LayoutParams lp;
+    DisplayManager displayManager;
+    DisplayManager.DisplayListener displayListener;
+    volatile int displayRotation = -1;
+    boolean geometryRefreshQueued;
+    int geometryRefreshDeferrals;
+    boolean geometryRefreshAfterLive;
     private boolean zoomed;
     private final ZoomTransport zoomTransport;
-    private volatile int screenW = 1080;
-    private volatile int screenH = 2460;
+    volatile int screenW = 1080;
+    volatile int screenH = 2460;
     private final Object taskUsersLock = new Object();
     private final Object taskWindowStatesLock = new Object();
     private final java.util.Map<Integer, TaskWindowState> taskWindowStates =
@@ -115,21 +114,21 @@ public final class WorkspaceHost {
     volatile boolean screenOn = true;
     private Slot launchCurrentSlot;
     Promotion promotion;
-    private SwapPreview swapPreview;
+    SwapPreview swapPreview;
     private Object swapPreviewStatusOwner;
     private final StatusBar statusBar;
     private volatile HomeTaskReturn coveredHome;
-    private CellMovePreview cellMovePreview;
+    CellMovePreview cellMovePreview;
     private Bitmap mainBackdrop;
-    private View topStripBacking;
-    private View mainGapBacking;
-    private Bitmap wallpaperBackdrop;
-    private Bitmap wellWallpaperBackdrop;
-    private boolean wallpaperBackdropRequested;
-    private boolean wallpaperBackdropDirty;
-    private long wallpaperLoadGeneration;
-    private int wallpaperRetryAttempt;
-    private BroadcastReceiver wallpaperReceiver;
+    View topStripBacking;
+    View mainGapBacking;
+    Bitmap wallpaperBackdrop;
+    Bitmap wellWallpaperBackdrop;
+    boolean wallpaperBackdropRequested;
+    boolean wallpaperBackdropDirty;
+    long wallpaperLoadGeneration;
+    int wallpaperRetryAttempt;
+    BroadcastReceiver wallpaperReceiver;
     private BroadcastReceiver desktopIconReceiver;
     private BroadcastReceiver liveZoomReceiver;
     private LiveZoomRequest pendingLiveZoom;
@@ -139,12 +138,12 @@ public final class WorkspaceHost {
     private final UnlockFinishGate unlockFinishGate = new UnlockFinishGate();
     private final FinishTransactions<Long> unlockFinishTransactions = new FinishTransactions<>(16);
     /** mirror 承载时主区显示的桌面/上一主区快照（避免隐藏任务后主区全黑）。 */
-    private View carrierBackdrop;
-    private int carrierSlotIndex = -1;
-    private TopBar topBar;
+    View carrierBackdrop;
+    int carrierSlotIndex = -1;
+    TopBar topBar;
     private volatile WorkspaceOptions workspaceOptions = WorkspaceOptions.DEFAULT;
     private WorkspaceSettingsClient workspaceSettings;
-    private FrameLayout topLiveClip;
+    FrameLayout topLiveClip;
     private VideoPane videoPane;
     private final TopTaskState topTaskState = new TopTaskState();
     private final java.util.Map<TopTaskState.Key, TopDirection> topDirections = new java.util.HashMap<>();
@@ -165,8 +164,8 @@ public final class WorkspaceHost {
     private volatile TopTaskTransition topTransition;
 
     /** 侧栏按格分段的不透明底板；承载格需要把它藏起来让下面的真实任务画面透出来。 */
-    private final View[] sideBackingViews = new View[SLOT_COUNT];
-    private boolean mainOnRight;
+    final View[] sideBackingViews = new View[SLOT_COUNT];
+    boolean mainOnRight;
     volatile boolean keyguardLocked;
     private volatile boolean retainedForLock;
     private boolean lockExitPending;
@@ -185,7 +184,7 @@ public final class WorkspaceHost {
     private boolean suspendRequested;
     private final NavigationPolicy.EmptyMainGesture emptyMainGesture =
             new NavigationPolicy.EmptyMainGesture();
-    private boolean landscapeSuspended;
+    boolean landscapeSuspended;
     boolean transferBusy;
     private boolean overlayRefreshScheduled;
     private static boolean boundsHooksReady;
@@ -193,7 +192,7 @@ public final class WorkspaceHost {
     private static boolean surfaceHooksReady;
     private Object surfaceObserver;
     private boolean compactPending;
-    private CellMotion cellMotion;
+    CellMotion cellMotion;
     private SideDismiss sideDismiss;
     private Slot sideDismissSlot;
     private volatile boolean liveSwapInputBlocked;
@@ -634,245 +633,8 @@ public final class WorkspaceHost {
 
 
 
-    private MirrorExperiment mirrorExperiment;
-
-    private MirrorExperiment mirrorExperiment() {
-        if(mirrorExperiment==null)mirrorExperiment=new MirrorExperiment(ctx,main,new MirrorExperiment.Host() {
-            @Override public int resolveTask(int requested) throws Throwable { return resolveMirrorTask(requested); }
-            @Override public Object leash(int task) throws Throwable { return mirrorLeash(task); }
-            @Override public View root() { return root; }
-            @Override public int width() { return screenW; }
-            @Override public int height() { return screenH; }
-            @Override public boolean direct(Object leash,Rect destination) { return applyDirectCarrier(leash,destination,true); }
-            @Override public void restoreDirect(Object leash) { restoreDirectCarrier(leash); }
-        },WorkspaceHost::log);
-        return mirrorExperiment;
-    }
-    private void createMirrorLayer() { mirrorExperiment().createMirrorLayer(); }
-    private void setMirrorLayerVisible(boolean visible) {
-        if(!visible && leashExperiment!=null)leashExperiment.close();
-        if(mirrorExperiment!=null)mirrorExperiment.setMirrorLayerVisible(visible);
-    }
-    void startMirrorPoc(int task,Rect destination,int holdMs,int mode) {
-        mirrorExperiment().startMirrorPoc(task,destination,holdMs,mode);
-    }
-    /** The task to mirror: the requested one, or whatever currently owns the main cell. */
-    private int resolveMirrorTask(int requestedTask) throws Throwable {
-        if (requestedTask >= 0) return requestedTask;
-        LiveTask main = findMainTask();
-        if (main == null) {
-            log("mirror POC: no main task");
-            android.widget.Toast.makeText(ctx, "mirror: 主区无应用",
-                    android.widget.Toast.LENGTH_SHORT).show();
-            return -1;
-        }
-        return main.id;
-    }
-
-    /** The leash of a task, or null when no controller exposes a ShellTaskOrganizer. */
-    private Object mirrorLeash(int task) throws Throwable {
-        Object organizer = null;
-        for (Slot slot : slots) {
-            if (slot.controller != null) {
-                organizer = XposedHelpers.getObjectField(slot.controller, "mTaskOrganizer");
-                break;
-            }
-        }
-        if (organizer == null) {
-            log("mirror POC: no ShellTaskOrganizer on controllers");
-            return null;
-        }
-        Object leash = ShellCompat.taskLeash(organizer, task);
-        if (leash == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
-            log("mirror POC: leash unavailable task=" + task + " leash=" + leash);
-            return null;
-        }
-        return leash;
-    }
-
-    /**
-     * 免 mirror 承载：屏幕坐标 = 放大倍率 × 显示内容坐标 + 主区偏移，因此把格子的
-     * 屏幕矩形反算成任务 leash 的位置/缩放。原任务窗口仍占满屏、输入通道不变。
-     */
-    private boolean applyDirectCarrier(Object leash, Rect dest, boolean logSuccess) {
-        try {
-            final float ratio = layout.mainScale;
-            final float sx = dest.width() / (ratio * screenW);
-            final float sy = dest.height() / (ratio * screenH);
-            final float px = (dest.left - layout.mainOffsetX) / ratio;
-            final float py = (dest.top - layout.mainOffsetY) / ratio;
-            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
-            try {
-                XposedHelpers.callMethod(tx, "setPosition", leash, px, py);
-                XposedHelpers.callMethod(tx, "setMatrix", leash, sx, 0f, 0f, sy);
-                XposedHelpers.callMethod(tx, "apply");
-            } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-            }
-            if (logSuccess) {
-                log("direct carrier transform ratio=" + ratio + " scale=" + sx + "x" + sy
-                        + " pos=" + px + "," + py);
-            }
-            return true;
-        } catch (Throwable error) {
-            log("direct carrier failed: " + error);
-            return false;
-        }
-    }
-
-    private void restoreDirectCarrier(Object leash) {
-        try {
-            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
-            try {
-                XposedHelpers.callMethod(tx, "setPosition", leash, 0f, 0f);
-                XposedHelpers.callMethod(tx, "setMatrix", leash, 1f, 0f, 0f, 1f);
-                XposedHelpers.callMethod(tx, "apply");
-            } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-            }
-            log("direct carrier restored task to main");
-        } catch (Throwable error) {
-            log("direct carrier restore failed: " + error);
-        }
-    }
-
-    // ---------------------------------------------------------------- mirror 承载（fullscreen-only 应用进副格）
-
-    Object shellOrganizer() {
-        for (Slot slot : slots) {
-            if (slot.controller != null) {
-                return XposedHelpers.getObjectField(slot.controller, "mTaskOrganizer");
-            }
-        }
-        return null;
-    }
-
-    private void removeCarrierBackdrop() {
-        View box = carrierBackdrop;
-        carrierBackdrop = null;
-        if (box != null && root != null) {
-            try { root.removeView(box); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-            root.requestLayout();
-            root.invalidate();
-        }
-    }
-
-    /** 心跳/系统重排后重新声明“原任务 leash 在格子里的位置/缩放”。 */
-    private void reassertCarrier() {
-        for (Slot slot : slots) {
-            if (!slot.carrier) continue;
-            Object leash = slot.carrierLeash;
-            if (leash == null || slot.rect == null) continue;
-            try {
-                if (!Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
-                    log("carrier leash invalid; restoring task to main");
-                    restoreCarrierToMain();
-                    return;
-                }
-                Rect dest = new Rect(slot.rect[0], slot.rect[1], slot.rect[2], slot.rect[3]);
-                applyDirectCarrier(leash, dest, false);
-            } catch (Throwable error) {
-                log("carrier reassert failed: " + error);
-            }
-        }
-    }
-
-    /** 把承载中的任务移回主区（点击格子/主区、退出一步、系统返回都走这里）。 */
-    private void restoreCarrierToMain() {
-        boolean restored = false;
-        for (Slot slot : slots) {
-            if (!slot.carrier) continue;
-            Object leash = slot.carrierLeash;
-            try {
-                if (leash != null
-                        && Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
-                    restoreDirectCarrier(leash);
-                }
-            } catch (Throwable error) {
-                log("carrier restore failed: " + error);
-            }
-            slot.carrier = false;
-            slot.carrierTaskId = -1;
-            slot.carrierLeash = null;
-            slot.carrierMirror = null;
-            View tap = slot.carrierTapView;
-            slot.carrierTapView = null;
-            if (tap != null && root != null) {
-                try { root.removeView(tap); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-            }
-            slot.occupied = false;
-            slot.taskId = -1;
-            slot.taskToken = null;
-            slot.pkg = null;
-            slot.taskVisible = false;
-            View backing = sideBackingViews[slot.index];
-            if (backing != null) backing.setVisibility(View.VISIBLE);
-            if (slot.hint != null) slot.hint.setVisibility(View.VISIBLE);
-            log("carrier restored slot=" + slot.index + " task to main");
-            restored = true;
-        }
-        carrierSlotIndex = -1;
-        removeCarrierBackdrop();
-        if (root != null) {
-            root.setOnTouchListener(null);
-        }
-        if (restored && root != null) {
-            root.requestLayout();
-            root.invalidate();
-        }
-    }
-
-    /**
-     * 清掉主任务 leash 上可能残留的过渡裁切。旧版 clampOpeningTransition 把动画期的
-     * crop 写进了 finish 事务，任务回到常驻后仍被裁到主区矩形（顶栏启动的应用只显示
-     * 一部分）；这里在进入一步、快捷启动后、主任务变化时主动清一次。
-     */
-    private void clearMainTaskLeashCrop(int taskId) {
-        if (taskId < 0) return;
-        try {
-            Object organizer = shellOrganizer();
-            if (organizer == null) return;
-            Object leash = ShellCompat.taskLeash(organizer, taskId);
-            if (leash == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
-                return;
-            }
-            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
-            try {
-                XposedHelpers.callMethod(tx, "setCrop",
-                        new Class<?>[]{Class.forName("android.view.SurfaceControl"),
-                                android.graphics.Rect.class}, leash, null);
-                XposedHelpers.callMethod(tx, "apply");
-            } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-            }
-            log("main task leash crop cleared task=" + taskId);
-        } catch (Throwable error) {
-            log("clear main task crop failed task=" + taskId + ": " + error);
-        }
-    }
-
-    /** 延时清一次主任务 leash 裁切（进入一步/恢复/快捷启动后调用）。 */
-    private void scheduleMainCropClear(long delayMs) {
-        main.postDelayed(() -> {
-            if (root == null || scene == SUSPENDED) return;
-            if (!executeOnShell(() -> {
-                try {
-                    LiveTask mainTask = findMainTask();
-                    if (mainTask != null) clearMainTaskLeashCrop(mainTask.id);
-                } catch (Throwable error) {
-                    log("main task crop clear failed: " + error);
-                }
-            })) {
-                log("main task crop clear skipped: no shell queue");
-            }
-        }, delayMs);
-    }
-
     /** 小窗区在滑动起始侧，主窗在另一侧：左角滑入 → 主窗在右；右角滑入 → 主窗在左。 */
-    private static volatile int pendingMainSide = -1;
+    static volatile int pendingMainSide = -1;
 
     public static void setPendingMainSide(boolean mainOnRight) {
         WorkspaceHost host = sInstance;
@@ -882,14 +644,7 @@ public final class WorkspaceHost {
     }
 
     private void consumePendingMainSide() {
-        int pending = pendingMainSide;
-        if (pending < 0) return;
-        pendingMainSide = -1;
-        boolean right = pending == 1;
-        if (right != mainOnRight) {
-            log("pending main side applied: " + (right ? "right" : "left"));
-            setMainSide(right);
-        }
+        carriers.consumePendingMainSide();
     }
 
     /** 调试广播：把主区任务 leash 从主区尺寸动画到目标槽（view 级交换动画的 POC）。 */
@@ -899,118 +654,22 @@ public final class WorkspaceHost {
         host.debug.debugLeashAnim(slotIndex, durationMs, pkg);
     }
 
+    private final WorkspaceCarrierCoordinator carriers =
+            new WorkspaceCarrierCoordinator(this, WorkspaceHost::log);
 
-
-    private LeashExperiment leashExperiment;
-    /** POC 期间该格的 SF 底板必须停止心跳重建，否则会盖住动画中的真实任务画面。 */
-    private volatile int leashPocSlot = -1;
-
-    void runLeashAnimPoc(int slotIndex, long durationMs, String pkg) {
-        if (scene != ACTIVE || layout == null || slotIndex <= SLOT_MAIN
-                || slotIndex >= SLOT_COUNT || slots[slotIndex].rect == null) {
-            log("leash anim POC skipped slot=" + slotIndex + " scene=" + scene);
-            return;
-        }
-        final int index = slotIndex;
-        if (!executeOnShell(() -> {
-            try {
-                LiveTask task = null;
-                try {
-                    task = findMainTask();
-                } catch (Throwable error) {
-                    log("leash anim: findMainTask failed: " + error);
-                }
-                if (task == null && pkg != null) {
-                    try {
-                        task = findPackageTask(pkg);
-                        log("leash anim: package fallback task="
-                                + (task == null ? -1 : task.id) + " pkg=" + pkg);
-                    } catch (Throwable error) {
-                        log("leash anim: findPackageTask failed: " + error);
-                    }
-                }
-                if (task == null) {
-                    log("leash anim POC: no main task pkg=" + pkg);
-                    return;
-                }
-                final LiveTask resolved = task;
-                Object organizer = shellOrganizer();
-                Object leash = organizer == null ? null
-                        : ShellCompat.taskLeash(organizer, resolved.id);
-                if (leash == null
-                        || !Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
-                    log("leash anim POC: no leash task=" + resolved.id);
-                    return;
-                }
-                main.post(() -> animateLeashPoc(leash, slots[index].rect, index, resolved.id, durationMs));
-            } catch (Throwable error) {
-                log("leash anim POC setup failed: " + error);
-            }
-        })) {
-            log("leash anim POC skipped: no shell queue");
-        }
+    private void createMirrorLayer() { carriers.createMirrorLayer(); }
+    private void setMirrorLayerVisible(boolean visible) { carriers.setMirrorLayerVisible(visible); }
+    private void startMirrorPoc(int task, Rect destination, int holdMs, int mode) {
+        carriers.startMirrorPoc(task, destination, holdMs, mode);
     }
-
-    private void animateLeashPoc(Object leash,int[] rect,int slotIndex,int taskId,long durationMs) {
-        final Rect dest=new Rect(rect[0],rect[1],rect[2],rect[3]);
-        final float ratio=layout.mainScale;
-        if(leashExperiment==null)leashExperiment=new LeashExperiment(main,this::applyLeashTransform,
-                this::hideSlotChromeForPoc,WorkspaceHost::log);
-        leashExperiment.start(leash,slotIndex,taskId,
-                (dest.left-layout.mainOffsetX)/ratio,(dest.top-layout.mainOffsetY)/ratio,
-                dest.width()/(ratio*screenW),dest.height()/(ratio*screenH),durationMs);
+    private void runLeashAnimPoc(int slotIndex, long durationMs, String pkg) {
+        carriers.runLeashAnimPoc(slotIndex, durationMs, pkg);
     }
-
-    /** POC 期间隐藏目标格的宿主底板，让真实任务画面能在格子里可见（正式交换也会这么做）。 */
-    private void hideSlotChromeForPoc(int slotIndex, boolean hide) {
-        try {
-            leashPocSlot = hide ? slotIndex : -1;
-            View backing = sideBackingViews[slotIndex];
-            if (backing != null) {
-                backing.setVisibility(hide ? View.GONE : View.VISIBLE);
-            }
-            Slot slot = slots[slotIndex];
-            if (slot != null) {
-                if (hide) {
-                    if (slot.hint != null) slot.hint.setVisibility(View.GONE);
-                    removeCellBackground(slot);
-                } else if (slot.hint != null) {
-                    slot.hint.setVisibility(View.VISIBLE);
-                }
-            }
-            if (root != null) {
-                root.requestLayout();
-                root.invalidate();
-            }
-            log("leash anim POC slot chrome hidden=" + hide + " slot=" + slotIndex);
-        } catch (Throwable error) {
-            log("leash anim chrome failed: " + error);
-        }
-    }
-
-    private static Object newSurfaceTransaction() throws Exception {
-        java.lang.reflect.Constructor<?> cached = surfaceTransactionConstructor;
-        if (cached == null) {
-            cached = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor();
-            surfaceTransactionConstructor = cached;
-        }
-        return cached.newInstance();
-    }
-
-    private void applyLeashTransform(Object leash, float x, float y, float sx, float sy) {
-        try {
-            Object tx = newSurfaceTransaction();
-            try {
-                XposedHelpers.callMethod(tx, "setPosition", leash, x, y);
-                XposedHelpers.callMethod(tx, "setMatrix", leash, sx, 0f, 0f, sy);
-                XposedHelpers.callMethod(tx, "apply");
-            } finally {
-                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-            }
-        } catch (Throwable error) {
-            log("leash anim frame failed: " + error);
-        }
-    }
+    private Object shellOrganizer() { return carriers.shellOrganizer(); }
+    private void reassertCarrier() { carriers.reassertCarrier(); }
+    private void restoreCarrierToMain() { carriers.restoreCarrierToMain(); }
+    private void clearMainTaskLeashCrop(int taskId) { carriers.clearMainTaskLeashCrop(taskId); }
+    private void scheduleMainCropClear(long delayMs) { carriers.scheduleMainCropClear(delayMs); }
 
     /** Bounds of the visible main pane while the host owns the display zoom. */
     static Rect activeMainBounds() {
@@ -1077,7 +736,7 @@ public final class WorkspaceHost {
     }
 
     /** 等 TaskView 就绪再启动；宿主刚建时窗口可能还没 attach。 */
-    void launchWhenReady(int slot, String pkg, int attempt) {
+    private void launchWhenReady(int slot, String pkg, int attempt) {
         if (slot <= SLOT_MAIN || slot >= SLOT_COUNT) {
             return;
         }
@@ -2072,7 +1731,7 @@ public final class WorkspaceHost {
     }
 
     /** 诊断：打印当前所有 root task 的判定字段（findMainTask 漏判用）。 */
-    void dumpRoots(String reason) {
+    private void dumpRoots(String reason) {
         try {
             java.util.List<?> roots = rootInfos();
             LiveTask main = null;
@@ -2882,8 +2541,8 @@ public final class WorkspaceHost {
      * 动画结束后再写一次稳态续租，避免 4 秒租约把进行中的动画取消。
      */
     private static final long ZOOM_ANIM_MS = WorkspaceMotionSpec.DURATION_MS;
-    private android.animation.ValueAnimator workspaceAnimator;
-    private android.animation.ValueAnimator mainSideAnimator;
+    android.animation.ValueAnimator workspaceAnimator;
+    android.animation.ValueAnimator mainSideAnimator;
     private float mainSideFrameX = Float.NaN;
     private WallpaperCropDrawable mainSideBackdrop;
     private long mainSideSwitchGeneration;
@@ -2893,7 +2552,7 @@ public final class WorkspaceHost {
     /** The fade is running towards zero, so the main edge advances instead of receding. */
     private boolean workspaceExiting;
     private long workspaceZoomStart;
-    private LiveBackdrop workspaceBackdrop;
+    LiveBackdrop workspaceBackdrop;
     private View workspaceBackdropOwner;
     private View.OnAttachStateChangeListener workspaceBackdropDetach;
 
@@ -3435,7 +3094,7 @@ public final class WorkspaceHost {
                         if (carrierSlotIndex >= 0) reassertCarrier();
                         if (!zoomed && !HotZoneGesture.isAttached()) HotZoneGesture.raiseAll(ctx);
                         for (Slot slot : slots) {
-                            if (slot.carrier || slot.index == leashPocSlot) continue;
+                            if (slot.carrier || slot.index == carriers.leashPocSlot()) continue;
                             ensureCellBackground(slot);
                             if (!slot.occupied || slot.promoting) continue;
                             reapplyScale(slot);
@@ -4486,192 +4145,17 @@ public final class WorkspaceHost {
         }
     }
 
-    private void readDisplayGeometry() {
-        android.util.DisplayMetrics metrics = ctx.getResources().getDisplayMetrics();
-        int width = metrics.widthPixels;
-        int height = metrics.heightPixels;
-        try {
-            if (displayManager == null) {
-                displayManager = (DisplayManager) ctx.getSystemService(Context.DISPLAY_SERVICE);
-            }
-            Display display = displayManager == null
-                    ? null : displayManager.getDisplay(Display.DEFAULT_DISPLAY);
-            if (display != null) {
-                Point realSize = new Point();
-                display.getRealSize(realSize);
-                if (realSize.x > 0 && realSize.y > 0) {
-                    width = realSize.x;
-                    height = realSize.y;
-                }
-                displayRotation = display.getRotation();
-            }
-        } catch (Throwable error) {
-            log("display geometry read fell back to resources: " + error);
-        }
-        if (width > 0 && height > 0) {
-            boolean tablet = DeviceProfile.isTablet(ctx);
-            screenW = WorkspaceDisplayPolicy.width(tablet, width, height);
-            screenH = WorkspaceDisplayPolicy.height(tablet, width, height);
-        }
-    }
+    private void readDisplayGeometry() { displays.readDisplayGeometry(); }
 
-    private void scheduleDisplayGeometryRefresh() {
-        if (geometryRefreshQueued) return;
-        geometryRefreshQueued = true;
-        main.postDelayed(() -> {
-            geometryRefreshQueued = false;
-            refreshDisplayGeometry();
-        }, 120L);
-    }
 
-    private void refreshDisplayGeometry() {
-        if (root == null || displayManager == null) return;
-        if (cellMotion != null || promotion != null && promotion.nativeSwap) {
-            int oldWidth = screenW;
-            int oldHeight = screenH;
-            int oldRotation = displayRotation;
-            readDisplayGeometry();
-            int newWidth = screenW;
-            int newHeight = screenH;
-            int newRotation = displayRotation;
-            // Display notifications also report non-geometric changes. Keep the
-            // in-flight coordinate space intact until its finish or rollback.
-            screenW = oldWidth;
-            screenH = oldHeight;
-            displayRotation = oldRotation;
-            if (oldWidth == newWidth && oldHeight == newHeight && oldRotation == newRotation) {
-                if (cellMotion != null) log("unchanged display geometry retains real cell motion");
-                return;
-            }
-            if (cellMotion != null) {
-                cellMotion.finish();
-                scheduleDisplayGeometryRefresh();
-                return;
-            }
-            geometryRefreshAfterLive = true;
-            failPromotion(promotion, "display geometry changed during live swap "
-                    + oldWidth + "x" + oldHeight + " r" + oldRotation
-                    + " -> " + newWidth + "x" + newHeight + " r" + newRotation);
-            return;
-        }
-        if (transferBusy || swapPreview != null || cellMovePreview != null) {
-            if (geometryRefreshDeferrals++ < 8) {
-                scheduleDisplayGeometryRefresh();
-                return;
-            }
-        }
-        geometryRefreshDeferrals = 0;
-        int oldWidth = screenW;
-        int oldHeight = screenH;
-        int oldRotation = displayRotation;
-        readDisplayGeometry();
-        if(layout!=null && scene==ACTIVE && (oldWidth!=screenW || oldHeight!=screenH)) {
-            screenW=oldWidth;screenH=oldHeight;displayRotation=oldRotation;
-            log("display capacity change: return all real tasks before changing layout");
-            suspendSession("display-layout-change");
-            return;
-        }
-        if (NativeLandscapePolicy.shouldRestoreFromDisplay(
-                landscapeSuspended, scene == SUSPENDED, displayRotation)) {
-            log("restore workspace after native landscape rotation=" + displayRotation);
-            resumeSession();
-            return;
-        }
-        if (!DeviceProfile.isTablet(ctx)
-                && displayRotation != FullscreenRotationPolicy.portraitDisplayRotation()) {
-            if (oldRotation != displayRotation) {
-                log("workspace retains portrait geometry during display rotation "
-                        + displayRotation + "; waiting for WM portrait configuration");
-            }
-            return;
-        }
-        if ((oldWidth == screenW && oldHeight == screenH && oldRotation == displayRotation)
-                || screenW <= 0 || screenH <= 0) return;
 
-        layout = makeAdaptiveLayout(mainOnRight);
-        CELL_SLOT_COUNT=1+layout.cellCount;
-        mainOnRight=layout.mainOnRight;
-        for(Slot saved:slots) if(saved.sideRow < 0 && saved.index>=CELL_SLOT_COUNT && saved.index!=SLOT_TOP
-                && saved.parked) {
-            log("layout capacity released system task="+saved.taskId);
-            clearSlot(saved);
-        }
-        FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(-1, layout.topStrip);
-        if (topStripBacking != null) topStripBacking.setLayoutParams(topParams);
-        if (topLiveClip != null) {
-            topLiveClip.setLayoutParams(new FrameLayout.LayoutParams(-1,layout.tabletLandscape?-1:layout.topStrip));
-            topLiveClip.setClipBounds(new Rect(0,0,screenW,layout.tabletLandscape?screenH:layout.topStrip));
-        }
-        if (topBar != null) {
-            topBar.setLayoutParams(new FrameLayout.LayoutParams(-1, layout.topStrip));
-            topBar.setStatusBarInset(DeviceProfile.statusBarHeightPx(ctx));
-        }
-        if (!sideOrder.isEmpty()) ensureSideViewport();
-        for (int i = 1; i < slots.length; i++) {
-            Slot slot = slots[i];
-            slot.rect = slotBounds(slot);
-            applyRect(slot);
-            updateTouchRegion(slot);
-            updateHint(slot);
-            View backing = i < SLOT_COUNT ? sideBackingViews[i] : null;
-            if (backing != null && i<CELL_SLOT_COUNT) {
-                int[] cell=layout.cellBounds(i-1);
-                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                        layout.tabletLandscape?cell[2]-cell[0]:layout.sideWidth, sideSegmentHeight(i));
-                params.leftMargin = layout.tabletLandscape?cell[0]:layout.mainOnRight ? 0 : layout.mainWidth;
-                params.topMargin = sideSegmentTop(i);
-                backing.setLayoutParams(params);
-                backing.setVisibility(View.VISIBLE);
-            } else if(backing!=null) {
-                backing.setVisibility(View.GONE);
-            }
-            if (slot.carrierTapView != null) {
-                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                        slot.rect[2] - slot.rect[0], slot.rect[3] - slot.rect[1]);
-                params.leftMargin = slot.rect[0];
-                params.topMargin = slot.rect[1];
-                slot.carrierTapView.setLayoutParams(params);
-            }
-        }
-        if (carrierBackdrop != null) {
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                    layout.mainDispWidth, layout.mainDispHeight);
-            params.leftMargin = layout.mainOffsetX;
-            params.topMargin = layout.mainOffsetY;
-            carrierBackdrop.setLayoutParams(params);
-        }
-        configureTabletTools();
-        updateTopTaskGeometry();
-        applyWallpaperBackdrops();
-        if (carrierSlotIndex >= 0) reassertCarrier();
-        if (wm != null && lp != null) {
-            try { wm.updateViewLayout(root, lp); }
-            catch (Throwable error) { log("host window resize refresh failed: " + error); }
-        }
-        root.requestLayout();
-        root.invalidate();
-        boolean activeRoot = ZoomLifecyclePolicy.shouldReassertGeometry(
-                scene == ACTIVE && !keyguardLocked, root.getVisibility() == View.VISIBLE, screenOn);
-        if (activeRoot) writeZoom(true);
-        else log("display geometry changed while host inactive; skip zoom/task reassert");
-        boolean queued = activeRoot && executeOnShell(() -> {
-            if (scene != ACTIVE) return;
-            for (Slot slot : slots) {
-                if (slot.index > SLOT_MAIN && slot.occupied && !slot.carrier
-                        && !slot.promoting && !slot.launching) applyFullscreenBounds(slot);
-            }
-        });
-        main.postDelayed(() -> {
-            if (!ZoomLifecyclePolicy.shouldReassertGeometry(scene == ACTIVE && !keyguardLocked,
-                    root != null && root.getVisibility() == View.VISIBLE, screenOn)) return;
-            for (Slot slot : slots) {
-                if (slot.index > SLOT_MAIN && slot.occupied && !slot.carrier) reapplyScale(slot);
-            }
-        }, queued ? 180L : 0L);
-        log("display geometry changed " + oldWidth + "x" + oldHeight + " r" + oldRotation
-                + " -> " + screenW + "x" + screenH + " r" + displayRotation
-                + " queuedTaskBounds=" + queued + " " + layout.describe());
-    }
+    private void scheduleDisplayGeometryRefresh() { displays.scheduleDisplayGeometryRefresh(); }
+
+
+
+    private void refreshDisplayGeometry() { displays.refreshDisplayGeometry(); }
+
+
 
     private void refreshQuickApps() {
         if (topBar == null || root == null) return;
@@ -4914,204 +4398,58 @@ public final class WorkspaceHost {
     }
 
     /** 只取桌面壁纸做高斯模糊底（不使用应用内容），供顶栏/侧栏格子的液态玻璃使用。 */
-    private final Runnable wallpaperRetry = () -> {
-        if (root != null && screenOn && !keyguardLocked
-                && (scene == ACTIVE || scene == RESUMING)) loadWallpaperBackdrop();
-    };
+    private final WorkspaceWallpaperController wallpapers =
+            new WorkspaceWallpaperController(this, WorkspaceHost::log);
 
-    private void scheduleWallpaperRetry() {
-        main.removeCallbacks(wallpaperRetry);
-        long delay = Math.min(30000L, 1500L << Math.min(wallpaperRetryAttempt++, 4));
-        if (root != null && screenOn && !keyguardLocked
-                && (scene == ACTIVE || scene == RESUMING)) main.postDelayed(wallpaperRetry, delay);
-    }
+    private final WorkspaceDisplayController displays =
+            new WorkspaceDisplayController(this, WorkspaceHost::log);
 
-    private void loadWallpaperBackdrop() {
-        if (wallpaperBackdropRequested) return;
-        if (!wallpaperBackdropDirty && wallpaperBackdrop != null && !wallpaperBackdrop.isRecycled()) {
-            applyWallpaperBackdrops();
-            return;
-        }
-        if (screenW <= 0 || screenH <= 0) return;
-        if (root == null) return;
-        if (!WallpaperSnapshot.canCapture(ctx)) {
-            scheduleWallpaperRetry();
-            return;
-        }
-        wallpaperBackdropRequested = true;
-        final long request = ++wallpaperLoadGeneration;
-        final int width = screenW, height = screenH;
-        final boolean canUseWarmup = !wallpaperBackdropDirty;
-        final int user = CurrentUser.id();
-        Thread loader = new Thread(() -> {
-            Bitmap ready = null;
-            Bitmap wellReady = null;
-            try {
-                Bitmap source = WorkspaceBackground.loadBlurred(ctx, width, height);
-                Bitmap[] prepared = source == null && canUseWarmup
-                        ? Warmup.takePreparedWallpaper(user, width, height) : null;
-                if (prepared != null) {
-                    main.post(() -> finishWallpaperLoad(request, width, height, prepared[0], prepared[1]));
-                    return;
-                }
-                if (source == null) source = HyperOsStyle.blurredWallpaper(ctx, width, height);
-                ready = WorkspaceFrost.finish(source);
-                // A tiny, extra-blurred texture is shared by all circular wells.
-                // Prepare it off the UI thread; no blur or capture work per frame.
-                if (ready != null) wellReady = HyperOsStyle.blurredBitmap(ready,
-                        Math.max(1, width / 6), Math.max(1, height / 6));
-            } catch (Throwable error) {
-                log("wallpaper blur failed: " + error);
-            }
-            final Bitmap bitmap = ready;
-            final Bitmap wellBitmap = wellReady;
-            main.post(() -> finishWallpaperLoad(request, width, height, bitmap, wellBitmap));
-        }, "OneStepLiteWallpaperBlur");
-        loader.start();
-    }
+    static int coordinatorSlotMain() { return SLOT_MAIN; }
+    static int coordinatorSlotTop() { return SLOT_TOP; }
+    static int coordinatorSlotCount() { return SLOT_COUNT; }
+    LiveTask coordinatorFindMainTask() throws Exception { return findMainTask(); }
+    LiveTask coordinatorFindPackageTask(String pkg) throws Exception { return findPackageTask(pkg); }
+    void coordinatorRemoveCellBackground(Slot slot) { removeCellBackground(slot); }
+    void coordinatorSetMainSide(boolean right) { setMainSide(right); }
+    Object coordinatorShellOrganizer() { return carriers.shellOrganizer(); }
+    boolean coordinatorExecuteOnShell(Runnable task) { return executeOnShell(task); }
+    void coordinatorLaunchWhenReady(int slot, String pkg, int attempt) { launchWhenReady(slot, pkg, attempt); }
+    void coordinatorSwapWithMain(int slot) { swapWithMain(slot); }
+    void coordinatorStartMirrorPoc(int task, Rect destination, int holdMs, int mode) { startMirrorPoc(task, destination, holdMs, mode); }
+    void coordinatorRunLeashAnimPoc(int slot, long durationMs, String pkg) { runLeashAnimPoc(slot, durationMs, pkg); }
+    void coordinatorDumpRoots(String reason) { dumpRoots(reason); }
+    WorkspaceLayout coordinatorMakeAdaptiveLayout(boolean right) { return makeAdaptiveLayout(right); }
+    void coordinatorClearSlot(Slot slot) { clearSlot(slot); }
+    void coordinatorApplyRect(Slot slot) { applyRect(slot); }
+    void coordinatorUpdateTouchRegion(Slot slot) { updateTouchRegion(slot); }
+    void coordinatorUpdateHint(Slot slot) { updateHint(slot); }
+    boolean coordinatorEnsureSideViewport() { return ensureSideViewport(); }
+    int coordinatorSideSegmentTop(int index) { return sideSegmentTop(index); }
+    int coordinatorSideSegmentHeight(int index) { return sideSegmentHeight(index); }
+    void coordinatorConfigureTabletTools() { configureTabletTools(); }
+    void coordinatorUpdateTopTaskGeometry() { updateTopTaskGeometry(); }
+    void coordinatorApplyWallpaperBackdrops() { wallpapers.applyWallpaperBackdrops(); }
+    void coordinatorReassertCarrier() { carriers.reassertCarrier(); }
+    void coordinatorWriteZoom(boolean on) { writeZoom(on); }
+    void coordinatorApplyFullscreenBounds(Slot slot) { applyFullscreenBounds(slot); }
+    void coordinatorReapplyScale(Slot slot) { reapplyScale(slot); }
+    void coordinatorSuspendSession(String reason) { suspendSession(reason); }
+    void coordinatorResumeSession() { resumeSession(); }
+    void coordinatorFailPromotion(Promotion ticket, String reason) { failPromotion(ticket, reason); }
+    int[] coordinatorSlotBounds(Slot slot) { return slotBounds(slot); }
+    TopTaskGeometry coordinatorTopGeometry() { return topGeometry(); }
+    android.graphics.RectF coordinatorWorkspaceMainHole() { return workspaceMainHole(); }
+    void coordinatorUpdateWorkspaceBacking(View view, android.graphics.RectF hole) { updateWorkspaceBacking(view, hole); }
+    boolean coordinatorPresentsSlot(Slot slot) { return presentsSlot(slot); }
 
-    private void finishWallpaperLoad(long request, int width, int height, Bitmap bitmap, Bitmap wellBitmap) {
-        if (request != wallpaperLoadGeneration || root == null || width != screenW || height != screenH
-                || !WallpaperSnapshot.canCapture(ctx)) {
-            if (bitmap != null) bitmap.recycle();
-            if (wellBitmap != null) wellBitmap.recycle();
-            if (request == wallpaperLoadGeneration) {
-                wallpaperBackdropRequested = false;
-                scheduleWallpaperRetry();
-            }
-            return;
-        }
-        if (bitmap != null && !bitmap.isRecycled()
-                && (mainSideAnimator != null || workspaceAnimator != null || promotion != null || cellMotion != null)) {
-            // Every layer of one transition keeps the same texture until its final frame.
-            main.postDelayed(() -> finishWallpaperLoad(request, width, height, bitmap, wellBitmap), 50L);
-            return;
-        }
-        wallpaperBackdropRequested = false;
-        if (bitmap == null || bitmap.isRecycled()) {
-            log("wallpaper blur unavailable; retain last desktop texture");
-            scheduleWallpaperRetry();
-            return;
-        }
-        // Old drawables/native animations retain their bitmap until their last
-        // frame. Let GC reclaim it after those owners release, never recycle live textures.
-        wallpaperBackdrop = bitmap;
-        wellWallpaperBackdrop = wellBitmap;
-        wallpaperBackdropDirty = false;
-        wallpaperRetryAttempt = 0;
-        main.removeCallbacks(wallpaperRetry);
-        if (workspaceBackdrop != null) workspaceBackdrop.replaceWallpaper(bitmap);
-        log("wallpaper gaussian backdrop ready " + bitmap.getWidth() + "x" + bitmap.getHeight());
-        applyWallpaperBackdrops();
-        }
-
-    private void applyWallpaperBackdrops() {
-        if (root != null && layout != null) {
-            if (layout.tabletLandscape) {
-                if (mainGapBacking == null) {
-                    mainGapBacking = new View(ctx);
-                    mainGapBacking.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-                    mainGapBacking.setBackground(HyperOsStyle.topBackground(ctx));
-                    root.addView(mainGapBacking);
-                }
-                int[] bounds = layout.mainGapBounds();
-                FrameLayout.LayoutParams gap = new FrameLayout.LayoutParams(bounds[2]-bounds[0], bounds[3]-bounds[1]);
-                gap.leftMargin = bounds[0];
-                gap.topMargin = bounds[1];
-                mainGapBacking.setLayoutParams(gap);
-                mainGapBacking.setAlpha(1f);
-                View backing = sideBackingViews[SLOT_TOP];
-                if (backing == null) {
-                    backing = new View(ctx);
-                    backing.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-                    sideBackingViews[SLOT_TOP] = backing;
-                    root.addView(backing, 0);
-                }
-                int[] side = layout.interactiveBounds();
-                FrameLayout.LayoutParams sideParams = new FrameLayout.LayoutParams(side[2]-side[0], side[3]-side[1]);
-                sideParams.leftMargin=side[0];sideParams.topMargin=side[1];
-                backing.setLayoutParams(sideParams);
-            } else if (mainGapBacking != null) {
-                root.removeView(mainGapBacking);
-                mainGapBacking = null;
-            }
-            if (!layout.tabletLandscape && sideBackingViews[SLOT_TOP] != null) {
-                root.removeView(sideBackingViews[SLOT_TOP]);
-                sideBackingViews[SLOT_TOP] = null;
-            }
-        }
-        updateWorkspaceBackdropVisibility();
-        if (wallpaperBackdrop == null || wallpaperBackdrop.isRecycled() || layout == null) return;
-        if (mainGapBacking != null) {
-            int[] bounds = layout.mainGapBounds();
-            mainGapBacking.setBackground(new WallpaperCropDrawable(wallpaperBackdrop, screenW, screenH,
-                    bounds[0], bounds[1], HyperOsStyle.topWallpaperTint(ctx)));
-        }
-        if (sideBackingViews[SLOT_TOP] != null) {
-            int[] bounds = layout.interactiveBounds();
-            sideBackingViews[SLOT_TOP].setBackground(new WallpaperCropDrawable(wallpaperBackdrop, screenW, screenH,
-                    bounds[0], bounds[1], HyperOsStyle.topWallpaperTint(ctx)));
-        }
-        if (topBar != null) topBar.setWallpaperBackdrop(wallpaperBackdrop, screenW, screenH);
-        if (topStripBacking != null) {
-            topStripBacking.setBackground(new WallpaperCropDrawable(wallpaperBackdrop, screenW, screenH,
-                    0, 0, HyperOsStyle.topWallpaperTint(ctx)));
-        }
-        Slot upper=slots[SLOT_TOP];
-        if(upper!=null && upper.hint!=null && !upper.occupied)
-            upper.hint.setBackground(new WallpaperCropDrawable(wallpaperBackdrop,screenW,screenH,
-                    topGeometry().left,topGeometry().top,HyperOsStyle.topWallpaperTint(ctx)));
-        int x = layout.mainOnRight ? 0 : layout.mainWidth;
-        for (int i = 1; i < CELL_SLOT_COUNT; i++) {
-            View backing = sideBackingViews[i];
-            if (backing != null) backing.setBackground(new WallpaperCropDrawable(wallpaperBackdrop, screenW, screenH,
-                    layout.tabletLandscape?layout.cellBounds(i-1)[0]:x,
-                    sideSegmentTop(i), HyperOsStyle.topWallpaperTint(ctx)));
-        }
-        for (int i = 1; i < slots.length; i++) {
-            if (i == SLOT_TOP) continue;
-            Slot slot = slots[i];
-            if (slot != null && presentsSlot(slot)) refreshEmptyHintBackdrop(slot);
-        }
-        updateWorkspaceBackdropVisibility();
-    }
-
-    /** Empty rows, including newly freed task owners, must match the wallpaper in the transition. */
-    private void refreshEmptyHintBackdrop(Slot slot) {
-        if (slot.hint == null || slot.rect == null || (slot.occupied && !slot.parked)
-                || wallpaperBackdrop == null || wallpaperBackdrop.isRecycled()) return;
-        int x = slot.rect[0], y = slot.rect[1];
-        int tint = HyperOsStyle.topWallpaperTint(ctx);
-        if (slot.hint.getBackground() instanceof WallpaperCropDrawable) {
-            WallpaperCropDrawable current = (WallpaperCropDrawable) slot.hint.getBackground();
-            if (current.matchesWallpaper(wallpaperBackdrop, screenW, screenH, tint)) {
-                current.setScreenOrigin(x, y);
-                current.setWellWallpaper(wellWallpaperBackdrop);
-                return;
-            }
-        }
-        WallpaperCropDrawable backdrop = new WallpaperCropDrawable(
-                wallpaperBackdrop, screenW, screenH, x, y, tint);
-        backdrop.setWellWallpaper(wellWallpaperBackdrop);
-        if (layout != null) backdrop.setMainHole(workspaceMainHole());
-        slot.hint.setBackground(backdrop);
-    }
-
-    /** Apply the same cold-entry gate to newly created and replaced backgrounds. */
+    private void scheduleWallpaperRetry() { wallpapers.scheduleWallpaperRetry(); }
+    private void loadWallpaperBackdrop() { wallpapers.loadWallpaperBackdrop(); }
+    private void applyWallpaperBackdrops() { wallpapers.applyWallpaperBackdrops(); }
+    private void refreshEmptyHintBackdrop(Slot slot) { wallpapers.refreshEmptyHintBackdrop(slot); }
     private void updateWorkspaceBackdropVisibility() {
-        if (layout == null) return;
-        // Wallpaper can arrive during a task handoff; do not rewrite its Surface alpha.
-        android.graphics.RectF hole = workspaceMainHole();
-        updateWorkspaceBacking(topStripBacking, hole);
-        updateWorkspaceBacking(mainGapBacking, hole);
-        for (int i=1;i<SLOT_COUNT;i++) {
-            View backing=sideBackingViews[i];
-            updateWorkspaceBacking(backing, hole);
-            Slot slot=slots[i];
-            if (slot!=null && slot.hint!=null && slot.hint.getBackground() instanceof WallpaperCropDrawable)
-                ((WallpaperCropDrawable) slot.hint.getBackground()).setMainHole(hole);
-        }
+        wallpapers.updateWorkspaceBackdropVisibility();
     }
+
 
     /** 角部滑动起手在状态栏区域时 MIUI 通知栏/控制中心会被顺带拉出并盖住主区；打开一步后主动收起。 */
     private void collapseStatusBarPanels() {
@@ -5126,40 +4464,8 @@ public final class WorkspaceHost {
         }
     }
 
-    /** 换壁纸后自动重算模糊底，避免一步里还是旧壁纸。 */
-    private void registerWallpaperReceiver() {
-        if (wallpaperReceiver != null) return;
-        try {
-            wallpaperReceiver = new BroadcastReceiver() {
-                @Override public void onReceive(Context context, Intent intent) {
-                    log("wallpaper changed; reloading blur backdrop");
-                    invalidateWallpaperBackdrop();
-                }
-            };
-            ctx.registerReceiver(wallpaperReceiver, new IntentFilter(Intent.ACTION_WALLPAPER_CHANGED));
-            log("wallpaper change receiver registered");
-        } catch (Throwable error) {
-            log("wallpaper receiver failed: " + error);
-        }
-        try {
-            ctx.getContentResolver().registerContentObserver(WorkspaceBackground.URI, false,
-                    new android.database.ContentObserver(main) {
-                        @Override public void onChange(boolean selfChange) { invalidateWallpaperBackdrop(); }
-                    });
-        } catch (RuntimeException unavailable) {
-            log("workspace background observer unavailable: " + unavailable);
-        }
-    }
-
-    private void invalidateWallpaperBackdrop() {
-        wallpaperBackdropDirty = true;
-        ++wallpaperLoadGeneration;
-        wallpaperBackdropRequested = false;
-        wallpaperRetryAttempt = 0;
-        main.removeCallbacks(wallpaperRetry);
-        if ((scene == ACTIVE || scene == RESUMING) && screenOn && !keyguardLocked)
-            loadWallpaperBackdrop();
-    }
+    private void registerWallpaperReceiver() { wallpapers.registerWallpaperReceiver(); }
+    private void invalidateWallpaperBackdrop() { wallpapers.invalidateWallpaperBackdrop(); }
 
     private void registerDesktopIconReceiver() {
         if (desktopIconReceiver != null) return;
@@ -6945,7 +6251,7 @@ public final class WorkspaceHost {
     }
 
     /** Promote through the existing Shell queue; retain the slot until actual detachment. */
-    void swapWithMain(int slotIndex) {
+    private void swapWithMain(int slotIndex) {
         if(slotIndex==SLOT_TOP) { releaseTopTask(true,true,null); return; }
         swapWithMain(slotIndex, false);
     }
@@ -8199,7 +7505,7 @@ public final class WorkspaceHost {
         if (ticket.mainLeash != null && !ticket.handoffAttempted) {
             try {
                 if (Boolean.TRUE.equals(XposedHelpers.callMethod(ticket.mainLeash, "isValid"))) {
-                    applyLeashTransform(ticket.mainLeash, 0f, 0f, 1f, 1f);
+                    carriers.applyLeashTransform(ticket.mainLeash, 0f, 0f, 1f, 1f);
                     log("live main shrink restored after failure task=" + ticket.taskId);
                 }
             } catch (Throwable error) {
@@ -9396,7 +8702,7 @@ public final class WorkspaceHost {
         return sb.toString();
     }
 
-    boolean executeOnShell(Runnable task) {
+    private boolean executeOnShell(Runnable task) {
         if (executor != null) {
             try { executor.execute(task); return true; }
             catch (Throwable error) { log("Host executor failed: " + error); }
@@ -9697,4 +9003,3 @@ public final class WorkspaceHost {
         }
     }
 }
-

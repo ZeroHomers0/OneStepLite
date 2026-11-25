@@ -4,18 +4,19 @@ import os, subprocess, sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from source_paths import package_dir
 root=Path(__file__).resolve().parents[2];src=package_dir(root);out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
-s=(src/'WorkspaceHost.java').read_text('utf-8');a=s.index('    private void loadWallpaperBackdrop()');b=s.index('{',a)+1;depth=1
+s=(src/'WorkspaceWallpaperController.java').read_text('utf-8');a=s.index('    void loadWallpaperBackdrop()');b=s.index('{',a)+1;depth=1
 while depth:depth+=(s[b]=='{')-(s[b]=='}');b+=1
 method=s[a:b]
-a=s.index('    private void finishWallpaperLoad(');b=s.index('{',a)+1;depth=1
+a=s.index('    void finishWallpaperLoad(');b=s.index('{',a)+1;depth=1
 while depth:depth+=(s[b]=='{')-(s[b]=='}');b+=1
 method+='\n'+s[a:b]
-a=s.index('    private void scheduleWallpaperRetry(');b=s.index('{',a)+1;depth=1
+a=s.index('    void scheduleWallpaperRetry(');b=s.index('{',a)+1;depth=1
 while depth:depth+=(s[b]=='{')-(s[b]=='}');b+=1
 method+='\n'+s[a:b]
-attempt=s.index('    private int wallpaperRetryAttempt;')
-method+='\n'+s[attempt:attempt+len('    private int wallpaperRetryAttempt;')]
-method+='\n'+s[s.index('    private final Runnable wallpaperRetry'):s.index('    private void scheduleWallpaperRetry')]
+method=method.replace('host.','')
+method=method.replace('WorkspaceHost.','').replace('log.accept(','log(')
+method+='\n int wallpaperRetryAttempt;'
+method+='\n final Runnable wallpaperRetry=this::loadWallpaperBackdrop;'
 java=r'''package io.github.zerohomers0.onesteplite;
 import java.util.*;
 public class WallpaperRefreshRegression {
