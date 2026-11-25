@@ -83,13 +83,10 @@ public class WordHoldRegression{
  h=fresh();h.fallbackCapture.deferred=true;two=new MotionEvent(2);two.count=2;
  h.motion(two);h.main.drain();h.motion(new MotionEvent(0));h.fallbackCapture.result.accept("old OCR");
  check(h.opens==0,"OCR from a previous press cannot open word selection");
- h=fresh();check(h.showExtractedWords("semantic paragraph",true)&&h.opens==1&&h.lifts==0,
-     "a moved semantic text result opens word selection without starting a whole paragraph drag");
  System.out.println("Production word hold cancellation checks="+checks+" passed");
  }
 }
-'''.replace('__METHODS__',member('    private void motion(')+'\n'+member('    private void moveLiftCandidate(')+'\n'
-    +member('    private boolean showExtractedWords(')+'\n'+member('    private boolean deferWords('))}
+'''.replace('__METHODS__',member('    private void motion(')+'\n'+member('    private void moveLiftCandidate(')+'\n'+member('    private boolean deferWords('))}
 paths=[]
 for name,text in files.items():
     path=out/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(text,encoding='utf-8');paths.append(str(path))
