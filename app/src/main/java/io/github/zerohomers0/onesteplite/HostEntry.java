@@ -316,67 +316,22 @@ public class HostEntry implements IXposedHookLoadPackage {
         InputWindowMagnificationHooks.install(cl, () -> sZoomed, () -> sDisplayContent,
                 () -> sUnlockPhysicalShadeGeneration, () -> sUnlockPhysicalShadeUntil,
                 HostEntry::log);
-        try {
-            Class<?> spy = XposedHelpers.findClass("com.android.server.input.GestureMonitorSpyWindow", cl);
-            XposedBridge.hookAllConstructors(spy, new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (p.args.length != 7 || !Integer.valueOf(0).equals(p.args[2])) return;
-                    String name = String.valueOf(p.args[1]);
-                    try {
-                        Context context = (Context) sSystemContext;
-                        String[] packages = context == null ? null
-                                : context.getPackageManager().getPackagesForUid((Integer) p.args[4]);
-                        String kind = NativeFreeformPolicy.gestureKind((Integer) p.args[2],
-                                name, (Integer) p.args[4], packages);
-                        if (kind == null) return;
-                        Object surface = XposedHelpers.getObjectField(p.thisObject, "mInputSurface");
-                        synchronized (sGestureSurfaces) {
-                            sGestureSurfaces.put(surface, kind);
-                        }
-                        ZoomTarget target = sZoomTarget;
-                        if (target != null) target.handler.post(() -> {
-                            synchronized (target.globalLock) {
-                                if (sZoomTarget == target)
-                                    applyGestureSurfacesLocked(target, sZoomScale,
-                                            sZoomOffset, sZoomOffsetX);
-                            }
-                        });
-                        log("captured gesture monitor name=" + name + " pid=" + p.args[3]
-                                + " uid=" + p.args[4] + " packages="
-                                + (packages == null ? "unknown" : java.util.Arrays.toString(packages)));
-                        if ("return".equals(kind)) {
-                            StackTraceElement[] frames = Thread.currentThread().getStackTrace();
-                            StringBuilder callers = new StringBuilder();
-                            for (int i = 1; i < frames.length && i < 9; i++) {
-                                if (callers.length() > 0) callers.append(" <- ");
-                                callers.append(frames[i].getClassName()).append('.')
-                                        .append(frames[i].getMethodName());
-                            }
-                            log("return gesture monitor creator " + callers);
-                        }
-                    } catch (Throwable error) { log("navigation surface admission skipped: " + error); }
-                }
-            });
-        } catch (Throwable error) { log("navigation input geometry unavailable: " + error); }
-        // Keep the non-resizable override inside OneStepLite-owned side tasks. A process-wide
-        // override also changes Home and unrelated windowing decisions.
-        try {
-            Class<?> taskCls = XposedHelpers.findClass("com.android.server.wm.Task", cl);
-            XposedBridge.hookAllMethods(taskCls, "isResizeable", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    if (!sFullscreenRotationActive) return;
-                    try {
-                        if (isSideTask(param.thisObject)) param.setResult(Boolean.TRUE);
-                    } catch (Throwable error) {
-                        log("scoped resizeability check skipped: " + error);
-                    }
-                }
-            });
-            log("Task#isResizeable override scoped to active OneStepLite side tasks");
-        } catch (Throwable t) {
-            log("Task#isResizeable hook failed: " + t);
-        }
+        NavigationGestureSurfaceHooks.install(cl, new NavigationGestureSurfaceHooks.Host() {
+            @Override public Context systemContext() { return (Context) sSystemContext; }
+            @Override public java.util.Map<Object, String> gestureSurfaces() {
+                return sGestureSurfaces;
+            }
+            @Override public ZoomTarget zoomTarget() { return sZoomTarget; }
+            @Override public float zoomScale() { return sZoomScale; }
+            @Override public float zoomOffsetX() { return sZoomOffsetX; }
+            @Override public float zoomOffsetY() { return sZoomOffset; }
+            @Override public void applyGestureSurfaces(
+                    ZoomTarget target, float scale, float offsetY, float offsetX) {
+                HostEntry.this.applyGestureSurfacesLocked(target, scale, offsetY, offsetX);
+            }
+        }, HostEntry::log);
+        TaskResizeableHooks.install(cl, () -> sFullscreenRotationActive,
+                HostEntry::isSideTask, HostEntry::log);
         try {
             Class<?> at = XposedHelpers.findClass("android.app.ActivityThread", cl);
             Object thread = XposedHelpers.callStaticMethod(at, "currentActivityThread");
