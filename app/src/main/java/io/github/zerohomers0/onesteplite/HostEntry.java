@@ -1521,67 +1521,12 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
     /** Hold the workspace portrait; app transforms must never announce display rotation. */
     private void installFixedMainRotationHooks(ClassLoader cl) {
-        try {
-            Class<?> policy = XposedHelpers.findClass("com.android.server.wm.InsetsPolicy", cl);
-            XposedBridge.hookAllMethods(policy, "adjustInsetsForWindow", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (p.hasThrowable() || p.args.length != 3 || !sZoomed
-                            || !sFullscreenRotationActive || sDisplayContent == null) return;
-                    try {
-                        Object original = p.getResult();
-                        Object adjusted = TopInsets.adjust(p.args[0], sDisplayContent,
-                                original, DesktopLaunchBridge::ownsTopViewport);
-                        if (adjusted != original) sTopSystemBars.remember(p.args[0], sDisplayContent);
-                        p.setResult(adjusted);
-                    }
-                    catch (Throwable unavailable) { log("upper insets viewport unavailable: " + unavailable); }
-                }
-            });
-            XposedBridge.hookAllMethods(policy, "getInsetsForWindowMetrics", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if(p.hasThrowable() || p.args.length!=2 || !sZoomed || !sFullscreenRotationActive
-                            || sDisplayContent==null || p.args[0]==null)return;
-                    try {
-                        Object adjusted=TopInsets.adjustMetrics(p.args[0],sDisplayContent,p.args[1],
-                                DesktopLaunchBridge::ownsTopViewport);
-                        if(adjusted!=p.args[1]) {
-                            sTopSystemBars.remember(p.args[0],sDisplayContent);
-                            XposedHelpers.callMethod(p.args[1],"set",adjusted,true);
-                        }
-                    } catch(Throwable unavailable) {log("upper metrics insets unavailable: "+unavailable);}
-                }
-            });
-            log("upper leased viewport insets installed; native IME retained");
-        } catch (Throwable unavailable) { log("upper viewport insets hook unavailable: " + unavailable); }
-        try {
-            Class<?> activityRecord = XposedHelpers.findClass(
-                    "com.android.server.wm.ActivityRecord", cl);
-            XposedBridge.hookAllMethods(activityRecord, "resolveOverrideConfiguration",
-                    new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (p.hasThrowable() || !sZoomed || !sFullscreenRotationActive
-                            || p.args.length != 1
-                            || !(p.args[0] instanceof android.content.res.Configuration)) return;
-                    try {
-                        if (XposedHelpers.getObjectField(p.thisObject, "mDisplayContent")
-                                != sDisplayContent) return;
-                        Object task = XposedHelpers.callMethod(p.thisObject, "getTask");
-                        android.content.res.Configuration sideLocal=ownedSideRotationConfigurationLocked(p.thisObject,task);
-                        if(SideConfiguration.apply(p.thisObject,task,sideLocal))return;
-                        android.content.res.Configuration local =
-                                ownedTopRotationConfigurationLocked(p.thisObject, task);
-                        if (TopConfiguration.applyRotated(p.thisObject, task, local)) return;
-                        TopConfiguration.apply(p.thisObject, task,
-                                (android.content.res.Configuration) p.args[0]);
-                    } catch (Throwable error) {
-                        log("upper Activity configuration unavailable: " + error);
-                    }
-                }
-            });
-            log("upper Activity configuration follows full task viewport");
-        } catch (Throwable error) {
-            log("upper Activity configuration hook unavailable: " + error);
-        }
+        FixedRotationInsetsHooks.install(cl, sTopSystemBars, () -> sDisplayContent,
+                () -> sZoomed, () -> sFullscreenRotationActive, HostEntry::log);
+        FixedRotationConfigurationHooks.install(cl, () -> sDisplayContent,
+                () -> sZoomed, () -> sFullscreenRotationActive,
+                this::ownedSideRotationConfigurationLocked,
+                this::ownedTopRotationConfigurationLocked, HostEntry::log);
         try {
             Class<?> activityRecord = XposedHelpers.findClass(
                     "com.android.server.wm.ActivityRecord", cl);
