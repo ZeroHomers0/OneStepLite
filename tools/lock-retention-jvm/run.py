@@ -89,8 +89,7 @@ public class WorkspaceHost {
  final WindowPrivacy windowPrivacy=new WindowPrivacy(WorkspaceHost::log);
  WorkspaceOptions workspaceOptions=WorkspaceOptions.DEFAULT;Context ctx;
  Slot[]slots=new Slot[SLOT_COUNT];StatusBar statusBar=new StatusBar();SwapTrace swapTrace;
- static class WorkspaceDebugController {void stopTrace(){}}
- final WorkspaceDebugController debug=new WorkspaceDebugController();Debug debug=new Debug();
+ Debug debug=new Debug();
  boolean lockExitPending;boolean screenOn=true,keyguardLocked,retainedForLock,keyguardWindowHidden,keyguardWindowNotTouchable,retainedOnExit;
  boolean restoredSurfaces,traceNextSwap,workspaceEntering,zoomed=true,suspendRequested,landscapeSuspended,mirror=true;
  float keyguardWindowAlpha,workspaceAlpha=1f;int keyguardResumeIndex=-1,scene=ACTIVE,suspends,entries,repairs,reasserts,adoptions,zooms;
