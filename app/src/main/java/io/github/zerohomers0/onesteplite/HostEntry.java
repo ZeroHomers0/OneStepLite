@@ -974,94 +974,27 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     /** Preserve active WM magnification after Shell resets its transition targets. */
     private void hookMagnificationReplayAfterTransition(ClassLoader cl) {
+        TransitionMagnificationStartHooks.install(cl, new TransitionMagnificationStartHooks.Host() {
+            @Override public boolean zoomed() { return sZoomed; }
+            @Override public ZoomTarget zoomTarget() { return sZoomTarget; }
+            @Override public Object displayContent() { return sDisplayContent; }
+            @Override public NativeFreeformStartGate nativeFreeformStart() {
+                return sNativeFreeformStart;
+            }
+            @Override public void finishNativeFreeformStart(ZoomTarget target, Object start) {
+                HostEntry.finishNativeFreeformStart(target, start);
+            }
+            @Override public void reapplyFinalMagnification(
+                    Object display, Object transaction, Object info) {
+                HostEntry.reapplyFinalMagnification(display, transaction, info);
+            }
+            @Override public float zoomScale() { return sZoomScale; }
+            @Override public float zoomOffsetX() { return sZoomOffsetX; }
+            @Override public float zoomOffsetY() { return sZoomOffset; }
+        }, HostEntry::log);
         try {
             Class<?> transition = XposedHelpers.findClass(
                     "com.android.server.wm.Transition", cl);
-            XposedBridge.hookAllMethods(transition, "calculateTransitionInfo", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    ZoomTarget target = sZoomTarget;
-                    if (p.hasThrowable() || !sZoomed || target == null
-                            || target.display != sDisplayContent || !Thread.holdsLock(target.globalLock)
-                            || !TransitionMagnificationCompat.isStart(p.args)) return;
-                    try {
-                        if (NativeFreeformReturn.change(p.getResult()) != null) {
-                            Object nativeTask = null;
-                            for (Object change : (java.util.List<?>) p.args[2]) {
-                                Object container = XposedHelpers.getObjectField(change, "mContainer");
-                                Object task = XposedHelpers.callMethod(container, "asTask");
-                                if (task != null && XposedHelpers.getIntField(change, "mWindowingMode") == 5
-                                        && Integer.valueOf(1).equals(XposedHelpers.callMethod(task, "getWindowingMode"))
-                                        && XposedHelpers.callMethod(task, "getDisplayContent") == target.display)
-                                    nativeTask = task;
-                            }
-                            Object start = p.args[3];
-                            if (nativeTask == null || !sNativeFreeformStart.begin(target.display, start)) return;
-                            try {
-                                ((android.view.SurfaceControl.Transaction) start).addTransactionCommittedListener(
-                                        command -> target.handler.post(command), () -> finishNativeFreeformStart(target, start));
-                                if (!NativeFreeformHandoff.markNativePrepared(nativeTask))
-                                    throw new IllegalStateException("native return source identity changed");
-                                reapplyFinalMagnification(target.display, start);
-                                if (!HomeTransitionMagnification.prepare(p.getResult(), (java.util.List<?>) p.args[2],
-                                        target.display, start, sZoomScale, sZoomOffsetX, sZoomOffset))
-                                    throw new IllegalStateException("native return Root scene changed");
-                                log("native return Root/start magnification transferred atomically");
-                            } catch (Throwable error) {
-                                sNativeFreeformStart.finish(target.display, start); throw error;
-                            }
-                            return;
-                        }
-                        for (Object change : (java.util.List<?>) p.args[2]) {
-                            if (XposedHelpers.getIntField(change, "mWindowingMode") != 1
-                                    || !Boolean.TRUE.equals(XposedHelpers.getObjectField(change, "mVisible"))) continue;
-                            Object container = XposedHelpers.getObjectField(change, "mContainer");
-                            Object task = XposedHelpers.callMethod(container, "asTask");
-                            if (task == null || XposedHelpers.callMethod(task, "getDisplayContent") != target.display
-                                    || ((Number) XposedHelpers.callMethod(task, "getWindowingMode")).intValue() != 5)
-                                continue;
-                            Object start = p.args[3];
-                            if (!sNativeFreeformStart.begin(target.display, start)) return;
-                            try {
-                                android.view.SurfaceControl.Transaction tx =
-                                        (android.view.SurfaceControl.Transaction) start;
-                                tx.addTransactionCommittedListener(command -> target.handler.post(command),
-                                        () -> finishNativeFreeformStart(target, start));
-                                if (!NativeFreeformHandoff.markPrepared(task))
-                                    throw new IllegalStateException("native fullscreen source identity changed");
-                                reapplyFinalMagnification(target.display, start);
-                                log("native freeform main transform transferred in start transaction");
-                            } catch (Throwable error) {
-                                sNativeFreeformStart.finish(target.display, start);
-                                throw error;
-                            }
-                            return;
-                        }
-                        for (Object change : (java.util.List<?>) p.args[2]) {
-                            Object container = XposedHelpers.getObjectField(change, "mContainer");
-                            Object task = XposedHelpers.callMethod(container, "asTask");
-                            if (task == null) continue;
-                            int transitMode = (Integer) XposedHelpers.callMethod(
-                                    change, "getTransitMode", container);
-                            if (!MainLaunchMagnification.shouldApply(sZoomed, target.display,
-                                    XposedHelpers.callMethod(task, "getDisplayContent"),
-                                    XposedHelpers.callMethod(task, "getRootTask") == task,
-                                    Boolean.TRUE.equals(XposedHelpers.callMethod(
-                                            task, "isVisibleRequested")),
-                                    (Integer) XposedHelpers.callMethod(task, "getWindowingMode"),
-                                    transitMode)) continue;
-                            reapplyFinalMagnification(target.display, p.args[3]);
-                            if (HomeTransitionMagnification.prepare(p.getResult(),
-                                    (java.util.List<?>) p.args[2], target.display, p.args[3],
-                                    sZoomScale, sZoomOffsetX, sZoomOffset))
-                                log("Home transition root retains workspace transform");
-                            log("main launch magnification included in transition start task="
-                                    + XposedHelpers.getIntField(task, "mTaskId")
-                                    + " transit=" + transitMode);
-                            return;
-                        }
-                    } catch (Throwable error) { log("transition start magnification skipped: " + error); }
-                }
-            });
             XposedBridge.hookAllMethods(transition, "buildFinishTransaction", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     if (p.hasThrowable()) return;
