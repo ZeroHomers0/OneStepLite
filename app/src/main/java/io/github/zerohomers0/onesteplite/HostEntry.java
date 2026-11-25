@@ -3013,42 +3013,25 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     private static Object sNativeFreeformLayerAnchor;
     private static final ModalWindowLayers sModalWindowLayers = new ModalWindowLayers();
-    private static Object sNativeFreeformPinManager;
     private static final java.util.Map<Object, NativeHostLayer> sNativeFreeformHostLayers =
             new java.util.IdentityHashMap<>();
     private static final ThreadLocal<Object> sNativeTouchExclusionDisplay = new ThreadLocal<>();
     private static Object sNativeTouchExclusionManager;
 
     private static void installNativeFreeformPin(ClassLoader cl) {
-        try {
-            Class<?> manager = XposedHelpers.findClass(
-                    "com.android.server.wm.MiuiFreeFormManagerService", cl);
-            try {
-                sNativeFreeformPinManager = XposedHelpers.callStaticMethod(XposedHelpers.findClass(
-                        "com.android.server.wm.MiuiFreeFormManagerServiceStub", cl), "getInstance");
-            } catch (Throwable notCreatedYet) { /* The first pin decision supplies the live instance. */ }
-            XposedHelpers.findAndHookMethod(manager, "shouldForegroundPin", int.class,
-                    new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (p.hasThrowable()) return;
-                    sNativeFreeformPinManager = p.thisObject;
-                    if (Boolean.TRUE.equals(p.getResult()))
-                        releaseNativeForegroundPinLayers(p.thisObject, (Integer) p.args[0]);
-                }
-            });
-            log("native foreground pin releases host layers before Shell hides task");
-        } catch (Throwable error) { log("native foreground pin hook unavailable: " + error); }
+        NativeFreeformPinHooks.install(cl, HostEntry::releaseNativeForegroundPinLayers, HostEntry::log);
     }
 
+
     private static boolean isNativeForegroundPin(Object task) {
-        Object manager = sNativeFreeformPinManager != null
-                ? sNativeFreeformPinManager : sNativeTouchExclusionManager;
+        Object manager = NativeFreeformPinHooks.manager();
+        if(manager==null)manager=sNativeTouchExclusionManager;
         return manager != null && Boolean.TRUE.equals(XposedHelpers.callMethod(manager,
                 "getMiuiFreeformIsForegroundPin", XposedHelpers.getIntField(task, "mTaskId")));
     }
 
     private static void releaseNativeForegroundPinLayers(Object manager, int taskId) {
-        sNativeFreeformPinManager = manager;
+        NativeFreeformPinHooks.setManager(manager);
         ZoomTarget target = sZoomTarget;
         if (!sZoomed || target == null) return;
         synchronized (target.globalLock) {

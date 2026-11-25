@@ -139,7 +139,7 @@ public final class NativeFreeformLayerBridgeTest {
         Window pinHost = new Window("WorkspaceHost"), pinMirror = new Window("OneStepLiteMirrorLayer");
         pinDisplay.windows.addAll(List.of(pinHost, pinMirror));
         Task pinTask = new Task(5); pinDisplay.tasks.add(pinTask);
-        setStatic("sNativeFreeformPinManager", manager);
+        NativeFreeformPinHooks.setManager(manager);
         apply(pinDisplay, new Object());
         check(pinHost.anchor==pinTask.surface && pinMirror.anchor==pinTask.surface);
         manager.foreground.add(pinTask.mTaskId);
@@ -164,7 +164,7 @@ public final class NativeFreeformLayerBridgeTest {
         apply(pinDisplay, new Object()); check(pinHost.anchor==pinTask.surface);
         // Background pin keeps its established WM visibility gate.
         pinTask.visible=false; apply(pinDisplay, new Object()); check(pinHost.anchor==null);
-        setStatic("sZoomTarget", null); setStatic("sNativeFreeformPinManager", null);
+        setStatic("sZoomTarget", null); NativeFreeformPinHooks.setManager(null);
         System.out.println("NativeFreeformLayerBridge checks="+checks+" passed (fake WM; rendering/input pending)");
     }
     static Object fakeTarget(Display display, Object lock) throws Exception {
