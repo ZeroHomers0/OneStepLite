@@ -313,89 +313,9 @@ public class HostEntry implements IXposedHookLoadPackage {
         installSideSystemBarPolicy(cl);
         installWorkspaceFocus(cl);
         installWorkspaceRunningTasks(cl);
-        // Use WM's own visual AND input-window magnification path for system input UI.
-        // The target normally excludes IME and conditionally excludes the navigation bar.
-        // Do not change accessibility settings or pretend that a mouse is connected.
-        try {
-            Class<?> window = XposedHelpers.findClass("com.android.server.wm.WindowState", cl);
-            XposedHelpers.findAndHookMethod(window, "shouldMagnify", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (!sZoomed || sDisplayContent == null) return;
-                    try {
-                        if (XposedHelpers.callMethod(p.thisObject, "getDisplayContent") != sDisplayContent) return;
-                        WindowManager.LayoutParams attrs = (WindowManager.LayoutParams)
-                                XposedHelpers.getObjectField(p.thisObject, "mAttrs");
-                        if (sUnlockPhysicalShadeGeneration != 0
-                                && android.os.SystemClock.uptimeMillis() < sUnlockPhysicalShadeUntil
-                                && attrs.type == WindowTypes.NOTIFICATION_SHADE && SYSTEMUI.equals(attrs.packageName)
-                                && "NotificationShade".contentEquals(attrs.getTitle())) {
-                            p.setResult(Boolean.FALSE);
-                            return;
-                        }
-                        if (ImeViewport.imeWindow(p.thisObject)
-                                && ImeViewport.target(sDisplayContent,
-                                        DesktopLaunchBridge::ownsTopTask) != null) {
-                            p.setResult(Boolean.FALSE);
-                            return;
-                        }
-                        if (InputMagnificationPolicy.shouldExcludeFromMagnification(attrs.type,
-                                attrs.packageName, attrs.getTitle())) {
-                            p.setResult(Boolean.FALSE);
-                            return;
-                        }
-                        // Native freeforms inherit the same WM parent transform as main apps.
-                        // Their canonical leash retains the OEM's own mini/freeform scale.
-                        int flags = XposedHelpers.getIntField(attrs, "privateFlags");
-                        // Native gesture windows keep the ROM's own magnification policy.
-                        if (InputMagnificationPolicy.shouldForceMagnification(attrs.type, flags,
-                                attrs.packageName, attrs.getTitle()))
-                            p.setResult(Boolean.TRUE);
-                    } catch (Throwable error) { log("input UI magnification skipped: " + error); }
-                }
-            });
-            log("scoped IME/navigation magnification admitted on default display");
-        } catch (Throwable error) { log("input UI magnification unavailable: " + error); }
-        try {
-            Class<?> window = XposedHelpers.findClass("com.android.server.wm.WindowState", cl);
-            XposedHelpers.findAndHookMethod(window, ShellCompat.hasMethod(window, "canBeImeLayeringTarget", 0)
-                    ? "canBeImeLayeringTarget" : "canBeImeTarget",
-                    new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (!sZoomed || !Boolean.TRUE.equals(p.getResult())) return;
-                    try {
-                        if (ImeViewport.skipOtherTask(p.thisObject, sDisplayContent,
-                                DesktopLaunchBridge::ownsTopTask)) {
-                            p.setResult(Boolean.FALSE);
-                            return;
-                        }
-                        Object task = XposedHelpers.callMethod(p.thisObject, "getTask");
-                        if (task != null
-                                && Integer.valueOf(6).equals(XposedHelpers.callMethod(
-                                        task, "getWindowingMode"))
-                                && Boolean.TRUE.equals(XposedHelpers.callMethod(
-                                        task, "isForceTranslucent"))
-                                && !ImePolicy.isFocusedTopWindow(p.thisObject,sDisplayContent,
-                                        DesktopLaunchBridge::ownsTopTask)) {
-                            p.setResult(Boolean.FALSE);
-                        }
-                    } catch (Throwable error) {
-                        log("side IME exclusion skipped: " + error);
-                    }
-                }
-            });
-            XposedHelpers.findAndHookMethod(window,"shouldControlIme",new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if(!sZoomed || !Boolean.FALSE.equals(p.getResult()))return;
-                    try {
-                        if(ImePolicy.isFocusedTopWindow(p.thisObject,sDisplayContent,
-                                DesktopLaunchBridge::ownsTopTask)
-                                && DesktopLaunchBridge.ownsTopTask(XposedHelpers.callMethod(p.thisObject,"getTask")))
-                            p.setResult(Boolean.TRUE);
-                    } catch(Throwable unavailable) {log("TOP IME control skipped: "+unavailable);}
-                }
-            });
-            log("passive side TaskViews excluded from IME layering; focused TOP keeps native eligibility");
-        } catch (Throwable error) { log("side IME exclusion unavailable: " + error); }
+        InputWindowMagnificationHooks.install(cl, () -> sZoomed, () -> sDisplayContent,
+                () -> sUnlockPhysicalShadeGeneration, () -> sUnlockPhysicalShadeUntil,
+                HostEntry::log);
         try {
             Class<?> spy = XposedHelpers.findClass("com.android.server.input.GestureMonitorSpyWindow", cl);
             XposedBridge.hookAllConstructors(spy, new XC_MethodHook() {
