@@ -168,6 +168,7 @@ final class TopBar extends FrameLayout {
     void setTabletToolsExpanded(boolean expanded,boolean animate) {
         tabletToolsExpanded=expanded;listener.onTaskCellsCovered(expanded);
         setVisibility(expanded?VISIBLE:INVISIBLE);renderTabletTools();
+        if(workspaceActive && dragShareEnabled && shareWorkspace!=null)shareWorkspace.setActive(true);
     }
     private void renderTabletTools() {
         if(tabletHeaderHeight>0)setClipBounds(new Rect(0,tabletHeaderHeight,getWidth(),getHeight()));

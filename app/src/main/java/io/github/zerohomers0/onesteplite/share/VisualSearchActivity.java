@@ -5,7 +5,6 @@ import android.graphics.Bitmap;
 import android.graphics.ImageDecoder;
 import android.net.Uri;
 import android.os.Bundle;
-import android.view.View;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.LinearLayout;
@@ -16,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class VisualSearchActivity extends Activity {
     private final AtomicBoolean closed=new AtomicBoolean();
     private WebView web;
+    private VisualSearchDrag pageDrag;
     private android.widget.ProgressBar progress;
     private String form;
     @Override public void onCreate(Bundle state){
@@ -47,7 +47,10 @@ public final class VisualSearchActivity extends Activity {
     @android.annotation.SuppressLint("SetJavaScriptEnabled") // Remote image search has no JavaScript bridge or local resource access.
     private void createPage(){
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setBackgroundColor(HyperOsStyle.page(this));
-        View retry=WorkspacePopupStyle.action(this,"重试",false,()->{if(form!=null)submit();});
+        IconButton retry=new IconButton(this,IconButton.RETRY,"重试");
+        retry.setMinimumWidth(HyperOsStyle.dp(this,44));
+        retry.setTooltipText("重试");
+        retry.setOnClickListener(view->{if(form!=null)submit();});
         WorkspacePopupStyle.heading(page,"图片搜索",this::finish,retry);
         progress=new android.widget.ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         progress.setIndeterminate(false);
@@ -56,6 +59,7 @@ public final class VisualSearchActivity extends Activity {
         web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);
         web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);
         web.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        pageDrag=new VisualSearchDrag(this,web);
         web.setWebChromeClient(new android.webkit.WebChromeClient(){
             @Override public void onProgressChanged(WebView view,int percent){
                 if(closed.get())return;
@@ -64,6 +68,7 @@ public final class VisualSearchActivity extends Activity {
             }
         });
         web.setWebViewClient(new WebViewClient(){
+            @Override public void onPageStarted(WebView view,String url,Bitmap favicon){if(pageDrag!=null)pageDrag.cancelPress();}
             @Override public boolean shouldOverrideUrlLoading(WebView view,android.webkit.WebResourceRequest request){return !"https".equals(request.getUrl().getScheme());}
             @Override public void onReceivedError(WebView view,android.webkit.WebResourceRequest request,android.webkit.WebResourceError error){
                 if(!closed.get() && request.isForMainFrame())android.widget.Toast.makeText(VisualSearchActivity.this,"网络暂时不可用，请重试",android.widget.Toast.LENGTH_LONG).show();
@@ -76,5 +81,9 @@ public final class VisualSearchActivity extends Activity {
         });page.requestApplyInsets();
     }
     private void submit(){progress.setProgress(0);progress.setVisibility(android.view.View.VISIBLE);web.loadDataWithBaseURL(VisualSearchForm.BASE,form,"text/html","UTF-8",null);}
-    @Override protected void onDestroy(){closed.set(true);form=null;if(web!=null){web.stopLoading();web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onPause(){
+        super.onPause();
+        if(pageDrag!=null)pageDrag.cancelPress();
+    }
+    @Override protected void onDestroy(){closed.set(true);form=null;if(pageDrag!=null){pageDrag.close();pageDrag=null;}if(web!=null){web.stopLoading();web.destroy();web=null;}super.onDestroy();}
 }

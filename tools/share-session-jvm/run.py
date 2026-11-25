@@ -26,7 +26,9 @@ methods = '\n'.join(member(signature) for signature in [
     '    boolean onWindowDrag(', '    boolean onWindowDrag(DragEvent event,String targetPackage,boolean covered,View origin)',
     '    private void finishVisuals(', '    private void clearTargetHover(', '    void cancel(',
     '    boolean retainDelivery(', '    private void finishDelivery(',
-    '    @Override protected void onDetachedFromWindow()', '    void close()'])
+    '    @Override protected void onDetachedFromWindow()', '    void close()',
+    '    void setActive(', '    private void startObservers(', '    private void restoreObservers(',
+    '    @Override protected void onWindowVisibilityChanged('])
 files = {
 'ShareSessionRegression.java': '''package io.github.zerohomers0.onesteplite;
 import java.util.Set;
@@ -36,8 +38,10 @@ static int checks;static void check(boolean value,String message){checks++;if(!v
 static final class DragEvent {static final int ACTION_DRAG_STARTED=1,ACTION_DRAG_LOCATION=2,ACTION_DROP=3,ACTION_DRAG_ENDED=4,ACTION_DRAG_EXITED=5;
 int action;DragEvent(int value){action=value;}int getAction(){return action;}Object getClipDescription(){return this;}}
 static final class ComponentName {String pkg;ComponentName(String p,String name){pkg=p;}}
-static class Counter implements AutoCloseable {int closes,stops,restores;void dragStarted(){}public void close(){closes++;}void stop(){stops++;}boolean isDragging(){return false;}void dragEnded(boolean consumed){restores++;}}
-static class Base {int detaches;protected void onDetachedFromWindow(){detaches++;}}
+static class Counter implements AutoCloseable {int closes,stops,restores,started;void start(){started++;}void dragStarted(){}public void close(){closes++;}void stop(){stops++;}boolean isDragging(){return false;}void dragEnded(boolean consumed){restores++;}}
+static class Base {static final int VISIBLE=0;int detaches,visibility;boolean shown=true,attached=true;
+boolean isShown(){return shown;}boolean isAttachedToWindow(){return attached;}int getWindowVisibility(){return visibility;}
+protected void onWindowVisibilityChanged(int next){visibility=next;}protected void onDetachedFromWindow(){detaches++;}}
 static class View {}
 static class ShareTargetButton extends View {boolean hovered=true;void setDragHovered(boolean value){hovered=value;}}
 static class Targets {ShareTargetButton child=new ShareTargetButton();int getChildCount(){return 1;}View getChildAt(int i){return child;}}
@@ -50,7 +54,7 @@ boolean isOpen(){return open;}boolean onDrag(DragEvent event,String name,View so
 void setWindowHover(Function<String,String> identity,Consumer<String> activate){}void setMainOnRight(boolean right){}void close(){open=false;closes++;}}
 static class Replay extends Base {
 BooleanSupplier ready=()->true;Object dispatch,bounds;ComponentName hovered;Consumer<String> hint=value->{};ShareRailOverlay overlay;
-boolean panelSource,hasPointer,mainRight;Object transferClip;Counter receipt;Function<String,String> hoverIdentity=value->value;Consumer<String> hoverActivate=value->{};
+boolean panelSource,hasPointer,mainRight,workspaceActive;Object transferClip;Counter receipt;Function<String,String> hoverIdentity=value->value;Consumer<String> hoverActivate=value->{};
 String sourcePackage;Set<String> windowPackages;
 static class Hover extends Counter {void move(String value){}}Hover windowHover=new Hover();
 boolean dragging,dropped,deliveryPending,retainingDelivery,shareOnly;int generation,starts,ends,stops,drops;String lastTarget;
@@ -122,6 +126,15 @@ check(!rail.onWindowDrag(new DragEvent(2),"other.pkg",false)&&rail.hovered==rail
       "arrow hit suppresses the small-window outline");
 rail=new Replay();rail.dragging=true;rail.cancel();check(rail.panel.restores==1,"cancel restores an active source popup");
 rail=new Replay();rail.cancel();check(rail.panel.restores==0,"idle reset must not end a newly staged source drag");
+rail=new Replay();rail.setActive(true);rail.onWindowVisibilityChanged(4);
+check(rail.portal.closes==1,"hidden workspace stops portal observation");
+rail.onWindowVisibilityChanged(0);
+check(rail.portal.started==2&&rail.history.started==2,"visible workspace restores both observers without toggling the feature");
+rail.setActive(false);rail.onWindowVisibilityChanged(0);
+check(rail.portal.started==2,"a disabled workspace never restarts observation on visibility change");
+rail=new Replay();rail.setActive(true);rail.deliveryPending=true;rail.receipt=new Counter();
+rail.onWindowVisibilityChanged(4);
+check(rail.deliveryPending&&rail.receipt.closes==0,"brief proxy visibility change preserves accepted delivery");
 System.out.println("Production share session checks="+checks+" passed");
 }}
 '''.replace('__METHODS__', methods),

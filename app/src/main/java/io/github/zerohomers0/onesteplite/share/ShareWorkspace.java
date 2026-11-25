@@ -590,7 +590,22 @@ final class ShareWorkspace extends FrameLayout {
         }
     }
 
-    void setActive(boolean active) { if(active){history.start();if(portal!=null)portal.start();}else close(); }
+    private boolean workspaceActive;
+
+    void setActive(boolean active) {
+        workspaceActive=active;
+        if(active)startObservers();
+        else close();
+    }
+
+    private void startObservers() {
+        history.start();
+        if(portal!=null)portal.start();
+    }
+
+    private void restoreObservers() {
+        if(workspaceActive && isAttachedToWindow() && isShown() && getWindowVisibility()==VISIBLE)startObservers();
+    }
     void setCoveredSource(BooleanSupplier covered){this.covered=covered;}
 
     boolean retainDelivery(Runnable settled) {
@@ -606,22 +621,38 @@ final class ShareWorkspace extends FrameLayout {
         Runnable settled=deliverySettled;deliverySettled=()->{};settled.run();
     }
 
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        restoreObservers();
+    }
     @Override protected void onDetachedFromWindow() {
         if(retainingDelivery){finishVisuals();transition.reset();panel.close();capture.close();if(portal!=null)portal.close();history.stop();}
         else close();super.onDetachedFromWindow();
     }
     @Override protected void onSizeChanged(int w, int h, int oldW, int oldH) {
         super.onSizeChanged(w, h, oldW, oldH);
-        if (oldW > 0 && (w != oldW || h != oldH)) close();
+        if (oldW > 0 && (w != oldW || h != oldH)) {
+            close();
+            post(this::restoreObservers);
+        }
     }
     @Override protected void onConfigurationChanged(android.content.res.Configuration configuration) {
         super.onConfigurationChanged(configuration);
-        if (panel != null) close();
+        if (panel != null) {
+            close();
+            post(this::restoreObservers);
+        }
     }
     @Override protected void onVisibilityChanged(View view, int visibility) {
         super.onVisibilityChanged(view, visibility);
         if (panel != null && !isShown() && !retainingDelivery) close();
-        else if(history!=null && ready.getAsBoolean())history.start();
+        else if(history!=null)restoreObservers();
+    }
+    @Override protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        if(panel==null)return;
+        if(visibility==VISIBLE)restoreObservers();
+        else if(!retainingDelivery && !deliveryPending)close();
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private void message(String text) { android.widget.Toast.makeText(getContext(), text, android.widget.Toast.LENGTH_SHORT).show(); }
