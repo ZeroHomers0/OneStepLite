@@ -10,10 +10,6 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC=package_dir(os.environ.get('ONESTEPLITE_FOCUS_SOURCE',ROOT))
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / 'build/tests/ime-window-focus-jvm'
 JDK = Path(os.environ['ONESTEPLITE_JAVA_BIN'])
-host = (SRC / 'HostEntry.java').read_text(encoding='utf-8-sig')
-start = host.index('    private void installWorkspaceWindowFocus(ClassLoader cl) {')
-end = host.index('\n    private void ', start + 10)
-install = host[start:end]
 tree = ast.parse((ROOT / 'tools/live-swap-jvm/run.py').read_text(encoding='utf-8-sig'))
 shared = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
               and any(isinstance(t, ast.Name) and t.id == 'FILES' for t in n.targets))
@@ -91,6 +87,7 @@ public class DisplayContent{
  public boolean lambda$new$3(WindowState window){return true;}
  public void unrelatedNativeMethod(){}
 }''',
+    'io/github/zerohomers0/onesteplite/ZoomTarget.java':'package io.github.zerohomers0.onesteplite; final class ZoomTarget {Object display; final Object globalLock=new Object();}',
     'io/github/zerohomers0/onesteplite/DesktopLaunchBridge.java': r'''package io.github.zerohomers0.onesteplite;
 public class DesktopLaunchBridge{
  static final java.util.Map<Object,Lease> leases=new java.util.IdentityHashMap<>();
@@ -100,15 +97,15 @@ public class DesktopLaunchBridge{
  static boolean recentsLeaseAlive(Object value){Lease lease=(Lease)value;if(lease.fail)throw new IllegalStateException("lease read failure");return lease.alive;}
 }''',
     'io/github/zerohomers0/onesteplite/HostEntry.java': r'''package io.github.zerohomers0.onesteplite;
-import de.robv.android.xposed.*;
 class HostEntry{
  static boolean sZoomed;static Object sDisplayContent;
- static class ZoomTarget{Object display,globalLock=new Object();}static ZoomTarget sZoomTarget;
+ static ZoomTarget sZoomTarget;
  static final ThreadLocal<Object> sWindowFocusScanDisplay=new ThreadLocal<>();
  static final java.util.List<String> logs=new java.util.ArrayList<>();
  static void log(String text){logs.add(text);}
- static void install(){new HostEntry().installWorkspaceWindowFocus(HostEntry.class.getClassLoader());}
-''' + install + '\n}',
+ static void install(){WorkspaceWindowFocusHooks.install(HostEntry.class.getClassLoader(),()->sZoomTarget,
+  ()->sDisplayContent,()->sZoomed,sWindowFocusScanDisplay,HostEntry::log);}
+}''',
     'io/github/zerohomers0/onesteplite/ImeWindowFocusTest.java': r'''package io.github.zerohomers0.onesteplite;
 import android.graphics.Rect;import de.robv.android.xposed.*;import com.android.server.wm.*;
 public class ImeWindowFocusTest{
@@ -184,7 +181,7 @@ public class ImeWindowFocusTest{
   d.mFocusedApp=oldApp;check(scan(d)==main && d.appChanges==previous+1,"valid later scan failed native repair");
   Task upperTask=new Task();upperTask.display=d;upperTask.bounds=new Rect(0,0,1251,2519);
   Activity upperApp=new Activity(upperTask,area);WindowState upper=new WindowState(d,upperTask);upper.mActivityRecord=upperApp;
-  HostEntry.sZoomTarget=new HostEntry.ZoomTarget();HostEntry.sZoomTarget.display=d;
+  HostEntry.sZoomTarget=new ZoomTarget();HostEntry.sZoomTarget.display=d;
   DesktopLaunchBridge.topTask=upperTask;d.windows=new WindowState[]{upper,main};d.nativeCutoff=false;
   d.mCurrentFocus=upper;d.mFocusedApp=mainApp;
   check(scan(d)==main,"stale TOP window retained native focus over main app");
@@ -227,6 +224,7 @@ for name, body in FILES.items():
     sources.append(str(path))
 sources.append(str(ROOT / 'tools/test-stubs/android/graphics/Rect.java'))
 sources.extend(str(SRC / (name + '.java')) for name in
-               ['TopPointerFocus', 'ImePolicy', 'SideRoleChange', 'ZoomChannelState', 'ZoomCommand', 'ZoomAnimCommand'])
+               ['TopPointerFocus', 'ImePolicy', 'SideRoleChange', 'ZoomChannelState', 'ZoomCommand',
+                'ZoomAnimCommand', 'WorkspaceWindowFocusHooks'])
 subprocess.run([str(JDK / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(OUT), *sources], check=True)
 subprocess.run([str(JDK / 'java.exe'), '-cp', str(OUT), 'io.github.zerohomers0.onesteplite.ImeWindowFocusTest'], check=True)
