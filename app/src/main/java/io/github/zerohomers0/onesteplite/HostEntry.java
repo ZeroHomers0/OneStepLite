@@ -1323,86 +1323,32 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private void installMagnificationSurfaceTracking(ClassLoader cl) {
-        try {
-            Class<?> container = XposedHelpers.findClass("com.android.server.wm.WindowContainer", cl);
-            Class<?> transaction = XposedHelpers.findClass("android.view.SurfaceControl$Transaction", cl);
-            Class<?> spec = XposedHelpers.findClass("android.view.MagnificationSpec", cl);
-            XposedHelpers.findAndHookMethod(container, "applyMagnificationSpec", transaction,
-                    spec, new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    ZoomTarget target = sZoomTarget;
-                    if (!sZoomed || target == null || target.display != sDisplayContent
-                            || !Thread.holdsLock(target.globalLock)) return;
-                    try {
-                        boolean finalSnapshot = Boolean.TRUE.equals(sFinalMagnificationSnapshot.get());
-                        // Even an empty concurrent transition builds a display-wide finish.
-                        // Only Home's own delayed finish may restore children below its Root.
-                        boolean homeFinish = finalSnapshot && HomeTransitionMagnification.hasInfo(
-                                sMagnificationFinishInfo.get());
-                        if (!homeFinish && HomeTransitionMagnification.owns(
-                                p.thisObject, target.display)) {
-                            p.setObjectExtra("onesteplite.sideMagnification", Boolean.TRUE);
-                            p.setResult(null);
-                            return;
-                        }
-                        if (SideMagnification.ownsGeometry(p.thisObject, target.display)) {
-                            p.setObjectExtra("onesteplite.sideMagnification", Boolean.TRUE);
-                            p.setResult(null);
-                            return;
-                        }
-                        p.args[0] = sNativeFreeformStart.route(p.thisObject, target.display,
-                                p.args[0], Boolean.TRUE.equals(sFinalMagnificationSnapshot.get()));
-                        p.args[0] = sLiveSwapZoomSurfaces.route(p.thisObject, target.display,
-                                p.args[0], Boolean.TRUE.equals(sFinalMagnificationSnapshot.get()));
-                        java.util.Map<Object, Object> tracked = sMagnifiedSurfaces;
-                        if (!homeFinish && HomeTransitionMagnification.activeOn(target.display)) {
-                            tracked = new java.util.IdentityHashMap<>(tracked);
-                            tracked.entrySet().removeIf(entry ->
-                                    HomeTransitionMagnification.owns(entry.getKey(), target.display));
-                        }
-                        MagnificationTree.prepare(p.thisObject, target.display,
-                                p.args[0], p.args[1], tracked);
-                    } catch (Throwable error) {
-                        log("magnification replay surface cleanup skipped: " + error);
-                    }
-                }
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (!p.hasThrowable()
-                            && !Boolean.TRUE.equals(p.getObjectExtra("onesteplite.sideMagnification")))
-                        rememberMagnifiedSurface(p.thisObject, p.args[1]);
-                    if (!p.hasThrowable()) stagePassBlurCoordinates(p.thisObject, p.args[0], p.args[1]);
-                }
-            });
-            XposedHelpers.findAndHookMethod(container, "clearMagnificationSpec", transaction,
-                    new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    ZoomTarget target = sZoomTarget;
-                    if (!sZoomed || target == null || target.display != sDisplayContent
-                            || !Thread.holdsLock(target.globalLock)) return;
-                    try {
-                        // Native clear recurses before apply. Skipping apply alone lets
-                        // an older WM spec reset the TaskView leash to identity first.
-                        boolean homeFinish = Boolean.TRUE.equals(sFinalMagnificationSnapshot.get())
-                                && HomeTransitionMagnification.hasInfo(sMagnificationFinishInfo.get());
-                        if (!homeFinish
-                                && HomeTransitionMagnification.owns(p.thisObject, target.display)) {
-                            p.setResult(null);
-                            return;
-                        }
-                        if (SideMagnification.ownsGeometry(p.thisObject, target.display))
-                            p.setResult(null);
-                    } catch (Throwable error) {
-                        log("side magnification clear guard unavailable: " + error);
-                    }
-                }
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (!p.hasThrowable()) stagePassBlurCoordinates(p.thisObject, p.args[0], null);
-                }
-            });
-            log("WM magnification surface identities tracked for exit reconciliation");
-        } catch (Throwable error) {
-            log("WM magnification surface tracking unavailable: " + error);
-        }
+        MagnificationSurfaceTrackingHooks.install(cl, new MagnificationSurfaceTrackingHooks.Host() {
+            @Override public boolean zoomed() { return sZoomed; }
+            @Override public Object displayContent() { return sDisplayContent; }
+            @Override public ZoomTarget zoomTarget() { return sZoomTarget; }
+            @Override public boolean finalSnapshot() {
+                return Boolean.TRUE.equals(sFinalMagnificationSnapshot.get());
+            }
+            @Override public Object finishInfo() { return sMagnificationFinishInfo.get(); }
+            @Override public Object routeNativeFreeform(Object container, Object display,
+                    Object transaction, boolean snapshot) {
+                return sNativeFreeformStart.route(container, display, transaction, snapshot);
+            }
+            @Override public Object routeLiveSwap(Object container, Object display,
+                    Object transaction, boolean snapshot) {
+                return sLiveSwapZoomSurfaces.route(container, display, transaction, snapshot);
+            }
+            @Override public java.util.Map<Object, Object> trackedSurfaces() {
+                return sMagnifiedSurfaces;
+            }
+            @Override public void remember(Object container, Object spec) {
+                rememberMagnifiedSurface(container, spec);
+            }
+            @Override public void stagePassBlur(Object display, Object transaction, Object spec) {
+                stagePassBlurCoordinates(display, transaction, spec);
+            }
+        }, HostEntry::log);
     }
 
     private static final PassBlurCoordinates sPassBlurCoordinates = new PassBlurCoordinates();
