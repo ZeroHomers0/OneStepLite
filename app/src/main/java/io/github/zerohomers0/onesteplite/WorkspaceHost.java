@@ -67,14 +67,15 @@ public final class WorkspaceHost {
     private static final long SIDE_PROMOTION_TIMEOUT_MS = 3500L;
 
     private static volatile WorkspaceHost sInstance;
+    final WorkspaceDebugController debug = new WorkspaceDebugController(this);
     /** Resolved once: the leash POC builds a transaction on every animation frame. */
     private static volatile java.lang.reflect.Constructor<?> surfaceTransactionConstructor;
 
-    private final Context ctx;
+    final Context ctx;
     private final Executor executor;
     private final Object factory;
     private final Object transitions;
-    private final Handler main = new Handler(Looper.getMainLooper());
+    final Handler main = new Handler(Looper.getMainLooper());
 
     private volatile Slot[] slots = new Slot[SLOT_COUNT];
     private final SideRowOrder<Slot> sideOrder=new SideRowOrder<>();
@@ -90,8 +91,8 @@ public final class WorkspaceHost {
     private Object sideViewport;
     private final Rect sideViewportCrop = new Rect();
 
-    private volatile WorkspaceLayout layout;
-    private FrameLayout root;
+    volatile WorkspaceLayout layout;
+    FrameLayout root;
     private WindowManager wm;
     private WindowManager.LayoutParams lp;
     private DisplayManager displayManager;
@@ -111,9 +112,9 @@ public final class WorkspaceHost {
     private volatile java.util.Set<Integer> taskUserIds;
     private volatile long taskUserIdsReadAt;
     private volatile String taskUserIdsReadError;
-    private volatile boolean screenOn = true;
+    volatile boolean screenOn = true;
     private Slot launchCurrentSlot;
-    private Promotion promotion;
+    Promotion promotion;
     private SwapPreview swapPreview;
     private Object swapPreviewStatusOwner;
     private final StatusBar statusBar;
@@ -166,7 +167,7 @@ public final class WorkspaceHost {
     /** 侧栏按格分段的不透明底板；承载格需要把它藏起来让下面的真实任务画面透出来。 */
     private final View[] sideBackingViews = new View[SLOT_COUNT];
     private boolean mainOnRight;
-    private volatile boolean keyguardLocked;
+    volatile boolean keyguardLocked;
     private volatile boolean retainedForLock;
     private boolean lockExitPending;
     private boolean retainedGeometryConfirmed;
@@ -178,21 +179,19 @@ public final class WorkspaceHost {
     private volatile boolean retainedOnExit;
     private long retainedExitSourceEpoch = -1;
     private String pendingSuspendReason;
-    private static final int ACTIVE = 0, SUSPENDING = 1, SUSPENDED = 2, RESUMING = 3;
-    private volatile int scene = ACTIVE;
+    static final int ACTIVE = 0, SUSPENDING = 1, SUSPENDED = 2, RESUMING = 3;
+    volatile int scene = ACTIVE;
     private long sceneEpoch;
     private boolean suspendRequested;
     private final NavigationPolicy.EmptyMainGesture emptyMainGesture =
             new NavigationPolicy.EmptyMainGesture();
     private boolean landscapeSuspended;
-    private boolean transferBusy;
+    boolean transferBusy;
     private boolean overlayRefreshScheduled;
     private static boolean boundsHooksReady;
     private static boolean legacyTaskInfoCallbacks;
     private static boolean surfaceHooksReady;
     private Object surfaceObserver;
-    private volatile boolean traceNextSwap;
-    private volatile SwapTrace swapTrace;
     private boolean compactPending;
     private CellMotion cellMotion;
     private SideDismiss sideDismiss;
@@ -202,7 +201,44 @@ public final class WorkspaceHost {
     private View transitionInputWindow;
     private TopPresentationController topPresentation;
     private final android.os.IBinder desktopSceneOwner = new android.os.Binder();
-    private volatile long desktopRegistrationSequence;
+    private final DesktopSideTaskPublisher desktopSideTaskPublisher =
+            new DesktopSideTaskPublisher(new DesktopSideTaskPublisher.Host() {
+        @Override public TopBar topBar() { return topBar; }
+        @Override public int cellSlotCount() { return CELL_SLOT_COUNT; }
+        @Override public Slot[] slots() { return slots; }
+        @Override public int topSlot() { return SLOT_TOP; }
+        @Override public long sceneEpoch() { return sceneEpoch; }
+        @Override public boolean sceneActive() { return scene == ACTIVE; }
+        @Override public boolean sceneSuspending() { return scene == SUSPENDING; }
+        @Override public boolean sceneSuspended() { return scene == SUSPENDED; }
+        @Override public boolean retainedOnExit() { return retainedOnExit; }
+        @Override public boolean screenOn() { return screenOn; }
+        @Override public boolean keyguardLocked() { return keyguardLocked; }
+        @Override public FrameLayout root() { return root; }
+        @Override public boolean isActive(Slot slot) { return WorkspaceHost.this.isActive(slot); }
+        @Override public boolean controllerOwns(Slot slot, int taskId, Object token) {
+            return WorkspaceHost.this.controllerOwns(slot, taskId, token);
+        }
+        @Override public boolean mayWriteSideSurface(Slot slot) {
+            return WorkspaceHost.this.mayWriteSideSurface(slot);
+        }
+        @Override public WorkspaceOptions options() { return workspaceOptions; }
+        @Override public LiveTask findMainTask() throws Exception {
+            return WorkspaceHost.this.findMainTask();
+        }
+        @Override public Object rootInfo(LiveTask task) throws Exception {
+            return WorkspaceHost.this.rootInfo(task);
+        }
+        @Override public int windowModeOf(Object info) { return WorkspaceHost.windowModeOf(info); }
+        @Override public TopTaskState topTaskState() { return topTaskState; }
+        @Override public boolean topFace() { return topFace; }
+        @Override public TopTaskGeometry topGeometry() { return WorkspaceHost.this.topGeometry(); }
+        @Override public android.os.IBinder sceneOwner() { return desktopSceneOwner; }
+        @Override public Context context() { return ctx; }
+        @Override public boolean executeOnShell(Runnable task) {
+            return WorkspaceHost.this.executeOnShell(task);
+        }
+    }, WorkspaceHost::log);
     private final FinishTransactions<RenderBinding> finishTransactions = new FinishTransactions<>(16);
     private final FinishTransactions<Long> workspaceFinishes = new FinishTransactions<>(16);
 
@@ -309,9 +345,7 @@ public final class WorkspaceHost {
                 UnlockHandoff pending = h.unlockHandoff;
                 h.unlockHandoff = null;
                 if (pending != null) pending.cancel();
-                h.traceNextSwap = false;
-                SwapTrace trace = h.swapTrace;
-                if (trace != null) trace.close();
+                h.debug.stopTrace();
                 h.closeSwapPreview();
                 h.statusBar.restore();
                 h.closeCellMovePreview();
@@ -516,22 +550,20 @@ public final class WorkspaceHost {
     /** 调试广播：向指定格启动一个包（无人值守验证用）。 */
     public static void debugLaunch(int slot, String pkg) {
         WorkspaceHost h = sInstance;
-        if (h == null) {
-            log("debugLaunch: host not started");
-            return;
-        }
-        h.main.post(() -> h.launchWhenReady(slot, pkg, 0));
+        if (h == null) { log("debugLaunch: host not started"); return; }
+        h.debug.debugLaunch(slot, pkg);
     }
+
+
 
     /** 调试广播：把指定副格与主区交换。 */
     public static void debugSwap(int slot) {
         WorkspaceHost h = sInstance;
-        if (h == null) {
-            log("debugSwap: host not started");
-            return;
-        }
-        h.main.post(() -> h.swapWithMain(slot));
+        if (h == null) { log("debugSwap: host not started"); return; }
+        h.debug.debugSwap(slot);
     }
+
+
 
     /** Keep the original notification dispatch until this exact side owner is released. */
     static boolean promoteForNotification(String pkg, int userId, Runnable dispatch) {
@@ -575,50 +607,32 @@ public final class WorkspaceHost {
     public static void debugTraceNextSwap() {
         WorkspaceHost h = sInstance;
         if (h == null) { log("passive trace: host not started"); return; }
-        h.main.post(() -> {
-            if (h.scene != ACTIVE || !h.screenOn || h.keyguardLocked
-                    || h.promotion != null || h.transferBusy) return;
-            h.traceNextSwap = true;
-            log("passive trace armed for next one swap; 6s/384 events; no transaction mutations");
-        });
+        h.debug.debugTraceNextSwap();
     }
+
+
 
     private void traceSwap(Promotion ticket) {
-        if (!traceNextSwap) return;
-        traceNextSwap = false;
-        SwapTrace old = swapTrace;
-        if (old != null) old.close();
-        swapTrace = null;
-        try {
-            LiveTask previous = ticket.previousMain;
-            swapTrace = new SwapTrace(main, new java.io.File(ctx.getFilesDir(), "onesteplite-swap-traces"),
-                    WorkspaceHost::log, previous == null ? -1 : previous.id,
-                    previous == null ? null : previous.token, ticket.taskId, ticket.token,
-                    ticket.slot.controller, shellOrganizer(), layout.describe(),
-                    closed -> { if (swapTrace == closed) swapTrace = null; });
-        } catch (Throwable error) { log("passive trace unavailable: " + error); }
+        debug.traceSwap(ticket);
     }
 
+
+
     private void traceSwapEvent(String event) {
-        SwapTrace trace = swapTrace;
-        if (trace != null) trace.snapshot(event);
+        debug.traceSwapEvent(event);
     }
+
+
 
     /** 调试广播：把主区任务 mirror 成宿主窗口里的实时画面（验证 live-surface 承载）。 */
     public static void debugMirror(int taskId, int x, int y, int w, int h, int holdMs,
             int hideMode) {
         WorkspaceHost host = sInstance;
-        if (host == null) {
-            log("debugMirror: host not started");
-            return;
-        }
-        if (w <= 0 || h <= 0) {
-            log("debugMirror: bad rect " + w + "x" + h);
-            return;
-        }
-        host.main.post(() -> host.startMirrorPoc(taskId,
-                new Rect(x, y, x + w, y + h), Math.max(1000, holdMs), hideMode));
+        if (host == null) { log("debugMirror: host not started"); return; }
+        host.debug.debugMirror(taskId, x, y, w, h, holdMs, hideMode);
     }
+
+
 
     private MirrorExperiment mirrorExperiment;
 
@@ -639,7 +653,7 @@ public final class WorkspaceHost {
         if(!visible && leashExperiment!=null)leashExperiment.close();
         if(mirrorExperiment!=null)mirrorExperiment.setMirrorLayerVisible(visible);
     }
-    private void startMirrorPoc(int task,Rect destination,int holdMs,int mode) {
+    void startMirrorPoc(int task,Rect destination,int holdMs,int mode) {
         mirrorExperiment().startMirrorPoc(task,destination,holdMs,mode);
     }
     /** The task to mirror: the requested one, or whatever currently owns the main cell. */
@@ -726,7 +740,7 @@ public final class WorkspaceHost {
 
     // ---------------------------------------------------------------- mirror 承载（fullscreen-only 应用进副格）
 
-    private Object shellOrganizer() {
+    Object shellOrganizer() {
         for (Slot slot : slots) {
             if (slot.controller != null) {
                 return XposedHelpers.getObjectField(slot.controller, "mTaskOrganizer");
@@ -881,18 +895,17 @@ public final class WorkspaceHost {
     /** 调试广播：把主区任务 leash 从主区尺寸动画到目标槽（view 级交换动画的 POC）。 */
     public static void debugLeashAnim(int slotIndex, int durationMs, String pkg) {
         WorkspaceHost host = sInstance;
-        if (host == null) {
-            log("debugLeashAnim: host not started");
-            return;
-        }
-        host.main.post(() -> host.runLeashAnimPoc(slotIndex, Math.max(150, durationMs), pkg));
+        if (host == null) { log("debugLeashAnim: host not started"); return; }
+        host.debug.debugLeashAnim(slotIndex, durationMs, pkg);
     }
+
+
 
     private LeashExperiment leashExperiment;
     /** POC 期间该格的 SF 底板必须停止心跳重建，否则会盖住动画中的真实任务画面。 */
     private volatile int leashPocSlot = -1;
 
-    private void runLeashAnimPoc(int slotIndex, long durationMs, String pkg) {
+    void runLeashAnimPoc(int slotIndex, long durationMs, String pkg) {
         if (scene != ACTIVE || layout == null || slotIndex <= SLOT_MAIN
                 || slotIndex >= SLOT_COUNT || slots[slotIndex].rect == null) {
             log("leash anim POC skipped slot=" + slotIndex + " scene=" + scene);
@@ -1064,7 +1077,7 @@ public final class WorkspaceHost {
     }
 
     /** 等 TaskView 就绪再启动；宿主刚建时窗口可能还没 attach。 */
-    private void launchWhenReady(int slot, String pkg, int attempt) {
+    void launchWhenReady(int slot, String pkg, int attempt) {
         if (slot <= SLOT_MAIN || slot >= SLOT_COUNT) {
             return;
         }
@@ -2059,7 +2072,7 @@ public final class WorkspaceHost {
     }
 
     /** 诊断：打印当前所有 root task 的判定字段（findMainTask 漏判用）。 */
-    private void dumpRoots(String reason) {
+    void dumpRoots(String reason) {
         try {
             java.util.List<?> roots = rootInfos();
             LiveTask main = null;
@@ -2076,14 +2089,11 @@ public final class WorkspaceHost {
     /** 调试广播入口：打印 root 诊断。 */
     public static void debugRoots() {
         WorkspaceHost host = sInstance;
-        if (host == null) {
-            log("debugRoots: host not started");
-            return;
-        }
-        if (!host.executeOnShell(() -> host.dumpRoots("debug"))) {
-            log("debugRoots skipped: no shell queue");
-        }
+        if (host == null) { log("debugRoots: host not started"); return; }
+        host.debug.debugRoots();
     }
+
+
 
     private LiveTask findMainTask() throws Exception {
         // A closing fullscreen app may remain visible while Home has already taken
@@ -2628,7 +2638,7 @@ public final class WorkspaceHost {
                                     keyguardTransactions.mark(args[3], java.util.Collections.singletonList(sceneEpoch));
                                     trackUnlockFinish(args[3]);
                                 }
-                                SwapTrace trace = swapTrace;
+                                SwapTrace trace = debug.swapTrace();
                                 if (trace != null) trace.transition(args[1], args[2], args[3]);
                                 trackRetainedSurfaces(args[1], args[2], args[3]);
                                 scheduleOverlayRefresh();
@@ -5220,102 +5230,7 @@ public final class WorkspaceHost {
 
     /** Publish only confirmed bindings; system_server rechecks each native task before use. */
     private void publishDesktopSideTasks() {
-        if (topBar != null) topBar.requestOpenedAppsRefresh();
-        final long sequence = ++desktopRegistrationSequence;
-        final long epoch = sceneEpoch;
-        final java.util.List<Slot> owners = new java.util.ArrayList<>();
-        for (Slot slot : slots) if (slot != null && slot.index > 0
-                && (slot.index < CELL_SLOT_COUNT || slot.sideRow >= 0 || retainedOnExit
-                        && (scene == SUSPENDING || scene == SUSPENDED))) owners.add(slot);
-        final boolean active = scene == ACTIVE && screenOn && !keyguardLocked && root != null;
-        final boolean keepRecents = root != null && (scene != SUSPENDED || retainedOnExit);
-        Runnable send = () -> {
-            if (sequence != desktopRegistrationSequence || epoch != sceneEpoch) return;
-            android.os.Bundle state = new android.os.Bundle();
-            java.util.ArrayList<android.os.Bundle> rows = new java.util.ArrayList<>();
-            java.util.ArrayList<android.os.Bundle> recents = new java.util.ArrayList<>();
-            if (active || keepRecents) for (Slot slot : owners) {
-                try {
-                    if (!isActive(slot) || !slot.occupied || slot.parked || slot.taskId < 0
-                            || slot.taskToken == null || slot.pkg == null
-                            || !controllerOwns(slot, slot.taskId, slot.taskToken)) continue;
-                    Object organizer = XposedHelpers.getObjectField(slot.controller, "mTaskOrganizer");
-                    synchronized (XposedHelpers.getObjectField(organizer, "mLock")) {
-                        Object appeared = ((android.util.SparseArray<?>) XposedHelpers.getObjectField(
-                                organizer, "mTasks")).get(slot.taskId);
-                        Object info = appeared == null ? null : XposedHelpers.callMethod(appeared, "getTaskInfo");
-                        if (info == null || !slot.taskToken.equals(XposedHelpers.getObjectField(info, "token"))) continue;
-                        android.os.Bundle row = new android.os.Bundle();
-                        row.putBinder("task", (android.os.IBinder) XposedHelpers.callMethod(slot.taskToken, "asBinder"));
-                        row.putInt("taskId", slot.taskId);
-                        row.putInt("userId", XposedHelpers.getIntField(info, "userId"));
-                        row.putInt("displayId", XposedHelpers.getIntField(info, "displayId"));
-                        row.putString("package", slot.pkg);
-                        row.putLong("scene", epoch);
-                        row.putLong("binding", slot.taskEpoch);
-                        row.putBoolean("sideClipped", slot.sideRow >= 0 && !slot.sideShown);
-                        if (keepRecents && (scene != SUSPENDED || retainedOnExit)
-                                && windowModeOf(info) == 6) recents.add(row);
-                        if (active && scene == ACTIVE && screenOn && !keyguardLocked
-                                && !slot.frozen && !slot.promoting && !slot.launching
-                                && mayWriteSideSurface(slot)) rows.add(row);
-                    }
-                } catch (Throwable unavailable) { log("desktop binding omitted: " + unavailable); }
-            }
-            if (sequence != desktopRegistrationSequence || epoch != sceneEpoch) return;
-            state.putBinder("owner", desktopSceneOwner);
-            state.putBoolean("retained", retainedOnExit && (scene == SUSPENDING || scene == SUSPENDED));
-            state.putBoolean("hideRecents", workspaceOptions.hideSideRecents && active
-                    && scene==ACTIVE && screenOn && !keyguardLocked);
-            if (active && scene == ACTIVE && screenOn && !keyguardLocked) {
-                try {
-                    LiveTask mainTask = findMainTask();
-                    Object info = mainTask == null ? null : rootInfo(mainTask);
-                    if (info != null && windowModeOf(info) == 1) {
-                        android.os.Bundle row = new android.os.Bundle();
-                        row.putBinder("task", (android.os.IBinder) XposedHelpers.callMethod(mainTask.token, "asBinder"));
-                        row.putInt("taskId", mainTask.id);
-                        row.putInt("userId", XposedHelpers.getIntField(info, "userId"));
-                        row.putInt("displayId", XposedHelpers.getIntField(info, "displayId"));
-                        state.putBundle("rotationMain", row);
-                    }
-                } catch (Throwable changing) { log("rotation main binding omitted: " + changing); }
-            }
-            Slot upper = slots[SLOT_TOP];
-            TopTaskState.Key upperOwner = topTaskState.owner();
-            if (active && scene == ACTIVE && screenOn && !keyguardLocked && topFace
-                    && upperOwner != null && upperOwner.taskId == upper.taskId
-                    && upperOwner.token.equals(upper.taskToken)
-                    && isActive(upper) && upper.occupied && !upper.parked
-                    && !upper.frozen && !upper.promoting && !upper.launching
-                    && upper.taskToken != null && controllerOwns(upper, upper.taskId, upper.taskToken)) {
-                TopTaskGeometry geometry = topGeometry();
-                android.os.Bundle topInput = new android.os.Bundle();
-                topInput.putBinder("task", (android.os.IBinder) XposedHelpers.callMethod(upper.taskToken, "asBinder"));
-                topInput.putInt("taskId", upper.taskId);
-                topInput.putInt("userId", upperOwner.userId);
-                topInput.putInt("displayId", 0);
-                topInput.putInt("width", geometry.logicalWidth);
-                topInput.putInt("height", geometry.logicalHeight);
-                topInput.putFloat("scale", geometry.scale);
-                topInput.putFloat("left", geometry.left);
-                topInput.putFloat("top", geometry.top);
-                state.putBundle("topInput", topInput);
-                if (upper.pkg != null && mayWriteSideSurface(upper)) {
-                    android.os.Bundle launch = new android.os.Bundle(topInput);
-                    launch.putString("package", upper.pkg);
-                    launch.putLong("scene", epoch);
-                    launch.putLong("binding", upper.taskEpoch);
-                    state.putBundle("topLaunch", launch);
-                }
-            }
-            state.putLong("sequence", sequence);
-            state.putParcelableArrayList("rows", rows);
-            state.putParcelableArrayList("recents", recents);
-            ctx.sendBroadcast(new Intent(DesktopLaunchBridge.ACTION).setPackage("android")
-                    .putExtra("state", state), android.Manifest.permission.WRITE_SECURE_SETTINGS);
-        };
-        if (active || keepRecents) executeOnShell(send); else send.run();
+        desktopSideTaskPublisher.publish();
     }
 
     private void promoteSideTaskForDesktopLaunch(String pkg, int launchUser, ComponentName entry) {
@@ -5507,8 +5422,10 @@ public final class WorkspaceHost {
     public static void debugDumpViews() {
         WorkspaceHost host = sInstance;
         if (host == null) { log("debugDumpViews: host not started"); return; }
-        host.main.post(() -> WorkspaceDiagnostics.dumpViewTree(host.root,WorkspaceHost::log));
+        host.debug.debugDumpViews();
     }
+
+
 
     /** 交换确认后把新主任务 leash 完全复位：position/matrix/alpha/crop，避免副格残留变换把画面顶到主区上方。 */
     private void resetMainTaskLeash(int taskId) {
@@ -7028,7 +6945,7 @@ public final class WorkspaceHost {
     }
 
     /** Promote through the existing Shell queue; retain the slot until actual detachment. */
-    private void swapWithMain(int slotIndex) {
+    void swapWithMain(int slotIndex) {
         if(slotIndex==SLOT_TOP) { releaseTopTask(true,true,null); return; }
         swapWithMain(slotIndex, false);
     }
@@ -9479,7 +9396,7 @@ public final class WorkspaceHost {
         return sb.toString();
     }
 
-    private boolean executeOnShell(Runnable task) {
+    boolean executeOnShell(Runnable task) {
         if (executor != null) {
             try { executor.execute(task); return true; }
             catch (Throwable error) { log("Host executor failed: " + error); }
@@ -9770,7 +9687,7 @@ public final class WorkspaceHost {
         return null;
     }
 
-    private static void log(String msg) {
+    static void log(String msg) {
         if (!RoutineLog.allow(msg)) return;
         Log.i(TAG, msg);
         try {

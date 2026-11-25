@@ -74,6 +74,7 @@ public class WorkspaceHost {
  WorkspaceLayout layout=new WorkspaceLayout();
  static class Clipboard {static Clipboard get(Context c){return new Clipboard();}void close(){}}
  static class SwapTrace {void close(){}}
+ static class Debug {void stopTrace(){}}
  static class NativeLandscapePolicy {static boolean shouldRestoreFromHome(boolean a,boolean b,String c){return false;}}
  static class SystemClock {static long uptimeMillis(){return 100;}}
  static class NativeRecents {static boolean show(){return false;}}
@@ -88,6 +89,8 @@ public class WorkspaceHost {
  final WindowPrivacy windowPrivacy=new WindowPrivacy(WorkspaceHost::log);
  WorkspaceOptions workspaceOptions=WorkspaceOptions.DEFAULT;Context ctx;
  Slot[]slots=new Slot[SLOT_COUNT];StatusBar statusBar=new StatusBar();SwapTrace swapTrace;
+ static class WorkspaceDebugController {void stopTrace(){}}
+ final WorkspaceDebugController debug=new WorkspaceDebugController();Debug debug=new Debug();
  boolean lockExitPending;boolean screenOn=true,keyguardLocked,retainedForLock,keyguardWindowHidden,keyguardWindowNotTouchable,retainedOnExit;
  boolean restoredSurfaces,traceNextSwap,workspaceEntering,zoomed=true,suspendRequested,landscapeSuspended,mirror=true;
  float keyguardWindowAlpha,workspaceAlpha=1f;int keyguardResumeIndex=-1,scene=ACTIVE,suspends,entries,repairs,reasserts,adoptions,zooms;
