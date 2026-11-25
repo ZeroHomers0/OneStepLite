@@ -28,12 +28,13 @@ final class ShareDragCatchment implements AutoCloseable {
         try {
         Context context=owner.getContext().createDisplayContext(owner.getDisplay()).createWindowContext(WindowTypes.SYSTEM_UI_DIALOG,null);
         FrameLayout view=new FrameLayout(context);view.setOnDragListener((ignored,event)->owner.onTipDrag(view,event));
-        int[] position=new int[2];owner.getLocationOnScreen(position);
-        WindowManager.LayoutParams attrs=new WindowManager.LayoutParams(owner.getWidth(),owner.getHeight()+offset,
+        android.graphics.Rect screen=new android.graphics.Rect();
+        if(!ViewScreenBounds.read(owner,screen))return;
+        WindowManager.LayoutParams attrs=new WindowManager.LayoutParams(screen.width(),screen.height()+offset,
                 WindowTypes.SYSTEM_UI_DIALOG,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         |WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN|WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
-        attrs.gravity=Gravity.TOP|Gravity.LEFT;attrs.x=position[0];attrs.y=position[1];attrs.setFitInsetsTypes(0);
+        attrs.gravity=Gravity.TOP|Gravity.LEFT;attrs.x=screen.left;attrs.y=screen.top;attrs.setFitInsetsTypes(0);
         attrs.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         attrs.setTitle("OneStepLiteContentPanel");HostWindowPolicy.configure(attrs);
         context.getSystemService(WindowManager.class).addView(view,attrs);plate=view;
