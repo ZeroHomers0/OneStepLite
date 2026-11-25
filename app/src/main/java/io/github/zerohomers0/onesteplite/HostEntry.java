@@ -2891,7 +2891,12 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private void installNativeFreeformCoexistence(ClassLoader cl) {
-        installNativeFreeformTouchExclusion(cl);
+        NativeFreeformTouchExclusionHooks.install(cl,
+                () -> sZoomTarget,
+                () -> sNativeFreeformLayerAnchor,
+                () -> sNativeFreeformHostLayers,
+                () -> sZoomed,
+                HostEntry::log);
         installNativeFreeformPin(cl);
         try {
             Class<?> display = XposedHelpers.findClass("com.android.server.wm.DisplayContent", cl);
@@ -2913,9 +2918,6 @@ public class HostEntry implements IXposedHookLoadPackage {
     private static final ModalWindowLayers sModalWindowLayers = new ModalWindowLayers();
     private static final java.util.Map<Object, NativeHostLayer> sNativeFreeformHostLayers =
             new java.util.IdentityHashMap<>();
-    private static final ThreadLocal<Object> sNativeTouchExclusionDisplay = new ThreadLocal<>();
-    private static Object sNativeTouchExclusionManager;
-
     private static void installNativeFreeformPin(ClassLoader cl) {
         NativeFreeformPinHooks.install(cl, HostEntry::releaseNativeForegroundPinLayers, HostEntry::log);
     }
@@ -2923,7 +2925,7 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     private static boolean isNativeForegroundPin(Object task) {
         Object manager = NativeFreeformPinHooks.manager();
-        if(manager==null)manager=sNativeTouchExclusionManager;
+        if(manager==null)manager=NativeFreeformTouchExclusionHooks.manager();
         return manager != null && Boolean.TRUE.equals(XposedHelpers.callMethod(manager,
                 "getMiuiFreeformIsForegroundPin", XposedHelpers.getIntField(task, "mTaskId")));
     }
@@ -2947,53 +2949,6 @@ public class HostEntry implements IXposedHookLoadPackage {
                 log("native foreground pin layers reconciled task=" + taskId);
             } catch (Throwable error) { log("native foreground pin layer release failed: " + error); }
         }
-    }
-
-    private static void installNativeFreeformTouchExclusion(ClassLoader cl) {
-        try {
-            Class<?> manager = XposedHelpers.findClass(
-                    "com.android.server.wm.MiuiFreeFormManagerService", cl);
-            Class<?> display = XposedHelpers.findClass("com.android.server.wm.DisplayContent", cl);
-            XposedHelpers.findAndHookMethod(manager, "updateMiuiFreeformTouchExcludeRegion", display,
-                    new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    sNativeTouchExclusionManager = p.thisObject;
-                    p.setObjectExtra("onesteplitePreviousExcludeDisplay", sNativeTouchExclusionDisplay.get());
-                    sNativeTouchExclusionDisplay.set(p.args[0]);
-                }
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    Object previous = p.getObjectExtra("onesteplitePreviousExcludeDisplay");
-                    if (previous == null) sNativeTouchExclusionDisplay.remove();
-                    else sNativeTouchExclusionDisplay.set(previous);
-                }
-            });
-            Class<?> window = XposedHelpers.findClass("com.android.server.wm.WindowState", cl);
-            XposedHelpers.findAndHookMethod(window, "getTouchableRegion", android.graphics.Region.class,
-                    new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    Object currentDisplay = sNativeTouchExclusionDisplay.get();
-                    if (currentDisplay == null || p.hasThrowable()) return;
-                    ZoomTarget target = sZoomTarget;
-                    if (target == null || !Thread.holdsLock(target.globalLock)) return;
-                    NativeHostLayer state = sNativeFreeformHostLayers.get(p.thisObject);
-                    try {
-                        boolean sameSurfaceAndAnchor = state != null
-                                && state.nativeAnchor != null
-                                && state.nativeAnchor == sNativeFreeformLayerAnchor
-                                && state.surface == XposedHelpers.callMethod(p.thisObject, "getSurfaceControl");
-                        if (NativeFreeformPolicy.omitFromTouchExclusion(sZoomed,
-                                currentDisplay == target.display
-                                && currentDisplay == XposedHelpers.callMethod(p.thisObject, "getDisplayContent"),
-                                state != null, sameSurfaceAndAnchor)) {
-                            // Only OEM's exclusion-union scratch Region changes. Its ordinary
-                            // InputDispatcher region and all other windows retain native behavior.
-                            ((android.graphics.Region) p.args[0]).setEmpty();
-                        }
-                    } catch (Throwable error) { log("native touch exclusion skipped: " + error); }
-                }
-            });
-            log("native touch exclusion follows scoped OneStepLite relative layers");
-        } catch (Throwable error) { log("native touch exclusion hook unavailable: " + error); }
     }
 
     /** Amend WM's own layer transaction; never reparent or transform an OEM task. */
@@ -3082,9 +3037,10 @@ public class HostEntry implements IXposedHookLoadPackage {
                 state.nativeLayer = layer;
             }
         }
-        if (touchExclusionChanged && sNativeTouchExclusionManager != null) {
+        Object touchManager = NativeFreeformTouchExclusionHooks.manager();
+        if (touchExclusionChanged && touchManager != null) {
             try {
-                XposedHelpers.callMethod(sNativeTouchExclusionManager,
+                XposedHelpers.callMethod(touchManager,
                         "updateMiuiFreeformTouchExcludeRegion", display);
             } catch (Throwable error) { log("native touch exclusion refresh skipped: " + error); }
         }
