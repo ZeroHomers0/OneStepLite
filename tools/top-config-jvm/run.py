@@ -66,7 +66,7 @@ public class TopConfigRegression {
  boolean executeOnShell(Runnable r){if(defer)queue.add(r);else r.run();return true;}
  boolean canRender(Slot s){return true;}boolean holdsLiveFlipZoom(){return false;}boolean mayWriteSideSurface(Slot s){return true;}
  boolean controllerOwns(Slot s,int id,Object token){return true;}Object getSurfaceField(Object c,String n){return new Object();}
- TopTaskGeometry topGeometry(){return new TopTaskGeometry(1080,2460,622,0,2.75f);}
+ TopTaskGeometry topGeometry(){return new TopTaskGeometry(1080,2460,622,true,2.75f);}
  Rect logicalBounds(Slot s){TopTaskGeometry g=topGeometry();return s.index==4?new Rect(0,0,g.logicalWidth,g.logicalHeight):new Rect(0,0,1080,2460);}
  boolean applyWct(String why,Object wct){applied=wct;return true;}static void log(String s){}
  Iterable<Info>rootInfos(){return infos;}int windowModeOf(Object o){return ((Info)o).mode;}
@@ -84,9 +84,13 @@ public class TopConfigRegression {
   var h=host();var slot=new Slot();h.applyFullscreenBounds(slot);
   var w=(android.window.WindowContainerTransaction)h.applied;
   check(w.calls.contains("setDensityDpi:upper:0"),"top inherits native density to keep retained and new View pixels consistent");
-  check(w.calls.contains("setAppBounds:upper:0,0,2964,1707"),"app metrics use the full logical viewport, beyond physical width");
-  check(w.calls.contains("setScreenSizeDp:upper:1078:621"),"resources match the logical viewport and selected density");
-  check(w.calls.contains("setSmallestScreenWidthDp:upper:621"),"smallest width belongs to the top viewport");
+  check(w.calls.contains("setAppBounds:upper:0,0,1647,949"),"phone app metrics use the compact logical viewport");
+  check(w.calls.contains("setScreenSizeDp:upper:599:345"),"resources match the logical viewport and selected density");
+  check(w.calls.contains("setSmallestScreenWidthDp:upper:345"),"smallest width belongs to the compact viewport");
+  var g=h.topGeometry();
+  check(Math.round(g.logicalWidth*g.scale)==1080&&Math.round(g.logicalHeight*g.scale)==622,"compact renderer and input fill the original strip");
+  var wide=new TopTaskGeometry(1080,2460,622,false,2.75f);
+  check(wide.logicalWidth==2964&&wide.logicalHeight==1707,"noncompact viewport keeps the existing tablet metrics");
   slot.index=1;h.applyFullscreenBounds(slot);w=(android.window.WindowContainerTransaction)h.applied;
   check(w.calls.stream().noneMatch(s->s.startsWith("setDensityDpi")),"other side density unchanged");
   check(w.calls.stream().noneMatch(s->s.startsWith("setAppBounds")||s.startsWith("setScreenSizeDp")||s.startsWith("setSmallestScreenWidthDp")),"ordinary side tasks acquire no top resource overrides");

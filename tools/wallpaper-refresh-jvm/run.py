@@ -18,12 +18,14 @@ public class WallpaperRefreshRegression {
  static class Context {boolean interactive=true;}
  static class Handler {List<Runnable>queue=Collections.synchronizedList(new ArrayList<>());int retries;Runnable delayed;void post(Runnable r){queue.add(r);}void removeCallbacks(Runnable r){}void postDelayed(Runnable r,long d){retries++;delayed=r;}void drain(){while(!queue.isEmpty())queue.remove(0).run();}}
  static class HyperOsStyle {static boolean fail;static List<Bitmap>produced=Collections.synchronizedList(new ArrayList<>());static Bitmap blurredWallpaper(Context c,int w,int h){if(fail)return null;Bitmap b=new Bitmap();produced.add(b);return b;}static Bitmap blurredBitmap(Bitmap b,int w,int h){Bitmap next=new Bitmap();produced.add(next);return next;}}
- static class WorkspaceFrost {static Bitmap finish(Bitmap b){return b;}}
+ static class WorkspaceFrost {static Bitmap last;static Bitmap finish(Bitmap b){last=b;return b;}}
+ static class WorkspaceBackground {static Bitmap custom;static Bitmap loadBlurred(Context c,int w,int h){return custom;}}
+ static class LiveBackdrop {Bitmap texture;void replaceWallpaper(Bitmap bitmap){texture=bitmap;}}
  static class CurrentUser {static int id(){return 0;}}
  static class Warmup {static Bitmap[] ready;static Bitmap[] takePreparedWallpaper(int u,int w,int h){Bitmap[] result=ready;ready=null;return result;}}
  static class WallpaperSnapshot {static boolean canCapture(Context c){return c.interactive;}}
  static class Clipboard {static Clipboard get(Context c){return new Clipboard();}void close(){}}
- Bitmap wallpaperBackdrop=new Bitmap(),wellWallpaperBackdrop=new Bitmap();boolean wallpaperBackdropDirty=true,wallpaperBackdropRequested;long wallpaperLoadGeneration;Object mainSideAnimator,workspaceAnimator,promotion,cellMotion;int screenW=1080,screenH=2400,applies;Object root=new Object();Context ctx=new Context();Handler main=new Handler();Runnable wallpaperRetry=()->{};
+ Bitmap wallpaperBackdrop=new Bitmap(),wellWallpaperBackdrop=new Bitmap();boolean wallpaperBackdropDirty=true,wallpaperBackdropRequested;long wallpaperLoadGeneration;Object mainSideAnimator,workspaceAnimator,promotion,cellMotion;int screenW=1080,screenH=2400,applies;Object root=new Object();Context ctx=new Context();Handler main=new Handler();Runnable wallpaperRetry=()->{};LiveBackdrop workspaceBackdrop;
  void applyWallpaperBackdrops(){applies++;check(!wallpaperBackdrop.isRecycled(),"published wallpaper was recycled");}void log(String s){}
  METHOD
  static void waitQueued(WallpaperRefreshRegression h,int count)throws Exception {for(int i=0;i<1000;i++){if(h.main.queue.size()>=count)return;Thread.sleep(2);}throw new AssertionError("capture did not complete");}
@@ -40,8 +42,15 @@ public class WallpaperRefreshRegression {
   h=new WallpaperRefreshRegression();old=h.wallpaperBackdrop;HyperOsStyle.fail=true;h.loadWallpaperBackdrop();waitQueued(h,1);h.main.drain();check(h.applies==0&&h.wallpaperBackdrop==old&&!old.recycled&&h.main.retries==1,"capture failure keeps the last texture instead of flashing blank");HyperOsStyle.fail=false;
   h=new WallpaperRefreshRegression();old=h.wallpaperBackdrop;h.mainSideAnimator=new Object();h.loadWallpaperBackdrop();waitQueued(h,1);h.main.drain();check(h.applies==0&&h.wallpaperBackdrop==old&&h.wallpaperBackdropRequested,"active side transition keeps a single wallpaper texture");h.mainSideAnimator=null;h.main.delayed.run();check(h.applies==1&&!h.wallpaperBackdropRequested,"deferred texture publishes after the motion owner releases");
   h=new WallpaperRefreshRegression();h.wallpaperBackdrop=null;h.wallpaperBackdropDirty=false;Bitmap pre=new Bitmap(),preWell=new Bitmap();Warmup.ready=new Bitmap[]{pre,preWell};count=HyperOsStyle.produced.size();h.loadWallpaperBackdrop();
-  check(h.wallpaperBackdrop==pre&&h.wellWallpaperBackdrop==preWell&&h.applies==1,"boot glass is published synchronously before workspace entry");
-  check(HyperOsStyle.produced.size()==count&&h.main.queue.isEmpty()&&Warmup.ready==null,"warm cache is consumed once without capture, worker or heartbeat");
+  waitQueued(h,1);h.main.drain();check(h.wallpaperBackdrop==pre&&h.wellWallpaperBackdrop==preWell&&h.applies==1,"boot glass is published after checking the selected background");
+  check(HyperOsStyle.produced.size()==count&&h.main.queue.isEmpty()&&Warmup.ready==null,"warm cache is consumed once without another capture");
+  h=new WallpaperRefreshRegression();h.wallpaperBackdropDirty=false;h.wallpaperBackdrop=null;h.workspaceBackdrop=new LiveBackdrop();
+  Warmup.ready=new Bitmap[]{pre,preWell};Bitmap imported=new Bitmap();WorkspaceBackground.custom=imported;
+  h.loadWallpaperBackdrop();waitQueued(h,1);h.main.drain();
+  check(WorkspaceFrost.last==imported&&h.wallpaperBackdrop==imported,"custom image passes through the same ink-glass shader");
+  check(h.workspaceBackdrop.texture==imported&&Warmup.ready!=null,"live backing updates and the system cache cannot replace the custom texture");
+  WorkspaceBackground.custom=null;h.wallpaperBackdropDirty=true;h.loadWallpaperBackdrop();waitQueued(h,1);h.main.drain();
+  check(h.workspaceBackdrop.texture!=imported&&h.wallpaperBackdrop==h.workspaceBackdrop.texture,"reset restores the live system material");
   System.out.println("Production async wallpaper refresh: "+checks+" checks passed");
  }
 }'''.replace('METHOD',method)

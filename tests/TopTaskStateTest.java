@@ -38,7 +38,7 @@ public final class TopTaskStateTest {
         s.release(b);
         ok(s.request(b,4,true,false)==null);
         ok(s.request(b,4,true,true)!=null);
-        TopTaskGeometry g=new TopTaskGeometry(1080,2460,622,39,2.75f);
+        TopTaskGeometry g=new TopTaskGeometry(1080,2460,622,false,2.75f);
         float previousFit=1080f/2460;
         float priorScale=(float)Math.sqrt(previousFit);
         ok(Math.abs(g.scale*2.75f-priorScale*242f/160f)<.00001f);
@@ -47,11 +47,11 @@ public final class TopTaskStateTest {
         ok(g.densityDpi==440 && TopTaskGeometry.DISPLAY_DPI==242);
         ok(Math.abs(g.logicalWidth/2.75f-(1080/priorScale)/(242f/160f))<1f);
         ok(Math.abs(g.logicalHeight/2.75f-(622/priorScale)/(242f/160f))<1f);
-        TopTaskGeometry resized=new TopTaskGeometry(1080,2460,541,122,2.75f);
+        TopTaskGeometry resized=new TopTaskGeometry(1080,2460,541,false,2.75f);
         ok(resized.bottom==541 && Math.abs(resized.logicalHeight*resized.scale-541)<.5f);
         for (int[] display:new int[][]{{1080,2340},{1440,3200},{720,1600}}) {
             WorkspaceLayout layout=WorkspaceLayout.of(display[0],display[1]);
-            TopTaskGeometry geometry=new TopTaskGeometry(display[0],display[1],layout.topStrip,30,2f);
+            TopTaskGeometry geometry=new TopTaskGeometry(display[0],display[1],layout.topStrip,false,2f);
             ok(geometry.right==display[0] && geometry.bottom==layout.topStrip && layout.fillsScreen());
             // A retained 48dp control and a newly inflated 48dp control use the same
             // native px size. Their projected size must match the selected 242 layout.
@@ -63,16 +63,18 @@ public final class TopTaskStateTest {
         TopTaskState manualState=new TopTaskState();
         ok(manualState.commit(manualState.request(a,1,true,true),1));
         ok(manualState.owner().equals(a));
-        TopTaskGeometry doubled=new TopTaskGeometry(2160,4920,1244,0,2.75f);
+        TopTaskGeometry doubled=new TopTaskGeometry(2160,4920,1244,false,2.75f);
         ok(doubled.densityDpi==g.densityDpi);
-        TopTaskGeometry shallow=new TopTaskGeometry(1080,2460,200,0,2.75f);
+        TopTaskGeometry shallow=new TopTaskGeometry(1080,2460,200,false,2.75f);
         ok(shallow.densityDpi==440 && Math.abs(shallow.logicalHeight*shallow.scale-200)<.5f);
         ok(shallow.scale<g.scale && shallow.densityDpi==g.densityDpi);
-        TopTaskGeometry full=new TopTaskGeometry(1080,2460,2460,0,2.75f);
+        TopTaskGeometry full=new TopTaskGeometry(1080,2460,2460,false,2.75f);
         ok(full.scale>0 && full.scale<=1f);
-        TopTaskGeometry tiny=new TopTaskGeometry(1,1,1,0,2.75f);
+        TopTaskGeometry tiny=new TopTaskGeometry(1,1,1,false,2.75f);
         ok(tiny.scale>0f && tiny.logicalWidth>=1 && tiny.logicalHeight>=1 && tiny.densityDpi==440);
         ok(Math.abs(g.logicalWidth*g.scale-g.right)<.5f && Math.abs(g.logicalHeight*g.scale-g.bottom)<.5f);
+        TopTaskGeometry lowDensity=new TopTaskGeometry(1080,2460,622,true,1.5f);
+        ok(lowDensity.scale<1f && Math.round(lowDensity.logicalWidth*lowDensity.scale)==1080);
         System.out.println("TopTaskState: " + checks + " checks passed");
     }
 }

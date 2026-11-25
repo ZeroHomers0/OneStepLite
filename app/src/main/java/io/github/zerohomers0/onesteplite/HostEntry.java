@@ -2660,7 +2660,18 @@ public class HostEntry implements IXposedHookLoadPackage {
             boolean focused=Boolean.TRUE.equals(XposedHelpers.callMethod(task,"isFocused"));
             boolean fullscreen=wideVideoFullscreen(task);
             boolean portrait=request==1 || request==7 || request==9 || request==12;
-            String signature=topWorkspaceGeneration+":"+user+":"+mode+":"+landscape+":"+focused+":"+fullscreen+":"+portrait;
+            String page="";
+            int viewportOrientation=0;
+            try {
+                Object active=XposedHelpers.callMethod(task,"topRunningActivity");
+                Object component=XposedHelpers.getObjectField(active,"mActivityComponent");
+                if(component instanceof android.content.ComponentName)
+                    page=((android.content.ComponentName)component).flattenToString();
+                if(mode==6)viewportOrientation=XposedHelpers.getIntField(
+                        XposedHelpers.callMethod(active,"getConfiguration"),"orientation");
+            } catch(Throwable unavailable) { /* The task may be switching pages. */ }
+            String signature=topWorkspaceGeneration+":"+user+":"+mode+":"+landscape+":"+focused+":"+fullscreen
+                    +":"+request+":"+page+":"+viewportOrientation;
             if(signature.equals(topTaskSignals.get(task)))return;
             topTaskSignals.put(task,signature);
             Context context=(Context)(sSystemContext!=null?sSystemContext:sWmsContext);
@@ -2670,6 +2681,8 @@ public class HostEntry implements IXposedHookLoadPackage {
                     .putExtra("task",id).putExtra("user",user).putExtra("token",(android.os.Parcelable)token)
                     .putExtra("landscape",landscape).putExtra("fullscreen",fullscreen)
                     .putExtra("focused",focused).putExtra("mode",mode).putExtra("portrait",portrait)
+                    .putExtra("page",page).putExtra("request",request)
+                    .putExtra("viewportOrientation",viewportOrientation)
                     .putExtra("issued",android.os.SystemClock.uptimeMillis());
             bridge.post(()->{
                 try {context.sendBroadcast(signal,android.Manifest.permission.WRITE_SECURE_SETTINGS);}

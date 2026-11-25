@@ -72,6 +72,16 @@ final class FullscreenRotationPolicy {
                 || orientation == ORIENTATION_USER_LANDSCAPE;
     }
 
+    static boolean requestsPortrait(int orientation) {
+        return orientation == ORIENTATION_PORTRAIT || orientation == ORIENTATION_REVERSE_PORTRAIT
+                || orientation == ORIENTATION_SENSOR_PORTRAIT || orientation == ORIENTATION_USER_PORTRAIT;
+    }
+
+    static boolean allowsEitherOrientation(int orientation) {
+        return orientation == -1 || orientation == ORIENTATION_USER || orientation == ORIENTATION_SENSOR
+                || orientation == ORIENTATION_FULL_SENSOR || orientation == ORIENTATION_FULL_USER;
+    }
+
     /** The display hold controls the workspace; application direction stays per task. */
     static int taskRotation(int overrideOrientation, int resolvedRotation, boolean rotationLocked) {
         return taskRotation(overrideOrientation, resolvedRotation, rotationLocked,

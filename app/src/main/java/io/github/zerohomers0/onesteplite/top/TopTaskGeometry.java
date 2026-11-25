@@ -7,6 +7,7 @@ final class TopTaskGeometry {
     final float scale;
     final int densityDpi;
     static final int DISPLAY_DPI = 242;
+    private static final int COMPACT_WIDTH_DP = 599;
     TopTaskGeometry(int[] region, float density) {
         left=region[0];top=region[1];right=region[2];bottom=region[3];
         densityDpi=Math.max(1,Math.round((Float.isFinite(density)&&density>0f?density:1f)*160f));
@@ -14,7 +15,7 @@ final class TopTaskGeometry {
         logicalWidth=Math.max(1,Math.round((right-left)/scale));
         logicalHeight=Math.max(1,Math.round((bottom-top)/scale));
     }
-    TopTaskGeometry(int width, int height, int strip, int inset, float density) {
+    TopTaskGeometry(int width, int height, int strip, boolean compact, float density) {
         left=top=0;right=Math.max(1,width);bottom=Math.max(1,strip);
         int longEdge=Math.max(1,Math.max(width,height));
         int shortEdge=Math.max(1,Math.min(width,height));
@@ -23,7 +24,12 @@ final class TopTaskGeometry {
         // Keep existing and newly inflated Views on the same resource density.
         // Move the selected density ratio into the one surface/input transform;
         // this preserves the prior dp viewport and correctly resized control size.
-        scale=(float)Math.sqrt(fit)*DISPLAY_DPI/densityDpi;
+        float previousScale=(float)Math.sqrt(fit)*DISPLAY_DPI/densityDpi;
+        // A wide logical viewport selects tablet resources even on a phone.
+        // Fit a compact viewport with the same transform used for touch.
+        int compactWidth=Math.max(1, COMPACT_WIDTH_DP*densityDpi/160);
+        // The raw-input bridge requires a shrinking transform.
+        scale=compact?Math.min(.98f,Math.max(previousScale,right/(float)compactWidth)):previousScale;
         // The logical viewport has the available rectangle's aspect, not the display's.
         // App bounds and resource dimensions must use this same logical viewport.
         logicalWidth=Math.max(1,Math.round(right/scale));

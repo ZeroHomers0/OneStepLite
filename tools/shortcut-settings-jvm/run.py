@@ -12,7 +12,8 @@ src = package_dir(root)
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
 files = {
-'android/net/Uri.java': 'package android.net;public class Uri {public static Uri parse(String value){return new Uri();}}',
+'android/net/Uri.java': 'package android.net;public record Uri(String value) {public static Uri parse(String value){return new Uri(value);}}',
+'android/os/ParcelFileDescriptor.java': 'package android.os;public class ParcelFileDescriptor {}',
 'android/os/Bundle.java': '''package android.os;import java.util.*;public class Bundle {
 private final Map<String,Object> data=new HashMap<>();public void putString(String k,String v){data.put(k,v);}
 public String getString(String k){return (String)data.get(k);}public void putBoolean(String k,boolean v){data.put(k,v);}
@@ -38,10 +39,14 @@ public ContentResolver getContentResolver(){return resolver;}public android.cont
 'android/content/ContentProvider.java': '''package android.content;public abstract class ContentProvider {
 public Context context;public Context getContext(){return context;}public abstract boolean onCreate();
 public android.os.Bundle call(String m,String a,android.os.Bundle b){return null;}
+public android.os.ParcelFileDescriptor openFile(android.net.Uri u,String mode)throws java.io.FileNotFoundException{return null;}
 public abstract String getType(android.net.Uri uri);public abstract android.database.Cursor query(android.net.Uri u,String[] p,String s,String[] a,String o);
 public abstract android.net.Uri insert(android.net.Uri u,ContentValues v);public abstract int delete(android.net.Uri u,String s,String[] a);
 public abstract int update(android.net.Uri u,ContentValues v,String s,String[] a);}''',
 'io/github/zerohomers0/onesteplite/Packages.java': 'package io.github.zerohomers0.onesteplite;class Packages {static final String SYSTEM_UI="com.android.systemui";}',
+'io/github/zerohomers0/onesteplite/WorkspaceBackground.java': '''package io.github.zerohomers0.onesteplite;class WorkspaceBackground {
+static final android.net.Uri URI=android.net.Uri.parse("background");
+static android.os.ParcelFileDescriptor open(android.content.Context c){return new android.os.ParcelFileDescriptor();}}''',
 'io/github/zerohomers0/onesteplite/ShareActions.java': 'package io.github.zerohomers0.onesteplite;class ShareActions {static android.os.Bundle settings(android.content.Context c){return new android.os.Bundle();}}',
 'io/github/zerohomers0/onesteplite/WorkspaceSettingsStore.java': '''package io.github.zerohomers0.onesteplite;class WorkspaceSettingsStore {
 static final String READ="read";static final android.net.Uri URI=android.net.Uri.parse("options");
@@ -51,9 +56,18 @@ import android.content.*;import android.os.*;
 public class ShortcutSettingsRegression {
 static int checks;static void check(boolean ok,String message){checks++;if(!ok)throw new AssertionError(message);}
 static void denied(Runnable call,String message){boolean rejected=false;try{call.run();}catch(RuntimeException expected){rejected=true;}check(rejected,message);}
-public static void main(String[] args){
+static void rejectedFile(WorkspaceSettingsProvider p,int uid,android.net.Uri uri,String mode){
+Binder.uid=uid;boolean rejected=false;try{p.openFile(uri,mode);}catch(SecurityException|java.io.FileNotFoundException expected){rejected=true;}
+check(rejected,"unexpected background access "+uid+" "+mode);}
+public static void main(String[] args)throws Exception{
 Context context=new Context();WorkspaceSettingsProvider provider=new WorkspaceSettingsProvider();provider.context=context;context.resolver.provider=provider;
 check(provider.onCreate(),"provider initializes");
+Binder.uid=10042;check(provider.openFile(WorkspaceBackground.URI,"r")!=null,"same-user SystemUI can read background");
+rejectedFile(provider,10042,WorkspaceBackground.URI,"rw");
+rejectedFile(provider,110042,WorkspaceBackground.URI,"r");
+rejectedFile(provider,12346,WorkspaceBackground.URI,"r");
+rejectedFile(provider,12345,android.net.Uri.parse("options"),"r");
+Binder.uid=12345;
 check(ShortcutSettingsClient.read(context,"apps")==null,"missing app override preserves legacy lookup");
 check(ShortcutSettingsClient.read(context,"share")==null,"missing share override preserves legacy lookup");
 check(ShortcutSettingsClient.readForUser(context,"apps",10)==null,"foreign-user quick pins retain their legacy lookup");

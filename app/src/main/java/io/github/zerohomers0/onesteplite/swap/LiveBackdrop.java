@@ -87,6 +87,20 @@ final class LiveBackdrop implements AutoCloseable {
                 (int) Math.ceil(side.right * x), (int) Math.ceil(side.bottom * y));
     }
 
+    void replaceWallpaper(Bitmap wallpaper) {
+        if (closed || producer == null || wallpaper == null || wallpaper.isRecycled()) return;
+        try {
+            Canvas canvas = producer.lockCanvas(null);
+            try {
+                canvas.drawBitmap(wallpaper, null, fullCrop, new Paint(Paint.FILTER_BITMAP_FLAG));
+            } finally {
+                producer.unlockCanvasAndPost(canvas);
+            }
+        } catch (RuntimeException unavailable) {
+            log.accept("live wallpaper refresh: " + unavailable);
+        }
+    }
+
     void stage(Object tx, boolean finishing, boolean rollback, boolean flip) {
         if (closed || surface == null) return;
         // Only temporarily reparented real tasks sit above this Host child. Once

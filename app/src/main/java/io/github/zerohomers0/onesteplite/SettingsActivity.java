@@ -1,11 +1,13 @@
 package io.github.zerohomers0.onesteplite;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -19,9 +21,11 @@ import android.widget.Toolbar;
 
 /** Workspace settings opened by the native system Settings entry. */
 public final class SettingsActivity extends Activity {
+    private static final int PICK_WORKSPACE_BACKGROUND = 41;
     private WorkspaceSettingsPage settings;
     private TextView pageTitle;
     private Resources systemSettingsResources;
+    private boolean updatingBackground;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -94,6 +98,48 @@ public final class SettingsActivity extends Activity {
 
     void setPageTitle(String title) {
         pageTitle.setText(title);
+    }
+
+    void pickWorkspaceBackground() {
+        if (updatingBackground) return;
+        Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("image/*");
+        try {
+            startActivityForResult(picker, PICK_WORKSPACE_BACKGROUND);
+        } catch (android.content.ActivityNotFoundException unavailable) {
+            android.widget.Toast.makeText(this, "无法打开图片选择器", android.widget.Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request == PICK_WORKSPACE_BACKGROUND && result == RESULT_OK
+                && data != null && data.getData() != null) updateWorkspaceBackground(data.getData());
+    }
+
+    void updateWorkspaceBackground(Uri uri) {
+        if (updatingBackground) return;
+        updatingBackground = true;
+        android.content.Context application = getApplicationContext();
+        new Thread(() -> {
+            boolean saved;
+            try {
+                if (uri == null) WorkspaceBackground.reset(application);
+                else WorkspaceBackground.save(application, uri);
+                saved = true;
+            } catch (java.io.IOException | RuntimeException unavailable) {
+                saved = false;
+            }
+            final boolean success = saved;
+            runOnUiThread(() -> {
+                updatingBackground = false;
+                if (isDestroyed() || isFinishing()) return;
+                if (success) settings.refreshLayout();
+                else android.widget.Toast.makeText(this, uri == null ? "恢复背景失败" : "无法读取这张图片",
+                        android.widget.Toast.LENGTH_SHORT).show();
+            });
+        }, "WorkspaceBackgroundImport").start();
     }
 
     int settingsColor(String name, int fallback) {

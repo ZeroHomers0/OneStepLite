@@ -16,6 +16,7 @@ FILES={
 'android/os/Handler.java':'package android.os;public class Handler {public boolean post(Runnable r){r.run();return true;}}',
 'android/Manifest.java':'package android;public class Manifest {public static class permission {public static final String WRITE_SECURE_SETTINGS="secure";}}',
 'android/content/Intent.java':'''package android.content;import java.util.*;public class Intent {public Map<String,Object> extras=new HashMap<>();public String action,pkg;public Intent(String a){action=a;}public Intent setPackage(String p){pkg=p;return this;}public Intent putExtra(String k,Object v){extras.put(k,v);return this;}}''',
+'android/content/ComponentName.java':'package android.content;public class ComponentName {public String flattenToString(){return "pkg/Activity";}}',
 'android/content/Context.java':'''package android.content;import java.util.*;public class Context {public List<Intent> sent=new ArrayList<>();public void sendBroadcast(Intent i,String permission){if(!"secure".equals(permission))throw new AssertionError("unprotected");sent.add(i);}}''',
 'io/github/zerohomers0/onesteplite/DirectionRegression.java':'''package io.github.zerohomers0.onesteplite;
 import java.util.*;import android.os.*;import android.content.*;import de.robv.android.xposed.XposedHelpers;
@@ -27,7 +28,10 @@ public class DirectionRegression {
  static class Remote {Token token=new Token();Object toWindowContainerToken(){return token;}}
  static Object nativeTaskInfoInProgress;
  static class Info {int userId=999;Object token=new Token();boolean isFocused;}
+ static class Activity {ComponentName mActivityComponent=new ComponentName();InfoConfig config=new InfoConfig();InfoConfig getConfiguration(){return config;}}
+ static class InfoConfig {int orientation=2;}
  static class Task {int mUserId=10,mCurrentUser=20,aggregations;boolean leaf=true,focused=true,upper=true,fullscreen=true;Object mRemoteToken=new Remote();
+  Activity topRunningActivity(){return new Activity();}
   boolean isLeafTask(){return leaf;}boolean isFocused(){return focused;}
   Info getTaskInfo(){aggregations++;nativeTaskInfoInProgress=null;return new Info();}}
  static boolean sZoomed=true;static long topWorkspaceGeneration=1;static final String SYSTEMUI="com.android.systemui";
@@ -45,6 +49,8 @@ public class DirectionRegression {
  t.leaf=false;h.send(t,1);check(sSystemContext.sent.get(2).extras.get("user").equals(20),"root current user mismatch");
  int before=sSystemContext.sent.size();t.upper=false;h.send(t,6);check(sSystemContext.sent.size()==before,"non-TOP side admitted");t.upper=true;h.send(t,6);check(sSystemContext.sent.size()==before+1,"TOP signal missing");
  h.sendTopTaskDirection(t,100,0,0,0,6);check(Boolean.TRUE.equals(sSystemContext.sent.get(before+1).extras.get("landscape")),"landscape changed");
+ Intent upper=sSystemContext.sent.get(before+1);
+ check(upper.extras.get("request").equals(0)&&upper.extras.get("page").equals("pkg/Activity")&&upper.extras.get("viewportOrientation").equals(2),"actual page request and viewport missing");
  int last=sSystemContext.sent.size();t.fullscreen=false;h.send(t,1);check(sSystemContext.sent.size()==last+1,"late fullscreen change lost");check(Boolean.FALSE.equals(sSystemContext.sent.get(last).extras.get("fullscreen")),"fullscreen cleared signal wrong");
  sZoomed=false;h.send(t,1);check(h.topTaskSignals.isEmpty(),"exit cache not cleared");sZoomed=true;t.mRemoteToken=null;h.send(t,1);check(!logs.isEmpty(),"unavailable native token not contained");
  check(t.aggregations==0&&nativeTaskInfoInProgress==outer,"later branch reentered shared native helper");

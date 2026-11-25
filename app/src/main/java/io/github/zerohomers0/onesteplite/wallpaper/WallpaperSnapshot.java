@@ -55,7 +55,7 @@ final class WallpaperSnapshot {
         if (!canCapture(context)) { result.recycle(); return null; }
         return result;
     }
-    private static Bitmap fit(Bitmap source, int width, int height) {
+    static Bitmap fit(Bitmap source, int width, int height) {
         Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(result);
         float scale = Math.max(width / (float) source.getWidth(), height / (float) source.getHeight());

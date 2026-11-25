@@ -18,15 +18,22 @@ import java.util.function.Consumer;import android.content.*;import android.os.*;
 public final class TopAdmissionRegression {
  static final int ACTIVE=1,SLOT_TOP=4;int scene=ACTIVE;long sceneEpoch=1;
  static int checks;static void check(boolean v,String why){checks++;if(!v)throw new AssertionError(why);}
- static class Slot {int index;boolean occupied;Slot(int i){index=i;}}
+ static class Slot {int index;boolean occupied,promoting;long taskEpoch;Slot(int i){index=i;}}
  static class Task {int id=42;Object token=new Binder();}
- static class TopCandidate {Task task=new Task();TopTaskState.Key key=new TopTaskState.Key(42,0,"token");Slot source;boolean landscape=true;}
+ static class TopCandidate {Task task=new Task();TopTaskState.Key key=new TopTaskState.Key(42,0,"token");Slot source;boolean landscape=true,tryLandscape;}
  static class View {static final int VISIBLE=0,INVISIBLE=4;}
  static class Pane {boolean occupied;void occupied(boolean v){occupied=v;}void message(String s){}void setVisibility(int v){}}
  static class Root {void requestLayout(){}}
  Root root=new Root();Pane topTaskPane=new Pane();Object promotion,cellMotion;
  boolean screenOn=true,keyguardLocked,transferBusy,workspaceEntering,suspendRequested,topFromMain,topPortrait;
  boolean fail=true,defer;int adopted,restored,finished,released;Runnable pending;
+ int reportedOrientation=2,pageOrientation=-1;
+ record TopDirection(int viewportOrientation) {}
+ TopDirection direction;
+ Object rootInfo(Task task){return task;}
+ int configurationOrientationOf(Object info){return reportedOrientation;}
+ TopDirection topPageDirection(Object info,TopTaskState.Key key){return direction;}
+ int topPageOrientation(Object info,TopDirection signal){return pageOrientation;}
  Slot[]slots={new Slot(0),new Slot(1),new Slot(2),new Slot(3),new Slot(4)};Slot topOriginalSlot;
  Context ctx=new Context();Handler main=new Handler();IBinder desktopSceneOwner=new Binder();Rect logicalBounds(Slot s){return new Rect(0,0,2964,1707);}
  TopTaskState topTaskState=new TopTaskState();
@@ -39,7 +46,7 @@ public final class TopAdmissionRegression {
  void publishDesktopSideTasks(){}void preferMainAfterTopChange(){}void revealTopTaskTransition(){}void cancelTopTaskTransition(){}
  void restoreTabletCoveredMain(TopTaskState.Key key){}
  void finishPendingSuspend(){finished++;}static void log(String text){}
-'''+member('    private boolean topReady(')+member('    private void adoptTopTask(')+member('    private void prepareTopViewport(')+member('    private void adoptTopTaskPrepared(')+member('    private void topAdoptionFailed(')+'''
+'''+member('    private boolean topReady(')+member('    private void adoptTopTask(')+member('    private void prepareTopViewport(')+member('    private void adoptTopTaskPrepared(')+member('    private void verifyTopLandscape(')+member('    private void topAdoptionFailed(')+'''
  static TopCandidate candidate(TopAdmissionRegression h){TopCandidate c=new TopCandidate();c.source=h.slots[1];return c;}
  static TopTaskState.Ticket ticket(TopAdmissionRegression h,TopCandidate c){return h.topTaskState.request(c.key,1,true,true);}
  public static void main(String[]args){
@@ -66,6 +73,12 @@ public final class TopAdmissionRegression {
   check(h.adopted==0&&h.restored==1&&!h.topTaskState.busy(),"late ack after timeout changes native task");
   h=new TopAdmissionRegression();c=candidate(h);h.ctx.auto=false;h.adoptTopTask(c,ticket(h,c),false);h.sceneEpoch++;h.topTaskState.sceneChanged();h.ctx.ack(-1);
   check(h.adopted==0,"old viewport ack crosses scene epoch");
+  h=new TopAdmissionRegression();c=candidate(h);c.landscape=false;c.tryLandscape=true;h.fail=false;h.slots[SLOT_TOP].occupied=true;
+  h.adoptTopTask(c,ticket(h,c),true);
+  check(!h.topPortrait&&h.main.queued.size()==1,"flexible page tries the landscape viewport");
+  h.main.fire();check(h.released==0,"confirmed landscape stays pinned");
+  h.verifyTopLandscape(c);h.direction=new TopDirection(1);h.main.fire();check(h.released==1,"portrait Activity returns despite a wide task");
+  h.verifyTopLandscape(c);h.slots[SLOT_TOP].taskEpoch++;h.main.fire();check(h.released==1,"late verification cannot return a new binding");
   System.out.println("Production top admission/lock/late-callback checks="+checks+" passed");
  }
 }'''
@@ -79,6 +92,7 @@ files={
 'android/content/Intent.java':'package android.content;public class Intent{public Intent(String a){}public Intent setPackage(String p){return this;}public Intent putExtra(String k,Object o){return this;}}',
 'android/content/BroadcastReceiver.java':'package android.content;public abstract class BroadcastReceiver{public int result;public int getResultCode(){return result;}public abstract void onReceive(Context c,Intent i);}',
 'android/content/Context.java':'package android.content;import android.os.*;public class Context{public boolean auto=true;BroadcastReceiver callback;public void sendOrderedBroadcast(Intent i,String p,BroadcastReceiver r,Handler h,int code,String data,Bundle extras){callback=r;if(auto)ack(-1);}public void ack(int c){callback.result=c;callback.onReceive(this,null);}}',
+'android/widget/Toast.java':'package android.widget;public class Toast{public static final int LENGTH_SHORT=0;public static Toast makeText(android.content.Context c,String s,int d){return new Toast();}public void show(){}}',
 'de/robv/android/xposed/XposedHelpers.java':'package de.robv.android.xposed;public class XposedHelpers{public static Object callMethod(Object o,String n,Object...a){return o;}}',
 'io/github/zerohomers0/onesteplite/DesktopLaunchBridge.java':'package io.github.zerohomers0.onesteplite;public class DesktopLaunchBridge{static final String PREPARE_TOP="prepare";}',
 }
@@ -86,7 +100,7 @@ for name,text in files.items():
  q=out/name;q.parent.mkdir(parents=True,exist_ok=True);q.write_text(text,encoding='utf8')
 p=out/'io/github/zerohomers0/onesteplite/TopAdmissionRegression.java';p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body,encoding='utf-8')
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(p),str(src/'TopTaskState.java'),*[str(out/n) for n in files]],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(p),str(src/'TopTaskState.java'),str(src/'FullscreenRotationPolicy.java'),str(src/'TaskWindowState.java'),*[str(out/n) for n in files]],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.TopAdmissionRegression'],check=True)
 
 # Replay the actual face/suspend methods. A visible control face must paint after
@@ -157,9 +171,10 @@ subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.oneste
 direction='''package io.github.zerohomers0.onesteplite;
 import java.util.*;
 public class TopDirectionRegression {
- Object root=new Object();Map<TopTaskState.Key,Boolean> topDirections=new HashMap<>();
+ record TopDirection(boolean landscape){}
+ Object root=new Object();Map<TopTaskState.Key,TopDirection> topDirections=new HashMap<>();
  TopTaskState topTaskState=new TopTaskState();boolean topAuto=true,topFace=true;
- static class TopCandidate {TopTaskState.Key key;boolean landscape;}TopCandidate current;int opened,claimed;
+ static class TopCandidate {TopTaskState.Key key;boolean landscape,tryLandscape;}TopCandidate current;int opened,claimed;
  static final int ACTIVE=1,SLOT_TOP=4;int scene=ACTIVE;boolean screenOn=true,keyguardLocked,transferBusy;
  Object promotion,workspaceAnimator;float workspaceAlpha=1f;
  static class VideoPane {boolean embedded(){return false;}void refresh(){}}VideoPane videoPane;
@@ -169,8 +184,9 @@ public class TopDirectionRegression {
  static class Bar {boolean enabled;void setAlpha(float a){}void setSendMainToTopEnabled(boolean b){enabled=b;}}Bar topBar=new Bar();
  void updateTopExitWindow(){}static void log(String s){}
  boolean supportsTaskUser(int user){return user==0||user==999;}boolean topReady(){return true;}
- TopCandidate currentTopCandidate(){if(current!=null)current.landscape=Boolean.TRUE.equals(topDirections.get(current.key));return current;}
+ TopCandidate currentTopCandidate(){if(current!=null)current.landscape=topDirections.getOrDefault(current.key,new TopDirection(false)).landscape();return current;}
  void claimTopTask(TopCandidate c,boolean manual){claimed++;}
+ void topTaskDirection(TopTaskState.Key key,boolean landscape){topTaskDirection(key,new TopDirection(landscape));}
 '''+member('    private void topTaskDirection(')+member('    private void updateTopBarState(')+member('    private boolean mainCanFillTop(')+'''
  public static void main(String[]args){
   var h=new TopDirectionRegression();var a=new TopTaskState.Key(7,0,"a");h.current=new TopCandidate();h.current.key=a;
@@ -178,14 +194,16 @@ public class TopDirectionRegression {
   if(h.topBar.enabled)throw new AssertionError("portrait main action stays enabled");
   h.topTaskDirection(a,true);if(!h.topBar.enabled)throw new AssertionError("landscape main action was not refreshed");
   h.topTaskDirection(a,false);if(h.topBar.enabled)throw new AssertionError("return to portrait did not disable action");
+  h.current.tryLandscape=true;h.topTaskDirection(a,false);
+  if(!h.topBar.enabled)throw new AssertionError("flexible portrait page cannot try manual landscape admission");
   if(h.opened!=0||h.claimed!=0||h.topTaskState.owner()!=null||h.topTaskState.busy())throw new AssertionError("direction change admitted/opened upper task");
   var t=h.topTaskState.request(a,1,true,true);h.topTaskState.commit(t,1);h.topTaskDirection(a,false);
-  if(!a.equals(h.topTaskState.owner())||h.topDirections.get(a)!=false)throw new AssertionError("portrait navigation lost explicit owner");
+  if(!a.equals(h.topTaskState.owner())||h.topDirections.get(a).landscape())throw new AssertionError("portrait navigation lost explicit owner");
   var foreign=new TopTaskState.Key(8,10,"foreign");h.topTaskDirection(foreign,true);
   if(h.topDirections.containsKey(foreign))throw new AssertionError("unsupported user recorded");
   h.root=null;h.topTaskDirection(new TopTaskState.Key(9,0,"late"),true);
   if(h.topDirections.size()!=1)throw new AssertionError("detached Host consumed direction callback");
-  System.out.println("Production upper manual-only direction checks=7 passed");
+  System.out.println("Production upper manual-only direction checks=8 passed");
  }
 }'''
 p=out/'io/github/zerohomers0/onesteplite/TopDirectionRegression.java';p.write_text(direction,encoding='utf-8')

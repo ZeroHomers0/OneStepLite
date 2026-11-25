@@ -145,7 +145,9 @@ public final class WorkspaceHost {
     private FrameLayout topLiveClip;
     private VideoPane videoPane;
     private final TopTaskState topTaskState = new TopTaskState();
-    private final java.util.Map<TopTaskState.Key, Boolean> topDirections = new java.util.HashMap<>();
+    private final java.util.Map<TopTaskState.Key, TopDirection> topDirections = new java.util.HashMap<>();
+    private record TopDirection(boolean landscape, String page, int request, int mode,
+            int viewportOrientation) {}
     private final WideVideoPolicy wideVideoPolicy = new WideVideoPolicy();
     /** Scratch main hole: every consumer copies it before the next frame. */
     private final android.graphics.RectF workspaceHole = new android.graphics.RectF();
@@ -167,8 +169,11 @@ public final class WorkspaceHost {
         final TopTaskState.Key key;
         final Slot source;
         final boolean landscape;
-        TopCandidate(LiveTask task, TopTaskState.Key key, Slot source, boolean landscape) {
+        final boolean tryLandscape;
+        TopCandidate(LiveTask task, TopTaskState.Key key, Slot source, boolean landscape,
+                boolean tryLandscape) {
             this.task=task; this.key=key; this.source=source; this.landscape=landscape;
+            this.tryLandscape=tryLandscape;
         }
     }
     /** 侧栏按格分段的不透明底板；承载格需要把它藏起来让下面的真实任务画面透出来。 */
@@ -1597,6 +1602,7 @@ public final class WorkspaceHost {
         if (scene != SUSPENDED || !screenOn || root == null || !EntryGuard.canOpen(ctx)) return;
         landscapeSuspended = false;
         scene = RESUMING;
+        if (wallpaperBackdropDirty) loadWallpaperBackdrop();
         final long epoch = ++sceneEpoch;
         // Read the foreground before showing our overlay or reclaiming any saved task.
         // A desktop launch while suspended is the user's new main-task choice.
@@ -2172,7 +2178,7 @@ public final class WorkspaceHost {
     private TopTaskGeometry topGeometry() {
         if (layout.tabletLandscape) return new TopTaskGeometry(layout.interactiveBounds(),
                 ctx.getResources().getDisplayMetrics().density);
-        return new TopTaskGeometry(screenW,screenH,layout.topStrip,DeviceProfile.statusBarHeightPx(ctx),
+        return new TopTaskGeometry(screenW,screenH,layout.topStrip,!DeviceProfile.isTablet(ctx),
                 ctx.getResources().getDisplayMetrics().density);
     }
     /** Keep app metrics in the same logical viewport as the hosted surface and input. */
@@ -4059,10 +4065,36 @@ public final class WorkspaceHost {
     private TopCandidate candidate(Object info, Slot source) {
         LiveTask task=new LiveTask(info);
         TopTaskState.Key key=new TopTaskState.Key(task.id,XposedHelpers.getIntField(info,"userId"),task.token);
-        Boolean directed=topDirections.get(key);
-        boolean landscape=directed!=null?directed:configurationOrientationOf(info)==2
-                || FullscreenRotationPolicy.requestsLandscape(requestedOrientationOf(info));
-        return new TopCandidate(task,key,source,landscape);
+        TopDirection directed=topPageDirection(info,key);
+        int orientation=topPageOrientation(info,directed);
+        boolean landscape=!FullscreenRotationPolicy.requestsPortrait(orientation)
+                && (FullscreenRotationPolicy.requestsLandscape(orientation)
+                || (directed!=null?directed.landscape():configurationOrientationOf(info)==2));
+        boolean tryLandscape=!landscape && !layout.tabletLandscape
+                && FullscreenRotationPolicy.allowsEitherOrientation(orientation);
+        return new TopCandidate(task,key,source,landscape,tryLandscape);
+    }
+
+    private TopDirection topPageDirection(Object info, TopTaskState.Key key) {
+        TopDirection direction=topDirections.get(key);
+        if(direction==null || direction.page()==null || direction.page().isEmpty()
+                || direction.mode()!=windowModeOf(info))return null;
+        try {
+            Object page=XposedHelpers.getObjectField(info,"topActivity");
+            return page instanceof ComponentName
+                    && direction.page().equals(((ComponentName)page).flattenToString())
+                    ? direction : null;
+        } catch(Throwable unavailable) {return null;}
+    }
+
+    private int topPageOrientation(Object info, TopDirection direction) {
+        if(direction!=null)return direction.request();
+        int requested=requestedOrientationOf(info);
+        if(requested!=-1)return requested;
+        try {
+            Object activity=XposedHelpers.getObjectField(info,"topActivityInfo");
+            return XposedHelpers.getIntField(activity,"screenOrientation");
+        } catch(Throwable unavailable) {return Integer.MIN_VALUE;}
     }
 
     private TopCandidate currentTopCandidate() {
@@ -4095,6 +4127,11 @@ public final class WorkspaceHost {
             if(selected.source==null && (!ordinaryRoot(fresh,1) || !mainTaskVisible(fresh))) {cancelTopTaskTransition();return;}
             if(selected.source!=null && (!ordinaryRoot(fresh,6) || !controllerOwns(selected.source,selected.task.id,selected.task.token))) {cancelTopTaskTransition();return;}
             TopCandidate checked=candidate(fresh,selected.source);
+            if(selected.source==null && !layout.tabletLandscape
+                    && !checked.landscape && !checked.tryLandscape) {
+                cancelTopTaskTransition();
+                return;
+            }
             TopTaskState.Ticket ticket=topTaskState.request(checked.key,sceneEpoch,true,manual);
             if(ticket==null) {cancelTopTaskTransition();return;}
             if(selected.source==null)adoptTopTask(checked,ticket,true);
@@ -4144,7 +4181,7 @@ public final class WorkspaceHost {
         adoptExisting(slots[SLOT_TOP],selected.task,fromMain,()->{
             if(!topTaskState.commit(ticket,sceneEpoch)) {releaseTopTask(false,false,null);return;}
             topOriginalSlot=selected.source;topFromMain=fromMain;
-            topPortrait=!selected.landscape;
+            topPortrait=!selected.landscape && !selected.tryLandscape;
             updateTopTaskGeometry();applyFullscreenBounds(slots[SLOT_TOP]);applySlotScale(slots[SLOT_TOP]);
             // The strip's surface is shared with the main window during a cross-fade,
             // so its alpha and crop must be re-staged for the new owner explicitly.
@@ -4154,9 +4191,32 @@ public final class WorkspaceHost {
             log("upper task admitted task="+selected.key.taskId+" user="+selected.key.userId+" original="+(selected.source==null?"main":selected.source.index));
             restoreTabletCoveredMain(selected.key);
             revealTopTaskTransition();
+            if(selected.tryLandscape)verifyTopLandscape(selected);
             preferMainAfterTopChange();
             finishPendingSuspend();
         },error->topAdoptionFailed(selected,ticket,error));
+    }
+
+    private void verifyTopLandscape(TopCandidate selected) {
+        final Slot upper=slots[SLOT_TOP];
+        final long binding=upper.taskEpoch, epoch=sceneEpoch;
+        main.postDelayed(()->{
+            if(epoch!=sceneEpoch || upper.taskEpoch!=binding
+                    || !selected.key.equals(topTaskState.owner()) || !topReady() || suspendRequested
+                    || upper.promoting || !upper.occupied)return;
+            try {
+                Object info=rootInfo(selected.task);
+                if(info!=null) {
+                    TopDirection direction=topPageDirection(info,selected.key);
+                    int orientation=direction!=null && direction.viewportOrientation()!=0
+                            ? direction.viewportOrientation() : configurationOrientationOf(info);
+                    if(orientation==2 && !FullscreenRotationPolicy.requestsPortrait(
+                            topPageOrientation(info,direction)))return;
+                }
+            } catch(Throwable unavailable) {log("upper landscape verification unavailable: "+unavailable);}
+            releaseTopTask(true,true,()->android.widget.Toast.makeText(ctx,
+                    "当前页面无法在顶栏横屏，已返回主窗",android.widget.Toast.LENGTH_SHORT).show());
+        },900L);
     }
 
     private void topAdoptionFailed(TopCandidate selected,TopTaskState.Ticket ticket,String error) {
@@ -4307,7 +4367,9 @@ public final class WorkspaceHost {
         if(taskId<0 || userId<0 || token==null)return;
         final TopTaskState.Key key=new TopTaskState.Key(taskId,userId,token);
         host.main.post(()->{
-            host.topTaskDirection(key,landscape);
+            host.topTaskDirection(key,new TopDirection(landscape,intent.getStringExtra("page"),
+                    intent.getIntExtra("request",Integer.MIN_VALUE),intent.getIntExtra("mode",-1),
+                    intent.getIntExtra("viewportOrientation",0)));
             host.observeWideVideo(key,landscape,intent.getBooleanExtra("fullscreen",false),
                     intent.getBooleanExtra("focused",false),intent.getIntExtra("mode",-1),
                     intent.getBooleanExtra("portrait",false),intent.getLongExtra("issued",0));
@@ -4354,9 +4416,9 @@ public final class WorkspaceHost {
         } else log("wide video stays in main task="+key.taskId);
     }
 
-    private void topTaskDirection(TopTaskState.Key key, boolean landscape) {
+    private void topTaskDirection(TopTaskState.Key key, TopDirection direction) {
         if(root==null || !supportsTaskUser(key.userId))return;
-        topDirections.put(key,landscape);
+        topDirections.put(key,direction);
         if(topDirections.size()>64)topDirections.keySet().removeIf(item->!item.equals(topTaskState.owner()) && !item.equals(key));
         // Observe only. A direction change never opens the upper face or claims a task.
         updateTopBarState();
@@ -4929,8 +4991,7 @@ public final class WorkspaceHost {
     }
 
     /**
-     * Only a landscape main app can fill the strip; a portrait app would be
-     * letterboxed into a sliver, so the header action stays greyed out.
+     * Enable the strip for a page that requests or allows landscape.
      */
     private boolean mainCanFillTop() {
         if (layout == null || layout.tabletLandscape || !topReady()) return false;
@@ -4938,7 +4999,7 @@ public final class WorkspaceHost {
         if (slots[SLOT_TOP].occupied) return false;
         try {
             TopCandidate candidate = currentTopCandidate();
-            return candidate != null && candidate.landscape;
+            return candidate != null && (candidate.landscape || candidate.tryLandscape);
         } catch (Throwable unavailable) {
             log("upper action state unavailable: " + unavailable);
             return false;
@@ -5147,15 +5208,21 @@ public final class WorkspaceHost {
         wallpaperBackdropRequested = true;
         final long request = ++wallpaperLoadGeneration;
         final int width = screenW, height = screenH;
-        if(!wallpaperBackdropDirty) {
-            Bitmap[] prepared=Warmup.takePreparedWallpaper(CurrentUser.id(),width,height);
-            if(prepared!=null){finishWallpaperLoad(request,width,height,prepared[0],prepared[1]);return;}
-        }
+        final boolean canUseWarmup = !wallpaperBackdropDirty;
+        final int user = CurrentUser.id();
         Thread loader = new Thread(() -> {
             Bitmap ready = null;
             Bitmap wellReady = null;
             try {
-                ready = WorkspaceFrost.finish(HyperOsStyle.blurredWallpaper(ctx, width, height));
+                Bitmap source = WorkspaceBackground.loadBlurred(ctx, width, height);
+                Bitmap[] prepared = source == null && canUseWarmup
+                        ? Warmup.takePreparedWallpaper(user, width, height) : null;
+                if (prepared != null) {
+                    main.post(() -> finishWallpaperLoad(request, width, height, prepared[0], prepared[1]));
+                    return;
+                }
+                if (source == null) source = HyperOsStyle.blurredWallpaper(ctx, width, height);
+                ready = WorkspaceFrost.finish(source);
                 // A tiny, extra-blurred texture is shared by all circular wells.
                 // Prepare it off the UI thread; no blur or capture work per frame.
                 if (ready != null) wellReady = HyperOsStyle.blurredBitmap(ready,
@@ -5200,6 +5267,7 @@ public final class WorkspaceHost {
         wallpaperBackdrop = bitmap;
         wellWallpaperBackdrop = wellBitmap;
         wallpaperBackdropDirty = false;
+        if (workspaceBackdrop != null) workspaceBackdrop.replaceWallpaper(bitmap);
         log("wallpaper gaussian backdrop ready " + bitmap.getWidth() + "x" + bitmap.getHeight());
         applyWallpaperBackdrops();
         }
@@ -5332,10 +5400,7 @@ public final class WorkspaceHost {
             wallpaperReceiver = new BroadcastReceiver() {
                 @Override public void onReceive(Context context, Intent intent) {
                     log("wallpaper changed; reloading blur backdrop");
-                    wallpaperBackdropDirty = true;
-                    ++wallpaperLoadGeneration;
-                    wallpaperBackdropRequested = false;
-                    loadWallpaperBackdrop();
+                    invalidateWallpaperBackdrop();
                 }
             };
             ctx.registerReceiver(wallpaperReceiver, new IntentFilter(Intent.ACTION_WALLPAPER_CHANGED));
@@ -5343,6 +5408,23 @@ public final class WorkspaceHost {
         } catch (Throwable error) {
             log("wallpaper receiver failed: " + error);
         }
+        try {
+            ctx.getContentResolver().registerContentObserver(WorkspaceBackground.URI, false,
+                    new android.database.ContentObserver(main) {
+                        @Override public void onChange(boolean selfChange) { invalidateWallpaperBackdrop(); }
+                    });
+        } catch (RuntimeException unavailable) {
+            log("workspace background observer unavailable: " + unavailable);
+        }
+    }
+
+    private void invalidateWallpaperBackdrop() {
+        wallpaperBackdropDirty = true;
+        ++wallpaperLoadGeneration;
+        wallpaperBackdropRequested = false;
+        main.removeCallbacks(wallpaperRetry);
+        if ((scene == ACTIVE || scene == RESUMING) && screenOn && !keyguardLocked)
+            loadWallpaperBackdrop();
     }
 
     private void registerDesktopIconReceiver() {

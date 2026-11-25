@@ -132,6 +132,9 @@ final class WorkspaceSettingsPage extends FrameLayout {
         divider(appearance);
         menu(appearance,"主题模式",WorkspaceOptions.themeLabel(options.themeMode),()->chooseTheme(options.themeMode));
         divider(appearance);
+        menu(appearance, "工作区背景", WorkspaceBackground.selected(activity) ? "自定义图片" : "系统壁纸",
+                this::chooseWorkspaceBackground);
+        divider(appearance);
         switchOption(appearance,"顶栏控件随窗口换边","开启时，顶部操作按钮和前台、分享标记一起换边；关闭时按默认位置显示",
                 options.followTopBarSide,value->persist(WorkspaceSettingsStore.read(activity).withFollowTopBarSide(value)));
         add(appearance, 0, 12);
@@ -399,6 +402,34 @@ final class WorkspaceSettingsPage extends FrameLayout {
         dialog.setContentView(body);dialog.show();
         android.view.Window window=dialog.getWindow();
         if(window!=null){WorkspacePopupStyle.size(window,activity);window.setLayout(WorkspacePopupStyle.width(activity),-2);}
+    }
+
+    private void chooseWorkspaceBackground() {
+        boolean custom = WorkspaceBackground.selected(activity);
+        android.app.Dialog dialog = new android.app.Dialog(activity);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        LinearLayout body = new LinearLayout(activity);
+        body.setOrientation(LinearLayout.VERTICAL);
+        WorkspacePopupStyle.decorate(body, null);
+        WorkspacePopupStyle.heading(body, "工作区背景", dialog::dismiss);
+        LinearLayout choices = card();
+        choiceOption(choices, "系统壁纸", null, !custom, true, () -> {
+            dialog.dismiss();
+            if (custom) activity.updateWorkspaceBackground(null);
+        });
+        divider(choices);
+        choiceOption(choices, "自定义图片", custom ? "点击更换图片" : null, custom, true, () -> {
+            dialog.dismiss();
+            activity.pickWorkspaceBackground();
+        });
+        body.addView(choices, new LinearLayout.LayoutParams(-1, -2));
+        dialog.setContentView(body);
+        dialog.show();
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            WorkspacePopupStyle.size(window, activity);
+            window.setLayout(WorkspacePopupStyle.width(activity), -2);
+        }
     }
 
     private void appDragDiagram() {
