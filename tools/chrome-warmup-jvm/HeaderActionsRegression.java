@@ -7,8 +7,12 @@ public final class HeaderActionsRegression {
     static class Context {}
     static class View {
         interface Click { void run(View view); }
+        interface Touch { boolean run(View view,android.view.MotionEvent event); }
         Click click;
+        boolean enabled=true;
+        boolean isEnabled(){return enabled;}
         void setOnClickListener(Click action) { click=action; }
+        void setOnTouchListener(Touch action) {}
         void performClick() { click.run(this); }
     }
     static class FrameLayout extends View {
@@ -51,6 +55,7 @@ public final class HeaderActionsRegression {
         final class Header extends FrameLayout {
             TextView title;
             IconButton left,right,topApp,settings,expand,capture;
+            boolean topAppAvailable=true;
             View[] buttons;
             IconButton[] icons;
             __CONSTRUCTOR__

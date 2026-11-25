@@ -49,7 +49,8 @@ final class WorkspaceSettingsStore {
             context.getContentResolver().notifyChange(URI, null);
             // A wakeup only: receivers reread the authenticated provider, never extras.
             try {
-                context.sendBroadcast(new android.content.Intent(Actions.SETTINGS_CHANGED).setPackage(Packages.SYSTEM_UI));
+                context.sendBroadcast(new android.content.Intent(Actions.SETTINGS_CHANGED).setPackage(Packages.SYSTEM_UI),
+                        Actions.SETTINGS_WAKEUP_PERMISSION);
             } catch(RuntimeException unavailable) { /* The provider observer remains the primary channel. */ }
         }
         return saved;

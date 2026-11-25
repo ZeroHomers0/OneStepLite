@@ -105,6 +105,8 @@ action_files={
  'HeaderActionsRegression.java':actions,
  'android/view/Gravity.java':'package android.view;public class Gravity {public static final int CENTER=17;}',
  'android/graphics/Typeface.java':'package android.graphics;public class Typeface {public static Object create(String name,int style){return null;}}',
+ 'android/view/MotionEvent.java':'package android.view;public class MotionEvent {public static final int ACTION_UP=1;public int getActionMasked(){return 0;}}',
+ 'android/widget/Toast.java':'package android.widget;public class Toast {public static final int LENGTH_SHORT=0;public static Toast makeText(Object context,String text,int length){return new Toast();}public void show(){}}',
 }
 action_paths=[]
 for name,text in action_files.items():

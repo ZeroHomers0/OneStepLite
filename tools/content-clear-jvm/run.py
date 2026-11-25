@@ -25,13 +25,15 @@ class CurrentUser{static int id(){return 7;}}
 class RecentFilesSource{static List<ContentEntry> load(Object context,CancellationSignal signal,Set<String> hidden){
  List<ContentEntry> rows=new ArrayList<>();for(int i=0;i<60;i++)rows.add(new ContentEntry("file:"+i));return rows;}}
 class SharedPreferences{
- final Map<String,Set<String>> values=new HashMap<>();
+ final Map<String,Set<String>> values=new HashMap<>();final Map<String,String> strings=new HashMap<>();
  Set<String> getStringSet(String key,Set<String> fallback){return new LinkedHashSet<>(values.getOrDefault(key,fallback));}
+ String getString(String key,String fallback){return strings.getOrDefault(key,fallback);}
  Editor edit(){return new Editor(this);}
- static class Editor{final SharedPreferences owner;String key;Set<String> value;
+ static class Editor{final SharedPreferences owner;String key;Set<String> value;String stringKey,stringValue;
   Editor(SharedPreferences owner){this.owner=owner;}
   Editor putStringSet(String key,Set<String> value){this.key=key;this.value=value;return this;}
-  void apply(){if(key!=null)owner.values.put(key,new LinkedHashSet<>(value));}}}
+  Editor putString(String key,String value){this.stringKey=key;this.stringValue=value;return this;}
+  void apply(){if(key!=null)owner.values.put(key,new LinkedHashSet<>(value));if(stringKey!=null)owner.strings.put(stringKey,stringValue);}}}
 class Worker{void execute(Runnable task){task.run();}}
 class Anchor{boolean post(Runnable task){task.run();return true;}}
 class Shell{String status="";void status(String value){status=value;}}
@@ -69,6 +71,9 @@ __METHODS__
   check(imageHidden.size()==61,"all image batches and inbox rows are hidden");
   check(imageHidden.contains("media:0")&&imageHidden.contains("media:59"),"first and last image batches are hidden");
   check(imageHidden.contains("inbox:0:0"),"imported image is hidden with the page");
+  check(images.prefs.strings.get("hidden_order_0").split("\\n").length==61,"image clear persists ordered identities");
+  check(images.prefs.strings.get("hidden_order_0").startsWith("media:0\\n")&&
+          images.prefs.strings.get("hidden_order_0").endsWith("media:59"),"image clear keeps query order");
   check(images.loads==1&&images.selection.cleared==0,"image page reloads after the full key scan");
   check(images.shell.status.contains("正在清除"),"clear progress is visible while scanning");
   check(images.message.contains("原文件保留")&&!images.clearingMedia,"clear completes with the existing file-preserving message");
@@ -78,6 +83,15 @@ __METHODS__
   check(fileHidden.size()==62,"recent file page includes all files and imported documents");
   check(fileHidden.contains("file:0")&&fileHidden.contains("file:59"),"all recent file batches are hidden");
   check(files.loads==1&&files.selection.cleared==1,"file page reloads independently");
+
+  Replay bounded=new Replay(0);Set<String> old=new LinkedHashSet<>();StringBuilder oldOrder=new StringBuilder();
+  for(int i=0;i<256;i++){String key="old:"+i;old.add(key);if(i>0)oldOrder.append('\\n');oldOrder.append(key);}
+  bounded.prefs.values.put("hidden_0",old);bounded.prefs.strings.put("hidden_order_0",oldOrder.toString());
+  bounded.clearMediaRecords();
+  Set<String> boundedHidden=bounded.prefs.values.get("hidden_0");
+  check(boundedHidden.size()==256,"hidden history remains bounded");
+  check(!boundedHidden.contains("old:0")&&boundedHidden.contains("media:0")&&boundedHidden.contains("media:59"),
+          "ordered eviction drops the oldest key and retains this clear");
 
   Replay stale=new Replay(0);stale.anchor=new Anchor(){@Override boolean post(Runnable task){stale.generation++;return true;}};
   stale.clearMediaRecords();

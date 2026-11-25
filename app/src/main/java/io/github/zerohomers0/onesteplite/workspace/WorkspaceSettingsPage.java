@@ -35,6 +35,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
             if (screen == HOME || screen == GESTURE) show(screen, false);
         }
     };
+    private boolean gestureObserverRegistered;
     private int screen;
     private ScrollView scroll;
     private LinearLayout content;
@@ -314,11 +315,15 @@ final class WorkspaceSettingsPage extends FrameLayout {
             activity.getContentResolver().registerContentObserver(
                     android.provider.Settings.Global.getUriFor(EntryGestureSettings.HIDE_GESTURE_LINE),
                     false, gestureObserver);
+            gestureObserverRegistered=true;
         } catch (RuntimeException unavailable) { /* Selection and runtime still check live state. */ }
     }
 
     @Override protected void onDetachedFromWindow() {
-        activity.getContentResolver().unregisterContentObserver(gestureObserver);
+        if(gestureObserverRegistered)try{
+            activity.getContentResolver().unregisterContentObserver(gestureObserver);
+        }catch(RuntimeException unavailable){ /* The resolver may already be gone during teardown. */}
+        gestureObserverRegistered=false;
         super.onDetachedFromWindow();
     }
 

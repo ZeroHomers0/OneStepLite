@@ -17,9 +17,9 @@ files={
 'android/content/Intent.java':'package android.content;public class Intent {public int untrustedMode;}',
 'android/content/IntentFilter.java':'package android.content;public class IntentFilter {public IntentFilter(String action){}}',
 'android/content/Context.java':'''package android.content;public class Context {public static final int RECEIVER_EXPORTED=2;
- public final ContentResolver resolver=new ContentResolver();public BroadcastReceiver receiver;public boolean failRegister;
+ public final ContentResolver resolver=new ContentResolver();public BroadcastReceiver receiver;public String permission;public boolean failRegister;
  public ContentResolver getContentResolver(){return resolver;}
- public void registerReceiver(BroadcastReceiver r,IntentFilter f,String p,android.os.Handler h,int flags){if(failRegister)throw new IllegalStateException();receiver=r;}}''',
+ public void registerReceiver(BroadcastReceiver r,IntentFilter f,String p,android.os.Handler h,int flags){if(failRegister)throw new IllegalStateException();receiver=r;permission=p;}}''',
 'android/content/ContentResolver.java':'''package android.content;public class ContentResolver {
  public int mode;public boolean fail,failObserve;public android.database.ContentObserver observer;
  public android.os.Bundle call(Object u,String m,Object a,Object e){if(fail)throw new IllegalStateException();return new android.os.Bundle(mode);}
@@ -34,6 +34,7 @@ public class SettingsClientRegression {
  public static void main(String[]args){
   Context c=new Context();Looper main=new Looper();List<Integer> received=new ArrayList<>();
   var client=new WorkspaceSettingsClient(c,new Handler(main),o->received.add(o.entryGesture));Looper worker=HandlerThread.latest;
+  check("io.github.zerohomers0.onesteplite.permission.SETTINGS_WAKEUP".equals(c.permission),"wakeup receiver requires the module signature permission");
   worker.drain();check(received.isEmpty()&&main.tasks.size()==1,"provider result delivered asynchronously");
   c.resolver.mode=1;client.refresh();main.drain();check(received.isEmpty(),"old queued snapshot cannot overwrite a newer selection");
   worker.drain();main.drain();check(received.equals(List.of(1)),"latest bottom selection delivered");

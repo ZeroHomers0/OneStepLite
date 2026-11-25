@@ -30,7 +30,7 @@ final class WorkspaceSettingsClient {
         try {
             context.registerReceiver(new android.content.BroadcastReceiver() {
                 @Override public void onReceive(Context ignored,android.content.Intent intent) { refresh(); }
-            },new android.content.IntentFilter(Actions.SETTINGS_CHANGED),null,main,Context.RECEIVER_EXPORTED);
+            },new android.content.IntentFilter(Actions.SETTINGS_CHANGED),Actions.SETTINGS_WAKEUP_PERMISSION,main,Context.RECEIVER_EXPORTED);
         } catch(RuntimeException unavailable) {
             android.util.Log.w(Tags.PROBE,"settings wakeup receiver unavailable",unavailable);
         }

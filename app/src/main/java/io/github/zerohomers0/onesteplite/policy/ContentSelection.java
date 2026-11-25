@@ -21,6 +21,7 @@ final class ContentSelection {
     List<String> keys(int page) { return new ArrayList<>(pages.get(page)); }
     boolean contains(int page, String key) { return pages.get(page).contains(key); }
     void clear(int page) { pages.get(page).clear(); }
+    void clearSelections() { for (Set<String> page : pages) page.clear(); }
     void position(int page, int y) { positions[page] = Math.max(0, y); }
     int position(int page) { return positions[page]; }
     void reset() { for (int i=0;i<pages.size();i++) { clear(i);positions[i]=0; } }

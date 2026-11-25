@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="io.github.zerohomers0.onesteplite">
   <permission android:name="io.github.zerohomers0.onesteplite.CONTENT_ACCESS" android:protectionLevel="signature" />
+  <permission android:name="io.github.zerohomers0.onesteplite.permission.SETTINGS_WAKEUP" android:protectionLevel="signature" />
   <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="io.github.zerohomers0.onesteplite.permission.SETTINGS_WAKEUP" />
   <uses-permission android:name="io.github.zerohomers0.onesteplite.CONTENT_ACCESS" />
   <queries>
     <package android:name="com.miui.contentextension" />

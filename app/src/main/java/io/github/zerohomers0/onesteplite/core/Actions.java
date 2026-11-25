@@ -3,6 +3,7 @@ package io.github.zerohomers0.onesteplite;
 /** Every broadcast action this module sends or listens for, in one place. */
 final class Actions {
     static final String SETTINGS_CHANGED = "io.github.zerohomers0.onesteplite.SETTINGS_CHANGED";
+    static final String SETTINGS_WAKEUP_PERMISSION = "io.github.zerohomers0.onesteplite.permission.SETTINGS_WAKEUP";
     /** Debug console: toggles OneStepLite and accepts developer commands. */
     static final String DEBUG = "io.github.zerohomers0.onesteplite.DEBUG";
     static final String TOGGLE = "io.github.zerohomers0.onesteplite.TOGGLE";

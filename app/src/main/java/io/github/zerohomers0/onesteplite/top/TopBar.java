@@ -205,6 +205,7 @@ final class TopBar extends FrameLayout {
     private final class Header extends FrameLayout {
         final TextView title;
         final IconButton left,right,topApp,settings,expand,capture;
+        private boolean topAppAvailable=true;
         /** Scratch arrays: measure and layout run on every frame of a resize. */
         private final View[] buttons;
         private final IconButton[] icons;
@@ -219,7 +220,11 @@ final class TopBar extends FrameLayout {
             addView(title);
             left=button(IconButton.SIDE_LEFT,"小窗放在左侧",()->listener.onSetMainSide(true));
             right=button(IconButton.SIDE_RIGHT,"小窗放在右侧",()->listener.onSetMainSide(false));
-            topApp=button(IconButton.TOP_APP,"把主窗应用放到顶栏",()->listener.onSendMainToTop());
+            topApp=button(IconButton.TOP_APP,"把主窗应用放到顶栏",()->{
+                if(topAppAvailable)listener.onSendMainToTop();
+                else android.widget.Toast.makeText(getContext(),"主窗应用为竖屏，暂时无法置顶",
+                        android.widget.Toast.LENGTH_SHORT).show();
+            });
             settings=button(IconButton.SETTINGS,"系统设置",()->listener.onOpenSettings());
             expand=button(IconButton.EXPAND_LEFT,"放大为全屏并退出工作区",()->listener.onExit());
             capture=button(IconButton.CAPTURE,"截取主窗图片",()->{if(shareWorkspace!=null)shareWorkspace.captureMain();});
@@ -257,9 +262,12 @@ final class TopBar extends FrameLayout {
             requestLayout();
         }
         void setSendMainToTopEnabled(boolean enabled) {
-            if (topApp.isEnabled() == enabled) return;
-            topApp.setEnabled(enabled);
+            if (topAppAvailable == enabled) return;
+            topAppAvailable=enabled;
             topApp.setAlpha(enabled ? 1f : .32f);
+            topApp.setFocusable(enabled);
+            String description=enabled?"把主窗应用放到顶栏":"主窗应用为竖屏，暂时无法置顶";
+            topApp.setContentDescription(description);topApp.setTooltipText(description);
         }
         void updateColors() {
             int fallback=HyperOsStyle.textPrimary(getContext());
@@ -287,7 +295,9 @@ final class TopBar extends FrameLayout {
         @Override protected void onMeasure(int ws,int hs) {
             int w=MeasureSpec.getSize(ws),h=MeasureSpec.getSize(hs);
             int edge=Math.round(10*getResources().getDisplayMetrics().density);
-            int bw=Math.min(Math.round(38*getResources().getDisplayMetrics().density),Math.min(h,Math.max(1,(w-2*edge)/8)));
+            float density=getResources().getDisplayMetrics().density;
+            int preferred=w>=Math.round(380*density)?48:38;
+            int bw=Math.min(Math.round(preferred*density),Math.min(h,Math.max(1,(w-2*edge)/8)));
             fitTitle(Math.max(1,w-2*edge-6*bw));
             title.measure(MeasureSpec.makeMeasureSpec(Math.max(1,w-2*edge-6*bw),MeasureSpec.EXACTLY),hs);
             for(View v:buttons)v.measure(MeasureSpec.makeMeasureSpec(bw,MeasureSpec.EXACTLY),hs);

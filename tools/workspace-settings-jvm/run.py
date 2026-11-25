@@ -30,7 +30,7 @@ files = {
   public Editor putBoolean(String k,boolean v){pending.put(k,v);return this;}
   public boolean commit(){if(commit)for(var entry:pending.entrySet()){if(entry.getValue()==null)values.remove(entry.getKey());else values.put(entry.getKey(),entry.getValue());}return commit;}}}''',
 'android/content/Context.java': '''package android.content;public class Context {
- public void sendBroadcast(Intent i){}
+ public void sendBroadcast(Intent i){}public void sendBroadcast(Intent i,String permission){lastBroadcastPermission=permission;}public String lastBroadcastPermission;
  public static final int MODE_PRIVATE=0;public SharedPreferences prefs=new SharedPreferences();
  public ContentResolver resolver=new ContentResolver();public Context createDeviceProtectedStorageContext(){return this;}
  public SharedPreferences getSharedPreferences(String name,int mode){return prefs;}
@@ -51,6 +51,7 @@ public class SettingsRegression {
   check(old.showLunar&&old.swapMode==1&&old.entryGesture==0,"old preferences migrate without loss");
   check(!old.keepOnLock&&!WorkspaceOptions.DEFAULT.keepOnLock,"old installs retain lock-exit default");
   check(WorkspaceSettingsStore.write(c,old.withKeepOnLock(true)),"lock choice saves independently of gesture line");
+  check("io.github.zerohomers0.onesteplite.permission.SETTINGS_WAKEUP".equals(c.lastBroadcastPermission),"settings wakeup uses the signature permission");
   check(WorkspaceSettingsStore.read(c).keepOnLock,"lock choice persists");
   check(WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(WorkspaceSettingsStore.read(c))).keepOnLock,"lock choice reaches SystemUI snapshot");
   check(old.withKeepOnLock(true).withShowLunar(false).withSwapMode(0).withEntryGesture(1).keepOnLock,"all other choices preserve lock preference");

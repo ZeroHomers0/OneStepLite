@@ -142,7 +142,7 @@ final class ContentPanelLayout extends LinearLayout {
     }
 
     void setActions(ContentPanelActions actions) {
-        LayoutParams size=new LayoutParams(dp(36),dp(44));
+        LayoutParams size=new LayoutParams(dp(48),dp(44));
         size.setMarginStart(dp(2));toolbar.addView(actions,size);actions.bindMenu(this::setActionMenu);
     }
 

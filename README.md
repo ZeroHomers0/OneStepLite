@@ -1,6 +1,6 @@
 # OneStepLite
 
-面向小米 HyperOS 的 LSPosed 多任务模块。一个主窗、三个真实小窗，在同一屏幕中切换和查看多个应用。
+面向小米 HyperOS 的 LSPosed 多任务模块。一个主窗、三个真实小窗（平板横屏布局可显示四个小窗），在同一屏幕中切换和查看多个应用。
 
 [![Build](https://github.com/ZeroHomers0/OneStepLite/actions/workflows/build.yml/badge.svg)](https://github.com/ZeroHomers0/OneStepLite/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/ZeroHomers0/OneStepLite)](https://github.com/ZeroHomers0/OneStepLite/releases/latest)

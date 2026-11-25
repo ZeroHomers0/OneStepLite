@@ -13,6 +13,10 @@ public final class ContentWorkflowPolicyTest {
         selection.keys(0).clear();check(selection.keys(0).size()==31,"selection snapshots cannot mutate owner");
         check(selection.toggle(3,"shelf")&&selection.keys(0).size()==31,"shelf selection independent of media");
         selection.position(3,250);check(selection.position(3)==250,"shelf keeps scroll position");
+        selection.clearSelections();
+        check(selection.keys(0).isEmpty()&&selection.keys(1).isEmpty(),"panel close clears every selection");
+        check(selection.position(0)==80&&selection.position(1)==140,"panel close preserves page positions");
+        selection.toggle(0,"after-close");
         selection.reset();check(selection.keys(1).isEmpty()&&selection.position(1)==0,"user reset clears records");
         check(selection.keys(3).isEmpty()&&selection.position(3)==0,"user reset clears shelf position and selection");
         ShareEdgePolicy edge=new ShareEdgePolicy();

@@ -235,11 +235,18 @@ final class ContentPanel {
             boolean posted=anchor.post(()->{
                 if(query==signal)query=null;
                 if(!valid(token,user) || page!=tab){clearingMedia=false;return;}
-                java.util.LinkedHashSet<String> merged=new java.util.LinkedHashSet<>(
-                        preferences().getStringSet("hidden_"+page,java.util.Collections.emptySet()));
-                merged.addAll(mounted);merged.addAll(scanned);
-                while(merged.size()>256)merged.remove(merged.iterator().next());
-                preferences().edit().putStringSet("hidden_"+page,merged).apply();
+                java.util.Set<String> existing=preferences().getStringSet("hidden_"+page,
+                        java.util.Collections.emptySet());
+                java.util.List<String> order=new java.util.ArrayList<>();
+                for(String key:preferences().getString("hidden_order_"+page,"").split("\n"))
+                    if(!key.isEmpty() && existing.contains(key) && !order.contains(key))order.add(key);
+                for(String key:existing)if(!order.contains(key))order.add(key);
+                for(String key:mounted)if(!order.contains(key))order.add(key);
+                for(String key:scanned)if(!order.contains(key))order.add(key);
+                while(order.size()>256)order.remove(0);
+                java.util.LinkedHashSet<String> merged=new java.util.LinkedHashSet<>(order);
+                preferences().edit().putStringSet("hidden_"+page,merged)
+                        .putString("hidden_order_"+page,String.join("\n",order)).apply();
                 clearingMedia=false;selection.clear(page);load();
                 message("已清除显示记录，原文件保留");
             });
@@ -264,7 +271,9 @@ final class ContentPanel {
     // Injected SystemUI widgets use the project's Chinese-only workspace copy.
     @android.annotation.SuppressLint("SetTextI18n")
     private void historyOptions() {
-        showPreview(new ClipboardOptionsPane(context,history.enabled(),history::enable,this::closePreview));
+        showPreview(new ClipboardOptionsPane(context,history.enabled(),value->{
+            history.enable(value);if(tab==2)load();
+        },this::closePreview));
     }
 
 
@@ -289,7 +298,9 @@ final class ContentPanel {
         clearEntries();refreshSelection();
         if(tab==3){int token=generation,user=CurrentUser.id();shell.status("正在读取暂存…");WORKER.execute(()->shelf(token,user));return;}
         if (tab == 2) {
-            clipboard();final int token=generation,user=CurrentUser.id();
+            if(history.enabled())history.start();
+            int token=generation,user=CurrentUser.id();
+            WORKER.execute(()->clipboard(token,user));
             WORKER.execute(()->loadImportedClipboard(token,user));return;
         }
         loadMedia(false);
@@ -435,6 +446,8 @@ final class ContentPanel {
             byte[] buffer,int[] remaining,CancellationSignal signal) {
         if(entry.originalUri!=null && !uris.add(mediaIdentity(entry.originalUri)))return false;
         if(buffer==null || entry.bytes>=8*1024*1024 || entry.uri==null || !entry.uri.equals(entry.originalUri))return true;
+        // MediaStore IDs already identify native rows; hashing every image on open is unnecessary I/O.
+        if("media".equals(entry.uri.getAuthority()))return true;
         String digest=contentDigest(entry.uri,buffer,remaining,signal);
         return digest==null || digests.add(digest);
     }
@@ -493,7 +506,8 @@ final class ContentPanel {
         } else {
             TextView text=label(entry.label);text.setMaxLines(tab==2?4:3);view=text;
         }
-        view.setContentDescription(entry.label+"，长按拖曳分享");
+        view.setContentDescription(tab==0 && entry.mime.startsWith("image/")
+                ?imageDescription(entry):entry.label+"，长按拖曳分享");
         view.setOnClickListener(v->{
             if(selecting) {
                 if(!selection.toggle(tab,entry.key))message("一次最多选择32项");refreshSelection();
@@ -570,8 +584,19 @@ final class ContentPanel {
                 mark.setStroke(dp(3),HyperOsStyle.CONTROL_ACCENT);mark.setCornerRadius(dp(8));
             }
             tile.getValue().setForeground(mark);
-            tile.getValue().setSelected(selection.contains(tab,tile.getKey()));
+            boolean selected=selection.contains(tab,tile.getKey());
+            tile.getValue().setSelected(selected);
+            if(tab==0){
+                ContentEntry entry=entries.get(tile.getKey());
+                if(entry!=null)tile.getValue().setContentDescription(
+                        (selected?"已选择，":"")+imageDescription(entry));
+            }
         }
+    }
+
+    private String imageDescription(ContentEntry entry) {
+        String age=entry.addedAt>0?RecentFilePolicy.age(entry.addedAt,System.currentTimeMillis()):"时间未知";
+        return "图片，"+age+"，长按拖曳分享";
     }
 
     private void shelf(int token,int user) {
@@ -723,33 +748,52 @@ final class ContentPanel {
         if(old!=null){refreshMedia();refreshClipboard();}
     }
 
-    private void clipboard() {
+    private void clipboard(int token,int user) {
+        java.util.List<ContentEntry> current=new java.util.ArrayList<>();
+        java.util.List<ContentEntry> historyRows=new java.util.ArrayList<>();
+        String clipboardError=null;
         try {
-            if(history.enabled())history.start();
             ClipboardManager manager = context.getSystemService(ClipboardManager.class);
             ClipData data = manager == null ? null : manager.getPrimaryClip();
             if(data!=null && data.getItemCount()>0) {
                 android.os.PersistableBundle extras=data.getDescription().getExtras();
                 if(extras==null || !extras.getBoolean("android.content.extra.IS_SENSITIVE")) {
                     SharePayload payload=new SharePayload(data);
-                    if(!payload.text.isEmpty() || !payload.uris.isEmpty())shell.heading("当前剪贴板",contentWidth);
-                    if(!payload.text.isEmpty())addEntry(new ContentEntry("text:"+payload.text,payload.text,
+                    if(!payload.text.isEmpty())current.add(new ContentEntry("text:"+payload.text,payload.text,
                             "text/plain",payload.text,null,null));
-                    for(Uri uri:payload.uris) {
-                        String mime=payload.mime;
-                        addEntry(new ContentEntry("clipboard:"+uri,"剪贴板文件，长按拖曳",mime,null,uri,null));
-                    }
+                    for(Uri uri:payload.uris)current.add(new ContentEntry("clipboard:"+uri,
+                            "剪贴板文件，长按拖曳",payload.mime,null,uri,null));
                 }
             }
-            boolean historyHeading=false;
+        } catch (RuntimeException unavailable) {
+            clipboardError="当前剪贴板暂不支持此内容";
+        }
+        try {
             for(ClipboardHistory.Record record:history.records()) {
-                String key="text:"+record.text;if(entries.containsKey(key))continue;
-                if(!historyHeading){shell.heading("历史",contentWidth);historyHeading=true;}
-                addEntry(new ContentEntry(key,(record.pinned?"已固定 · ":"")+record.text,"text/plain",record.text,null,null,-1,record.time));
+                String key="text:"+record.text;
+                boolean duplicate=false;for(ContentEntry row:current)if(row.key.equals(key)){duplicate=true;break;}
+                if(duplicate)continue;
+                historyRows.add(new ContentEntry(key,(record.pinned?"已固定 · ":"")+record.text,
+                        "text/plain",record.text,null,null,-1,record.time));
             }
-            if(entries.isEmpty())shell.status("暂无剪贴板内容");
-            restorePosition(generation,CurrentUser.id());
-        } catch (RuntimeException unavailable) { shell.status("无法读取当前剪贴板"); }
+        } catch (RuntimeException unavailable) { clipboardError="剪贴板历史暂不可用"; }
+        if(token!=generation)return;
+        String error=clipboardError;
+        anchor.post(()->{if(valid(token,user))applyClipboard(current,historyRows,error,token,user);});
+    }
+
+    private void applyClipboard(java.util.List<ContentEntry> current,
+            java.util.List<ContentEntry> historyRows,String error,int token,int user) {
+        if(!valid(token,user))return;
+        if(!current.isEmpty())shell.heading("当前剪贴板",contentWidth);
+        for(ContentEntry entry:current)addEntry(entry);
+        if(error!=null)shell.heading(error,contentWidth);
+        if(!historyRows.isEmpty()){
+            shell.heading("历史",contentWidth);
+            for(ContentEntry entry:historyRows)addEntry(entry);
+        }
+        if(entries.isEmpty())shell.status(error==null?"暂无剪贴板内容":error+"\n暂无历史记录");
+        restorePosition(token,user);
     }
 
     private boolean begin(View source, ClipData clip) {
@@ -815,7 +859,7 @@ final class ContentPanel {
         cancelQuery();
         if(scroll!=null)selection.position(tab,scroll.getScrollY());
         closePreview();
-        dragging = false;
+        dragging = false;selecting=false;selection.clearSelections();
         Dialog old = dialog;
         dialog = null;
         if (old != null) try { old.setOnDismissListener(null);old.dismiss(); }
