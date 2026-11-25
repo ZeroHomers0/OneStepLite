@@ -24,7 +24,7 @@ final class WordSelectionPane extends LinearLayout {
     private final android.widget.FrameLayout content;
     private View actionLayer;
     private final TextView all,mode,copy,status;
-    private final LinearLayout statusBar;
+    private final android.widget.FrameLayout historyMenu;
     private final BitSet beforeSlide=new BitSet();
     private final int[] screenPosition=new int[2];
     private final Runnable edgeScroll=this::scrollSelection;
@@ -32,14 +32,14 @@ final class WordSelectionPane extends LinearLayout {
     private float downX,downY,pointerX,pointerY;
     private int slideAnchor,slideEnd=-1,edgeStep;
 
-    WordSelectionPane(Context context,String source,BiPredicate<View,String> drag) {
+    WordSelectionPane(Context context,String source,BiPredicate<View,String> drag,Runnable back) {
         super(context);this.source=source;this.drag=drag;setOrientation(VERTICAL);
         WorkspacePopupStyle.decorate(this,null);
         status=label("");status.setTextSize(WorkspacePopupStyle.SUPPORT_SP);status.setGravity(android.view.Gravity.START);
         status.setTextColor(HyperOsStyle.textSecondary(context));
-        statusBar=new LinearLayout(context);statusBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        statusBar.addView(status,new LayoutParams(0,-2,1));
-        addView(statusBar,new LayoutParams(-1,-2));
+        historyMenu=new android.widget.FrameLayout(context);
+        historyMenu.setVisibility(GONE);
+        WorkspacePopupStyle.heading(this,"选词",back,status,historyMenu);
         content=new android.widget.FrameLayout(context);
         addView(content,new LayoutParams(-1,0,1));
         LinearLayout body=new LinearLayout(context);body.setOrientation(VERTICAL);
@@ -65,8 +65,8 @@ final class WordSelectionPane extends LinearLayout {
     void addHistoryActions(Runnable pin,Runnable delete) {
         IconButton more=new IconButton(getContext(),IconButton.MORE_VERTICAL,"剪贴板记录操作");
         more.setTooltipText("剪贴板记录操作");
-        LayoutParams size=new LayoutParams(dp(36),dp(44));size.setMarginStart(dp(2));
-        statusBar.addView(more,size);
+        historyMenu.addView(more,new android.widget.FrameLayout.LayoutParams(dp(36),dp(44)));
+        historyMenu.setVisibility(VISIBLE);
         more.setOnClickListener(v->{
             if(closeActionMenu())return;
             LinearLayout menu=ContentPanelActions.createMenu(getContext());

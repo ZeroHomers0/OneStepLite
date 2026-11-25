@@ -245,8 +245,9 @@ final class ContentPanel {
         WORKER.execute(()->{
             java.util.Set<String> scanned=scanMediaKeys(token,page,hidden,signal);
             boolean posted=anchor.post(()->{
-                if(query==signal)query=null;
-                if(!valid(token,user) || page!=tab){clearingMedia=false;return;}
+                if(query!=signal)return;
+                query=null;clearingMedia=false;
+                if(!valid(token,user) || page!=tab)return;
                 java.util.Set<String> existing=preferences().getStringSet("hidden_"+page,
                         java.util.Collections.emptySet());
                 java.util.List<String> order=new java.util.ArrayList<>();
@@ -259,10 +260,10 @@ final class ContentPanel {
                 java.util.LinkedHashSet<String> merged=new java.util.LinkedHashSet<>(order);
                 preferences().edit().putStringSet("hidden_"+page,merged)
                         .putString("hidden_order_"+page,String.join("\n",order)).apply();
-                clearingMedia=false;selection.clear(page);load();
+                selection.clear(page);load();
                 message("已清除显示记录，原文件保留");
             });
-            if(!posted)clearingMedia=false;
+            if(!posted && token==generation)clearingMedia=false;
         });
     }
 
@@ -633,23 +634,28 @@ final class ContentPanel {
                         -1,row.optLong("time"),row.has("document_uri")?Uri.parse(row.getString("document_uri")):uri));
             }
             if(token!=generation){releaseRows(items);return;}
-            deduplicateRows(items,true,null);
-            anchor.post(()->{
-                if(!valid(token,user)){for(ContentEntry item:items)if(item.thumbnail!=null)item.thumbnail.recycle();return;}
+            items.sort(java.util.Comparator.comparingLong((ContentEntry row)->row.addedAt).reversed());
+            boolean posted=anchor.post(()->{
+                if(!valid(token,user)){releaseRows(items);return;}
                 for(ContentEntry item:items)addEntry(item);
                 if(items.isEmpty())shell.status("将内容拖到顶栏“暂存”\n临时内容保留24小时");restorePosition(token,user);
             });
+            if(!posted)releaseRows(items);
         }catch(Exception unavailable){anchor.post(()->{if(valid(token,user))shell.status("暂时无法读取暂存");});}
     }
 
     private void removeShelf() {
         Bundle input=new Bundle();java.util.ArrayList<String> ids=new java.util.ArrayList<>();
         for(String key:selection.keys(3))if(key.startsWith("shelf:"))ids.add(key.substring(6));
+        if(selecting && ids.isEmpty())return;
         if(!ids.isEmpty())input.putStringArrayList("ids",ids);
         int token=generation,user=CurrentUser.id();
         WORKER.execute(()->{try{
-            context.getContentResolver().call(ContentInboxProvider.ROOT,"shelf_remove",null,input);
-            anchor.post(()->{if(valid(token,user)){selection.clear(3);load();}});
+            if(context.getContentResolver().call(ContentInboxProvider.ROOT,"shelf_remove",null,input)==null)
+                throw new IllegalStateException("Missing shelf removal result");
+            anchor.post(()->{if(valid(token,user)){
+                selection.clear(3);load();message("已移除暂存");
+            }});
         }catch(RuntimeException unavailable){anchor.post(()->{if(valid(token,user))message("暂存移除失败，请重试");});}});
     }
 
@@ -714,8 +720,7 @@ final class ContentPanel {
 
     private void textPreview(ContentEntry entry) {
         WordSelectionPane body=new WordSelectionPane(context,entry.text==null?entry.label:entry.text,
-                (view,text)->begin(view,ClipData.newPlainText("选中文字",text)));
-        WorkspacePopupStyle.heading(body,"选词",this::closePreview);
+                (view,text)->begin(view,ClipData.newPlainText("选中文字",text)),this::closePreview);
         if(tab==2 && entry.text!=null) {
             body.addHistoryActions(()->{history.pin(entry.text);closePreview();load();},
                     ()->{history.remove(entry.text);closePreview();load();});

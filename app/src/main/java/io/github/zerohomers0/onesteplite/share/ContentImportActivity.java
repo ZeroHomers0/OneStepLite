@@ -34,7 +34,13 @@ public final class ContentImportActivity extends Activity {
         String token=getIntent().getStringExtra("launch_token");
         if(token!=null) {
             ContentInboxProvider.Launch request=ContentInboxProvider.consumeRequest(token);
-            if(request!=null){receipt=request.receipt;operation=request.operation;}
+            if(request!=null){
+                receipt=request.receipt;operation=request.operation;
+                if(ShareActions.STAGE.equals(operation)){
+                    overrideActivityTransition(OVERRIDE_TRANSITION_OPEN,0,0);
+                    overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE,0,0);
+                }
+            }
             if(request!=null && request.grant!=null) {
                 externalTarget=request.intent;delegatedRead=request.grant;importContent(request.intent);return;
             }

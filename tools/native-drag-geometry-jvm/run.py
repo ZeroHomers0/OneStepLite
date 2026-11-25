@@ -29,6 +29,7 @@ public static Object callMethod(Object o,String n,Object...args){try{for(var m:o
 'io/github/zerohomers0/onesteplite/NativeGeometryRegression.java':'''package io.github.zerohomers0.onesteplite;
 import android.graphics.*;import android.os.*;import android.view.*;import de.robv.android.xposed.*;import java.util.*;
 class ContentDragShadow{int recycled;void recycleThumbnail(){recycled++;}}
+class NativeContentDragCard{static boolean files(android.content.ClipData c){return c.mime.equals("file");}}
 class PortalDragInput{static Object originalWindow(Object w){return ((NativeGeometryRegression.Target)w).original;}}
 class WindowIdentity{static boolean ownsPicker(Object w,Object d){return false;}
 static boolean ownsShareReceiver(Object w){return ((NativeGeometryRegression.Target)w).shareReceiver;}}
@@ -138,6 +139,28 @@ check(Boolean.FALSE.equals(privateDrop.result)&&state.ended==4,"cancel blocks QQ
 var explicitDrop=event(state,rail.mInputChannelToken,100f,926f);
 XposedBridge.hooks.get("reportDropWindowLock").fire(explicitDrop);
 check(explicitDrop.result==null&&state.ended==4,"explicit share receiver survives portal source resolution");
+for(String app:List.of("com.tencent.mm","other.source")){
+    state=new State();source=new Target();source.pkg=app;
+    Target target=new Target();target.pkg=app;
+    state.mService.mWindowMap.put(state.mLocalWin,source);
+    state.mService.mInputToWindowMap.put(target.mInputChannelToken,target);
+    state.mData=new android.content.ClipData();state.mFlags=256;
+    for(String mime:List.of("text","image","file")){
+        state.mData.mime=mime;
+        var nativeDrop=event(state,target.mInputChannelToken,100f,926f);
+        XposedBridge.hooks.get("reportDropWindowLockInner").fire(nativeDrop);
+        check(Boolean.FALSE.equals(nativeDrop.result),"global "+mime+" cancels in "+app);
+    }
+    state.mFlags=0;state.mData=null;
+    var localDrop=event(state,target.mInputChannelToken,100f,926f);
+    XposedBridge.hooks.get("reportDropWindowLock").fire(localDrop);
+    check(localDrop.result==null,"ordinary app-local drag keeps its behavior");
+    Target portal=new Target();portal.pkg="com.android.systemui";portal.original=source;
+    state.mService.mWindowMap.put(state.mLocalWin,portal);
+    var portalDrop=event(state,target.mInputChannelToken,100f,926f);
+    XposedBridge.hooks.get("reportDropWindowLock").fire(portalDrop);
+    check(Boolean.FALSE.equals(portalDrop.result),"validated portal source cancels even without a public clip");
+}
 System.out.println("Production native drag geometry checks="+checks+" passed (WM doubles; device pending)");}}
 '''
 }

@@ -61,7 +61,8 @@ final class ShareWorkspace extends FrameLayout {
     private boolean edgeQueued;
     private final Runnable edgeTick=this::scrollEdge;
     private boolean dragging, dropped;
-    private int generation, user;
+    private volatile int generation;
+    private int user;
     private ComponentName hovered;
     private String sourcePackage;
     private java.util.Set<String> windowPackages;
@@ -444,11 +445,16 @@ final class ShareWorkspace extends FrameLayout {
             int token=generation,owner=user;deliveryPending=true;
             receipt=new ShareDelivery(getContext(),(success,retained)->{
                 if(token!=generation || owner!=CurrentUser.id())return;
-                finishDelivery(token);resultSink.accept(success,retained);
+                finishDelivery(token);
+                if(success && ShareActions.STAGE.equals(ShareActions.operation(target)))message("已暂存");
+                resultSink.accept(success,retained);
             });
             handler.removeCallbacks(expire);handler.postDelayed(expire,60_000L);
             if(payload.uris.isEmpty() || payload.uris.stream().allMatch(uri->ContentInboxProvider.AUTHORITY.equals(uri.getAuthority()))) {
-                dropped=true;prepareDelivery(target,intent,null,token,owner);return true;
+                dropped=true;
+                if(ShareActions.STAGE.equals(ShareActions.operation(target)))stageOwned(payload.clip,token,owner);
+                else prepareDelivery(target,intent,null,token,owner);
+                return true;
             }
             ClipData files=new ClipData("文件",new String[]{payload.mime},new ClipData.Item(payload.uris.get(0)));
             for(int i=1;i<payload.uris.size();i++)files.addItem(new ClipData.Item(payload.uris.get(i)));
@@ -459,6 +465,23 @@ final class ShareWorkspace extends FrameLayout {
             dropped=false;finishDelivery(generation);message("无法交付内容，原内容保留");return false;
         }
     }
+    private void stageOwned(ClipData clip,int token,int owner) {
+        WORKER.execute(()->{
+            if(token!=generation || owner!=CurrentUser.id())return;
+            try {
+                android.os.Bundle data=new android.os.Bundle();data.putParcelable("clip",clip);
+                if(getContext().getContentResolver().call(ContentInboxProvider.ROOT,"shelf_add",null,data)==null)
+                    throw new IllegalStateException("Missing shelf confirmation");
+                handler.post(()->{
+                    if(token!=generation || owner!=CurrentUser.id())return;
+                    finishDelivery(token);
+                    message("已暂存");
+                    resultSink.accept(true,clip);
+                });
+            }catch(RuntimeException unavailable){handler.post(()->failDelivery(token,owner));}
+        });
+    }
+
     private void prepareDelivery(ComponentName target,Intent intent,DropPermissionContract grant,int token,int owner) {
         android.os.IBinder callback=receipt.token;
         WORKER.execute(()->{
@@ -479,9 +502,12 @@ final class ShareWorkspace extends FrameLayout {
         Runnable launch=()->{
             if(token!=generation || owner!=CurrentUser.id()){if(grant!=null)grant.close();return;}
             if(!ready.getAsBoolean()){failDelivery(token,owner);return;}
-            try{getContext().startActivity(new Intent().setComponent(new ComponentName(ContentInboxProvider.MODULE,
-                    ContentImportActivity.class.getName())).putExtra("launch_token",capability)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_MULTIPLE_TASK|Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS));
+            try{
+                Intent proxy=new Intent().setComponent(new ComponentName(ContentInboxProvider.MODULE,
+                        ContentImportActivity.class.getName())).putExtra("launch_token",capability)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_MULTIPLE_TASK|Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+                if(ShareActions.STAGE.equals(ShareActions.operation(target)))proxy.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                getContext().startActivity(proxy);
                 ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.STARTED);
                 if(delegatedRead==grant)delegatedRead=null;
             }catch(RuntimeException unavailable){if(grant!=null)grant.close();failDelivery(token,owner);}

@@ -27,13 +27,13 @@ public class WallpaperRefreshRegression {
  static class HyperOsStyle {static boolean fail;static List<Bitmap>produced=Collections.synchronizedList(new ArrayList<>());static Bitmap blurredWallpaper(Context c,int w,int h){if(fail)return null;Bitmap b=new Bitmap();produced.add(b);return b;}static Bitmap blurredBitmap(Bitmap b,int w,int h){Bitmap next=new Bitmap();produced.add(next);return next;}}
  static class WorkspaceFrost {static Bitmap last;static Bitmap finish(Bitmap b){last=b;return b;}}
  static class WorkspaceBackground {static Bitmap custom;static Bitmap loadBlurred(Context c,int w,int h){return custom;}}
- static class LiveBackdrop {Bitmap texture;void replaceWallpaper(Bitmap bitmap){texture=bitmap;}}
+ static class LiveBackdrop {Bitmap texture;void replaceWallpaper(Bitmap bitmap,int tint){texture=bitmap;}}
  static class CurrentUser {static int id(){return 0;}}
  static class Warmup {static Bitmap[] ready;static Bitmap[] takePreparedWallpaper(int u,int w,int h){Bitmap[] result=ready;ready=null;return result;}}
  static class WallpaperSnapshot {static boolean canCapture(Context c){return c.interactive;}}
  static class Clipboard {static Clipboard get(Context c){return new Clipboard();}void close(){}}
  Bitmap wallpaperBackdrop=new Bitmap(),wellWallpaperBackdrop=new Bitmap();boolean wallpaperBackdropDirty=true,wallpaperBackdropRequested;long wallpaperLoadGeneration;Object mainSideAnimator,workspaceAnimator,promotion,cellMotion;int screenW=1080,screenH=2400,applies,scene=1;static final int ACTIVE=1,RESUMING=2;boolean screenOn=true,keyguardLocked;Object root=new Object();Context ctx=new Context();Handler main=new Handler();LiveBackdrop workspaceBackdrop;
- void applyWallpaperBackdrops(){applies++;check(!wallpaperBackdrop.isRecycled(),"published wallpaper was recycled");}void log(String s){}
+ void applyWallpaperBackdrops(){if(workspaceBackdrop!=null)workspaceBackdrop.replaceWallpaper(wallpaperBackdrop,0);applies++;check(!wallpaperBackdrop.isRecycled(),"published wallpaper was recycled");}void log(String s){}
  METHOD
  static void waitQueued(WallpaperRefreshRegression h,int count)throws Exception {for(int i=0;i<1000;i++){if(h.main.queue.size()>=count)return;Thread.sleep(2);}throw new AssertionError("capture did not complete");}
  public static void main(String[]args)throws Exception {

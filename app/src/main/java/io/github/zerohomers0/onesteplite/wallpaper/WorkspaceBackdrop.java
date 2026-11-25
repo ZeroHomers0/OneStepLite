@@ -151,7 +151,8 @@ final class WorkspaceBackdrop {
                         handler.removeCallbacks(timeout);
                         if (getResultCode() != -1 || parent == null || anchor == null)
                             throw new IllegalStateException("native wallpaper parent rejected");
-                        backdrop = LiveBackdrop.create(parent, wallpaper, width, height, log);
+                        backdrop = LiveBackdrop.createThemed(parent, wallpaper, width, height,
+                                HyperOsStyle.topWallpaperTint(context), log);
                         try (SurfaceControl.Transaction tx=new SurfaceControl.Transaction()) {
                             // The native opaque wallpaper scales with the main area.
                             // Keep it above this full-screen blur so Home stays clear,

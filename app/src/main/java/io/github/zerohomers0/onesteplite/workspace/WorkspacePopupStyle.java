@@ -37,7 +37,7 @@ final class WorkspacePopupStyle {
         mask.setCornerRadius(dp(context,28));mask.setColor(HyperOsStyle.page(context));window.setBackgroundDrawable(mask);
         android.view.WindowManager manager=context.getSystemService(android.view.WindowManager.class);
         boolean capable=WindowGlassCompat.enable(window);
-        java.util.function.Consumer<Boolean> update=enabled->mask.setColor(enabled && capable?(HyperOsStyle.dark(context)?0x3010151c:0x30ffffff):HyperOsStyle.page(context));
+        java.util.function.Consumer<Boolean> update=enabled->mask.setColor(enabled && capable?(HyperOsStyle.dark(context)?0x3010151c:0x30e7edf5):HyperOsStyle.page(context));
         View decor=window.getDecorView();
         decor.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){
             private boolean registered;
@@ -103,6 +103,11 @@ final class WorkspacePopupStyle {
     }
 
     static void heading(android.widget.LinearLayout body,String title,Runnable back,View trailingAction) {
+        heading(body,title,back,null,trailingAction);
+    }
+
+    static void heading(android.widget.LinearLayout body,String title,Runnable back,
+            android.widget.TextView subtitle,View trailingAction) {
         Context context=body.getContext();android.widget.LinearLayout row=new android.widget.LinearLayout(context);
         row.setGravity(Gravity.CENTER_VERTICAL);
         int height=dp(context,ACTION_HEIGHT_DP);
@@ -112,7 +117,13 @@ final class WorkspacePopupStyle {
         label.setTypeface(android.graphics.Typeface.DEFAULT,android.graphics.Typeface.BOLD);label.setTextColor(tint);
         label.setSingleLine(true);label.setEllipsize(android.text.TextUtils.TruncateAt.END);label.setAccessibilityHeading(true);
         label.setPaddingRelative(dp(context,4),0,dp(context,8),0);
-        row.addView(label,new android.widget.LinearLayout.LayoutParams(0,-2,1));
+        if(subtitle==null)row.addView(label,new android.widget.LinearLayout.LayoutParams(0,-2,1));
+        else {
+            row.addView(label,new android.widget.LinearLayout.LayoutParams(-2,-2));
+            subtitle.setSingleLine(true);
+            subtitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            row.addView(subtitle,new android.widget.LinearLayout.LayoutParams(0,-2,1));
+        }
         if(trailingAction!=null){
             android.widget.LinearLayout.LayoutParams actionBounds=new android.widget.LinearLayout.LayoutParams(-2,height);
             actionBounds.setMarginEnd(dp(context,8));

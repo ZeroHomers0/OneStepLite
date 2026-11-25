@@ -61,6 +61,8 @@ public class WallpaperLayoutRegression {
   static int topWallpaperTint(Object c){return 0x1fffffff;}
   static int accent(Object c){return 0;}static int textSecondary(Object c){return 0;}
  }
+ static class LiveBackdrop{int tint;void replaceWallpaper(Bitmap b,int value){tint=value;}}
+ LiveBackdrop workspaceBackdrop;
  static class Bar extends View{void setWallpaperBackdrop(Bitmap b,int w,int h){}}
  static class Slot{
   final int index;int sideRow=-1;boolean occupied,parked,sideShown;

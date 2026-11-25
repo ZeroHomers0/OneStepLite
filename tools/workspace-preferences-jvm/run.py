@@ -59,11 +59,11 @@ files = {
             static int checks;static void check(boolean v,String m){checks++;if(!v)throw new AssertionError(m);}
             public static void main(String[]args){
                 var ctx=new android.content.Context();String saved=XposedHelpers.saved;
-                check(HyperOsStyle.topWallpaperTint(ctx)==0,"day mode preserves wallpaper blur colours");
+                check(HyperOsStyle.topWallpaperTint(ctx)==0x26ffffff,"day mode lightly brightens the wallpaper blur");
                 ctx.resources.config.uiMode=32;
                 check(HyperOsStyle.topWallpaperTint(ctx)==0x99080a10,"night mode uses a translucent dark wash over the same blur");
                 ctx.resources.config.uiMode=16;
-                check(HyperOsStyle.topWallpaperTint(ctx)==0,"switching back to day removes dark wash");
+                check(HyperOsStyle.topWallpaperTint(ctx)==0x26ffffff,"switching back to day restores the light tint");
                 check(QuickAppPins.arrange(ctx,List.of()).isEmpty(),"cold cache renders empty");
                 check(saved.equals(XposedHelpers.saved)&&XposedHelpers.writes==0,"cold cache never deletes saved pins");
                 var a=new QuickApp("a/Activity");var b=new QuickApp("b/Activity");

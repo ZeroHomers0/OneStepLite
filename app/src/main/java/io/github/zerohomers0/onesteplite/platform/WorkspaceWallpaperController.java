@@ -109,7 +109,6 @@ final class WorkspaceWallpaperController {
         host.wallpaperBackdropDirty = false;
         host.wallpaperRetryAttempt = 0;
         host.main.removeCallbacks(wallpaperRetry);
-        if (host.workspaceBackdrop != null) host.workspaceBackdrop.replaceWallpaper(bitmap);
         log.accept("wallpaper gaussian backdrop ready " + bitmap.getWidth() + "x" + bitmap.getHeight());
         applyWallpaperBackdrops();
         }
@@ -151,6 +150,8 @@ final class WorkspaceWallpaperController {
         }
         updateWorkspaceBackdropVisibility();
         if (host.wallpaperBackdrop == null || host.wallpaperBackdrop.isRecycled() || host.layout == null) return;
+        if (host.workspaceBackdrop != null) host.workspaceBackdrop.replaceWallpaper(host.wallpaperBackdrop,
+                HyperOsStyle.topWallpaperTint(host.ctx));
         if (host.mainGapBacking != null) {
             int[] bounds = host.layout.mainGapBounds();
             host.mainGapBacking.setBackground(new WallpaperCropDrawable(host.wallpaperBackdrop, host.screenW, host.screenH,

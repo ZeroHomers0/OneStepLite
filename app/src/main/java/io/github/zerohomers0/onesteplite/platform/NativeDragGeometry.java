@@ -49,18 +49,21 @@ final class NativeDragGeometry {
             Object source=origin;
             Object originalApp=PortalDragInput.originalWindow(origin);
             if(originalApp!=null)origin=originalApp;
-            boolean qq="com.tencent.mobileqq".equals(XposedHelpers.callMethod(origin,"getOwningPackage"));
-            if(!qq) {
-                Object payload=XposedHelpers.getObjectField(state,"mData");
-                if(!(payload instanceof ClipData clip)
-                        || (XposedHelpers.getIntField(state,"mFlags")&android.view.View.DRAG_FLAG_GLOBAL)==0
-                        || !clip.getDescription().hasMimeType("text/*") && !clip.getDescription().hasMimeType("image/*"))return false;
-            }
+            if(originalApp==null && !nativeShareContent(state,source))return false;
             if(inputToken.equals(XposedHelpers.getObjectField(source,"mInputChannelToken"))
                     || inputToken.equals(XposedHelpers.getObjectField(origin,"mInputChannelToken")))return true;
             return sameOrigin(origin,dropWindow(state,wm,inputToken));
         }catch(RuntimeException unavailable){/* Keep the supported shadow-session fallback. */}
         return false;
+    }
+
+    private static boolean nativeShareContent(Object state,Object source) {
+        // Older QQ drags may only carry app-local state.
+        if("com.tencent.mobileqq".equals(XposedHelpers.callMethod(source,"getOwningPackage")))return true;
+        if((XposedHelpers.getIntField(state,"mFlags")&android.view.View.DRAG_FLAG_GLOBAL)==0)return false;
+        Object payload=XposedHelpers.getObjectField(state,"mData");
+        return payload instanceof ClipData clip && (clip.getDescription().hasMimeType("text/*")
+                || clip.getDescription().hasMimeType("image/*") || NativeContentDragCard.files(clip));
     }
 
     private static Object dropWindow(Object state,Object wm,Object token) {
@@ -126,11 +129,8 @@ final class NativeDragGeometry {
             Object token=call.args[0];
             if(token==null)return;
             if(token.equals(XposedHelpers.getObjectField(origin,"mInputChannelToken"))){reject(call);return;}
-            for(Object target:(java.util.Collection<?>)XposedHelpers.getObjectField(state,"mNotifiedWindows")) {
-                if(token.equals(XposedHelpers.getObjectField(target,"mInputChannelToken")) && sameOrigin(origin,target)){
-                    reject(call);return;
-                }
-            }
+            Object wm=XposedHelpers.getObjectField(state,"mService");
+            if(sameOrigin(origin,dropWindow(state,wm,token)))reject(call);
         }
         void stop(){
             if(stopped)return;

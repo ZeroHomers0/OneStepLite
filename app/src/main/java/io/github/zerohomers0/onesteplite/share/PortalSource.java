@@ -386,8 +386,7 @@ final class PortalSource implements AutoCloseable {
                 ?android.R.style.Theme_Material_Dialog_Alert:android.R.style.Theme_Material_Light_Dialog_Alert);
         android.app.Dialog opened=new WorkspaceDialog(themed,this::closeWords);selection=opened;
         opened.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
-        WordSelectionPane pane=new WordSelectionPane(themed,text,this::beginWords);
-        WorkspacePopupStyle.heading(pane,"选词",this::closeWords);
+        WordSelectionPane pane=new WordSelectionPane(themed,text,this::beginWords,this::closeWords);
         pane.setOnDragListener((view,event)->{
             if(event.getAction()==DragEvent.ACTION_DRAG_ENDED && selection==opened) {
                 selectingDrag=false;ContentDragMotion.close();

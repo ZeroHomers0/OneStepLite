@@ -25,7 +25,7 @@ ensure = host[a:b]
 files = {
 'android/graphics/Color.java': '''package android.graphics;public class Color {public static int red(int c){return 245;}public static int green(int c){return 245;}public static int blue(int c){return 245;}}''',
 'android/graphics/Bitmap.java': '''package android.graphics; public class Bitmap {public boolean recycled;public int getWidth(){return 360;}public int getHeight(){return 820;}public boolean isRecycled(){return recycled;}}''',
-'android/graphics/Canvas.java': '''package android.graphics; public class Canvas {public static Bitmap source;public static boolean fail;public void drawBitmap(Bitmap b,Rect s,Rect d,Paint p){if(fail)throw new IllegalStateException("draw");source=b;}}''',
+'android/graphics/Canvas.java': '''package android.graphics; public class Canvas {public static Bitmap source;public static int tint;public static boolean fail;public void drawColor(int color){tint=color;}public void drawBitmap(Bitmap b,Rect s,Rect d,Paint p){if(fail)throw new IllegalStateException("draw");source=b;tint=0;}}''',
 'android/graphics/Paint.java': '''package android.graphics; public class Paint {public static int FILTER_BITMAP_FLAG=2;public Paint(int f){}}''',
 'android/graphics/PixelFormat.java': '''package android.graphics; public class PixelFormat {public static int RGBA_8888=1;}''',
 'android/graphics/Rect.java': '''package android.graphics; public class Rect {public int left,top,right,bottom;public Rect(int a,int b,int c,int d){left=a;top=b;right=c;bottom=d;}}''',
@@ -124,6 +124,14 @@ public static void main(String[]args)throws Exception {
  Surface.fail=true;try{LiveBackdrop.create(parent,wallpaper,1080,2460,s->{});throw new AssertionError("producer failure accepted");}catch(IllegalStateException e){check(SurfaceControl.latest.releases==1&&SurfaceControl.Transaction.latest.removes==1,"partial producer construction releases owned control");}finally{Surface.fail=false;}
  Canvas.fail=true;try{LiveBackdrop.create(parent,wallpaper,1080,2460,s->{});throw new AssertionError("draw failure accepted");}catch(IllegalStateException e){check(Surface.latest.posts==1&&Surface.latest.releases==1&&SurfaceControl.latest.releases==1,"draw failure posts/unlocks and cleans only owned resources");}finally{Canvas.fail=false;}
  try{LiveBackdrop.create(parent,null,1080,2460,s->{});throw new AssertionError("missing wallpaper accepted");}catch(IllegalStateException e){checks++;}
+ LiveBackdrop themed=LiveBackdrop.createThemed(parent,wallpaper,1080,2460,0x99080a10,s->{});
+ Surface themedSurface=Surface.latest;
+ check(Canvas.tint==0x99080a10&&themedSurface.posts==1,"dark tint is present in the first live buffer");
+ themed.replaceWallpaper(wallpaper,0x26ffffff);
+ check(Canvas.source==wallpaper&&Canvas.tint==0x26ffffff&&themedSurface.posts==2,"light theme redraws the same bitmap with a light tint");
+ themed.replaceWallpaper(wallpaper,0x26ffffff);
+ check(themedSurface.posts==2,"unchanged theme and bitmap do not post another buffer");
+ themed.close();
  System.out.println("actual wallpaper lease and same-transaction visibility checks="+checks+" passed");
 }}
 '''.replace('BACKGROUND', background).replace('ENSURE', ensure).replace('CALL_CROPS', ','.join(side_crops)).replace('STRIP',host[host.index('    private static Rect liveSideStrip('):host.index('    private boolean livePeerBindingsCurrent(')])

@@ -284,6 +284,7 @@ public final class WorkspaceHost {
             slots[i] = new Slot(i);
         }
         workspaceSettings = new WorkspaceSettingsClient(this.ctx, main, options -> {
+            boolean themeChanged=workspaceOptions.themeMode!=options.themeMode;
             HyperOsStyle.theme(options.themeMode);
             boolean sharingDisabled=workspaceOptions.dragShareEnabled && !options.dragShareEnabled;
             workspaceOptions = options;
@@ -291,6 +292,7 @@ public final class WorkspaceHost {
                 contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();
             }
             if (topBar != null) topBar.applyOptions(options);
+            if (themeChanged && root!=null) applyWallpaperBackdrops();
             if(scene==ACTIVE && screenOn && !keyguardLocked)refreshQuickApps();
             if (root != null) {
                 publishDesktopSideTasks();

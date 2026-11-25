@@ -15,6 +15,17 @@ import de.robv.android.xposed.XposedHelpers;
 final class LiveBackdrop implements AutoCloseable {
     Object surface;
     private Surface producer;
+    private Bitmap renderedWallpaper;
+    private int renderedTint;
+
+    static LiveBackdrop createThemed(Object parent, Bitmap wallpaper, int width, int height,
+            int tint, Consumer<String> log) throws Exception {
+        LiveBackdrop backdrop=create(parent,wallpaper,width,height,null,null,
+                tint==0?null:canvas->canvas.drawColor(tint),log);
+        backdrop.renderedWallpaper=wallpaper;
+        backdrop.renderedTint=tint;
+        return backdrop;
+    }
     private final Consumer<String> log;
     private boolean closed;
     private View retiringRoot;
@@ -87,18 +98,23 @@ final class LiveBackdrop implements AutoCloseable {
                 (int) Math.ceil(side.right * x), (int) Math.ceil(side.bottom * y));
     }
 
-    void replaceWallpaper(Bitmap wallpaper) {
-        if (closed || producer == null || wallpaper == null || wallpaper.isRecycled()) return;
+    void replaceWallpaper(Bitmap wallpaper, int tint) {
+        if (closed || producer == null || wallpaper == null || wallpaper.isRecycled()
+                || (renderedWallpaper == wallpaper && renderedTint == tint)) return;
         try {
             Canvas canvas = producer.lockCanvas(null);
             try {
                 canvas.drawBitmap(wallpaper, null, fullCrop, new Paint(Paint.FILTER_BITMAP_FLAG));
+                if(tint!=0)canvas.drawColor(tint);
             } finally {
                 producer.unlockCanvasAndPost(canvas);
             }
         } catch (RuntimeException unavailable) {
             log.accept("live wallpaper refresh: " + unavailable);
+            return;
         }
+        renderedWallpaper=wallpaper;
+        renderedTint=tint;
     }
 
     void stage(Object tx, boolean finishing, boolean rollback, boolean flip) {
@@ -147,6 +163,7 @@ final class LiveBackdrop implements AutoCloseable {
     @Override public void close() {
         if (closed) return;
         closed = true;
+        renderedWallpaper=null;
         if (retiringRoot != null && detachListener != null)
             retiringRoot.removeOnAttachStateChangeListener(detachListener);
         retiringRoot = null; detachListener = null;

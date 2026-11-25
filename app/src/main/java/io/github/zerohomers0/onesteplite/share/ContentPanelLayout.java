@@ -49,7 +49,9 @@ final class ContentPanelLayout extends LinearLayout {
     ContentPanelLayout(Context context,IntConsumer select) {
         super(context);selectPage=select;setOrientation(VERTICAL);WorkspacePopupStyle.decorate(this,null);
         toolbar=new LinearLayout(context);toolbar.setGravity(Gravity.CENTER_VERTICAL);
-        addView(toolbar,new LayoutParams(-1,-2));
+        LayoutParams toolbarBounds=new LayoutParams(-1,-2);
+        toolbarBounds.bottomMargin=dp(8);
+        addView(toolbar,toolbarBounds);
         track=new android.widget.FrameLayout(context);
         toolbar.addView(track,new LayoutParams(0,-2,1));
         LinearLayout header=new LinearLayout(context);

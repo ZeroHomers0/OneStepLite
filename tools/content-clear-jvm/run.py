@@ -96,6 +96,14 @@ __METHODS__
   Replay stale=new Replay(0);stale.anchor=new Anchor(){@Override boolean post(Runnable task){stale.generation++;return true;}};
   stale.clearMediaRecords();
   check(!stale.prefs.values.containsKey("hidden_0")&&stale.loads==0,"late scan cannot hide records after the page generation changes");
+  Replay switching=new Replay(0);List<Runnable> callbacks=new ArrayList<>();
+  switching.anchor=new Anchor(){@Override boolean post(Runnable task){callbacks.add(task);return true;}};
+  switching.clearMediaRecords();
+  switching.cancelQuery();switching.tab=1;switching.clearMediaRecords();
+  callbacks.get(0).run();
+  check(switching.clearingMedia&&!switching.prefs.values.containsKey("hidden_0"),"late image callback cannot clear the file scan state");
+  callbacks.get(1).run();
+  check(!switching.clearingMedia&&switching.prefs.values.containsKey("hidden_1"),"the active file scan completes independently");
   System.out.println("Production content clear checks="+checks+" passed");
  }
 }

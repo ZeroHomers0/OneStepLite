@@ -132,7 +132,7 @@ final class HyperOsStyle {
     }
 
     static int topWallpaperTint(Context context) {
-        return dark(context)?0x99080a10:0;
+        return dark(context)?0x99080a10:0x26ffffff;
     }
 
     static Bitmap blurredWallpaper(Context context, int i, int i2) throws Exception {
@@ -220,7 +220,7 @@ final class HyperOsStyle {
     }
 
     static Drawable glassSheet(Context context, float f) {
-        GradientDrawable gradientDrawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{dark(context) ? -265934803 : -117440513, dark(context) ? -317187554 : -353176329});
+        GradientDrawable gradientDrawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{dark(context) ? -265934803 : 0xf8edf1f7, dark(context) ? -317187554 : 0xeae2e9f2});
         gradientDrawable.setCornerRadius(dp(context, f));
         gradientDrawable.setStroke(Math.max(1, dp(context, 0.75f)), stroke(context));
         return gradientDrawable;
