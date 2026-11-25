@@ -37,8 +37,9 @@ public static class LayoutParams {public LayoutParams(int w,int h){}}}''',
 public int adds,removes;public boolean fail;public LayoutParams last;
 public void addView(View view,LayoutParams params){adds++;last=params;if(fail)throw new IllegalStateException("window rejected");}
 public void removeViewImmediate(View view){removes++;}
-public static class LayoutParams {public static final int FLAG_NOT_FOCUSABLE=1,FLAG_NOT_TOUCH_MODAL=2;
-public int gravity,y,width,height,type,flags;public String title;
+public static class LayoutParams {public static final int FLAG_NOT_FOCUSABLE=1,FLAG_NOT_TOUCH_MODAL=2,FLAG_LAYOUT_IN_SCREEN=4,FLAG_LAYOUT_NO_LIMITS=8;
+public static final int LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS=3;
+public int gravity,y,width,height,type,flags,layoutInDisplayCutoutMode;public String title;
 public LayoutParams(int w,int h,int t,int f,int format){width=w;height=h;type=t;flags=f;}
 public void setTitle(String value){title=value;}public void setFitInsetsTypes(int value){}}}''',
 'io/github/zerohomers0/onesteplite/HyperOsStyle.java':'''package io.github.zerohomers0.onesteplite;
@@ -81,6 +82,10 @@ check(overlay.onDrag(event(1),null)&&overlay.isOpen(),"first content drag mounts
 ShareWorkspace first=ShareWorkspace.latest;check(context.windows.adds==1&&first.events==1,"root's drag-start initializes the mounted share session");
 check(context.windows.last.y==248&&context.windows.last.height==52,"share rail occupies only strip immediately above main");
 check(context.windows.last.width==1080&&context.windows.last.type==2017,"strip uses physical display width and existing modal window type");
+check((context.windows.last.flags&WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN)!=0
+&&(context.windows.last.flags&WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)!=0
+&&context.windows.last.layoutInDisplayCutoutMode==WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS,
+"strip window keeps screen coordinates so the arrow tip is measured where it is drawn");
 check(HostWindowPolicy.checks==1&&ModalIslandLease.active==1,"window uses owned overlay and island lease");
 overlay.setMainOnRight(true);check(first.mainRight&&first.closes==0,"side change mirrors icons without cancelling live drag");
 overlay.onDrag(event(1),null);check(context.windows.adds==1,"duplicate start never creates a second window");

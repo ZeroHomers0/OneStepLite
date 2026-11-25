@@ -66,8 +66,11 @@ final class ShareRailOverlay implements AutoCloseable {
             int height=HyperOsStyle.dp(context,52);
             WindowManager.LayoutParams params=new WindowManager.LayoutParams(
                     owner.getResources().getDisplayMetrics().widthPixels,height,WindowTypes.SYSTEM_UI_DIALOG,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,PixelFormat.TRANSLUCENT);
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                            |WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN|WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    PixelFormat.TRANSLUCENT);
             params.gravity=Gravity.TOP|Gravity.START;params.y=Math.max(0,main.top-height);
+            params.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
             params.setTitle("OneStepLiteContentPanel");params.setFitInsetsTypes(0);HostWindowPolicy.configure(params);
             windows.addView(plate,params);island=new ModalIslandLease(plate);island.start();return true;
         } catch(RuntimeException unavailable){close();android.util.Log.w(Tags.PROBE,"share overlay unavailable",unavailable);return false;}

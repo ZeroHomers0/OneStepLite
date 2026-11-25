@@ -57,7 +57,7 @@ Counter pendingRead,delegatedRead,catchment;Counter panel=new Counter(),history=
 Transition transition=new Transition();float alpha=1;
 Targets targets=new Targets();
 boolean accepts(Object description){return true;}boolean live(int token){return dragging&&ready.getAsBoolean();}
-boolean drag(DragEvent event){if(event.action==1){starts++;dragging=true;}if(event.action==4){ends++;finishVisuals();}return true;}
+boolean drag(DragEvent event,Object plate){if(event.action==1){starts++;dragging=true;}if(event.action==4){ends++;finishVisuals();}return true;}
 boolean drop(DragEvent event,ComponentName target){drops++;lastTarget=target.pkg;return true;}
 void stopEdge(){stops++;}void setAlpha(float value){alpha=value;}
 __METHODS__

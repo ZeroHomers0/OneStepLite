@@ -55,7 +55,7 @@ final class ShareWorkspace extends FrameLayout {
     private final ShareEdgePolicy edge=new ShareEdgePolicy();
     private final ShareRailTransition transition;
     private final float[] pointer=new float[2],physicalAim=new float[2];
-    private final int[] railOrigin=new int[2];
+    private final int[] railOrigin=new int[2],plateOrigin=new int[2];
     private float lastX,lastY;
     private boolean hasPointer;
     private boolean edgeQueued;
@@ -137,13 +137,13 @@ final class ShareWorkspace extends FrameLayout {
         shareFace.setVisibility(INVISIBLE);
         transition=new ShareRailTransition(normalRail,shareFace,content);
         transition.onFrame(()->{if(dragging && hasPointer)updateHovered(lastX,lastY);});
-        setOnDragListener((v, event) -> drag(event));
+        setOnDragListener((v, event) -> drag(event, null));
         if(shareOnly)setAlpha(0);
     }
 
     void refreshAppearance(){shareFace.setBackground(HyperOsStyle.shareRailBackground(getContext()));}
 
-    private boolean drag(DragEvent event) {
+    private boolean drag(DragEvent event, View plate) {
         if(!shareOnly && (covered.getAsBoolean() || overlay!=null && overlay.isOpen()))
             return onWindowDrag(event,null,true);
         switch (event.getAction()) {
@@ -188,13 +188,13 @@ final class ShareWorkspace extends FrameLayout {
                 });
                 return true;
             case DragEvent.ACTION_DRAG_LOCATION:
-                if(dragging)locateDragTip(event);
+                if(dragging)locateDragTip(event,plate);
                 return dragging;
             case DragEvent.ACTION_DRAG_EXITED:
                 hasPointer=false;stopEdge();hovered = null; clearTargetHover();hint.accept(null); return dragging;
             case DragEvent.ACTION_DROP:
                 if (!live(generation)) return false;
-                locateDragTip(event);
+                locateDragTip(event,plate);
                 if (hovered == null) return false;
                 return drop(event, hovered);
             case DragEvent.ACTION_DRAG_ENDED:
@@ -219,13 +219,21 @@ final class ShareWorkspace extends FrameLayout {
         return supported;
     }
 
-    boolean onTipDrag(DragEvent event){return drag(event);}
-    private void locateDragTip(DragEvent event) {
+    boolean onTipDrag(View plate,DragEvent event){return drag(event,plate);}
+    private void locateDragTip(DragEvent event,View plate) {
         refreshTip(event);
         if(ContentDragMotion.physicalTip(event.getClipDescription(),physicalAim)){
             getLocationOnScreen(railOrigin);
             locate(physicalAim[0]-railOrigin[0],physicalAim[1]-railOrigin[1]);
-        }else locate(event.getX(),event.getY()-tipOffset);
+            return;
+        }
+        // DragEvent coordinates are relative to the window that received them, which is not
+        // necessarily this view's window: the catchment is a separate window. Convert through
+        // screen space so the arrow tip is measured where it is actually drawn.
+        View origin=plate!=null?plate:this;
+        if(!origin.isAttachedToWindow()){locate(event.getX(),event.getY()-tipOffset);return;}
+        origin.getLocationOnScreen(plateOrigin);getLocationOnScreen(railOrigin);
+        locate(event.getX()+plateOrigin[0]-railOrigin[0],event.getY()+plateOrigin[1]-railOrigin[1]-tipOffset);
     }
 
     private void refreshTip(DragEvent event){
@@ -270,8 +278,8 @@ final class ShareWorkspace extends FrameLayout {
             return overlay.onDrag(event,targetPackage);
         }
         if (event.getAction() == DragEvent.ACTION_DRAG_STARTED)
-            return drag(event);
-        if(event.getAction()==DragEvent.ACTION_DRAG_ENDED)return drag(event);
+            return drag(event,null);
+        if(event.getAction()==DragEvent.ACTION_DRAG_ENDED)return drag(event,null);
         int action=event.getAction();
         boolean location=action==DragEvent.ACTION_DRAG_LOCATION;
         boolean sameSource=targetPackage!=null && targetPackage.equals(sourcePackage);
