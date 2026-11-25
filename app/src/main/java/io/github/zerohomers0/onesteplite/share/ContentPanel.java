@@ -49,6 +49,7 @@ final class ContentPanel {
     private final java.util.LinkedHashMap<String,ContentEntry> entries = new java.util.LinkedHashMap<>();
     private final java.util.Map<String,View> tiles = new java.util.HashMap<>();
     private boolean selecting;
+    private volatile boolean clearingMedia;
     private int owner=-1;
     private int tab;
     private volatile int generation;
@@ -216,12 +217,48 @@ final class ContentPanel {
     private void clearRecords() {
         if(tab==3){removeShelf();return;}
         if(tab==2) { history.clear();selection.clear(tab);load();message("已清空历史，系统当前剪贴板保留");return; }
-        java.util.LinkedHashSet<String> hidden=new java.util.LinkedHashSet<>(
-                preferences().getStringSet("hidden_"+tab,java.util.Collections.emptySet()));
-        hidden.addAll(entries.keySet());
-        while(hidden.size()>256)hidden.remove(hidden.iterator().next());
-        preferences().edit().putStringSet("hidden_"+tab,hidden).apply();
-        selection.clear(tab);load();message("已清除显示记录，原文件保留");
+        clearMediaRecords();
+    }
+
+    private void clearMediaRecords() {
+        if(clearingMedia)return;
+        int page=tab,user=CurrentUser.id();
+        java.util.Set<String> mounted=new java.util.LinkedHashSet<>(entries.keySet());
+        java.util.Set<String> hidden=new java.util.LinkedHashSet<>(
+                preferences().getStringSet("hidden_"+page,java.util.Collections.emptySet()));
+        cancelQuery();
+        int token=generation;
+        CancellationSignal signal=new CancellationSignal();query=signal;clearingMedia=true;
+        shell.status("正在清除记录…");
+        WORKER.execute(()->{
+            java.util.Set<String> scanned=scanMediaKeys(token,page,hidden,signal);
+            boolean posted=anchor.post(()->{
+                if(query==signal)query=null;
+                if(!valid(token,user) || page!=tab){clearingMedia=false;return;}
+                java.util.LinkedHashSet<String> merged=new java.util.LinkedHashSet<>(
+                        preferences().getStringSet("hidden_"+page,java.util.Collections.emptySet()));
+                merged.addAll(mounted);merged.addAll(scanned);
+                while(merged.size()>256)merged.remove(merged.iterator().next());
+                preferences().edit().putStringSet("hidden_"+page,merged).apply();
+                clearingMedia=false;selection.clear(page);load();
+                message("已清除显示记录，原文件保留");
+            });
+            if(!posted)clearingMedia=false;
+        });
+    }
+
+    private java.util.Set<String> scanMediaKeys(int token,int page,java.util.Set<String> hidden,
+            CancellationSignal signal) {
+        java.util.List<ContentEntry> rows=new java.util.ArrayList<>();
+        if(page==0)rows.addAll(inboxRows(token,page,hidden,signal));
+        try {
+            if(page==1)rows.addAll(RecentFilesSource.load(context,signal,hidden));
+            else readImages(signal,hidden,rows);
+        } catch(RuntimeException unavailable){ /* The mounted rows are still cleared below. */ }
+        if(page==1 && !signal.isCanceled())rows.addAll(inboxRows(token,page,hidden,signal));
+        java.util.Set<String> keys=new java.util.LinkedHashSet<>();
+        for(ContentEntry row:rows)keys.add(row.key);
+        return keys;
     }
 
     // Injected SystemUI widgets use the project's Chinese-only workspace copy.
@@ -795,7 +832,7 @@ final class ContentPanel {
         releaseRows(entries.values());
         entries.clear();tiles.clear();imageDay=Long.MIN_VALUE;
     }
-    private void cancelQuery() { generation++; if (query != null) { query.cancel(); query = null; } }
+    private void cancelQuery() { generation++;clearingMedia=false; if (query != null) { query.cancel(); query = null; } }
     private int dp(int value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }
     private void message(String value) {
         android.widget.Toast.makeText(context, value, android.widget.Toast.LENGTH_SHORT).show();
