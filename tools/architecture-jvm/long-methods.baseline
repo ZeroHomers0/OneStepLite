@@ -6,7 +6,6 @@ HostEntry.java:hookSystemServer
 HostEntry.java:armZoomBridge
 HostEntry.java:onReceive
 HostEntry.java:hookMagnificationReplayAfterTransition
-HostEntry.java:installFixedMainRotationHooks
 HostEntry.java:applyFixedRotationLocked
 HostEntry.java:installWorkspaceWindowFocus
 HostEntry.java:applyDisplayZoomLocked
