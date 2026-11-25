@@ -41,12 +41,12 @@ final class ShareRailOverlay implements AutoCloseable {
     boolean isOpen(){return plate!=null;}
     void setMainOnRight(boolean right){mainRight=right;if(rail!=null)rail.setMainOnRight(right);}
 
-    boolean onDrag(DragEvent event,String targetPackage) {
+    boolean onDrag(DragEvent event,String targetPackage,View origin) {
         if(event.getAction()==DragEvent.ACTION_DRAG_STARTED && !isOpen()) {
             close();if(!ready.getAsBoolean() || !show())return false;
         }
         ShareWorkspace current=rail;if(current==null)return false;
-        boolean accepted=current.onWindowDrag(event,targetPackage,false);
+        boolean accepted=current.onWindowDrag(event,targetPackage,false,origin);
         if(event.getAction()==DragEvent.ACTION_DRAG_STARTED && !accepted){hide();return false;}
         if(event.getAction()==DragEvent.ACTION_DRAG_ENDED) {
             // ShareWorkspace defers a DROP-less ENDED briefly so a late cross-window DROP can

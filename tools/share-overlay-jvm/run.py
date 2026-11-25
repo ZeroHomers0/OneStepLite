@@ -62,7 +62,7 @@ void onDeliveryResult(boolean success,android.content.ClipData retained){}
 ShareWorkspace(android.content.Context c,android.view.View n,java.util.function.BooleanSupplier ready,
 java.util.function.BiConsumer<android.content.ComponentName,Runnable> dispatch,java.util.function.Consumer<String> hint,
 java.util.function.Supplier<android.graphics.Rect> bounds,boolean only){super(c);latest=this;if(!only)throw new AssertionError("share-only expected");}
-boolean onWindowDrag(android.view.DragEvent e,String name,boolean covered){events++;target=name;return accepts;}
+android.view.View origin;boolean onWindowDrag(android.view.DragEvent e,String name,boolean covered,android.view.View source){events++;target=name;origin=source;return accepts;}
 boolean retainDelivery(Runnable done){settled=done;return pending;}
 void close(){closes++;pending=false;if(settled!=null)settled.run();}
 void deliver(){pending=false;if(settled!=null)settled.run();}
@@ -76,11 +76,11 @@ public static void main(String[] args){
 Context context=new Context();View owner=new View(context);boolean[] ready={true};Rect[] bounds={new Rect()};
 ShareRailOverlay overlay=new ShareRailOverlay(owner,()->ready[0],(target,launch)->{},hint->{},()->bounds[0]);
 check(!overlay.isOpen(),"no overlay allocated while idle");
-ready[0]=false;check(!overlay.onDrag(event(1),null)&&context.windows.adds==0,"inactive host never opens drag window");
-ready[0]=true;bounds[0]=null;check(!overlay.onDrag(event(1),null),"missing scene geometry rejects drag overlay");
-bounds[0]=new Rect();bounds[0].empty=true;check(!overlay.onDrag(event(1),null),"empty scene geometry rejects drag overlay");bounds[0].empty=false;
-check(overlay.onDrag(event(1),null)&&overlay.isOpen(),"first content drag mounts overlay");
-ShareWorkspace first=ShareWorkspace.latest;check(context.windows.adds==1&&first.events==1,"root's drag-start initializes the mounted share session");
+ready[0]=false;check(!overlay.onDrag(event(1),null,owner)&&context.windows.adds==0,"inactive host never opens drag window");
+ready[0]=true;bounds[0]=null;check(!overlay.onDrag(event(1),null,owner),"missing scene geometry rejects drag overlay");
+bounds[0]=new Rect();bounds[0].empty=true;check(!overlay.onDrag(event(1),null,owner),"empty scene geometry rejects drag overlay");bounds[0].empty=false;
+check(overlay.onDrag(event(1),null,owner)&&overlay.isOpen(),"first content drag mounts overlay");
+ShareWorkspace first=ShareWorkspace.latest;check(context.windows.adds==1&&first.events==1&&first.origin==owner,"root's drag-start initializes the mounted share session");
 check(context.windows.last.y==248&&context.windows.last.height==52,"share rail occupies only strip immediately above main");
 check(context.windows.last.width==1080&&context.windows.last.type==2017,"strip uses physical display width and existing modal window type");
 check((context.windows.last.flags&WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN)!=0
@@ -89,27 +89,27 @@ check((context.windows.last.flags&WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCRE
 "strip window keeps screen coordinates so the arrow tip is measured where it is drawn");
 check(HostWindowPolicy.checks==1&&ModalIslandLease.active==1,"window uses owned overlay and island lease");
 overlay.setMainOnRight(true);check(first.mainRight&&first.closes==0,"side change mirrors icons without cancelling live drag");
-overlay.onDrag(event(1),null);check(context.windows.adds==1,"duplicate start never creates a second window");
-overlay.onDrag(event(3),"target.pkg");check("target.pkg".equals(first.target),"occupied small-window share remains routed to same session");
-overlay.onDrag(event(4),null);check(overlay.isOpen()&&context.windows.removes==0,"drag end defers visual removal for a late DROP");
+overlay.onDrag(event(1),null,owner);check(context.windows.adds==1,"duplicate start never creates a second window");
+overlay.onDrag(event(3),"target.pkg",owner);check("target.pkg".equals(first.target),"occupied small-window share remains routed to same session");
+overlay.onDrag(event(4),null,owner);check(overlay.isOpen()&&context.windows.removes==0,"drag end defers visual removal for a late DROP");
 ShareWorkspace.runDelayed();check(!overlay.isOpen()&&context.windows.removes==1,"deferred drag end removes visual window");
 check(first.closes==1&&ModalIslandLease.active==0,"ordinary cancel releases rail and lease");
-check(!overlay.onDrag(event(3),"late.pkg"),"late drop cannot recreate closed overlay");
-overlay.onDrag(event(1),null);ShareWorkspace pending=ShareWorkspace.latest;pending.pending=true;
+check(!overlay.onDrag(event(3),"late.pkg",owner),"late drop cannot recreate closed overlay");
+overlay.onDrag(event(1),null,owner);ShareWorkspace pending=ShareWorkspace.latest;pending.pending=true;
 check(pending.mainRight,"new overlay inherits the configured badge side");
-overlay.onDrag(event(4),null);check(overlay.isOpen(),"accepted delivery also defers visual removal");
+overlay.onDrag(event(4),null,owner);check(overlay.isOpen(),"accepted delivery also defers visual removal");
 ShareWorkspace.runDelayed();check(!overlay.isOpen()&&pending.closes==0,"accepted async delivery survives visual window removal");
 check(ModalIslandLease.active==0,"pending delivery never keeps island hidden");
 overlay.setMainOnRight(true);check(pending.mainRight&&pending.closes==0,"side change preserves accepted detached delivery");pending.deliver();overlay.close();
 check(pending.closes==0,"completed detached delivery is released without double cancellation");
-overlay.onDrag(event(1),null);ShareWorkspace stopped=ShareWorkspace.latest;stopped.pending=true;overlay.onDrag(event(4),null);overlay.close();
+overlay.onDrag(event(1),null,owner);ShareWorkspace stopped=ShareWorkspace.latest;stopped.pending=true;overlay.onDrag(event(4),null,owner);overlay.close();
 check(stopped.closes==1,"host privacy close cancels pending detached delivery");
-context.windows.fail=true;check(!overlay.onDrag(event(1),null)&&!overlay.isOpen(),"window-add failure leaves no open state");
+context.windows.fail=true;check(!overlay.onDrag(event(1),null,owner)&&!overlay.isOpen(),"window-add failure leaves no open state");
 check(ModalIslandLease.active==0,"window-add failure acquires no surviving modal lease");
-context.windows.fail=false;bounds[0].top=20;overlay.onDrag(event(1),null);
+context.windows.fail=false;bounds[0].top=20;overlay.onDrag(event(1),null,owner);
 check(context.windows.last.y==0,"small top area clamps strip to display origin");overlay.close();
 check(!overlay.isOpen()&&ModalIslandLease.active==0,"explicit shutdown releases all UI");
-ShareWorkspace.accepts=false;check(!overlay.onDrag(event(1),null),"non-content drag is rejected by production share session");
+ShareWorkspace.accepts=false;check(!overlay.onDrag(event(1),null,owner),"non-content drag is rejected by production share session");
 check(!overlay.isOpen()&&ModalIslandLease.active==0,"rejected app or task drag leaves no overlay window or lease");
 System.out.println("Production share overlay checks="+checks+" passed");
 }}''',

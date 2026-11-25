@@ -25,7 +25,7 @@ public class ShareDropRegression {
   int getAction(){return action;}Object getLocalState(){return local;}ClipDescription getClipDescription(){return description;}boolean getResult(){return result;}}
  static final class ClipDescription {final Map<String,Object> extras=new HashMap<>();String mime="text/plain";
   boolean hasMimeType(String type){return type.equals(mime);}Extras getExtras(){return null;}int getMimeTypeCount(){return 1;}String getMimeType(int i){return mime;}ClipDescription(){}ClipDescription(ClipDescription other){}ClipDescription(String label,String[] types){mime=types[0];}static final class Extras{int getInt(String key,int fallback){return fallback;}String getString(String key){return null;}}}
- static final class View {}
+ static class View {}
  static final class ComponentName {final String pkg;ComponentName(String pkg){this.pkg=pkg;}public boolean equals(Object o){return o instanceof ComponentName&&pkg.equals(((ComponentName)o).pkg);}public int hashCode(){return pkg.hashCode();}}
  static final class ClipData {}
  static final class SharePayload {final String mime="text/plain";final List<Object> uris=new ArrayList<>();SharePayload(ClipData c){}}
@@ -41,12 +41,12 @@ public class ShareDropRegression {
  static final class ContentAccessCompat {static boolean currentProcessUser(){return true;}static int arrowOffset(DragEvent e){return 0;}static float shadowHalfWidth(DragEvent e){return 0;}}
  static final class ContentDragMotion {static void managed(Object owner,ClipDescription description){}static void close(){}}
  static final class ShareTargetCatalog {static Set<String> windowPackages(Object context,ClipDescription content,int count){return Set.of();}static List<ShareTarget> load(Object context,ClipDescription content,int count,boolean editing){return List.of();}}
- static final class Replay {
+ static final class Replay extends View {
   BooleanSupplier ready=()->true,covered=()->false;ShareRailOverlay overlay;boolean shareOnly,dragging,dropped,panelSource,imageDrag,hasPointer;Object transferClip;
   ComponentName hovered;Set<String> windowPackages;String sourcePackage;Consumer<String> hint=value->{};Portal portal=new Portal();Runnable expire=()->{};
   Panel panel=new Panel();static Handler handler=new Handler();static final Worker WORKER=new Worker();ShareDragCatchment catchment;int tipOffset,generation,user,drops,rejections;float dragHalfWidth;
   Runnable afterDrag=()->{};String lastMessage;
-  boolean accepts(ClipDescription description){return true;}boolean live(int token){return dragging;}boolean onWindowDrag(DragEvent e,Object target,boolean covered){return true;}
+  boolean accepts(ClipDescription description){return true;}boolean live(int token){return dragging;}boolean onWindowDrag(DragEvent e,Object target,boolean covered,View origin){return true;}
   void cancel(){dragging=false;}void locateDragTip(DragEvent event,View plate){hovered=null;}
   boolean drop(DragEvent event,ComponentName target){drops++;dropped=true;return true;}
   void showTargets(List<ShareTarget> entries){}void message(String value){lastMessage=value;}
@@ -75,6 +75,8 @@ __DRAG__
   crossing.catchment=new ShareDragCatchment(crossing,300,()->true);
   crossing.drag(new DragEvent(DragEvent.ACTION_DRAG_EXITED),null);
   check(crossing.hovered!=null,"rail EXIT into the overlapping catchment keeps the selected target");
+  Replay newer=new Replay();newer.dragging=true;newer.drag(ended,null);newer.generation++;
+  newer.handler.runDelayed();check(newer.dragging,"previous drag end cannot retire a newer drag");
   System.out.println("Production share DROP checks="+checks+" passed");
 }}
 '''.replace('__DRAG__',drag)

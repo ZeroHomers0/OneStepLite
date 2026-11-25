@@ -23,7 +23,8 @@ def member(signature):
     return source[start:end]
 
 methods = '\n'.join(member(signature) for signature in [
-    '    boolean onWindowDrag(', '    private void finishVisuals(', '    private void clearTargetHover(', '    void cancel(',
+    '    boolean onWindowDrag(', '    boolean onWindowDrag(DragEvent event,String targetPackage,boolean covered,View origin)',
+    '    private void finishVisuals(', '    private void clearTargetHover(', '    void cancel(',
     '    boolean retainDelivery(', '    private void finishDelivery(',
     '    @Override protected void onDetachedFromWindow()', '    void close()'])
 files = {
@@ -44,7 +45,8 @@ static class Handler {int removals;void removeCallbacks(Runnable r){removals++;}
 static class Transition {int resets,returns;void show(boolean value){if(!value)returns++;}void reset(){resets++;}}
 static class ShareRailOverlay {boolean open;int events,closes;String target;
 ShareRailOverlay(Object view,BooleanSupplier ready,Object dispatch,Object hint,Object bounds){}
-boolean isOpen(){return open;}boolean onDrag(DragEvent event,String name){events++;target=name;open=event.action!=4;return true;}
+View origin;
+boolean isOpen(){return open;}boolean onDrag(DragEvent event,String name,View source){events++;target=name;origin=source;open=event.action!=4;return true;}
 void setWindowHover(Function<String,String> identity,Consumer<String> activate){}void setMainOnRight(boolean right){}void close(){open=false;closes++;}}
 static class Replay extends Base {
 BooleanSupplier ready=()->true;Object dispatch,bounds,hovered;Consumer<String> hint=value->{};ShareRailOverlay overlay;
@@ -78,6 +80,8 @@ rail.onWindowDrag(new DragEvent(4),null,false);check(rail.ends==1&&!rail.draggin
 check(!rail.onWindowDrag(new DragEvent(3),"late.pkg",false),"late target DROP rejected");
 rail.onWindowDrag(new DragEvent(1),null,true);check(rail.overlay!=null&&rail.overlay.open,"occupied upper face opens dedicated overlay");
 rail.onWindowDrag(new DragEvent(3),"notes.pkg",false);check("notes.pkg".equals(rail.overlay.target),"overlay owns entire current session even if coverage changes");
+View receiver=new View();rail.onWindowDrag(new DragEvent(2),null,true,receiver);
+check(rail.overlay.origin==receiver,"covered share rail receives the source coordinate origin");
 rail.onWindowDrag(new DragEvent(4),null,false);check(!rail.overlay.open,"root drag end reaches overlay after coverage changes");
 rail=new Replay();rail.dragging=true;rail.dropped=true;rail.deliveryPending=true;int[] done={0};
 check(rail.retainDelivery(()->done[0]++),"pending delivery can outlive drag window");

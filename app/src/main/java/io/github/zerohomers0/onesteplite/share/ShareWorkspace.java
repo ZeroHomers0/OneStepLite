@@ -145,7 +145,7 @@ final class ShareWorkspace extends FrameLayout {
 
     private boolean drag(DragEvent event, View plate) {
         if(!shareOnly && (covered.getAsBoolean() || overlay!=null && overlay.isOpen()))
-            return onWindowDrag(event,null,true);
+            return onWindowDrag(event,null,true,plate==null?this:plate);
         switch (event.getAction()) {
             case DragEvent.ACTION_DRAG_STARTED:
                 if (!ready.getAsBoolean() || !ContentAccessCompat.currentProcessUser()
@@ -213,8 +213,9 @@ final class ShareWorkspace extends FrameLayout {
                     // dispatches its DROP. Defer retirement one event turn so a late DROP can
                     // still claim the selected target instead of being invalidated.
                     final boolean endedAccepted=event.getResult();
+                    final int endedGeneration=generation;
                     handler.postDelayed(()->{
-                        if(!dragging)return;
+                        if(!dragging || generation!=endedGeneration)return;
                         ContentDragMotion.close();
                         boolean consumed=dropped || endedAccepted;
                         finishVisuals();
@@ -291,6 +292,10 @@ final class ShareWorkspace extends FrameLayout {
     }
 
     boolean onWindowDrag(DragEvent event, String targetPackage,boolean covered) {
+        return onWindowDrag(event,targetPackage,covered,getRootView());
+    }
+
+    boolean onWindowDrag(DragEvent event,String targetPackage,boolean covered,View origin) {
         if(event.getAction()==DragEvent.ACTION_DRAG_STARTED && portal!=null)portal.dragStarted();
         if(covered || overlay!=null && overlay.isOpen()) {
             if(event.getAction()==DragEvent.ACTION_DRAG_STARTED)panelSource=panel.isDragging();
@@ -298,15 +303,16 @@ final class ShareWorkspace extends FrameLayout {
                 overlay=new ShareRailOverlay(this,ready,dispatch,hint,bounds);
                 overlay.setMainOnRight(mainRight);overlay.setWindowHover(hoverIdentity,hoverActivate);
             }
-            return overlay.onDrag(event,targetPackage);
+            return overlay.onDrag(event,targetPackage,origin);
         }
         if (event.getAction() == DragEvent.ACTION_DRAG_STARTED)
             return drag(event,null);
         if(event.getAction()==DragEvent.ACTION_DRAG_ENDED)return drag(event,null);
+        if(event.getAction()==DragEvent.ACTION_DRAG_EXITED && targetPackage==null)return drag(event,null);
         // No side-window package means the root Host window received the event. It must still
         // feed LOCATION/DROP back into this session so the arrow can select a share icon and
         // accept the DROP; returning false here was the silent share-bar cancellation.
-        if(targetPackage==null)return drag(event,getRootView());
+        if(targetPackage==null)return drag(event,origin);
         int action=event.getAction();
         boolean location=action==DragEvent.ACTION_DRAG_LOCATION;
         boolean sameSource=targetPackage!=null && targetPackage.equals(sourcePackage);
@@ -406,6 +412,7 @@ final class ShareWorkspace extends FrameLayout {
             if(IMAGE_TEXT.equals(target))return recognizeDrop(event,payload);
             String operation=ShareActions.operation(target);
             Intent intent=ShareRoutes.intent(payload,target);
+            ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.ACCEPTED);
             // The target catalog already filtered this enabled icon. Re-querying here made a
             // transient PackageManager miss return false and silently cancel an accepted DROP.
             // Provider preparation still resolves the receiver and reports failures.
@@ -422,7 +429,10 @@ final class ShareWorkspace extends FrameLayout {
             for(int i=1;i<payload.uris.size();i++)files.addItem(new ClipData.Item(payload.uris.get(i)));
             delegatedRead=ContentAccessCompat.delegate(event,files);dropped=true;
             prepareDelivery(target,intent,delegatedRead,token,owner);return true;
-        }catch(Exception unavailable){dropped=false;finishDelivery(generation);message("无法交付内容，原内容保留");return false;}
+        }catch(Exception unavailable){
+            ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.REJECTED);
+            dropped=false;finishDelivery(generation);message("无法交付内容，原内容保留");return false;
+        }
     }
     private void prepareDelivery(ComponentName target,Intent intent,DropPermissionContract grant,int token,int owner) {
         android.os.IBinder callback=receipt.token;
@@ -433,16 +443,21 @@ final class ShareWorkspace extends FrameLayout {
                 android.os.Bundle reply=getContext().getContentResolver().call(ContentInboxProvider.ROOT,
                         grant==null?"prepare_share":"prepare_external",null,data);
                 String capability=reply==null?null:reply.getString("token");if(capability==null)throw new IllegalStateException("Missing delivery capability");
+                ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.READY);
                 handler.post(()->startDelivery(target,capability,grant,token,owner));
             }catch(RuntimeException unavailable){if(grant!=null)grant.close();handler.post(()->failDelivery(token,owner));}
         });
     }
     private void startDelivery(ComponentName target,String capability,DropPermissionContract grant,int token,int owner) {
-        if(token!=generation || owner!=CurrentUser.id() || !ready.getAsBoolean()){if(grant!=null)grant.close();return;}
+        if(token!=generation || owner!=CurrentUser.id()){if(grant!=null)grant.close();return;}
+        if(!ready.getAsBoolean()){failDelivery(token,owner);return;}
         Runnable launch=()->{
-            if(token!=generation || owner!=CurrentUser.id() || !ready.getAsBoolean()){if(grant!=null)grant.close();return;}
+            if(token!=generation || owner!=CurrentUser.id()){if(grant!=null)grant.close();return;}
+            if(!ready.getAsBoolean()){failDelivery(token,owner);return;}
             try{getContext().startActivity(new Intent().setComponent(new ComponentName(ContentInboxProvider.MODULE,
-                    ContentImportActivity.class.getName())).putExtra("launch_token",capability).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    ContentImportActivity.class.getName())).putExtra("launch_token",capability)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_MULTIPLE_TASK|Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS));
+                ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.STARTED);
                 if(delegatedRead==grant)delegatedRead=null;
             }catch(RuntimeException unavailable){if(grant!=null)grant.close();failDelivery(token,owner);}
         };
@@ -451,6 +466,7 @@ final class ShareWorkspace extends FrameLayout {
     }
     private void failDelivery(int token,int owner) {
         if(token!=generation || owner!=CurrentUser.id())return;
+        ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.FAILED);
         ClipData retained=transferClip;
         try{if(retained!=null && new SharePayload(retained).uris.stream().anyMatch(uri->!ContentInboxProvider.AUTHORITY.equals(uri.getAuthority())))retained=null;}
         catch(RuntimeException unavailable){retained=null;}
