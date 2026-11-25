@@ -126,6 +126,14 @@ final class FullscreenRotationPolicyTest {
                 }
             }
         }
+        TaskRotationResolution landscapeResolution =
+                new TaskRotationResolution(0, 1, 1, true);
+        check(landscapeResolution.overrideOrientation == 0
+                && landscapeResolution.resolvedRotation == 1
+                && landscapeResolution.taskRotation == 1
+                && landscapeResolution.rotationLocked, "rotation resolution preserves its decision");
+        check(landscapeResolution.lands(), "landscape task rotation lands");
+        check(!new TaskRotationResolution(0, 2, 2, false).lands(), "portrait task rotation stays unlanded");
         System.out.println("FullscreenRotationPolicy checks=" + checks + " passed");
     }
 

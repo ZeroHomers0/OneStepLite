@@ -2071,7 +2071,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                     : (Integer) XposedHelpers.callMethod(task, "getWindowingMode");
             if (isUpperLandscapeTask(task)) {
                 if (XposedHelpers.callMethod(task,"topRunningActivity")==activity) {
-                    RotationResolution upper=resolveTaskRotationLocked(display,activity,task,windowingMode,source);
+                    TaskRotationResolution upper=resolveTaskRotationLocked(display,activity,task,windowingMode,source);
                     recordTaskWindowState(activity,upper.overrideOrientation,upper.resolvedRotation,
                             upper.taskRotation,6,source+" upper-landscape");
                 }
@@ -2126,7 +2126,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                 }
                 sFixedRotationApp = null;
             }
-            RotationResolution resolution = resolveTaskRotationLocked(
+            TaskRotationResolution resolution = resolveTaskRotationLocked(
                     display, activity, task, windowingMode, source);
             int overrideOrientation = resolution.overrideOrientation;
             int resolvedRotation = resolution.resolvedRotation;
@@ -2203,23 +2203,6 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static final class RotationResolution {
-        final int overrideOrientation, resolvedRotation, taskRotation;
-        final boolean rotationLocked;
-
-        RotationResolution(int overrideOrientation, int resolvedRotation, int taskRotation,
-                boolean rotationLocked) {
-            this.overrideOrientation = overrideOrientation;
-            this.resolvedRotation = resolvedRotation;
-            this.taskRotation = taskRotation;
-            this.rotationLocked = rotationLocked;
-        }
-
-        boolean lands() {
-            return taskRotation == 1 || taskRotation == 3;
-        }
-    }
-
     private static Object sApplyingSideRotationActivity;
     private android.content.res.Configuration ownedSideRotationConfigurationLocked(Object activity,Object task){
         if(!SideRoleChange.isSide(task)||isUpperLandscapeTask(task))return null;
@@ -2231,7 +2214,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         return (android.content.res.Configuration)XposedHelpers.getObjectField(state,"mRotatedOverrideConfiguration");
     }
 
-    private RotationResolution resolveTaskRotationLocked(Object display, Object activity,
+    private TaskRotationResolution resolveTaskRotationLocked(Object display, Object activity,
             Object task, int windowingMode, String source) throws Throwable {
         int overrideOrientation = (Integer) XposedHelpers.callMethod(
                 activity, "getOverrideOrientation");
@@ -2263,7 +2246,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                 overrideOrientation, resolvedRotation, rotationLocked,
                 windowingMode, rememberedRotation, sHeldDisplayRotation,
                 state!=null&&state.inheritsMainLandscape());
-        return new RotationResolution(
+        return new TaskRotationResolution(
                 overrideOrientation, resolvedRotation, rotation, rotationLocked);
     }
 
@@ -2364,7 +2347,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                     || XposedHelpers.callMethod(sDisplayContent, "topRunningActivity") != activity
                     && !DesktopLaunchBridge.rotationMain(sDisplayContent, activity)))
                 return false;
-            RotationResolution desired = resolveTaskRotationLocked(
+            TaskRotationResolution desired = resolveTaskRotationLocked(
                     sDisplayContent, activity, task, mode, "native-transform-finish");
             return desired.taskRotation != sHeldDisplayRotation
                     && Integer.valueOf(desired.taskRotation).equals(sTaskRotations.get(activity));
@@ -2833,9 +2816,6 @@ public class HostEntry implements IXposedHookLoadPackage {
     private static final java.util.Map<Object, Rect> sTopRotationBounds = new java.util.WeakHashMap<>();
     private static final java.util.Set<Object> sTopRotationConfigurationRelease =
             java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
-    private static final class TopRelaunchScope {
-        android.content.res.Configuration previous;
-    }
     private static final java.util.Map<Object, TopRelaunchScope>
             sTopRotationRelaunchScopes = new java.util.WeakHashMap<>();
 
@@ -3339,16 +3319,6 @@ public class HostEntry implements IXposedHookLoadPackage {
             });
             log("native touch exclusion follows scoped OneStepLite relative layers");
         } catch (Throwable error) { log("native touch exclusion hook unavailable: " + error); }
-    }
-
-    private static final class NativeHostLayer {
-        final Object surface;
-        int normalLayer;
-        Object normalRelativeTo;
-        Object nativeAnchor;
-        int nativeLayer;
-
-        NativeHostLayer(Object surface) { this.surface = surface; }
     }
 
     /** Amend WM's own layer transaction; never reparent or transform an OEM task. */

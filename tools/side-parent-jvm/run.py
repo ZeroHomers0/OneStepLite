@@ -86,7 +86,7 @@ public class SideParentRegression {
  boolean canRender(Slot s){return s.render&&!keyguardLocked&&!s.parked;}boolean mayWriteSideSurface(Slot s){return s.writable;}
  boolean isActive(Slot s){return s.render;}
  boolean holdingFlip,transferBusy;Object promotion;boolean holdsLiveFlipZoom(){return holdingFlip;}
- static class NativeObservation {java.util.concurrent.atomic.AtomicBoolean consumed=new java.util.concurrent.atomic.AtomicBoolean();Object token;}
+ static class NativeObservation {java.util.concurrent.atomic.AtomicBoolean consumed=new java.util.concurrent.atomic.AtomicBoolean();Object token;boolean isConsumed(){return consumed.get();}}
  NativeObservation pendingNativeObservation;
  final FinishTransactions<Long> workspaceFinishes=new FinishTransactions<>(16);
  final FinishTransactions<RenderBinding> finishTransactions=new FinishTransactions<>(16);

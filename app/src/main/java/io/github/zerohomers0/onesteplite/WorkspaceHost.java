@@ -326,32 +326,16 @@ public final class WorkspaceHost {
     private final FinishTransactions<NativeObservation> nativeObservations = new FinishTransactions<>(16);
     private volatile NativeObservation pendingNativeObservation;
 
-    /** One commit signal or the bounded watchdog starts the same state verification. */
-    private final class NativeObservation implements Runnable {
-        final Object token;
-        final Runnable check;
-        final java.util.concurrent.atomic.AtomicBoolean consumed = new java.util.concurrent.atomic.AtomicBoolean();
-        NativeObservation(Object token, Runnable check) { this.token = token; this.check = check; }
-        public void run() {
-            if (!consumed.compareAndSet(false, true)) return;
-            main.removeCallbacks(this);
-            if (pendingNativeObservation == this) pendingNativeObservation = null;
-            check.run();
-        }
-    }
-
     private NativeObservation observeNativeCommit(Object token, Runnable check) {
-        NativeObservation observation = new NativeObservation(token, check);
+        NativeObservation observation = new NativeObservation(token, check, main,
+                value -> { if (pendingNativeObservation == value) pendingNativeObservation = null; });
         pendingNativeObservation = observation;
         main.postDelayed(observation, 350L); // Fallback if the target omits the transition/commit callback.
         return observation;
     }
 
     private void cancelNativeObservation(NativeObservation observation) {
-        if (observation == null) return;
-        observation.consumed.set(true);
-        main.removeCallbacks(observation);
-        if (pendingNativeObservation == observation) pendingNativeObservation = null;
+        if (observation != null) observation.cancel();
     }
 
     private static final class Promotion {
@@ -2940,7 +2924,7 @@ public final class WorkspaceHost {
 
     private void trackRetainedSurfaces(Object info, Object start, Object finish) {
         NativeObservation observation = pendingNativeObservation;
-        if (observation != null && !observation.consumed.get()) {
+        if (observation != null && !observation.isConsumed()) {
             java.util.List<?> observedChanges = (java.util.List<?>) XposedHelpers.callMethod(info, "getChanges");
             for (Object change : observedChanges) {
                 Object task = XposedHelpers.callMethod(change, "getTaskInfo");
@@ -7813,29 +7797,6 @@ public final class WorkspaceHost {
                         ticket.slot.taskToken,ticket.token);
     }
 
-    private final class LiveZoomRequest implements Runnable {
-        final Promotion ticket;
-        final LiveSwapZoom.Zoom expected;
-        final java.util.function.Consumer<LiveSwapZoom.Ack> completed;
-        boolean delivered;
-        LiveZoomRequest(Promotion ticket, LiveSwapZoom.Zoom expected,
-                java.util.function.Consumer<LiveSwapZoom.Ack> completed) {
-            this.ticket = ticket; this.expected = expected; this.completed = completed;
-        }
-        void complete(LiveSwapZoom.Ack ack) {
-            if (delivered) return;
-            delivered = true;
-            main.removeCallbacks(this);
-            if (pendingLiveZoom == this) pendingLiveZoom = null;
-            completed.accept(ack);
-        }
-        void failed(String reason) {
-            complete(new LiveSwapZoom.Ack(expected.generation, 0L,
-                    expected.scale, expected.x, expected.y, false, reason));
-        }
-        @Override public void run() { failed("WMS live zoom commit timed out"); }
-    }
-
     private boolean registerLiveZoomReceiver() {
         if (liveZoomReceiver != null) return true;
         BroadcastReceiver receiver = new BroadcastReceiver() {
@@ -7856,7 +7817,7 @@ public final class WorkspaceHost {
                                 != pending.expected.generation) {
                     LiveSwapZoom.closeReplay(replay); return;
                 }
-                if (!livePromotionBound(pending.ticket)) {
+                if (!pending.isBound()) {
                     LiveSwapZoom.closeReplay(replay);
                     pending.failed("live zoom ticket changed before WMS commit");
                     return;
@@ -7885,7 +7846,9 @@ public final class WorkspaceHost {
     private void applyLiveZoom(Promotion ticket, LiveSwapZoom.Zoom target,
             java.util.function.Consumer<LiveSwapZoom.Ack> completed) {
         main.post(() -> {
-            LiveZoomRequest request = new LiveZoomRequest(ticket, target, completed);
+            LiveZoomRequest request = new LiveZoomRequest(target, completed, main,
+                    () -> livePromotionBound(ticket),
+                    value -> { if (pendingLiveZoom == value) pendingLiveZoom = null; });
             if (keyguardLocked || !screenOn || !livePromotionBound(ticket) || !ticket.nativeFlip
                     || !registerLiveZoomReceiver()) {
                 request.failed("live zoom ticket/receiver unavailable");
