@@ -62,7 +62,10 @@ $env:ONESTEPLITE_CLASSES = Join-Path $out 'classes'
 foreach ($tool in @('java','javac','javap','jar')) { Set-Item -Path "env:ONESTEPLITE_$($tool.ToUpperInvariant())" -Value (Join-Path $javaBin "$tool.exe") }
 $sources = @(Get-ChildItem -LiteralPath (Join-Path $src 'java') -Recurse -Filter '*.java' | ForEach-Object FullName)
 $sources += Join-Path $identitySources 'io\github\zerohomers0\onesteplite\BuildIdentity.java'
-& (Join-Path $javaBin 'javac.exe') -encoding UTF-8 -nowarn --release 17 -classpath "$android;$xposed" -d $env:ONESTEPLITE_CLASSES @sources
+$sourceList = Join-Path $out 'javac-sources.txt'
+$escapedSources = $sources | ForEach-Object { '"' + $_.Replace('\', '/') + '"' }
+[IO.File]::WriteAllLines($sourceList, [string[]]$escapedSources, [Text.UTF8Encoding]::new($false))
+& (Join-Path $javaBin 'javac.exe') -encoding UTF-8 -nowarn --release 17 -classpath "$android;$xposed" -d $env:ONESTEPLITE_CLASSES "@$sourceList"
 if ($LASTEXITCODE -ne 0) { throw 'Full Java source compilation failed.' }
 $clang = Join-Path $SdkPath "ndk\$NdkVersion\toolchains\llvm\prebuilt\windows-x86_64\bin\clang++.exe"
 if (-not (Test-Path -LiteralPath $clang)) { throw 'Install the documented Android NDK version.' }
@@ -91,7 +94,9 @@ Copy-Item -LiteralPath (Join-Path $out 'dex\classes.dex') -Destination $stage -F
 Copy-Item -LiteralPath $native -Destination (Join-Path $stage 'lib\arm64-v8a\libonesteplite_raw.so') -Force
 $packed = Join-Path $out 'packed.apk'
 Copy-Item -LiteralPath $base -Destination $packed -Force
-& (Join-Path $javaBin 'jar.exe') --update --file $packed --no-compress -C $stage classes.dex -C $stage lib\arm64-v8a\libonesteplite_raw.so
+& (Join-Path $javaBin 'jar.exe') --update --file $packed -C $stage classes.dex
+if ($LASTEXITCODE -ne 0) { throw 'DEX packaging failed.' }
+& (Join-Path $javaBin 'jar.exe') --update --file $packed --no-compress -C $stage lib\arm64-v8a\libonesteplite_raw.so
 if ($LASTEXITCODE -ne 0) { throw 'APK packaging failed.' }
 if ($Unsigned) { $apk = Join-Path $dist "OneStepLite-$($version.name)-unsigned.apk" }
 & (Join-Path $bt 'zipalign.exe') -f -P 16 4 $packed $apk
@@ -104,7 +109,7 @@ if (-not $Unsigned) {
 }
 & (Join-Path $bt 'zipalign.exe') -c -P 16 4 $apk
 if ($LASTEXITCODE -ne 0) { throw 'Final APK alignment failed.' }
-$packagingLines = & $Python -X utf8 (Join-Path $root 'tools\assert_module_apk.py') $apk --require-native
+$packagingLines = & $Python -X utf8 (Join-Path $root 'tools\assert_module_apk.py') $apk --require-native --require-compressed-dex
 if ($LASTEXITCODE -ne 0) { throw 'APK packaging verification failed.' }
 $packaging = @{}
 foreach ($line in $packagingLines) { $pair = $line -split ': ', 2; if ($pair.Count -eq 2) { $packaging[$pair[0]] = $pair[1] } }

@@ -7,6 +7,7 @@ directory holding exactly one APK, so Gradle can point it at the release
 output directory before the signed or unsigned name is known.
 """
 import argparse
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -49,6 +50,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('target', help='APK file, or a directory holding one APK')
     parser.add_argument('--require-native', action='store_true')
+    parser.add_argument('--require-compressed-dex', action='store_true')
     options = parser.parse_args()
 
     apk = resolve(options.target)
@@ -61,6 +63,11 @@ def main():
             raise SystemExit(f'Unexpected Xposed entry: {entry_class}')
 
         dex = single(archive, 'classes.dex')
+        if options.require_compressed_dex:
+            for entry in archive.infolist():
+                if re.fullmatch(r'classes(?:[0-9]+)?\.dex', entry.filename):
+                    if entry.compress_type != zipfile.ZIP_DEFLATED:
+                        raise SystemExit(f'Module release requires a deflated {entry.filename}.')
         if ENTRY_DESCRIPTOR not in archive.read('classes.dex'):
             raise SystemExit('The Xposed entry descriptor is missing from classes.dex.')
 
@@ -71,7 +78,7 @@ def main():
             if native_entry != NATIVE_ENTRY:
                 raise SystemExit(f'Unexpected native entry: {native_entry}')
             library = single(archive, NATIVE_LIBRARY)
-            if library.compress_size != library.file_size:
+            if library.compress_type != zipfile.ZIP_STORED:
                 raise SystemExit('Native library must be stored uncompressed for APK loading.')
             header = archive.read(NATIVE_LIBRARY)[:20]
             if len(header) != 20 or header[:5] != b'\x7fELF\x02' or int.from_bytes(header[18:20], 'little') != 183:
@@ -83,6 +90,7 @@ def main():
         print(f'apk: {apk}')
         print(f'entryClass: {entry_class}')
         print(f'dexBytes: {dex.file_size}')
+        print(f'dexPackedBytes: {dex.compress_size}')
         print('startupPackaging: passed')
         print(f"nativePackaging: {'passed' if options.require_native else 'not requested'}")
 

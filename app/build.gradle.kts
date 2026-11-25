@@ -86,6 +86,10 @@ android {
     }
 
     packaging {
+        // Compress DEX for distribution while keeping the native library mmap-ready.
+        dex {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
@@ -111,6 +115,7 @@ val verifyApk by tasks.registering(Exec::class) {
         rootProject.file("tools/assert_module_apk.py").absolutePath,
         output.get().asFile.absolutePath,
         "--require-native",
+        "--require-compressed-dex",
     )
 }
 

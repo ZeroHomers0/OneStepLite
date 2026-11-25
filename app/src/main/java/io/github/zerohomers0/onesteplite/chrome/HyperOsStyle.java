@@ -156,8 +156,12 @@ final class HyperOsStyle {
         int[] iArrBoxBlur = new int[iMax * iMax2];
         bitmapCreateBitmap.getPixels(iArrBoxBlur, 0, iMax, 0, 0, iMax, iMax2);
         int iMax3 = Math.max(4, Math.min(iMax, iMax2) / 38);
+        int[] scratch = new int[iArrBoxBlur.length];
         for (int i3 = 0; i3 < 3; i3++) {
-            iArrBoxBlur = boxBlur(iArrBoxBlur, iMax, iMax2, iMax3);
+            boxBlur(iArrBoxBlur, scratch, iMax, iMax2, iMax3);
+            int[] previous = iArrBoxBlur;
+            iArrBoxBlur = scratch;
+            scratch = previous;
         }
         bitmapCreateBitmap.setPixels(iArrBoxBlur, 0, iMax, 0, 0, iMax, iMax2);
         Bitmap bitmapCreateBitmap2 = Bitmap.createBitmap(i, i2, Bitmap.Config.ARGB_8888);
@@ -166,46 +170,48 @@ final class HyperOsStyle {
         return bitmapCreateBitmap2;
     }
 
-    private static int[] boxBlur(int[] iArr, int i, int i2, int i3) {
-        int[] iArr2 = new int[iArr.length];
-        for (int i4 = 0; i4 < i2; i4++) {
-            int i5 = i4 * i;
-            for (int i6 = 0; i6 < i; i6++) {
-                int iMin = Math.min(i - 1, i6 + i3);
-                int iRed = 0;
-                int i7 = 0;
-                int iGreen = 0;
-                int iBlue = 0;
-                for (int iMax = Math.max(0, i6 - i3); iMax <= iMin; iMax++) {
-                    int i8 = iArr[i5 + iMax];
-                    iRed += Color.red(i8);
-                    iGreen += Color.green(i8);
-                    iBlue += Color.blue(i8);
-                    i7++;
+    private static void boxBlur(int[] source, int[] target, int width, int height, int radius) {
+        int[] horizontal = new int[source.length];
+        for (int y = 0; y < height; y++) {
+            int row = y * width, red = 0, green = 0, blue = 0;
+            for (int x = -radius; x <= radius; x++) {
+                int pixel = source[row + Math.max(0, Math.min(width - 1, x))];
+                red += Color.red(pixel); green += Color.green(pixel); blue += Color.blue(pixel);
+            }
+            for (int x = 0; x < width; x++) {
+                int count = Math.min(width - 1, x + radius) - Math.max(0, x - radius) + 1;
+                horizontal[row + x] = Color.rgb(red / count, green / count, blue / count);
+                int removeX = x - radius, addX = x + radius + 1;
+                if (removeX >= 0) {
+                    int pixel = source[row + removeX];
+                    red -= Color.red(pixel); green -= Color.green(pixel); blue -= Color.blue(pixel);
                 }
-                iArr2[i5 + i6] = Color.rgb(iRed / i7, iGreen / i7, iBlue / i7);
+                if (addX < width) {
+                    int pixel = source[row + addX];
+                    red += Color.red(pixel); green += Color.green(pixel); blue += Color.blue(pixel);
+                }
             }
         }
-        int[] iArr3 = new int[iArr.length];
-        for (int i9 = 0; i9 < i2; i9++) {
-            int iMax2 = Math.max(0, i9 - i3);
-            int iMin2 = Math.min(i2 - 1, i9 + i3);
-            for (int i10 = 0; i10 < i; i10++) {
-                int iRed2 = 0;
-                int i11 = 0;
-                int iGreen2 = 0;
-                int iBlue2 = 0;
-                for (int i12 = iMax2; i12 <= iMin2; i12++) {
-                    int i13 = iArr2[(i12 * i) + i10];
-                    iRed2 += Color.red(i13);
-                    iGreen2 += Color.green(i13);
-                    iBlue2 += Color.blue(i13);
-                    i11++;
+        for (int x = 0; x < width; x++) {
+            int red = 0, green = 0, blue = 0;
+            for (int y = -radius; y <= radius; y++) {
+                int pixel = horizontal[Math.max(0, Math.min(height - 1, y)) * width + x];
+                red += Color.red(pixel); green += Color.green(pixel); blue += Color.blue(pixel);
+            }
+            for (int y = 0; y < height; y++) {
+                int count = Math.min(height - 1, y + radius) - Math.max(0, y - radius) + 1;
+                target[y * width + x] = Color.rgb(red / count, green / count, blue / count);
+                int removeY = y - radius, addY = y + radius + 1;
+                if (removeY >= 0) {
+                    int pixel = horizontal[removeY * width + x];
+                    red -= Color.red(pixel); green -= Color.green(pixel); blue -= Color.blue(pixel);
                 }
-                iArr3[(i9 * i) + i10] = Color.rgb(iRed2 / i11, iGreen2 / i11, iBlue2 / i11);
+                if (addY < height) {
+                    int pixel = horizontal[addY * width + x];
+                    red += Color.red(pixel); green += Color.green(pixel); blue += Color.blue(pixel);
+                }
             }
         }
-        return iArr3;
     }
 
     static Drawable glassSheet(Context context, float f) {

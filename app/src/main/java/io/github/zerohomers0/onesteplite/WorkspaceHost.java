@@ -127,6 +127,7 @@ public final class WorkspaceHost {
     private boolean wallpaperBackdropRequested;
     private boolean wallpaperBackdropDirty;
     private long wallpaperLoadGeneration;
+    private int wallpaperRetryAttempt;
     private BroadcastReceiver wallpaperReceiver;
     private BroadcastReceiver desktopIconReceiver;
     private BroadcastReceiver liveZoomReceiver;
@@ -5190,7 +5191,17 @@ public final class WorkspaceHost {
     }
 
     /** 只取桌面壁纸做高斯模糊底（不使用应用内容），供顶栏/侧栏格子的液态玻璃使用。 */
-    private final Runnable wallpaperRetry = () -> { if (root != null) loadWallpaperBackdrop(); };
+    private final Runnable wallpaperRetry = () -> {
+        if (root != null && screenOn && !keyguardLocked
+                && (scene == ACTIVE || scene == RESUMING)) loadWallpaperBackdrop();
+    };
+
+    private void scheduleWallpaperRetry() {
+        main.removeCallbacks(wallpaperRetry);
+        long delay = Math.min(30000L, 1500L << Math.min(wallpaperRetryAttempt++, 4));
+        if (root != null && screenOn && !keyguardLocked
+                && (scene == ACTIVE || scene == RESUMING)) main.postDelayed(wallpaperRetry, delay);
+    }
 
     private void loadWallpaperBackdrop() {
         if (wallpaperBackdropRequested) return;
@@ -5201,8 +5212,7 @@ public final class WorkspaceHost {
         if (screenW <= 0 || screenH <= 0) return;
         if (root == null) return;
         if (!WallpaperSnapshot.canCapture(ctx)) {
-            main.removeCallbacks(wallpaperRetry);
-            main.postDelayed(wallpaperRetry, 500L);
+            scheduleWallpaperRetry();
             return;
         }
         wallpaperBackdropRequested = true;
@@ -5244,8 +5254,7 @@ public final class WorkspaceHost {
             if (wellBitmap != null) wellBitmap.recycle();
             if (request == wallpaperLoadGeneration) {
                 wallpaperBackdropRequested = false;
-                main.removeCallbacks(wallpaperRetry);
-                if (root != null) main.postDelayed(wallpaperRetry, 500L);
+                scheduleWallpaperRetry();
             }
             return;
         }
@@ -5258,8 +5267,7 @@ public final class WorkspaceHost {
         wallpaperBackdropRequested = false;
         if (bitmap == null || bitmap.isRecycled()) {
             log("wallpaper blur unavailable; retain last desktop texture");
-            main.removeCallbacks(wallpaperRetry);
-            main.postDelayed(wallpaperRetry, 1500L);
+            scheduleWallpaperRetry();
             return;
         }
         // Old drawables/native animations retain their bitmap until their last
@@ -5267,6 +5275,8 @@ public final class WorkspaceHost {
         wallpaperBackdrop = bitmap;
         wellWallpaperBackdrop = wellBitmap;
         wallpaperBackdropDirty = false;
+        wallpaperRetryAttempt = 0;
+        main.removeCallbacks(wallpaperRetry);
         if (workspaceBackdrop != null) workspaceBackdrop.replaceWallpaper(bitmap);
         log("wallpaper gaussian backdrop ready " + bitmap.getWidth() + "x" + bitmap.getHeight());
         applyWallpaperBackdrops();
@@ -5422,6 +5432,7 @@ public final class WorkspaceHost {
         wallpaperBackdropDirty = true;
         ++wallpaperLoadGeneration;
         wallpaperBackdropRequested = false;
+        wallpaperRetryAttempt = 0;
         main.removeCallbacks(wallpaperRetry);
         if ((scene == ACTIVE || scene == RESUMING) && screenOn && !keyguardLocked)
             loadWallpaperBackdrop();
