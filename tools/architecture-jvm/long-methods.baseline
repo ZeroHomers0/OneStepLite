@@ -1,0 +1,12 @@
+WorkspaceHost.java:refreshDisplayGeometry
+WorkspaceHost.java:startLiveSwap
+WorkspaceHost.java:handoffPromotedTask
+WorkspaceHost.java:synchronized
+HostEntry.java:hookSystemServer
+HostEntry.java:armZoomBridge
+HostEntry.java:onReceive
+HostEntry.java:hookMagnificationReplayAfterTransition
+HostEntry.java:installFixedMainRotationHooks
+HostEntry.java:applyFixedRotationLocked
+HostEntry.java:installWorkspaceWindowFocus
+HostEntry.java:applyDisplayZoomLocked

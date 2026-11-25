@@ -129,43 +129,8 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    /**
-     * Keep the established tablet attached-keyboard policy. Phones retain MiType's
-     * native transient auto-floating admission and restoration when space is tight.
-     * Manual floating preferences remain owned by the keyboard.
-     */
     private static void hookMiTypeAutoFloating(ClassLoader cl) {
-        log("=== attached to com.xiaomi.type " + RUNTIME_MARKER);
-        try {
-            Class<?> service = XposedHelpers.findClass("com.mi.ime.MiInputMethodService", cl);
-            XposedHelpers.findAndHookMethod(service, "handleSpacePressureAutoFloating",
-                    android.view.inputmethod.EditorInfo.class, new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam param) {
-                    if (!(param.thisObject instanceof Context)) return;
-                    Context context = (Context) param.thisObject;
-                    try {
-                        if (!DeviceProfile.isTablet(context)) return;
-                        long now = System.currentTimeMillis();
-                        String encoded = android.provider.Settings.Global.getString(
-                                context.getContentResolver(), "onesteplite_zoom");
-                        if (!ImePolicy.suppressAutomaticFloating(encoded,
-                                now - android.os.SystemClock.elapsedRealtime(), now)) return;
-                    } catch (Throwable unavailable) {
-                        // Missing/denied/stale host state must leave the keyboard alone.
-                        return;
-                    }
-                    // The original method only replaces the normal input view
-                    // with MiType's floating placeholder and PopupWindow.  A
-                    // no-op keeps the IME attached to the native landscape
-                    // window configuration already supplied by WM.
-                    param.setResult(null);
-                    log("MiType automatic landscape floating suppressed");
-                }
-            });
-            log("MiType auto-floating decision hook installed");
-        } catch (Throwable error) {
-            log("MiType auto-floating hook unavailable: " + error);
-        }
+        MiTypeHooks.install(cl, RUNTIME_MARKER, HostEntry::log);
     }
 
     // ---------------------------------------------------------------- v1.1.0：系统框架整屏缩放（R2 同款）
@@ -3891,25 +3856,12 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private void hookApplication(ClassLoader cl) {
-        try {
-            Class<?> c = XposedHelpers.findClass("com.android.systemui.SystemUIService", cl);
-            XposedBridge.hookAllMethods(c, "onCreate", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    Object self = param.thisObject;
-                    if (self instanceof Context) {
-                        sContext = (Context) self;
-                        Warmup.start(sContext, cl);
-                        log("captured Context -> " + sContext);
-                        scheduleStart();
-                    }
-                }
-            });
-            log("hooked SystemUIService#onCreate");
-        } catch (Throwable t) {
-            log("could not hook SystemUIService: " + t);
-        }
+        SystemUiHooks.install(cl, context -> {
+            sContext=context;Warmup.start(context,cl);
+            log("captured Context -> " + context);scheduleStart();
+        }, HostEntry::log);
     }
+
 
     private void hookBackGestureDiagnostics(ClassLoader cl) {
         new BackGestureDiagnostics(()->sHostZoomed,HostEntry::log).install(cl);
@@ -3929,54 +3881,22 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private void hookShellProviders(ClassLoader cl) {
-        Class<?> module;
-        try {
-            module = XposedHelpers.findClass("com.android.wm.shell.dagger.WMShellBaseModule", cl);
-        } catch (Throwable t) {
-            log("WMShellBaseModule not found");
-            return;
-        }
-        int hooked = 0;
-        for (final Method m : module.getDeclaredMethods()) {
-            if (!m.getReturnType().getName().contains("TaskView")
-                    && !m.getName().startsWith("provideTaskView")
-                    && !m.getName().equals("provideRootTaskDisplayAreaOrganizer")) {
-                continue;
+        ShellProviderHooks.install(cl, new ShellProviderHooks.State() {
+            @Override public void rootTaskDisplayArea(Object value) {
+                ShellCompat.rootTaskDisplayArea=value;
             }
-            try {
-                XposedBridge.hookMethod(m, new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        Object r = param.getResult();
-                        String n = m.getName();
-                        if ("provideRootTaskDisplayAreaOrganizer".equals(n)) {
-                            ShellCompat.rootTaskDisplayArea = r;
-                        } else if ("provideTaskViewTransitions".equals(n)) {
-                            sTaskViewTransitions = r;
-                        } else if ("provideTaskViewFactoryController".equals(n)) {
-                            Object[] args = param.args;
-                            if (args != null && args.length > 1 && args[1] instanceof Executor) {
-                                sShellExecutor = (Executor) args[1];
-                                log("captured ShellExecutor -> " + sShellExecutor);
-                            }
-                            if (!param.hasThrowable() && r != null && args != null && args.length > 2
-                                    && m.getParameterTypes()[0].getName().equals("com.android.wm.shell.ShellTaskOrganizer")
-                                    && m.getParameterTypes()[2].getName().equals("com.android.wm.shell.common.SyncTransactionQueue")
-                                    && !SyncPreparation.bindProvider(args[0], args[2]))
-                                log("native TaskView sync queue binding rejected");
-                        } else if ("provideTaskViewFactory".equals(n) && r instanceof Optional) {
-                            sTaskViewFactory = ((Optional<?>) r).orElse(null);
-                            log("captured TaskViewFactory -> " + sTaskViewFactory);
-                        }
-                    }
-                });
-                hooked++;
-            } catch (Throwable t) {
-                log("hook failed for " + m.getName() + ": " + t);
+            @Override public void taskViewTransitions(Object value) {
+                sTaskViewTransitions=value;
             }
-        }
-        log("provider hooks installed: " + hooked);
+            @Override public void shellExecutor(Executor value) {
+                sShellExecutor=value;log("captured ShellExecutor -> " + value);
+            }
+            @Override public void taskViewFactory(Object value) {
+                sTaskViewFactory=value;log("captured TaskViewFactory -> " + value);
+            }
+        }, HostEntry::log);
     }
+
 
     private void scheduleStart() {
         if (sStarted) {
@@ -4009,88 +3929,14 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private static void installRetainedWorkspaceWakeHooks(ClassLoader cl) {
-        try {
-            XposedHelpers.findAndHookMethod(
-                    "com.android.systemui.keyguard.KeyguardLifecyclesDispatcher$KeyguardLifecycleHandler",
-                    cl, "handleMessage", android.os.Message.class, new XC_MethodHook() {
-                        @Override protected void afterHookedMethod(MethodHookParam param) {
-                            int event = ((android.os.Message) param.args[0]).what;
-                            // Native SCREEN_TURNING_ON and STARTED_WAKING_UP precede
-                            // SCREEN_ON broadcasts and the first visible desktop frame.
-                            if (event == 0 || event == 4) WorkspaceHost.onNativeWake();
-                        }
-                    });
-            log("retained workspace native wake hook armed");
-        } catch (Throwable unavailable) {
-            log("retained workspace native wake hook unavailable: " + unavailable);
-        }
-        try {
-            XposedHelpers.findAndHookMethod(
-                    "com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager",
-                    cl, "hide", long.class, long.class, new XC_MethodHook() {
-                        @Override protected void afterHookedMethod(MethodHookParam param) {
-                            WorkspaceHost.onNativeWake();
-                        }
-                    });
-            log("retained workspace native unlock hook armed");
-        } catch (Throwable unavailable) {
-            log("retained workspace native unlock hook unavailable: " + unavailable);
-        }
+        RetainedWorkspaceHooks.install(cl, HostEntry::log);
     }
 
-    /** v0.7.0：角部热区 + 广播触发；首次触发再启动宿主，之后切换显示。 */
     private void installTriggers() {
-        Warmup.prepareTaskViews(sContext, sShellExecutor, sTaskViewFactory);
-        final Runnable toggle = new Runnable() {
-            @Override
-            public void run() {
-                if (!EntryGuard.canOpen(sContext)) return;
-                try {
-                    WorkspaceHost.toggleOrStart(sContext, sShellExecutor, sTaskViewFactory, sTaskViewTransitions);
-                } catch (Throwable t) {
-                    log("toggle FAILED: " + t);
-                    XposedBridge.log(t);
-                }
-            }
-        };
-        HotZoneGesture.install(sContext, toggle);
-        try {
-            android.content.BroadcastReceiver receiver = new android.content.BroadcastReceiver() {
-                @Override
-                public void onReceive(android.content.Context context, android.content.Intent intent) {
-                    String action = intent.getAction();
-                    if (Actions.DEBUG.equals(action)) {
-                        handleDebugBroadcast(intent);
-                        return;
-                    }
-                    if (WorkspaceHost.LANDSCAPE_MODE_ACTION.equals(action)) {
-                        WorkspaceHost.onLandscapeMode(intent.getBooleanExtra("fullscreen", false));
-                        return;
-                    }
-                    if(RetainedWindow.READY.equals(action)) {
-                        WorkspaceHost.onRetainedNativeReady(intent.getLongExtra("generation",0));return;
-                    }
-                    if(WorkspaceHost.TOP_TASK_STATE_ACTION.equals(action)) {
-                        WorkspaceHost.onTopTaskState(intent);return;
-                    }
-                    log("broadcast " + action + " -> toggle");
-                    toggle.run();
-                }
-            };
-            android.content.IntentFilter filter = new android.content.IntentFilter();
-            filter.addAction(Actions.TOGGLE);
-            filter.addAction(Actions.DEBUG);
-            filter.addAction(WorkspaceHost.LANDSCAPE_MODE_ACTION);
-            filter.addAction(WorkspaceHost.TOP_TASK_STATE_ACTION);
-            filter.addAction(RetainedWindow.READY);
-            sContext.registerReceiver(receiver, filter, android.Manifest.permission.WRITE_SECURE_SETTINGS,
-                    null, android.content.Context.RECEIVER_EXPORTED);
-            log("broadcast trigger armed: TOGGLE / DEBUG");
-        } catch (Throwable t) {
-            log("broadcast trigger failed: " + t);
-        }
-        WorkspaceScreenObserver.install(sContext,HostEntry::log);
+        TriggerHooks.install(sContext, sShellExecutor, sTaskViewFactory,
+                sTaskViewTransitions, HostEntry::log);
     }
+
 
     /**
      * 无人值守调试广播（v0.8.0）：

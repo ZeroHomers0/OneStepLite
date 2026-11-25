@@ -8,7 +8,7 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 root = Path(__file__).resolve().parents[2]
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
-entry = (package_dir(root)/'HostEntry.java').read_text(encoding='utf-8')
+entry = (package_dir(root)/'ShellProviderHooks.java').read_text(encoding='utf-8')
 provider_start = entry.index('Object[] args = param.args;', entry.index('else if ("provideTaskViewFactoryController".equals(n))'))
 provider_end = entry.index('} else if ("provideTaskViewFactory".equals(n)', provider_start)
 provider_capture = entry[provider_start:provider_end]
@@ -42,8 +42,9 @@ public class SyncTransactionQueue {
  public void runInSync(TransactionRunnable c){order.add("runInSync");callback=c;}
 }''',
     'io/github/zerohomers0/onesteplite/SyncPreparationRegression.java': '''package io.github.zerohomers0.onesteplite;
-import android.view.SurfaceControl;import com.android.wm.shell.common.SyncTransactionQueue;
+import android.view.SurfaceControl;import com.android.wm.shell.common.SyncTransactionQueue;import java.util.function.Consumer;
 public class SyncPreparationRegression {
+ interface ProviderState {void shellExecutor(java.util.concurrent.Executor value);}
  public static class Controller {public Object mTaskOrganizer;public SyncTransactionQueue mSyncQueue=new SyncTransactionQueue();}
  public static class Os4Controller {public Object mTaskOrganizer;Os4Controller(Object organizer){mTaskOrganizer=organizer;}}
  public static class EqualOrganizer extends com.android.wm.shell.ShellTaskOrganizer {
@@ -129,12 +130,14 @@ public class SyncPreparationRegression {
 }
 files['io/github/zerohomers0/onesteplite/ProviderHook.java'] = '''package io.github.zerohomers0.onesteplite;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 class ProviderHook {
- static Executor sShellExecutor;static void log(String message){}
+ interface ProviderState {void shellExecutor(Executor value);}
+ static Executor sShellExecutor;static final ProviderState state=value->sShellExecutor=value;static final Consumer<String> log=message->{};
  static class Param {Object[] args;Object result;boolean failed;
   Param(Object[] args,Object result,boolean failed){this.args=args;this.result=result;this.failed=failed;}
   Object getResult(){return result;}boolean hasThrowable(){return failed;}}
- static void capture(java.lang.reflect.Method m,Param param){Object r=param.getResult();
+ static void capture(java.lang.reflect.Method m,Param param){Object r=param.getResult();String n=m.getName();
 ''' + provider_capture + '\n}\n}\n'
 paths = []
 for name, text in files.items():
