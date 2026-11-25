@@ -29,6 +29,7 @@ public static Object callMethod(Object o,String n,Object...args){try{for(var m:o
 'io/github/zerohomers0/onesteplite/NativeGeometryRegression.java':'''package io.github.zerohomers0.onesteplite;
 import android.graphics.*;import android.os.*;import android.view.*;import de.robv.android.xposed.*;import java.util.*;
 class ContentDragShadow{int recycled;void recycleThumbnail(){recycled++;}}
+class PortalDragInput{static Object originalWindow(Object w){return ((NativeGeometryRegression.Target)w).original;}}
 class WindowIdentity{static boolean ownsPicker(Object w,Object d){return false;}
 static boolean ownsShareReceiver(Object w){return ((NativeGeometryRegression.Target)w).shareReceiver;}}
 class Tags{static final String PROBE="test";}
@@ -36,7 +37,7 @@ public class NativeGeometryRegression{
 public static class State{public Object mLocalWin=new Object();public SurfaceControl mSurfaceControl=new SurfaceControl();public float mThumbOffsetY=107,mCurrentX=500,mCurrentY=870;public Set<Object> mNotifiedWindows=new HashSet<>();public Wm mService=new Wm();public android.content.ClipData mData;public int mFlags,ended;public void endDragLocked(boolean consumed,boolean relinquish){if(consumed||relinquish)throw new AssertionError("cancel must not report success");ended++;}}
 public static class RomState extends State{public float mCurrentDisplayX=500,mCurrentDisplayY=870;}
 public static class Wm{public Map<Object,Object> mWindowMap=new HashMap<>(),mInputToWindowMap=new HashMap<>();public Object mGlobalLock=new Object();public Handler mH=new Handler();public android.content.Context mContext=new android.content.Context();}
-public static class Target{public Object mInputChannelToken=new Object();public int mOwnerUid=12345;public boolean shareReceiver;public String pkg="com.tencent.mobileqq";public String getOwningPackage(){return pkg;}public float translateToWindowX(float x){return x*.75f-20;}public float translateToWindowY(float y){return y*.75f-200;}}
+public static class Target{public Object mInputChannelToken=new Object(),original;public int mOwnerUid=12345;public boolean shareReceiver;public String pkg="com.tencent.mobileqq";public String getOwningPackage(){return pkg;}public float translateToWindowX(float x){return x*.75f-20;}public float translateToWindowY(float y){return y*.75f-200;}}
 public static class Display{public Wm mWmService=new Wm();public Object mInputMethodWindow;public Target target=new Target();public Display(){target.pkg="other";}public Object getTouchableWinAtPointLocked(float x,float y){return y>=940&&y<1000?target:null;}}
 public static class Controller{public State mDragState=new State();}
 static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
@@ -124,6 +125,19 @@ check(Boolean.FALSE.equals(panelDrop.result)&&state.ended==1,"other same-UID pan
 var sourceDrop=event(state,source.mInputChannelToken,100f,926f);
 XposedBridge.hooks.get("reportDropWindowLock").fire(sourceDrop);
 check(Boolean.FALSE.equals(sourceDrop.result)&&state.ended==2,"true original source window still cancels");
+Target qqSource=new Target();
+source.original=qqSource;
+state.mNotifiedWindows.add(qqSource);
+var qqDrop=event(state,qqSource.mInputChannelToken,100f,926f);
+XposedBridge.hooks.get("reportDropWindowLockInner").fire(qqDrop);
+check(Boolean.FALSE.equals(qqDrop.result)&&state.ended==3,"portal transfer retains the real QQ source and blocks native DROP");
+state.mData=null;
+var privateDrop=event(state,qqSource.mInputChannelToken,100f,926f);
+XposedBridge.hooks.get("reportDropWindowLock").fire(privateDrop);
+check(Boolean.FALSE.equals(privateDrop.result)&&state.ended==4,"cancel blocks QQ's native receiver even with local-only state");
+var explicitDrop=event(state,rail.mInputChannelToken,100f,926f);
+XposedBridge.hooks.get("reportDropWindowLock").fire(explicitDrop);
+check(explicitDrop.result==null&&state.ended==4,"explicit share receiver survives portal source resolution");
 System.out.println("Production native drag geometry checks="+checks+" passed (WM doubles; device pending)");}}
 '''
 }

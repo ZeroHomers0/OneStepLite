@@ -9,7 +9,13 @@ final class ShareRailTransition {
     private final View normal,share,normalPrefix;
     private final Matrix normalMatrix=new Matrix(),shareMatrix=new Matrix(),prefixMatrix=new Matrix(),inverse=new Matrix();
     private final float[] source=new float[8],destination=new float[8];
+    private boolean prefixEnabled=true;
     private ValueAnimator animator;
+
+    void setPrefixEnabled(boolean enabled) {
+        prefixEnabled=enabled;
+        if(normalPrefix!=null)render();
+    }
     private float progress;
     private int generation;
     private Runnable frameChanged=()->{};
@@ -34,7 +40,10 @@ final class ShareRailTransition {
 
     private void render() {
         renderFace(normal,false,normal.getLeft(),normalMatrix);
-        if(normalPrefix!=null)renderFace(normalPrefix,false,normalPrefix.getLeft(),prefixMatrix);
+        if(normalPrefix!=null) {
+            if(prefixEnabled)renderFace(normalPrefix,false,normalPrefix.getLeft(),prefixMatrix);
+            else normalPrefix.setVisibility(View.INVISIBLE);
+        }
         renderFace(share,true,0,shareMatrix);
         frameChanged.run();
     }
@@ -68,7 +77,7 @@ final class ShareRailTransition {
         generation++;if(animator!=null){animator.cancel();animator=null;}progress=0;
         clear(normal);if(normalPrefix!=null)clear(normalPrefix);clear(share);
         normalMatrix.reset();prefixMatrix.reset();shareMatrix.reset();
-        normal.setVisibility(View.VISIBLE);if(normalPrefix!=null)normalPrefix.setVisibility(View.VISIBLE);
+        normal.setVisibility(View.VISIBLE);if(normalPrefix!=null)normalPrefix.setVisibility(prefixEnabled?View.VISIBLE:View.INVISIBLE);
         share.setVisibility(View.INVISIBLE);
     }
 

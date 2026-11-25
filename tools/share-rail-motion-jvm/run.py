@@ -82,6 +82,11 @@ entire.reset();check(normal.left==92&&prefix.left==12,"animation never rewrites 
 ValueAnimator.enabled=false;entire.show(true);check(share.visibility==0&&normal.visibility==4&&prefix.visibility==4,"reduced motion enters final face immediately");
 check(share.animation==null&&entire.mapSharePoint(new float[]{25,50}),"reduced motion retains exact endpoint hit coordinates");
 entire.show(false);check(normal.visibility==0&&prefix.visibility==0&&share.visibility==4,"reduced motion restores immediately");
+entire.setPrefixEnabled(false);
+entire.reset();entire.show(true);entire.show(false);
+check(prefix.visibility==4&&normal.visibility==0,"disabled content cell stays hidden after reset and cube animation");
+entire.setPrefixEnabled(true);
+check(prefix.visibility==0,"enabling content restores the cell on the normal face");
 System.out.println("Production share rail motion checks="+checks+" passed");
 }}''',
 }

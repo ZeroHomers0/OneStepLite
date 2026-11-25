@@ -35,6 +35,9 @@ XC_MethodHook.MethodHookParam call=new XC_MethodHook.MethodHookParam();call.args
 hook.beforeHookedMethod(call);return call.args[0];}}''',
 'de/robv/android/xposed/XposedHelpers.java': '''package de.robv.android.xposed;
 public class XposedHelpers {
+public static java.util.Map<Object,Object> originals=new java.util.IdentityHashMap<>();
+public static Object getAdditionalInstanceField(Object o,String key){return originals.get(o);}
+public static Object setAdditionalInstanceField(Object o,String key,Object value){return originals.put(o,value);}
 public static Class<?> findClass(String n,ClassLoader c){return Object.class;}
 public static Object getObjectField(Object o,String n){try{return o.getClass().getField(n).get(o);}catch(Exception e){throw new RuntimeException(e);}}
 public static int getIntField(Object o,String n){return (Integer)getObjectField(o,n);}
@@ -70,6 +73,8 @@ display.touched=focus;PortalDragInput.observeTouch(display,down);
 source.mAttrs.accessibilityTitle=PortalDragInput.identity("source.app",down);
 Win popup=new Win();popup.mAttrs.packageName="portal.app";display.mCurrentFocus=popup;
 check(XposedBridge.transfer(source.mInputChannelToken)==focus.mInputChannelToken);
+check(PortalDragInput.originalWindow(source)==focus);
+check("source.app".equals(PortalDragInput.sourcePackage(source.mAttrs.accessibilityTitle)));
 focus.mAttrs.flags=WindowManager.LayoutParams.FLAG_SECURE;
 check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);focus.mAttrs.flags=0;
 display.mWmService.mWindowMap.remove("focus");

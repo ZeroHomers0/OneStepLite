@@ -243,6 +243,9 @@ final class PortalSource implements AutoCloseable {
         nativePreview=request.getParcelable("preview",android.graphics.Bitmap.class);
         ClipData clip=uri==null?ClipData.newPlainText("提取文字",text):new ClipData("提取图片",new String[]{"image/jpeg"},
                 new ClipData.Item(android.net.Uri.parse(uri)));
+        android.os.PersistableBundle metadata=new android.os.PersistableBundle();
+        metadata.putString("onesteplite_source_package",request.getString("source"));
+        clip.getDescription().setExtras(metadata);
         Context display=anchor.getContext().createDisplayContext(anchor.getDisplay()).createWindowContext(WindowTypes.SYSTEM_UI_DIALOG,null);
         window=new FrameLayout(display);View source;
         if(uri!=null){

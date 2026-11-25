@@ -109,7 +109,7 @@ final class NativeContentDragCard {
             if(own && !geometryReady)return;
             if(own && "OneStepLitePortalSource".contentEquals(attrs.getTitle())){
                 Object origin=XposedHelpers.getObjectField(attrs,"accessibilityTitle");
-                if(origin instanceof CharSequence)sourcePackage=origin.toString();
+                if(origin instanceof CharSequence identity)sourcePackage=PortalDragInput.sourcePackage(identity);
             }
             if((Packages.SYSTEM_UI.equals(attrs.packageName) && !own)
                     || (attrs.flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)return;

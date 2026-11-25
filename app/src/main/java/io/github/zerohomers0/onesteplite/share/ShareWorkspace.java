@@ -118,7 +118,8 @@ final class ShareWorkspace extends FrameLayout {
         LayoutParams contentBounds=new LayoutParams(dp(50),-1);contentBounds.leftMargin=dp(6);addView(content,contentBounds);
         if(normalRail instanceof QuickAppRail) {
             content.setTooltipText(null);content.setClickable(false);content.setLongClickable(false);
-            setFeatureEnabled(true);
+            ((QuickAppRail)normalRail).setContentCell(dp(46),content::performClick,
+                    offset->content.setTranslationX(-offset));
         }
         shareFace=new FrameLayout(context);shareFace.setBackground(HyperOsStyle.shareRailBackground(context));
         shareFace.setClipChildren(false);shareFace.setClipToPadding(false);
@@ -375,9 +376,12 @@ final class ShareWorkspace extends FrameLayout {
         hasPointer=true;
         lastX=x;lastY=y;
         updateHovered(x,y);
-        float band=Math.max(dp(24),dragHalfWidth);
-        edge.update(x,0,getWidth(),band,android.os.SystemClock.uptimeMillis());
-        if(y>=0 && y<getHeight() && x>=0 && (x<band || x>getWidth()-band)) {
+        float width=getWidth();
+        float band=Math.min(width/3f,Math.max(dp(40),dragHalfWidth));
+        float edgeX=Math.max(0,Math.min(width,x));
+        edge.update(edgeX,0,width,band,android.os.SystemClock.uptimeMillis());
+        if(y>=0 && y<getHeight() && x>=-dp(8) && x<=width+dp(8)
+                && (edgeX<band || edgeX>width-band)) {
             if(!edgeQueued){edgeQueued=true;handler.postDelayed(edgeTick,16L);}
         } else stopEdge();
     }
@@ -413,10 +417,13 @@ final class ShareWorkspace extends FrameLayout {
     private void scrollEdge() {
         edgeQueued=false;
         if(!dragging || !isShown())return;
-        int direction=edge.update(lastX,0,getWidth(),Math.max(dp(24),dragHalfWidth),android.os.SystemClock.uptimeMillis());
-        if(direction!=0){
+        float width=getWidth();
+        float band=Math.min(width/3f,Math.max(dp(40),dragHalfWidth));
+        float edgeX=Math.max(0,Math.min(width,lastX));
+        int step=edge.step(edgeX,0,width,band,android.os.SystemClock.uptimeMillis());
+        if(step!=0){
             int before=scroll.getScrollX();
-            scroll.scrollBy(dp(edge.step(lastX,0,getWidth(),Math.max(dp(24),dragHalfWidth),android.os.SystemClock.uptimeMillis())),0);
+            scroll.scrollBy(dp(step),0);
             if(scroll.getScrollX()==before){edge.reset();return;}
         }
         edgeQueued=true;handler.postDelayed(edgeTick,16L);
@@ -550,7 +557,7 @@ final class ShareWorkspace extends FrameLayout {
     }
 
     void setFeatureEnabled(boolean enabled) {
-        content.setVisibility(enabled?VISIBLE:INVISIBLE);
+        transition.setPrefixEnabled(enabled);
         if(normalRail instanceof QuickAppRail) {
             ((QuickAppRail)normalRail).setContentCell(enabled?dp(46):0,content::performClick,
                     offset->content.setTranslationX(-offset));

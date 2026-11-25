@@ -14,7 +14,18 @@ import de.robv.android.xposed.XposedHelpers;
 /** The native drag takes the original application's touch stream, never fabricated input. */
 final class PortalDragInput {
     static final String TITLE="OneStepLitePortalSource";
+    private static final String ORIGINAL_WINDOW="portal_drag_original_window";
     private static Object observedDisplay,listener;
+
+    static Object originalWindow(Object portalWindow) {
+        return XposedHelpers.getAdditionalInstanceField(portalWindow,ORIGINAL_WINDOW);
+    }
+
+    static String sourcePackage(CharSequence identity) {
+        String value=identity.toString();
+        int delimiter=value.indexOf('\n');
+        return delimiter<0?value:value.substring(0,delimiter);
+    }
     private static volatile Touch touch;
     private record Touch(Object display,IBinder input,long down,int device,int pointer) {}
     private PortalDragInput(){}
@@ -102,7 +113,7 @@ final class PortalDragInput {
                 && (activeTouch.down()+":"+activeTouch.device()+":"+activeTouch.pointer()).equals(parts[1])){
             for(Object window:((Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap")).values())
                 if(activeTouch.input().equals(XposedHelpers.getObjectField(window,"mInputChannelToken")))
-                    return eligibleTouch(window,source,expected)?activeTouch.input():null;
+                    return eligibleTouch(window,source,expected)?remember(source,window):null;
             return null;
         }
         Object focus=XposedHelpers.getObjectField(display,"mCurrentFocus");
@@ -113,7 +124,13 @@ final class PortalDragInput {
             if(!eligibleTouch(focus,source,expected))return null;
             focus=XposedHelpers.callMethod(focus,"getParentWindow");
         }
-        return eligible(focus,source,expected)?(IBinder)XposedHelpers.getObjectField(focus,"mInputChannelToken"):null;
+        return eligible(focus,source,expected)?remember(source,focus):null;
+    }
+
+    private static IBinder remember(Object portalWindow,Object window) {
+        IBinder channel=(IBinder)XposedHelpers.getObjectField(window,"mInputChannelToken");
+        if(channel!=null)XposedHelpers.setAdditionalInstanceField(portalWindow,ORIGINAL_WINDOW,window);
+        return channel;
     }
 
     private static boolean eligibleTouch(Object window,Object source,String expected) {

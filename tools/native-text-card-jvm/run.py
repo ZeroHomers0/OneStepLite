@@ -51,6 +51,7 @@ import de.robv.android.xposed.XC_MethodHook;import de.robv.android.xposed.Xposed
 class Tags{static final String PROBE="test";}class Packages{static final String SYSTEM_UI="com.android.systemui";}
 class ContentInboxProvider{static final String MODULE="module";}
 class HyperOsStyle{static boolean dark(Context c){return false;}}
+class PortalDragInput{static String sourcePackage(CharSequence identity){return identity.toString().split("\\n",2)[0];}}
 class WindowIdentity{static boolean ownsPicker(Object w,Object d){return false;}}
 class NativeDragGeometry{static void mark(ClipData clip){}}
 class ContentDragShadow{ContentDragShadow(String t,float d,int n){}ContentDragShadow(String t,float d,int n,boolean words){}void setDark(boolean dark){}static int offset(ClipDescription d){return d.offset;}

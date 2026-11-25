@@ -46,6 +46,9 @@ final class NativeDragGeometry {
             Object origin=((java.util.Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap"))
                     .get(XposedHelpers.getObjectField(state,"mLocalWin"));
             if(origin==null)return false;
+            Object source=origin;
+            Object originalApp=PortalDragInput.originalWindow(origin);
+            if(originalApp!=null)origin=originalApp;
             boolean qq="com.tencent.mobileqq".equals(XposedHelpers.callMethod(origin,"getOwningPackage"));
             if(!qq) {
                 Object payload=XposedHelpers.getObjectField(state,"mData");
@@ -53,7 +56,8 @@ final class NativeDragGeometry {
                         || (XposedHelpers.getIntField(state,"mFlags")&android.view.View.DRAG_FLAG_GLOBAL)==0
                         || !clip.getDescription().hasMimeType("text/*") && !clip.getDescription().hasMimeType("image/*"))return false;
             }
-            if(inputToken.equals(XposedHelpers.getObjectField(origin,"mInputChannelToken")))return true;
+            if(inputToken.equals(XposedHelpers.getObjectField(source,"mInputChannelToken"))
+                    || inputToken.equals(XposedHelpers.getObjectField(origin,"mInputChannelToken")))return true;
             return sameOrigin(origin,dropWindow(state,wm,inputToken));
         }catch(RuntimeException unavailable){/* Keep the supported shadow-session fallback. */}
         return false;
@@ -111,15 +115,8 @@ final class NativeDragGeometry {
         Session(Object state,Object display,Object wm,ContentDragShadow card,SurfaceControl surface,BooleanSupplier active){
             this.state=state;this.card=card;this.surface=surface;this.active=active;
             Object source=((java.util.Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap")).get(XposedHelpers.getObjectField(state,"mLocalWin"));
-            if(source!=null && WindowIdentity.ownsPicker(source,display)){
-                Object attrs=XposedHelpers.getObjectField(source,"mAttrs");
-                if("OneStepLitePortalSource".equals(String.valueOf(XposedHelpers.callMethod(attrs,"getTitle")))){
-                    Object focus=XposedHelpers.getObjectField(display,"mCurrentFocus");
-                    if(focus!=null && java.util.Objects.equals(String.valueOf(XposedHelpers.getObjectField(attrs,"accessibilityTitle")),
-                            XposedHelpers.getObjectField(XposedHelpers.getObjectField(focus,"mAttrs"),"packageName")))source=focus;
-                }
-            }
-            origin=source;
+            Object original=source==null?null:PortalDragInput.originalWindow(source);
+            origin=original!=null?original:source;
             handler=(Handler)XposedHelpers.getObjectField(wm,"mH");
             handler.postDelayed(expiry,60_000L);
         }
