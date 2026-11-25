@@ -1162,29 +1162,8 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     /** 宿主写 SystemUI 私有文件时立即处理，避免 250ms 轮询造成的桥/缩放不同帧。 */
     private static void installZoomFileObserver() {
-        try {
-            final java.io.File dir =
-                    new java.io.File("/data/user_de/0/com.android.systemui/files");
-            if (!dir.isDirectory()) {
-                log("zoom FileObserver skipped: no SystemUI files dir");
-                return;
-            }
-            android.os.FileObserver observer = new android.os.FileObserver(dir,
-                    android.os.FileObserver.CLOSE_WRITE
-                            | android.os.FileObserver.MOVED_TO
-                            | android.os.FileObserver.CREATE) {
-                @Override
-                public void onEvent(int event, String path) {
-                    if (path == null || !path.endsWith("onesteplite-zoom")) return;
-                    readAndDispatchZoom(new java.io.File(dir, "onesteplite-zoom"));
-                }
-            };
-            observer.startWatching();
-            sZoomFileObserver = observer;
-            log("zoom FileObserver armed on SystemUI files dir");
-        } catch (Throwable t) {
-            log("zoom FileObserver failed: " + t);
-        }
+        ZoomFileObserverHooks.install(observer -> sZoomFileObserver = observer,
+                HostEntry::readAndDispatchZoom, HostEntry::log);
     }
 
     private void installTopSystemBarReturn(ClassLoader cl) {
@@ -2240,40 +2219,8 @@ public class HostEntry implements IXposedHookLoadPackage {
     private void installWorkspaceFocus(ClassLoader cl) {
         installWorkspaceWindowFocus(cl);
         installWorkspaceTopFrontNotifications(cl);
-        try {
-            Class<?> area = XposedHelpers.findClass("com.android.server.wm.TaskDisplayArea", cl);
-            XC_MethodHook selection = new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (!sZoomed || p.hasThrowable() || p.getResult() == null
-                            || Boolean.TRUE.equals(sReadingWorkspaceFocus.get())) return;
-                    sReadingWorkspaceFocus.set(Boolean.TRUE);
-                    try {
-                        Object original = p.getResult();
-                        if(ImePolicy.isTopAppFocused(original,sDisplayContent))return;
-                        Object lease = DesktopLaunchBridge.recentsLease(original);
-                        boolean upperFallback="getNextFocusableRootTask".equals(p.method.getName()) && isUpperLandscapeTask(original);
-                        if ((!upperFallback && (lease == null || !DesktopLaunchBridge.recentsLeaseAlive(lease)))
-                                || XposedHelpers.callMethod(original, "getDisplayContent") != sDisplayContent) return;
-                        Object ignored = p.args.length >= 2 && Boolean.TRUE.equals(p.args[1]) ? p.args[0] : null;
-                        boolean excludeMode = p.args.length == 4 && Boolean.TRUE.equals(p.args[2]);
-                        int mode = excludeMode ? (Integer) p.args[3] : 0;
-                        Object target = WorkspaceFocus.next(p.thisObject, ignored, excludeMode, mode, task -> {
-                            Object binding = DesktopLaunchBridge.recentsLease(task);
-                            return !ImePolicy.isTopAppFocused(task,sDisplayContent)
-                                    && (isUpperLandscapeTask(task)
-                                    || binding != null && DesktopLaunchBridge.recentsLeaseAlive(binding));
-                        });
-                        // No replacement means WM keeps its native fallback; never return a hidden task.
-                        if (target != null) p.setResult(target);
-                    } catch (Throwable unavailable) {
-                        log("workspace focus selection unavailable: " + unavailable);
-                    } finally { sReadingWorkspaceFocus.remove(); }
-                }
-            };
-            XposedBridge.hookAllMethods(area, "getFocusedRootTask", selection);
-            XposedBridge.hookAllMethods(area, "getNextFocusableRootTask", selection);
-            log("workspace native focus selection skips exact side-task leases");
-        } catch (Throwable unavailable) { log("workspace focus hook unavailable: " + unavailable); }
+        WorkspaceTaskFocusHooks.install(cl, () -> sZoomed, () -> sDisplayContent,
+                sReadingWorkspaceFocus, HostEntry::isUpperLandscapeTask, HostEntry::log);
     }
 
     private void installNativeFreeformCoexistence(ClassLoader cl) {
@@ -2478,49 +2425,8 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private void installSideSystemBarPolicy(ClassLoader cl) {
-        try {
-            Class<?> windowState = XposedHelpers.findClass(
-                    "com.android.server.wm.WindowState", cl);
-            XposedBridge.hookAllMethods(windowState, "getSystemUiVisibility",
-                    new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (!sFullscreenRotationActive || !(p.getResult() instanceof Integer)) return;
-                    try {
-                        Object task = XposedHelpers.callMethod(p.thisObject, "getTask");
-                        if (!isSideTask(task)) return;
-                        int original = (Integer) p.getResult();
-                        int visible = SystemBarVisibilityPolicy.forSideTask(original);
-                        if (visible != original) p.setResult(visible);
-                    } catch (Throwable error) {
-                        log("side task system-bar policy skipped: " + error);
-                    }
-                }
-            });
-            XposedHelpers.findAndHookMethod(windowState, "canAffectSystemUiFlags", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (!sZoomed || !Boolean.TRUE.equals(p.getResult())) return;
-                    try {
-                        if (XposedHelpers.callMethod(p.thisObject, "getDisplayContent") != sDisplayContent) return;
-                        Object task = XposedHelpers.callMethod(p.thisObject, "getTask");
-                        // TOP has its own bar-free viewport. Its unscaled landscape frame
-                        // must not consume the main task's status-bar appearance region.
-                        // This native predicate is only used by post-layout bar aggregation;
-                        // TOP Activity/Window focus and native edge-back/IME stay independent.
-                        if (sFullscreenRotationActive && SideRoleChange.isSide(task)
-                                && DesktopLaunchBridge.ownsTopViewport(task)) {
-                            p.setResult(Boolean.FALSE);
-                            return;
-                        }
-                        Object lease = DesktopLaunchBridge.recentsLease(task);
-                        if (lease != null && DesktopLaunchBridge.recentsLeaseAlive(lease))
-                            p.setResult(Boolean.FALSE);
-                    } catch (Throwable stale) { /* Preserve the native decision for unrelated windows. */ }
-                }
-            });
-            log("side task fullscreen system-ui flags and leased TOP appearance isolated from main bars");
-        } catch (Throwable error) {
-            log("side task system-bar policy unavailable: " + error);
-        }
+        SideSystemBarHooks.install(cl, () -> sFullscreenRotationActive, () -> sZoomed,
+                () -> sDisplayContent, HostEntry::isSideTask, HostEntry::log);
     }
 
     private void installDesktopIconLaunchBridge(ClassLoader cl) {

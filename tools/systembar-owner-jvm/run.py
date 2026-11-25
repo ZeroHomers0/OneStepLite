@@ -9,12 +9,6 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 ROOT = Path(__file__).resolve().parents[2]
 SRC=package_dir(ROOT)
 OUT = Path(sys.argv[1])
-# Optional old source supplies a negative control without altering the candidate.
-host_path = Path(sys.argv[2]) if len(sys.argv) > 2 else SRC / 'HostEntry.java'
-host = host_path.read_text(encoding='utf-8-sig')
-start = host.index('    private void installSideSystemBarPolicy(ClassLoader cl) {')
-end = host.index('\n    private void ', start + 10)
-install = host[start:end]
 tree = ast.parse((ROOT / 'tools/handoff-input-jvm/run.py').read_text(encoding='utf-8-sig'))
 shared = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
               and any(isinstance(t, ast.Name) and t.id == 'files' for t in n.targets))
@@ -45,8 +39,9 @@ class HostEntry {
  static boolean sZoomed=true,sFullscreenRotationActive=true;static Object sDisplayContent;
  static final java.util.List<String> logs=new java.util.ArrayList<>();
  static void log(String s){logs.add(s);}static boolean isSideTask(Object t){return SideRoleChange.isSide(t);}
- static void install(){new HostEntry().installSideSystemBarPolicy(HostEntry.class.getClassLoader());}
-''' + install + '\n}',
+ static void install(){SideSystemBarHooks.install(HostEntry.class.getClassLoader(),
+  ()->sFullscreenRotationActive,()->sZoomed,()->sDisplayContent,HostEntry::isSideTask,HostEntry::log);}
+}''',
 'io/github/zerohomers0/onesteplite/SystemBarOwnerTest.java': r'''package io.github.zerohomers0.onesteplite;
 import de.robv.android.xposed.*;import com.android.server.wm.WindowState;
 public class SystemBarOwnerTest {
@@ -118,7 +113,7 @@ for name, body in files.items():
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding='utf8')
     sources.append(str(path))
-sources.extend(str(SRC / (name + '.java')) for name in ['SideRoleChange', 'SystemBarVisibilityPolicy'])
+sources.extend(str(SRC / (name + '.java')) for name in ['SideRoleChange', 'SystemBarVisibilityPolicy', 'SideSystemBarHooks'])
 jdk = Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(OUT), *sources], check=True)
 subprocess.run([str(jdk/'java.exe'), '-cp', str(OUT), 'io.github.zerohomers0.onesteplite.SystemBarOwnerTest'], check=True)
