@@ -35,6 +35,7 @@ import android.content.*;import android.os.*;import org.json.*;import java.util.
 class Packages{static final String SYSTEM_UI="com.android.systemui";}
 class ContentInboxProvider{static final String AUTHORITY="owned";static JSONArray rows(Context c){return new JSONArray(c.prefs.stored);}
 static android.net.Uri uri(String id){return new android.net.Uri(AUTHORITY,id);}}
+class DragCacheStore{static ClipData promoteForStage(Context c,ClipData clip)throws Exception{return clip;}}
 class SharePayload{ClipData clip;List<android.net.Uri> uris=new ArrayList<>();String text="";SharePayload(ClipData source){
 if(source==null||source.items.isEmpty()||source.items.size()>32)throw new IllegalArgumentException();clip=source;
 for(ClipData.Item i:source.items){if(i.uri!=null)uris.add(i.uri);if(i.text!=null)text+=i.text;}}}

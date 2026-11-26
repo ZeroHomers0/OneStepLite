@@ -19,6 +19,8 @@ final class ContentShelfStore {
     }
 
     static void stage(Context context,ClipData clip) {
+        try{clip=DragCacheStore.promoteForStage(context,clip);}
+        catch(Exception failure){throw new IllegalStateException("Cannot promote drag content for shelf",failure);}
         SharePayload payload=new SharePayload(clip);
         synchronized(ContentInboxProvider.class) {
             try {
