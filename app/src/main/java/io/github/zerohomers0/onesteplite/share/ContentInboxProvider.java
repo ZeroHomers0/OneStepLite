@@ -4,7 +4,6 @@ import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Binder;
@@ -105,9 +104,9 @@ public final class ContentInboxProvider extends ContentProvider {
         if(MODULE.equals(target.getPackageName()) && operation.isEmpty())throw new SecurityException("Recursive inbox share");
         Intent share=payload.intent(target);
         share.setClipData(payload.clip);ShareRoutes.copyShortcut(requested,share);
-        java.util.List<ResolveInfo> receivers=getContext().getPackageManager().queryIntentActivities(share,0);
-        if(receivers.isEmpty() && operation.isEmpty())
-            throw new IllegalArgumentException("Unavailable receiver");
+        // Do not re-query the target here. ShareTargetCatalog already filtered the
+        // drop, while MIUI can transiently hide a small-window share activity from
+        // PackageManager. Starting the explicit intent is the authoritative check.
         String token=UUID.randomUUID().toString();
         long now=android.os.SystemClock.uptimeMillis();LAUNCHES.put(token,new Launch(share,now,null,extras.getBinder("receipt"),operation),now);
         Bundle result=new Bundle();result.putString("token",token);return result;
