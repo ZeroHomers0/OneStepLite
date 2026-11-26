@@ -41,6 +41,7 @@ final class PortalSource implements AutoCloseable {
     private long liftAt;
     private float downX,downY;
     private boolean liftEligible,startingDrag;
+    private AtomicBoolean windowRequest;
     private final Handler main=new Handler(Looper.getMainLooper());
     private PortalInputCompat input;
     private MotionEvent pointer;
@@ -184,19 +185,27 @@ final class PortalSource implements AutoCloseable {
         CountDownLatch done=new CountDownLatch(1);AtomicBoolean expired=new AtomicBoolean();Bundle[] result={null};
         main.post(()->{
             try {
-            if(expired.get()){done.countDown();return;}
-            if(code==PortalWire.STATUS)result[0]=status(request);
-            else if(request!=null && live() && window==null && selection==null && !selectingDrag
-                    && request.getInt("generation")==generation
-                    && PortalGesturePolicy.offer(request.getLong("down"),pointer.getDownTime(),issued,android.os.SystemClock.uptimeMillis()))
-                offer(request,result,done,expired);
-            if(window==null || code==PortalWire.STATUS)done.countDown();
-            }catch(RuntimeException unavailable){clearWindow();closeWords();done.countDown();
-                android.util.Log.w(Tags.PROBE,"source handoff unavailable",unavailable);}
+                if(expired.get())return;
+                if(code==PortalWire.STATUS)result[0]=status(request);
+                else if(request!=null && live() && window==null && selection==null && !selectingDrag
+                        && request.getInt("generation")==generation
+                        && PortalGesturePolicy.offer(request.getLong("down"),pointer.getDownTime(),issued,android.os.SystemClock.uptimeMillis()))
+                    offer(request,result,done,expired);
+            }catch(RuntimeException unavailable){
+                clearPendingWindow(expired);
+                android.util.Log.w(Tags.PROBE,"source handoff unavailable",unavailable);
+            }finally{
+                if(windowRequest!=expired || !startingDrag)done.countDown();
+            }
         });
-        try{if(!done.await(700,TimeUnit.MILLISECONDS)){expired.set(true);main.post(this::clearWindow);return null;}}
-        catch(InterruptedException interrupted){Thread.currentThread().interrupt();expired.set(true);return null;}
-        return result[0];
+        try{if(done.await(700,TimeUnit.MILLISECONDS))return result[0];}
+        catch(InterruptedException interrupted){Thread.currentThread().interrupt();}
+        expired.set(true);
+        main.post(()->clearPendingWindow(expired));
+        return null;
+    }
+    private void clearPendingWindow(AtomicBoolean request) {
+        if(windowRequest==request && startingDrag)clearWindow();
     }
     private Bundle status(Bundle request) {
         if(!live() || window!=null || selection!=null)return null;
@@ -297,6 +306,7 @@ final class PortalSource implements AutoCloseable {
             return event.getAction()!=DragEvent.ACTION_DROP;
         });
         FrameLayout sourceWindow=window;
+        windowRequest=expired;
         startingDrag=true;
         display.getSystemService(WindowManager.class).addView(sourceWindow,attrs);
         startWhenReady(sourceWindow,source,clip,generation,8,result,done,expired);
@@ -391,6 +401,7 @@ final class PortalSource implements AutoCloseable {
         if(startingDrag)discardCapture(nativeCaptureId);
         nativeCaptureId=null;
         startingDrag=false;
+        windowRequest=null;
         android.graphics.Bitmap preview=nativePreview;nativePreview=null;
         if(window==null){if(preview!=null)preview.recycle();return;}
         FrameLayout old=window;window=null;

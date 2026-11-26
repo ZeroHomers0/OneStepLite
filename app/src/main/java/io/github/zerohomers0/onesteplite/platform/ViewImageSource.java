@@ -18,8 +18,6 @@ import android.view.WindowManager;
 import android.widget.ImageView;
 import android.widget.EditText;
 import android.widget.TextView;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
 
@@ -29,7 +27,7 @@ final class ViewImageSource {
     private static final String LARK="com.ss.android.lark";
     private static final String HOME_IMAGE="com.miui.newhome.view.GestureImage";
     private static final String LARK_IMAGE="com.ss.android.lark.imagewidget.largeimage.LargeImageView";
-    private static final ExecutorService WORKER=Executors.newSingleThreadExecutor();
+    private static final ImageExtractionWorker WORKER=new ImageExtractionWorker();
     private static final ImageExtractionLease LEASE=new ImageExtractionLease();
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     private static final long EXTRACTION_TIMEOUT_MS=5000L;
@@ -182,7 +180,7 @@ final class ViewImageSource {
         },EXTRACTION_TIMEOUT_MS);
         android.content.Context context=activity.getApplicationContext();
         Handler main=new Handler(Looper.getMainLooper());
-        WORKER.execute(()->{
+        if(!WORKER.submit(()->{
             try {
                 if(!LEASE.active(lease))return;
                 String pkg=context.getPackageName();
@@ -205,10 +203,15 @@ final class ViewImageSource {
                             finish(lease);
                         }))finish(lease);
             } catch(RuntimeException unavailable){finish(lease);}
-        });
+        }))reject(lease);
     }
 
     private static void finish(int lease){LEASE.finish(lease);}
+
+    private static void reject(int lease) {
+        ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.REJECTED);
+        finish(lease);
+    }
 
     private static void offerText(android.content.Context context,View view,Bundle state,int lease) {
         if(!LEASE.active(lease))return;
@@ -286,10 +289,10 @@ final class ViewImageSource {
     private static void submitText(android.content.Context context,Bundle state,String text,boolean selected,int lease) {
         state.putString("text",text);
         state.putBoolean("selected",selected);
-        WORKER.execute(()->{
+        if(!WORKER.submit(()->{
             try { if(LEASE.active(lease))submit(context,state); }
             finally { finish(lease); }
-        });
+        }))reject(lease);
     }
 
     private static void submit(android.content.Context context,Bundle state) {
@@ -328,7 +331,7 @@ final class ViewImageSource {
     }
 
     private static void submitImage(android.content.Context context,Bundle state,Bitmap captured,int lease) {
-        WORKER.execute(()->{
+        if(!WORKER.submit(()->{
             try {
                 if(!LEASE.active(lease))return;
                 if(SystemExtractPayload.hasNoVisiblePixels(captured)){
@@ -337,9 +340,12 @@ final class ViewImageSource {
                 }
                 state.putByteArray("image",CaptureImageEncoder.encode(captured));
                 ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_ENCODE,ShareDiagnostics.Code.ACCEPTED);
-                submit(context,state);
+                if(LEASE.active(lease))submit(context,state);
             } catch(RuntimeException unavailable){ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_ENCODE,ShareDiagnostics.Code.FAILED);}
             finally{captured.recycle();finish(lease);}
-        });
+        })){
+            captured.recycle();
+            reject(lease);
+        }
     }
 }

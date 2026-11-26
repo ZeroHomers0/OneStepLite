@@ -35,10 +35,11 @@ public class WordHoldRegression{
  static class Anchor{Object getContext(){return this;}}
  Object window,selection;MotionEvent pointer;Runnable pendingWords,fallbackJob;float wordX,wordY,fallbackX,fallbackY;boolean validGesture,fallbackIssued,selectingDrag;
  Bundle liftCandidate;float downX,downY;long liftAt;boolean liftEligible,startingDrag;
+ AtomicBoolean windowRequest;
  String nativeCaptureId;int discardedCaptures;void discardCapture(String id){if(id!=null)discardedCaptures++;}
  int discarded;void clearLiftCandidate(){if(liftCandidate!=null)discarded++;liftCandidate=null;}
  int lifts;void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired){if(request.lift)lifts++;}
- void clearWindow(){window=null;startingDrag=false;validGesture=false;}
+ void clearWindow(){window=null;startingDrag=false;windowRequest=null;validGesture=false;}
  static class Capture{
  boolean deferred;java.util.function.Consumer<String> result;
  void close(){}
@@ -106,10 +107,18 @@ public class WordHoldRegression{
  h.finishRejectedLift(false);check(android.widget.Toast.shown==1,"cancelled input does not show a retry prompt");
  h.nativeCaptureId="capture";h.finishRejectedLift(false);
  check(h.nativeCaptureId==null&&h.discardedCaptures==1,"a failed image lift releases its private capture");
+ h=fresh();h.window=new Object();h.startingDrag=true;h.windowRequest=new AtomicBoolean();
+ h.clearPendingWindow(new AtomicBoolean(true));
+ check(h.window!=null,"an unrelated IPC timeout cannot cancel a pending native drag");
+ h.clearPendingWindow(h.windowRequest);
+ check(h.window==null,"an IPC timeout can retire its own pending window");
+ h=fresh();h.window=new Object();h.windowRequest=new AtomicBoolean(true);
+ h.clearPendingWindow(h.windowRequest);
+ check(h.window!=null,"an IPC timeout cannot clear a drag that already started");
  System.out.println("Production word hold cancellation checks="+checks+" passed");
  }
 }
-'''.replace('__METHODS__',member('    private void motion(')+'\n'+member('    private void moveLiftCandidate(')+'\n'+member('    private boolean deferWords(')+'\n'+member('    private void finishRejectedLift('))}
+'''.replace('__METHODS__',member('    private void motion(')+'\n'+member('    private void moveLiftCandidate(')+'\n'+member('    private boolean deferWords(')+'\n'+member('    private void finishRejectedLift(')+'\n'+member('    private void clearPendingWindow('))}
 paths=[]
 for name,text in files.items():
     path=out/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(text,encoding='utf-8');paths.append(str(path))
