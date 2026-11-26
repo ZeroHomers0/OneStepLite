@@ -57,7 +57,7 @@ BooleanSupplier ready=()->true;Object dispatch,bounds;ComponentName hovered;Cons
 boolean panelSource,hasPointer,mainRight,workspaceActive;Object transferClip;Counter receipt;Function<String,String> hoverIdentity=value->value;Consumer<String> hoverActivate=value->{};
 String sourcePackage;Set<String> windowPackages;
 static class Hover extends Counter {void move(String value){}}Hover windowHover=new Hover();
-boolean dragging,dropped,deliveryPending,retainingDelivery,shareOnly;int generation,starts,ends,stops,drops;String lastTarget;
+boolean dragging,dropped,deliveryPending,retainingDelivery,shareOnly;int generation,starts,ends,stops,drops;String lastTarget;Runnable deferredDelivery;
 Handler handler=new Handler();Runnable expire=()->{},deliverySettled=()->{};
 Counter pendingRead,delegatedRead,catchment;Counter panel=new Counter(),history=new Counter(),capture=new Counter(),portal=new Counter();Runnable afterDrag=()->{};
 Transition transition=new Transition();float alpha=1;

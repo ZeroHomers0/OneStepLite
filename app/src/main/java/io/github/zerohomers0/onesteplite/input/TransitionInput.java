@@ -48,6 +48,12 @@ final class TransitionInput {
         }
     }
 
+    /** Drag-hover drops must reach the promoted main window before the finger lifts. */
+    void releaseNow() {
+        generation++;
+        set(false);
+    }
+
     boolean consume(int action) {
         if (action == MotionEvent.ACTION_DOWN) gesture = blocked;
         boolean consume = blocked || gesture;

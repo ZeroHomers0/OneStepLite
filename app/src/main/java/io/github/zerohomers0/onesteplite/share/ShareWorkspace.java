@@ -83,6 +83,10 @@ final class ShareWorkspace extends FrameLayout {
     private java.util.function.Function<String,String> hoverIdentity=value->value;
     private Consumer<String> hoverActivate=value->{};
     private BiConsumer<Boolean,ClipData> resultSink=this::onDeliveryResult;
+    private boolean deferNextDelivery;
+    private Runnable deferredDelivery;
+    private long deferredDeliveryDeadline;
+    private static final long DEFERRED_DELIVERY_TIMEOUT_MS=5000L;
 
     void setActiveViewSource(java.util.function.Predicate<String> source) {
         if(portal!=null)portal.setActiveViewSource(source);
@@ -355,6 +359,15 @@ final class ShareWorkspace extends FrameLayout {
         return !location || !sameSource && supported;
     }
 
+    /** Keep a hover-promoted window as the target even after its side cell disappears. */
+    boolean acceptPromotedDrop(DragEvent event,String pkg,boolean defer) {
+        if(!dragging || dropped || pkg==null || pkg.equals(sourcePackage))return false;
+        windowHover.close();
+        deferNextDelivery=defer;
+        try{return drop(event,new ComponentName(pkg,""));}
+        finally{deferNextDelivery=false;}
+    }
+
     private void showTargets(List<ShareTarget> entries) {
         targets.removeAllViews();
         if(imageDrag && !shareOnly) {
@@ -454,16 +467,24 @@ final class ShareWorkspace extends FrameLayout {
                 resultSink.accept(success,retained);
             });
             handler.removeCallbacks(expire);handler.postDelayed(expire,60_000L);
+            Runnable deliver;
             if(payload.uris.isEmpty() || payload.uris.stream().allMatch(uri->ContentInboxProvider.AUTHORITY.equals(uri.getAuthority()))) {
                 dropped=true;
-                if(ShareActions.STAGE.equals(ShareActions.operation(target)))stageOwned(payload.clip,token,owner);
-                else prepareDelivery(target,intent,null,token,owner);
-                return true;
+                deliver=ShareActions.STAGE.equals(ShareActions.operation(target))
+                        ?()->stageOwned(payload.clip,token,owner)
+                        :()->prepareDelivery(target,intent,null,token,owner);
+            } else {
+                ClipData files=new ClipData("文件",new String[]{payload.mime},new ClipData.Item(payload.uris.get(0)));
+                for(int i=1;i<payload.uris.size();i++)files.addItem(new ClipData.Item(payload.uris.get(i)));
+                DropPermissionContract grant=ContentAccessCompat.delegate(event,files);delegatedRead=grant;dropped=true;
+                deliver=()->prepareDelivery(target,intent,grant,token,owner);
             }
-            ClipData files=new ClipData("文件",new String[]{payload.mime},new ClipData.Item(payload.uris.get(0)));
-            for(int i=1;i<payload.uris.size();i++)files.addItem(new ClipData.Item(payload.uris.get(i)));
-            delegatedRead=ContentAccessCompat.delegate(event,files);dropped=true;
-            prepareDelivery(target,intent,delegatedRead,token,owner);return true;
+            if(deferNextDelivery){
+                deferredDelivery=deliver;
+                deferredDeliveryDeadline=android.os.SystemClock.uptimeMillis()+DEFERRED_DELIVERY_TIMEOUT_MS;
+                scheduleDeferredDelivery(token);
+            } else deliver.run();
+            return true;
         }catch(Exception unavailable){
             ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.REJECTED);
             dropped=false;finishDelivery(generation);message("无法交付内容，原内容保留");return false;
@@ -528,6 +549,19 @@ final class ShareWorkspace extends FrameLayout {
         finishDelivery(token);resultSink.accept(false,retained);
     }
 
+    // Hover promotion temporarily disables canShareContent(). Keep the accepted payload
+    // until the promoted task owns the main window, then use the normal delivery route.
+    private void scheduleDeferredDelivery(int token) {
+        if(token!=generation || deferredDelivery==null)return;
+        if(ready.getAsBoolean() && isAttachedToWindow() && isShown()){
+            Runnable deliver=deferredDelivery;deferredDelivery=null;deliver.run();return;
+        }
+        if(android.os.SystemClock.uptimeMillis()>=deferredDeliveryDeadline){
+            deferredDelivery=null;failDelivery(token,user);return;
+        }
+        handler.postDelayed(()->scheduleDeferredDelivery(token),50L);
+    }
+
     private boolean recognizeDrop(DragEvent event,SharePayload payload) {
         if(payload.uris.size()!=1 || !payload.mime.startsWith("image/"))return false;
         android.net.Uri uri=payload.uris.get(0);
@@ -566,6 +600,7 @@ final class ShareWorkspace extends FrameLayout {
 
     void cancel() {
         generation++;
+        deferredDelivery=null;
         if(receipt!=null){receipt.close();receipt=null;}transferClip=null;
         afterDrag=()->{};
         handler.removeCallbacks(expire);
@@ -619,7 +654,7 @@ final class ShareWorkspace extends FrameLayout {
     private void finishDelivery(int token) {
         if(token!=generation)return;
         deliveryPending=false;retainingDelivery=false;handler.removeCallbacks(expire);
-        transferClip=null;
+        transferClip=null;deferredDelivery=null;
         if(receipt!=null){receipt.close();receipt=null;}
         if(delegatedRead!=null){delegatedRead.close();delegatedRead=null;}
         Runnable settled=deliverySettled;deliverySettled=()->{};settled.run();

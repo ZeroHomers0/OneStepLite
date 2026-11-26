@@ -55,7 +55,7 @@ public class LiveHostRegression {
  static class Promotion {
   static class Backdrop {int closes;void close(){closes++;}void closeAfterFrame(View v){if(v!=null&&v.layouts==0)throw new AssertionError("backdrop retired before Host restoration");closes++;}} Backdrop liveBackdrop;
   Slot slot; int taskId; Object token; LiveTask previousMain=new LiveTask(1,new Object());
-  boolean cancelled, nativeCompleting, nativeSubmitted, cancelRequested, externalLaunch, nativeHome, nativeFlip, nativeCollect,keepTopBarAppearance;
+  boolean cancelled, nativeCompleting, nativeSubmitted, cancelRequested, externalLaunch, nativeHome, nativeFlip, nativeCollect,keepTopBarAppearance,dragHover;
   long liveZoomGuardUntil;Runnable collectionLaunch;
   long sceneEpoch=7,bindingEpoch=3; LiveSwapVisualLease liveVisual;
   ArrayList<LiveSwapVisualLease> peerVisuals=new ArrayList<>();
@@ -107,6 +107,7 @@ public class LiveHostRegression {
  boolean ordinaryRoot(Object o,int mode){return o instanceof Info&&((Info)o).displayId==0&&((Info)o).mode==mode;}
  void log(String s){}void traceSwapEvent(String s){}void publishDesktopSideTasks(){publishes++;}
  void setLiveSwapInputBlocked(boolean b){inputPass=b;}
+ void setLiveSwapInputBlocked(boolean b,boolean immediate){inputPass=b;}
  void scheduleDisplayGeometryRefresh(){}
  void finishPendingSuspend(){suspends++;}
  boolean compactPending,sideScrolling;

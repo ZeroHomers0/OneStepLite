@@ -152,6 +152,10 @@ final class TopBar extends FrameLayout {
         return dragShareEnabled && shareWorkspace != null && shareWorkspace.onWindowDrag(event, targetPackage,
                 !isShown() || listener.contentRailCovered());
     }
+    boolean onPromotedContentDrop(android.view.DragEvent event,String targetPackage,boolean defer) {
+        return dragShareEnabled && shareWorkspace != null
+                && shareWorkspace.acceptPromotedDrop(event,targetPackage,defer);
+    }
     void setStatusBarInset(int inset) { statusBarInset=Math.max(0,inset);requestLayout(); }
     void setWallpaperBackdrop(Bitmap bitmap,int width,int height) {
         glassWallpaper=bitmap;glassWidth=width;glassHeight=height;setBackground(null);

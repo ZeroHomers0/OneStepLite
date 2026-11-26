@@ -1,5 +1,5 @@
 {
-  "name": "1.1.1",
-  "code": 1000251,
-  "runtimeMarker": "build=1.1.1 one-step-header-v2 fixed-layout-actions-v1 rounded-workspace-v1 no-media-v1 lock-entry-hold-v2 unlock-commit-gate-v2 opaque-cell-entry-v2 wide-video-modes-v1 workspace-style-recents-v1 square-overlay-video-v2 video-only-dock-v1 theme-clock-v2 side-memory-v1 unlock-single-owner-v3 side-landscape-v3-wct-snapshot side-switch-origin-v2 clock-fit-v3 video-frost-controls-v2 sleep-parent-hold-v4 lock-deferred-exit-v5 event-refresh-v1 drag-share-v2 side-reorder-v1 image-capture-store-v2"
+  "name": "1.1.2",
+  "code": 1000252,
+  "runtimeMarker": "build=1.1.2 one-step-header-v2 fixed-layout-actions-v1 rounded-workspace-v1 no-media-v1 lock-entry-hold-v2 unlock-commit-gate-v2 opaque-cell-entry-v2 wide-video-modes-v1 workspace-style-recents-v1 square-overlay-video-v2 video-only-dock-v1 theme-clock-v2 side-memory-v1 unlock-single-owner-v3 side-landscape-v3-wct-snapshot side-switch-origin-v2 clock-fit-v3 video-frost-controls-v2 sleep-parent-hold-v4 lock-deferred-exit-v5 event-refresh-v1 drag-share-v2 side-reorder-v1 image-capture-store-v2 drag-hover-drop-v1"
 }

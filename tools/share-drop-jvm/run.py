@@ -9,6 +9,10 @@ start=source.index('    private boolean drag(');end=source.index('{',start)+1;de
 while depth:
     depth+=(source[end]=='{')-(source[end]=='}');end+=1
 drag=source[start:end]
+promoted_start=source.index('    boolean acceptPromotedDrop(');promoted_end=source.index('{',promoted_start)+1;depth=1
+while depth:
+    depth+=(source[promoted_end]=='{')-(source[promoted_end]=='}');promoted_end+=1
+accept_promoted=source[promoted_start:promoted_end]
 drop_start=source.index('    private boolean drop(');drop_end=source.index('{',drop_start)+1;depth=1
 while depth:
     depth+=(source[drop_end]=='{')-(source[drop_end]=='}');drop_end+=1
@@ -26,7 +30,7 @@ public class ShareDropRegression {
  static final class ClipDescription {final Map<String,Object> extras=new HashMap<>();String mime="text/plain";
   boolean hasMimeType(String type){return type.equals(mime);}Extras getExtras(){return null;}int getMimeTypeCount(){return 1;}String getMimeType(int i){return mime;}ClipDescription(){}ClipDescription(ClipDescription other){}ClipDescription(String label,String[] types){mime=types[0];}static final class Extras{int getInt(String key,int fallback){return fallback;}String getString(String key){return null;}}}
  static class View {}
- static final class ComponentName {final String pkg;ComponentName(String pkg){this.pkg=pkg;}public boolean equals(Object o){return o instanceof ComponentName&&pkg.equals(((ComponentName)o).pkg);}public int hashCode(){return pkg.hashCode();}}
+ static final class ComponentName {final String pkg;ComponentName(String pkg){this.pkg=pkg;}ComponentName(String pkg,String name){this.pkg=pkg;}public boolean equals(Object o){return o instanceof ComponentName&&pkg.equals(((ComponentName)o).pkg);}public int hashCode(){return pkg.hashCode();}}
  static final class ClipData {}
  static final class SharePayload {final String mime="text/plain";final List<Object> uris=new ArrayList<>();SharePayload(ClipData c){}}
  static final class ShareTarget {}
@@ -42,18 +46,19 @@ public class ShareDropRegression {
  static final class ContentDragMotion {static void managed(Object owner,ClipDescription description){}static void close(){}}
  static final class ShareTargetCatalog {record Matches(Set<String> packages){}static Matches queryMatches(Object c,ClipDescription d,int n){return new Matches(Set.of());}static List<ShareTarget> loadForDrag(Object c,ClipDescription d,int n,Matches matches){return List.of();}}
  static final class Replay extends View {
-  BooleanSupplier ready=()->true,covered=()->false;ShareRailOverlay overlay;boolean shareOnly,dragging,dropped,panelSource,imageDrag,hasPointer;Object transferClip;
+  BooleanSupplier ready=()->true,covered=()->false;ShareRailOverlay overlay;boolean shareOnly,dragging,dropped,panelSource,imageDrag,hasPointer,deferNextDelivery,lastDeferred;Object transferClip;
   ComponentName hovered;Set<String> windowPackages;String sourcePackage;Consumer<String> hint=value->{};Portal portal=new Portal();Runnable expire=()->{};
   Panel panel=new Panel();static Handler handler=new Handler();static final Worker WORKER=new Worker();ShareDragCatchment catchment;int tipOffset,generation,user,drops,rejections;float dragHalfWidth;
   Runnable afterDrag=()->{},dragFinished=()->{};String lastMessage;AutoCloseableFixture windowHover=new AutoCloseableFixture();
   static final class AutoCloseableFixture {void close(){}}
   boolean accepts(ClipDescription description){return true;}boolean live(int token){return dragging;}boolean onWindowDrag(DragEvent e,Object target,boolean covered,View origin){return true;}
   void cancel(){dragging=false;}void locateDragTip(DragEvent event,View plate){hovered=null;}
-  boolean drop(DragEvent event,ComponentName target){drops++;dropped=true;return true;}
+  boolean drop(DragEvent event,ComponentName target){drops++;dropped=true;lastDeferred=deferNextDelivery;return true;}
   void showTargets(List<ShareTarget> entries){}void message(String value){lastMessage=value;}
   void finishVisuals(){dragging=false;}void stopEdge(){}void clearTargetHover(){}
   Replay getContext(){return this;}void post(Runnable r){r.run();}boolean performHapticFeedback(int kind){return true;}
 __DRAG__
+__PROMOTED__
  }
  public static void main(String[] args){
   Replay selected=new Replay();selected.dragging=true;selected.hovered=new ComponentName("chat");
@@ -78,9 +83,18 @@ __DRAG__
   check(crossing.hovered!=null,"rail EXIT into the overlapping catchment keeps the selected target");
   Replay newer=new Replay();newer.dragging=true;newer.drag(ended,null);newer.generation++;
   newer.handler.runDelayed();check(newer.dragging,"previous drag end cannot retire a newer drag");
+  Replay promoted=new Replay();promoted.dragging=true;promoted.sourcePackage="chat.pkg";
+  check(!promoted.acceptPromotedDrop(new DragEvent(DragEvent.ACTION_DROP),"chat.pkg",true)&&promoted.drops==0,
+      "same-source promoted drop still cancels");
+  promoted=new Replay();promoted.dragging=true;promoted.sourcePackage="other.pkg";
+  check(promoted.acceptPromotedDrop(new DragEvent(DragEvent.ACTION_DROP),"chat.pkg",true)
+      &&promoted.drops==1&&promoted.lastDeferred,"promoted drop keeps its delivery until the window is ready");
+  promoted=new Replay();promoted.dragging=true;
+  check(promoted.acceptPromotedDrop(new DragEvent(DragEvent.ACTION_DROP),"chat.pkg",false)
+      &&promoted.drops==1&&!promoted.lastDeferred,"settled promotion launches immediately");
   System.out.println("Production share DROP checks="+checks+" passed");
 }}
-'''.replace('__DRAG__',drag)
+'''.replace('__DRAG__',drag).replace('__PROMOTED__',accept_promoted)
 path=out/'ShareDropRegression.java';path.write_text(java,'utf-8')
 haptic=out/'android/view/HapticFeedbackConstants.java';haptic.parent.mkdir(parents=True,exist_ok=True)
 haptic.write_text('package android.view;public final class HapticFeedbackConstants{public static final int DRAG_START=0;}\n','utf-8')
