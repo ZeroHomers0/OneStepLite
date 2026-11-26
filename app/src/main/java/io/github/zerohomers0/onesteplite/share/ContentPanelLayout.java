@@ -68,9 +68,9 @@ final class ContentPanelLayout extends LinearLayout {
             tab.setGravity(Gravity.CENTER);tab.setTextColor(HyperOsStyle.textPrimary(context));
             tab.setOnClickListener(v->select.accept(index));tabs.add(tab);
             GradientDrawable tabFace=new GradientDrawable();tabFace.setColor(android.graphics.Color.TRANSPARENT);
-            face.setCornerRadius(dp(8));
+            tabFace.setCornerRadius(dp(8));
             tab.setBackground(new RippleDrawable(ColorStateList.valueOf(
-                    (HyperOsStyle.CONTROL_ACCENT&0x00ffffff)|0x1c000000),face,null));
+                    (HyperOsStyle.CONTROL_ACCENT&0x00ffffff)|0x1c000000),tabFace,null));
             LayoutParams cell=new LayoutParams(0,-2,1);header.addView(tab,cell);
         }
         this.track.addView(header,new android.widget.FrameLayout.LayoutParams(-1,-2));

@@ -5,6 +5,10 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from source_paths import package_dir
 src=package_dir(Path(__file__).resolve().parents[2]);out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 source=(src/'ContentPanelLayout.java').read_text(encoding='utf-8-sig')
+if 'tabFace.setCornerRadius' not in source or '),face,null)' in source:
+    raise AssertionError('tab ripple content must be transparent and own its drawable')
+if 'thumb.animate().translationX(x).setDuration(360)' not in source:
+    raise AssertionError('tab switch animation must remain attached to the thumb')
 def member(signature):
  start=source.index(signature);end=source.index('{',start)+1;depth=1
  while depth:
