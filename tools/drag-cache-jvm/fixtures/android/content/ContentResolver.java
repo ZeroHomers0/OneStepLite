@@ -1,0 +1,1 @@
+package android.content;import android.net.Uri;import java.io.*;public class ContentResolver{public String getType(Uri u){return "image/jpeg";}public InputStream openInputStream(Uri u){return new ByteArrayInputStream(new byte[]{1,2,3,4});}public android.database.Cursor query(Uri u,String[] p,String s,String[] a,String o){return null;}}

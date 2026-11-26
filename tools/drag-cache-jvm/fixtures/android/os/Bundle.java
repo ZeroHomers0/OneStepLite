@@ -1,0 +1,1 @@
+package android.os;import java.util.*;public class Bundle{final Map<String,String> v=new HashMap<>();public Bundle putString(String k,String x){v.put(k,x);return this;}public String getString(String k){return v.get(k);}}

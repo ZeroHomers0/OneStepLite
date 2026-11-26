@@ -21,6 +21,7 @@ public final class ContentImportActivity extends Activity {
     private boolean importing;
     private Intent pendingShare;
     private Intent externalTarget;
+    private boolean transientDrag;
     private android.os.IBinder delegatedRead,receipt;
     private String operation="";
     private final AtomicBoolean reported=new AtomicBoolean();
@@ -42,7 +43,7 @@ public final class ContentImportActivity extends Activity {
                 }
             }
             if(request!=null && request.grant!=null) {
-                externalTarget=request.intent;delegatedRead=request.grant;importContent(request.intent);return;
+                externalTarget=request.intent;delegatedRead=request.grant;transientDrag=true;importContent(request.intent);return;
             }
             pendingShare=request==null?null:request.intent;
             getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
@@ -75,6 +76,7 @@ public final class ContentImportActivity extends Activity {
         try {
             if(cancelled.get() || !ShareDelivery.active(receipt)){runOnUiThread(this::finish);return;}
             if(ShareActions.STAGE.equals(operation)) {
+                owned=DragCacheStore.promoteForStage(this,owned);
                 ContentShelfStore.stage(this,owned);outcome(true,owned);runOnUiThread(this::finish);return;
             }
             owned=ShareContentPreparation.prepare(this,owned,()->!cancelled.get());
@@ -153,18 +155,13 @@ public final class ContentImportActivity extends Activity {
                 ClipData clip=incoming.getClipData();
                 if(clip==null)clip=fromExtras(incoming);
                 SharePayload payload=new SharePayload(clip);
-                JSONArray existing=ContentInboxProvider.rows(this);
-                long budget=ContentInboxPolicy.MAX_TOTAL;
-                int records=0;
-                for(int i=0;i<existing.length();i++){
-                    JSONObject row=existing.getJSONObject(i);
-                    if(ContentInboxProvider.isReservedCapture(row))continue;
-                    records++;
-                    if(!row.has("document_uri"))budget-=ContentInboxProvider.file(this,row.getString("id")).length();
+                if(transientDrag && !ShareActions.STAGE.equals(operation)) {
+                    ClipData owned=storeTransient(payload);
+                    releaseDelegatedRead();
+                    deliverPrepared(owned,externalTarget);
+                    return;
                 }
-                int added=payload.uris.size()+(payload.text.isEmpty()?0:1);
-                if(!ContentInboxPolicy.withinInbox(records+added,ContentInboxPolicy.MAX_TOTAL-budget))
-                    throw new ContentInboxProvider.CapacityExceeded();
+                long budget=ContentInboxPolicy.MAX_TOTAL;
                 JSONArray rows=new JSONArray();long total=0;
                 for(Uri uri:payload.uris) {
                     String id=UUID.randomUUID().toString();File target=ContentInboxProvider.file(this,id);created.add(target);
@@ -204,6 +201,29 @@ public final class ContentImportActivity extends Activity {
                 runOnUiThread(()->{if(!cancelled.get())message(detail);finish();});
             } finally {releaseDelegatedRead();BUSY.set(false);}
         },"ContentInboxImport").start();
+    }
+
+    private ClipData storeTransient(SharePayload payload) throws Exception {
+        ClipData owned=null;java.util.ArrayList<String> ids=new java.util.ArrayList<>();
+        try {
+            for(int i=0;i<payload.clip.getItemCount();i++) {
+                ClipData.Item original=payload.clip.getItemAt(i);ClipData.Item stored=null;
+                if(original.getUri()!=null) {
+                    String mime=payload.mime;
+                    try{String declared=getContentResolver().getType(original.getUri());if(declared!=null)mime=declared;}
+                    catch(RuntimeException unavailable){}
+                    Bundle result=DragCacheStore.storeUri(this,original.getUri(),null,mime);
+                    ids.add(result.getString("id"));stored=new ClipData.Item(Uri.parse(result.getString("uri")));
+                } else if(original.getText()!=null)stored=new ClipData.Item(original.getText().toString());
+                if(stored==null)continue;
+                if(owned==null)owned=new ClipData(new android.content.ClipDescription(payload.clip.getDescription()),stored);else owned.addItem(stored);
+            }
+            if(owned==null)throw new java.io.IOException("No transient content");
+            return owned;
+        }catch(Exception failure) {
+            for(String id:ids)DragCacheStore.discard(this,id);
+            throw failure;
+        }
     }
 
     private long copy(Uri uri,File target,long budget) throws Exception {

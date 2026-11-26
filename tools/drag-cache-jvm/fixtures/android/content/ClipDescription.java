@@ -1,0 +1,1 @@
+package android.content;public class ClipDescription{final String[] types;public ClipDescription(String n,String[] t){types=t.clone();}public ClipDescription(ClipDescription o){types=o.types.clone();}public int getMimeTypeCount(){return types.length;}public String getMimeType(int i){return types[i];}}

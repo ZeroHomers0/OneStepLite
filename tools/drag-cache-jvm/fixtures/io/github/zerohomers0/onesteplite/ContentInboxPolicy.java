@@ -1,0 +1,1 @@
+package io.github.zerohomers0.onesteplite;final class ContentInboxPolicy{static final long MAX_FILE=100L*1024*1024;static boolean validId(String id){return id!=null&&id.matches("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}");}}

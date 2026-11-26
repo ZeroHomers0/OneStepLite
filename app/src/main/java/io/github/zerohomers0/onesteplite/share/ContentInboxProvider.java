@@ -26,7 +26,11 @@ public final class ContentInboxProvider extends ContentProvider {
             request->DropPermissionContract.release(request.grant));
     private static final long RETENTION=24L*60*60*1000;
 
-    @Override public boolean onCreate(){return true;}
+    @Override public boolean onCreate(){
+        if(getContext()!=null)try{DragCacheStore.cleanup(getContext());}
+        catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"drag cache startup cleanup deferred",unavailable);}
+        return true;
+    }
 
     private void enforceHost() {
         int uid=Binder.getCallingUid();
@@ -164,25 +168,62 @@ public final class ContentInboxProvider extends ContentProvider {
         JSONArray old=rows(context),all=new JSONArray();
         for(int i=0;i<added.length();i++)all.put(added.optJSONObject(i));
         for(int i=0;i<old.length();i++)all.put(old.optJSONObject(i));
-        int normal=0,reserved=0;long bytes=0;
-        for(int i=0;i<all.length();i++) {
-            JSONObject row=all.optJSONObject(i);
-            if(isReservedCapture(row)){
-                reserved++;continue;
-            }
-            normal++;
-            if(!row.has("document_uri"))bytes+=file(context,row.optString("id")).length();
-        }
-        if(!ContentInboxPolicy.withinInbox(normal,bytes)){
-            if(!ContentInboxPolicy.canReserveCapture(capture,reserved)){
-                if(capture)ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_STORE,ShareDiagnostics.Code.CAPACITY);
-                throw new CapacityExceeded();
-            }
-            try {added.getJSONObject(0).put("capture_reserve",true);}
-            catch(org.json.JSONException invalid){throw new IllegalStateException("Invalid capture record",invalid);}
-        }
+        java.util.ArrayList<String> evicted=evictForCapacity(context,all,added.length(),capture);
         if(!context.getSharedPreferences("content_inbox",Context.MODE_PRIVATE).edit().putString("rows",all.toString()).commit())
             throw new IllegalStateException("Inbox metadata save failed");
+        discardEvicted(context,evicted);
+    }
+
+    /** Evict only unprotected temporary rows; staged shelf items are never removed implicitly. */
+    private static java.util.ArrayList<String> evictForCapacity(Context context,JSONArray rows,int addedCount,boolean capture) {
+        java.util.ArrayList<String> evicted=new java.util.ArrayList<>();
+        int normal=0,reserved=0;long bytes=0;
+        for(int i=0;i<rows.length();i++) {
+            JSONObject row=rows.optJSONObject(i);
+            if(isReservedCapture(row)){reserved++;continue;}
+            normal++;if(!row.has("document_uri"))bytes+=file(context,row.optString("id")).length();
+        }
+        boolean removeAny=!ContentInboxPolicy.withinInbox(normal,bytes);
+        boolean[] removed=new boolean[rows.length()];
+        if(removeAny) {
+            for(int rank=0;rank<=2;rank++) {
+                for(int i=rows.length()-1;i>=addedCount;i--) {
+                    if(ContentInboxPolicy.withinInbox(normal,bytes))break;
+                    JSONObject row=rows.optJSONObject(i);
+                    if(row==null || removed[i] || ContentInboxPolicy.evictionPriority(
+                            row.optBoolean("staged"),row.optBoolean("shelf_removed"),isReservedCapture(row))!=rank)continue;
+                    removed[i]=true;evicted.add(row.optString("id"));
+                    if(isReservedCapture(row))reserved--;
+                    else {
+                        normal--;
+                        if(!row.has("document_uri"))bytes-=file(context,row.optString("id")).length();
+                    }
+                }
+                if(ContentInboxPolicy.withinInbox(normal,bytes))break;
+            }
+        }
+        if(!ContentInboxPolicy.withinInbox(normal,bytes) && capture
+                && ContentInboxPolicy.canReserveCapture(true,reserved)) {
+            JSONObject newest=rows.optJSONObject(0);
+            try{newest.put("capture_reserve",true);}
+            catch(org.json.JSONException invalid){throw new IllegalStateException("Invalid capture record",invalid);}
+            normal--;if(!newest.has("document_uri"))bytes-=file(context,newest.optString("id")).length();reserved++;
+        }
+        if(!ContentInboxPolicy.withinInbox(normal,bytes)) {
+            if(capture)ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_STORE,ShareDiagnostics.Code.CAPACITY);
+            throw new CapacityExceeded();
+        }
+        for(int i=removed.length-1;i>=0;i--)if(removed[i])rows.remove(i);
+        return evicted;
+    }
+
+    private static void discardEvicted(Context context,java.util.List<String> ids) {
+        for(String id:ids)if(ContentInboxPolicy.validId(id)) {
+            try{context.revokeUriPermission(uri(id),Intent.FLAG_GRANT_READ_URI_PERMISSION);}
+            catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"inbox grant cleanup unavailable",unavailable);}
+            File file=file(context,id);
+            if(file.exists() && !file.delete())android.util.Log.w(Tags.PROBE,"inbox eviction deletion failed");
+        }
     }
 
     static boolean isReservedCapture(JSONObject row) {
@@ -200,6 +241,7 @@ public final class ContentInboxProvider extends ContentProvider {
     }
 
     private static JSONObject find(Context context,Uri uri) {
+        if(DragCacheStore.isDragUri(uri))return DragCacheStore.find(context,uri);
         String id=uri.getLastPathSegment();JSONArray rows=rows(context);
         for(int i=0;i<rows.length();i++)if(rows.optJSONObject(i).optString("id").equals(id))return rows.optJSONObject(i);
         return null;
@@ -216,9 +258,11 @@ public final class ContentInboxProvider extends ContentProvider {
                 info=ShareImageInfo.read(input,snapshot.optString("name"),mime,expected);
             }finally{Binder.restoreCallingIdentity(identity);}
         }
-        else try(java.io.InputStream input=new java.io.FileInputStream(file(context,snapshot.optString("id")))){
+        else try(java.io.InputStream input=new java.io.FileInputStream(DragCacheStore.isDragUri(uri)
+                ?DragCacheStore.file(context,snapshot.optString("id")):file(context,snapshot.optString("id")))){
             info=ShareImageInfo.read(input,snapshot.optString("name"),mime,expected);
         }
+        if(DragCacheStore.isDragUri(uri))return info.mime;
         synchronized(ContentInboxProvider.class){
             JSONArray rows=rows(context);JSONObject current=null;
             for(int i=0;i<rows.length();i++)if(rows.optJSONObject(i).optString("id").equals(snapshot.optString("id")))current=rows.optJSONObject(i);
@@ -238,7 +282,11 @@ public final class ContentInboxProvider extends ContentProvider {
         if(row==null)throw new FileNotFoundException("Inbox item expired");
         try{
             ParcelFileDescriptor descriptor;
-            if(row.has("document_uri")){
+            if(DragCacheStore.isDragUri(uri)){
+                File dragFile=DragCacheStore.file(getContext(),uri.getPathSegments().get(1));
+                if(!dragFile.isFile())throw new FileNotFoundException("Drag item expired");
+                descriptor=ParcelFileDescriptor.open(dragFile,ParcelFileDescriptor.MODE_READ_ONLY);
+            }else if(row.has("document_uri")){
                 long identity=Binder.clearCallingIdentity();
                 try{descriptor=getContext().getContentResolver().openFileDescriptor(Uri.parse(row.optString("document_uri")),"r");}
                 finally{Binder.restoreCallingIdentity(identity);}
@@ -263,7 +311,9 @@ public final class ContentInboxProvider extends ContentProvider {
         Object[] values=new Object[columns.length];
         for(int i=0;i<columns.length;i++) {
             if("_display_name".equals(columns[i]))values[i]=row.optString("name");
-            if("_size".equals(columns[i]))values[i]=row.has("document_uri")?documentSize:Long.valueOf(file(getContext(),row.optString("id")).length());
+            if("_size".equals(columns[i]))values[i]=row.has("document_uri")?documentSize
+                    :Long.valueOf(DragCacheStore.isDragUri(uri)?DragCacheStore.file(getContext(),row.optString("id")).length()
+                    :file(getContext(),row.optString("id")).length());
         }
         cursor.addRow(values);return cursor;
     }

@@ -45,6 +45,10 @@ public final class ContentWorkflowPolicyTest {
                 && !ContentInboxPolicy.withinInbox(129,ContentInboxPolicy.MAX_TOTAL),"ordinary inbox retains its original limits");
         check(ContentInboxPolicy.canReserveCapture(true,7) && !ContentInboxPolicy.canReserveCapture(true,8)
                 && !ContentInboxPolicy.canReserveCapture(false,0),"reserve is bounded and only available to captures");
+        check(ContentInboxPolicy.evictionPriority(true,true,true)==-1,"staged shelf content is never evicted");
+        check(ContentInboxPolicy.evictionPriority(false,true,false)==0,"removed shelf backing is reclaimed first");
+        check(ContentInboxPolicy.evictionPriority(false,false,true)==1,"reserved captures are reclaimed before ordinary content");
+        check(ContentInboxPolicy.evictionPriority(false,false,false)==2,"ordinary temporary content is the final fallback");
         check(ContentInboxPolicy.liveLaunch(30000,0)&&!ContentInboxPolicy.liveLaunch(30001,0),"token expiry exact");
         check(!ContentInboxPolicy.liveLaunch(0,1),"clock rollback rejects token");
         check(DropDelegationPolicy.allowed(1000,1000,0,10123,true,true,true),"same-user real drop allowed");
