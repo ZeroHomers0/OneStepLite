@@ -96,7 +96,7 @@ final class TopBar extends FrameLayout {
 
     private int appliedTheme=-1;
     void applyOptions(WorkspaceOptions options) {
-        clock.setShowLunar(options.showLunar);
+        clock.setShowTime(options.showTime);clock.setShowDate(options.showDate);clock.setShowLunar(options.showLunar);
         if(dragShareEnabled!=options.dragShareEnabled){
             dragShareEnabled=options.dragShareEnabled;
             shareWorkspace.setFeatureEnabled(dragShareEnabled);

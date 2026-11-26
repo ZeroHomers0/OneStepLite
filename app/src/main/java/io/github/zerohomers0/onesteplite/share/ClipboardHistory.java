@@ -13,7 +13,7 @@ import java.util.concurrent.Executors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Opt-in text history listens only while the workspace is active; sensitive clips are skipped. */
+/** Fixed bounded text history listens only while the workspace is active; sensitive clips are skipped. */
 final class ClipboardHistory {
     private static final int LIMIT=64;
     private static final ExecutorService WORKER=Executors.newSingleThreadExecutor(runnable->{
@@ -41,17 +41,9 @@ final class ClipboardHistory {
                 .getSharedPreferences("onesteplite_clipboard_"+user,Context.MODE_PRIVATE);
     }
 
-    boolean enabled() { return preferences(CurrentUser.id()).getBoolean("enabled",false); }
-
-    void enable(boolean enabled) {
-        preferences(CurrentUser.id()).edit().putBoolean("enabled",enabled).apply();
-        stop();if(enabled)start();
-    }
-
     void start() {
         if(listening || clipboard==null || !ContentAccessCompat.currentProcessUser())return;
         try {
-            if(!enabled())return;
             owner=CurrentUser.id();generation++;clipboard.addPrimaryClipChangedListener(listener);listening=true;
         } catch(RuntimeException denied) { stop(); }
     }

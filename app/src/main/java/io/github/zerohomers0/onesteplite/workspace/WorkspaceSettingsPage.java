@@ -130,6 +130,12 @@ final class WorkspaceSettingsPage extends FrameLayout {
         WorkspaceOptions options = WorkspaceSettingsStore.read(activity);
         section("外观");
         LinearLayout appearance = card();
+        switchOption(appearance, "显示时间", "顶栏左侧显示当前时间", options.showTime,
+                checked -> persist(WorkspaceSettingsStore.read(activity).withShowTime(checked)));
+        divider(appearance);
+        switchOption(appearance, "显示日期", "时间右侧显示日期；关闭后日期和农历一起隐藏", options.showDate,
+                checked -> persist(WorkspaceSettingsStore.read(activity).withShowDate(checked)));
+        divider(appearance);
         switchOption(appearance, "显示农历", "日期下方显示农历", options.showLunar,
                 checked -> persist(WorkspaceSettingsStore.read(activity).withShowLunar(checked)));
         divider(appearance);

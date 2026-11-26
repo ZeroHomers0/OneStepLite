@@ -15,7 +15,7 @@ final class ContentPanelActions extends FrameLayout {
     private boolean selecting;
     private java.util.function.Consumer<View> menuHost=ignored->{};
 
-    ContentPanelActions(Context context,Runnable select,Runnable clear,Runnable record,Runnable browse) {
+    ContentPanelActions(Context context,Runnable select,Runnable clear,Runnable browse) {
         super(context);
         button=new IconButton(context,IconButton.MORE_VERTICAL,"内容操作");
         addView(button,new LayoutParams(-1,-1));
@@ -31,7 +31,6 @@ final class ContentPanelActions extends FrameLayout {
             Runnable dismiss=()->menuHost.accept(null);
             addAction(menu,"多选",dismiss,select);
             if(page==1)addAction(menu,"更多文件",dismiss,browse);
-            if(page==2)addAction(menu,"历史设置",dismiss,record);
             addAction(menu,page==3?"移除暂存":page==2?"清空剪贴板":"清除记录",dismiss,clear);
             menuHost.accept(menu);
         });

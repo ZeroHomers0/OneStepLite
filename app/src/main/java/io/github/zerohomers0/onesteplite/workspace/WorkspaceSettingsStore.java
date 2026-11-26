@@ -8,7 +8,7 @@ import android.os.Bundle;
 /** The module app owns persistence. SystemUI receives only a read-only snapshot. */
 final class WorkspaceSettingsStore {
     static final Uri URI = Uri.parse("content://io.github.zerohomers0.onesteplite.settings/options");
-    static final String READ = "read", LUNAR = "show_lunar", SWAP = "swap_mode",
+    static final String READ = "read", LUNAR = "show_lunar", TIME = "show_time", DATE = "show_date", SWAP = "swap_mode",
             ENTRY_GESTURE = "entry_gesture", KEEP_ON_LOCK = "keep_on_lock",
             SCROLL_SIDE_TASKS = "scroll_side_tasks", LANDSCAPE_VIDEO = "landscape_video",
             HIDE_RECENTS = "hide_side_recents", PARK_MAIN = "park_main_on_launch", DELETE_SHARED_IMAGES = "delete_shared_images";
@@ -31,7 +31,8 @@ final class WorkspaceSettingsStore {
                 preferences.getInt(LANDSCAPE_VIDEO, WorkspaceOptions.VIDEO_TURNED),
                 preferences.getBoolean(HIDE_RECENTS, false),
                 preferences.getBoolean(PARK_MAIN, false),preferences.getBoolean(DELETE_SHARED_IMAGES,false),preferences.getInt(THEME,0),
-                preferences.getBoolean(FOLLOW_TOP_BAR_SIDE,true),preferences.getBoolean(DRAG_SHARE,true));
+                preferences.getBoolean(FOLLOW_TOP_BAR_SIDE,true),preferences.getBoolean(DRAG_SHARE,true),
+                preferences.getBoolean(TIME,true),preferences.getBoolean(DATE,true));
     }
 
     static boolean write(Context context, WorkspaceOptions options) {
@@ -39,6 +40,7 @@ final class WorkspaceSettingsStore {
                 && !EntryGesturePolicy.canSelect(options.entryGesture,
                         EntryGestureSettings.lineHidden(context))) return false;
         boolean saved = preferences(context).edit().remove("hidden_buttons").putBoolean(LUNAR, options.showLunar)
+                .putBoolean(TIME, options.showTime).putBoolean(DATE, options.showDate)
                 .putInt(THEME,options.themeMode).putInt(SWAP, options.swapMode).putInt(ENTRY_GESTURE, options.entryGesture)
                 .putBoolean(FOLLOW_TOP_BAR_SIDE,options.followTopBarSide).putBoolean(DRAG_SHARE,options.dragShareEnabled)
                 .putBoolean(KEEP_ON_LOCK, options.keepOnLock)
@@ -59,7 +61,8 @@ final class WorkspaceSettingsStore {
 
     static Bundle bundle(WorkspaceOptions options) {
         Bundle result = new Bundle();
-        result.putInt(THEME,options.themeMode);result.putBoolean(LUNAR, options.showLunar); result.putInt(SWAP, options.swapMode);
+        result.putInt(THEME,options.themeMode);result.putBoolean(LUNAR, options.showLunar);
+        result.putBoolean(TIME,options.showTime);result.putBoolean(DATE,options.showDate);result.putInt(SWAP, options.swapMode);
         result.putInt(ENTRY_GESTURE, options.entryGesture);
         result.putBoolean(KEEP_ON_LOCK, options.keepOnLock);
         result.putBoolean(SCROLL_SIDE_TASKS, options.scrollSideTasks);
@@ -80,6 +83,7 @@ final class WorkspaceSettingsStore {
                 bundle.getInt(LANDSCAPE_VIDEO, WorkspaceOptions.VIDEO_TURNED),
                 bundle.getBoolean(HIDE_RECENTS, false),
                 bundle.getBoolean(PARK_MAIN, false),bundle.getBoolean(DELETE_SHARED_IMAGES,false),bundle.getInt(THEME,0),
-                bundle.getBoolean(FOLLOW_TOP_BAR_SIDE,true),bundle.getBoolean(DRAG_SHARE,true));
+                bundle.getBoolean(FOLLOW_TOP_BAR_SIDE,true),bundle.getBoolean(DRAG_SHARE,true),
+                bundle.getBoolean(TIME,true),bundle.getBoolean(DATE,true));
     }
 }

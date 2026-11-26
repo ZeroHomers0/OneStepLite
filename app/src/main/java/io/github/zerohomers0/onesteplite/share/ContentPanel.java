@@ -196,7 +196,7 @@ final class ContentPanel {
     private ContentPanelActions actions(Context context) {
         panelActions=new ContentPanelActions(context,()->{
             selecting=!selecting;if(!selecting)selection.clear(tab);refreshSelection();refreshMedia();refreshClipboard();
-        },this::clearRecords,this::historyOptions,this::chooseSystemFiles);
+        },this::clearRecords,this::chooseSystemFiles);
         return panelActions;
     }
 
@@ -280,15 +280,6 @@ final class ContentPanel {
         return keys;
     }
 
-    // Injected SystemUI widgets use the project's Chinese-only workspace copy.
-    @android.annotation.SuppressLint("SetTextI18n")
-    private void historyOptions() {
-        showPreview(new ClipboardOptionsPane(context,history.enabled(),value->{
-            history.enable(value);if(tab==2)load();
-        },this::closePreview));
-    }
-
-
     private TextView label(String text) {
         TextView view = new TextView(context);
         view.setText(text);
@@ -310,7 +301,7 @@ final class ContentPanel {
         clearEntries();refreshSelection();
         if(tab==3){int token=generation,user=CurrentUser.id();shell.status("正在读取暂存…");WORKER.execute(()->shelf(token,user));return;}
         if (tab == 2) {
-            if(history.enabled())history.start();
+            history.start();
             int token=generation,user=CurrentUser.id();
             long clearedAt=preferences().getLong("clipboard_cleared_at",0L);
             WORKER.execute(()->clipboard(token,user));

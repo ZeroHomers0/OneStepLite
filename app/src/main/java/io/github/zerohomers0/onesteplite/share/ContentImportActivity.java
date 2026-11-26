@@ -80,6 +80,8 @@ public final class ContentImportActivity extends Activity {
                 ContentShelfStore.stage(this,owned);outcome(true,owned);runOnUiThread(this::finish);return;
             }
             owned=ShareContentPreparation.prepare(this,owned,()->!cancelled.get());
+            if("com.tencent.mm".equals(base.getPackage()) && operation.isEmpty())
+                owned=MediaStoreImageBridge.publish(this,owned);
             SharePayload payload=new SharePayload(owned);
             android.content.ComponentName target=base.getComponent()==null
                     ?new android.content.ComponentName(base.getPackage(),""):base.getComponent();

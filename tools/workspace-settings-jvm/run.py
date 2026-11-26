@@ -48,7 +48,7 @@ public class SettingsRegression {
   check(WorkspaceSettingsStore.read(c).entryGesture==0,"old install retains corner default");
   c.prefs.values.put("hidden_buttons",2);c.prefs.values.put("swap_mode",1);
   WorkspaceOptions old=WorkspaceSettingsStore.read(c);
-  check(old.showLunar&&old.swapMode==1&&old.entryGesture==0,"old preferences migrate without loss");
+  check(old.showLunar&&old.showTime&&old.showDate&&old.swapMode==1&&old.entryGesture==0,"old preferences migrate without loss");
   check(!old.keepOnLock&&!WorkspaceOptions.DEFAULT.keepOnLock,"old installs retain lock-exit default");
   check(WorkspaceSettingsStore.write(c,old.withKeepOnLock(true)),"lock choice saves independently of gesture line");
   check("io.github.zerohomers0.onesteplite.permission.SETTINGS_WAKEUP".equals(c.lastBroadcastPermission),"settings wakeup uses the signature permission");
@@ -65,9 +65,14 @@ public class SettingsRegression {
   check(WorkspaceSettingsStore.write(c,bottom),"hidden line allows selection");
   check(c.resolver.notifications==1,"saved selection notifies live host");
   WorkspaceOptions decoded=WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(WorkspaceSettingsStore.read(c)));
-  check(decoded.entryGesture==1&&decoded.showLunar&&decoded.swapMode==1,"snapshot carries all user choices");
+  check(decoded.entryGesture==1&&decoded.showLunar&&decoded.showTime&&decoded.showDate&&decoded.swapMode==1,"snapshot carries all user choices");
   check(!WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(decoded.withShowLunar(false))).showLunar,"lunar choice reaches SystemUI");
+  check(!WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(decoded.withShowTime(false))).showTime,"time choice reaches SystemUI");
+  check(!WorkspaceSettingsStore.decode(WorkspaceSettingsStore.bundle(decoded.withShowDate(false))).showDate,"date choice reaches SystemUI");
   check(decoded.withShowLunar(false).entryGesture==1,"lunar toggle preserves entry");
+  check(!decoded.withShowTime(false).withShowDate(false).withShowLunar(false).showTime
+        && !decoded.withShowTime(false).withShowDate(false).withShowLunar(false).showDate,
+        "time and date toggles preserve each other");
   check(decoded.withSwapMode(0).entryGesture==1,"swap toggle preserves entry");
   for(int mode=1;mode<3;mode++) {
    WorkspaceOptions v=decoded.withLandscapeVideo(mode).withShowLunar(false).withSwapMode(0).withKeepOnLock(true).withScrollSideTasks(true);

@@ -4,9 +4,9 @@ import android.graphics.Rect;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
-import android.widget.ImageView;
 import java.util.ArrayDeque;
 import java.util.HashSet;
+import java.util.Locale;
 import de.robv.android.xposed.XposedHelpers;
 
 /** Reads only visible virtual nodes on the touched branch of one view. */
@@ -56,6 +56,8 @@ record ViewSemanticContent(String text, boolean selected, Rect image) {
     }
 
     private static ViewSemanticContent fromNode(AccessibilityNodeInfo node, Rect bounds, int children, int minImage) {
+        if(children==0 && bounds.width()>=minImage && bounds.height()>=minImage && isImageNode(node))
+            return new ViewSemanticContent(null,false,bounds);
         CharSequence text=node.getText();
         if(text!=null) {
             int start=node.getTextSelectionStart(),end=node.getTextSelectionEnd();
@@ -66,9 +68,17 @@ record ViewSemanticContent(String text, boolean selected, Rect image) {
                 if(!value.isBlank())return new ViewSemanticContent(value,selected,null);
             }
         }
-        if(children==0 && bounds.width()>=minImage && bounds.height()>=minImage
-                && ImageView.class.getName().contentEquals(java.util.Objects.toString(node.getClassName(),"")))
-            return new ViewSemanticContent(null,false,bounds);
         return null;
+    }
+
+    /** Browser images are exposed as ImageView-like virtual leaf nodes, often with alt text. */
+    private static boolean isImageNode(AccessibilityNodeInfo node) {
+        String className=String.valueOf(node.getClassName()).toLowerCase(Locale.ROOT);
+        if(className.contains("image") || className.contains("photo") || className.contains("picture"))return true;
+        CharSequence description=node.getContentDescription();
+        if(description==null)return false;
+        String value=description.toString().toLowerCase(Locale.ROOT);
+        return value.contains("图片") || value.contains("图像") || value.contains("照片")
+                || value.contains("image") || value.contains("photo") || value.contains("picture");
     }
 }

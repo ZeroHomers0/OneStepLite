@@ -30,6 +30,11 @@ public final class WorkspaceOptionsTest {
                 "temporary image cleanup can be disabled");
         WorkspaceOptions defaults = WorkspaceOptions.DEFAULT;
         check(defaults.showLunar, "lunar date visible by default");
+        check(defaults.showTime && defaults.showDate, "time and date visible by default");
+        check(!defaults.withShowTime(false).withShowDate(false).withSwapMode(1).withEntryGesture(1).showTime,
+                "interaction changes preserve time visibility preference");
+        check(!defaults.withShowTime(false).withShowDate(false).withSwapMode(1).withEntryGesture(1).showDate,
+                "interaction changes preserve date visibility preference");
         check(!defaults.withShowLunar(false).withSwapMode(1).withEntryGesture(1).showLunar,
                 "interaction changes preserve lunar preference");
         check(new WorkspaceOptions(0, -1).swapMode == WorkspaceOptions.GROW_IN_PLACE, "invalid mode changed existing behavior");
