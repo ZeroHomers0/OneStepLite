@@ -69,7 +69,10 @@ final class PortalRelay {
         try {
             if(image!=null) {
                 Bundle stored=CaptureInboxStore.store(context,image);id=stored.getString("id");
-                request.putString("uri",stored.getString("uri"));
+                String storedUri=stored.getString("uri");
+                android.net.Uri published=storedUri==null?null:MediaStoreImageBridge.publishUri(
+                        context,android.net.Uri.parse(storedUri));
+                request.putString("uri",published==null?storedUri:published.toString());
                 request.putString("capture_id",id);
             }
             Bundle result=PortalWire.call(target,PortalWire.OFFER,request);

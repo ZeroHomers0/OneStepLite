@@ -21,14 +21,19 @@ final class MediaStoreImageBridge {
     private static boolean noMediaAttempted;
     private MediaStoreImageBridge(){}
 
+    static Uri publishUri(Context context,Uri source){
+        if(context==null || source==null || !ContentInboxProvider.AUTHORITY.equals(source.getAuthority()))return null;
+        return publishOne(context,source);
+    }
+
     static ClipData publish(Context context,ClipData source){
         if(context==null || source==null)return source;
         ClipData result=null;boolean changed=false;
         for(int i=0;i<source.getItemCount();i++) {
             ClipData.Item original=source.getItemAt(i);ClipData.Item item=original;
             Uri uri=original.getUri();
-            if(uri!=null && ContentInboxProvider.AUTHORITY.equals(uri.getAuthority())) {
-                Uri published=publishOne(context,uri);
+            if(uri!=null) {
+                Uri published=publishUri(context,uri);
                 if(published!=null && !published.equals(uri)){item=new ClipData.Item(published);changed=true;}
             }
             if(item==null)continue;

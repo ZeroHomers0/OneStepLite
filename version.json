@@ -1,5 +1,5 @@
 {
-  "name": "1.1.3",
-  "code": 1000253,
-  "runtimeMarker": "build=1.1.3 one-step-header-v2 fixed-layout-actions-v1 rounded-workspace-v1 no-media-v1 lock-entry-hold-v2 unlock-commit-gate-v2 opaque-cell-entry-v2 wide-video-modes-v1 workspace-style-recents-v1 square-overlay-video-v2 video-only-dock-v1 theme-clock-v2 side-memory-v1 unlock-single-owner-v3 side-landscape-v3-wct-snapshot side-switch-origin-v2 clock-fit-v3 video-frost-controls-v2 sleep-parent-hold-v4 lock-deferred-exit-v5 event-refresh-v1 drag-share-v2 side-reorder-v1 image-capture-store-v2 drag-hover-drop-v1 drag-retarget-v1 image-extract-lease-v1 drag-cache-v1 clock-display-v1 browser-image-node-v1 clipboard-default-v1 wechat-media-bridge-v1 shelf-promote-v1"
+  "name": "1.1.4",
+  "code": 1000254,
+  "runtimeMarker": "build=1.1.4 one-step-header-v2 fixed-layout-actions-v1 rounded-workspace-v1 no-media-v1 lock-entry-hold-v2 unlock-commit-gate-v2 opaque-cell-entry-v2 wide-video-modes-v1 workspace-style-recents-v1 square-overlay-video-v2 video-only-dock-v1 theme-clock-v2 side-memory-v1 unlock-single-owner-v3 side-landscape-v3-wct-snapshot side-switch-origin-v2 clock-fit-v3 video-frost-controls-v2 sleep-parent-hold-v4 lock-deferred-exit-v5 event-refresh-v1 drag-share-v2 side-reorder-v1 image-capture-store-v2 drag-hover-drop-v1 drag-retarget-v1 image-extract-lease-v1 drag-cache-v1 clock-display-v1 browser-image-node-v1 clipboard-default-v1 wechat-media-bridge-v2 portal-media-source-v1 shelf-promote-v1"
 }
