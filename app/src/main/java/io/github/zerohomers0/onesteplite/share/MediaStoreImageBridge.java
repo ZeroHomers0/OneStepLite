@@ -15,17 +15,13 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /** Publishes module-owned images as short-lived hidden MediaStore items for direct chat drops. */
 final class MediaStoreImageBridge {
     private static final long TTL_MS=10L*60L*1000L;
     private static final String FOLDER=Environment.DIRECTORY_PICTURES+"/.OneStep";
     private static final Handler CLEANUP=new Handler(Looper.getMainLooper());
-    private static final ExecutorService IO=Executors.newSingleThreadExecutor(runnable->{
-        Thread thread=new Thread(runnable,"OneStepLite-media-store");
-        thread.setDaemon(true);return thread;
-    });
+    private static final ExecutorService IO=BackgroundExecutor.single("OneStepLite-media-store");
     private static boolean noMediaReady;
     private MediaStoreImageBridge(){}
 

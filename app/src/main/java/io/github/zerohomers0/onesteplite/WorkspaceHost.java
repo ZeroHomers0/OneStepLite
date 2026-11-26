@@ -198,6 +198,7 @@ public final class WorkspaceHost {
     private View transitionInputWindow;
     private TopPresentationController topPresentation;
     private final android.os.IBinder desktopSceneOwner = new android.os.Binder();
+    private boolean desktopPublishQueued;
     private final DesktopSideTaskPublisher desktopSideTaskPublisher =
             new DesktopSideTaskPublisher(new DesktopSideTaskPublisher.Host() {
         @Override public TopBar topBar() { return topBar; }
@@ -816,6 +817,7 @@ public final class WorkspaceHost {
         hideIme();
         workspaceEntering = false;
         final long exitAnimation = ++workspaceGeneration;
+        scheduleDormantTrim();
         if (screenOn&&!lockExitPending) writeZoomAnimated(false); else writeZoom(false);
         setZoomState(false);
         log("suspend begin; retain live task identities: " + reason);
@@ -1000,6 +1002,7 @@ public final class WorkspaceHost {
     }
 
     private void resumeSession() {
+        cancelDormantTrim();
         if (scene != SUSPENDED || !screenOn || root == null || !EntryGuard.canOpen(ctx)) return;
         landscapeSuspended = false;
         scene = RESUMING;
@@ -2545,6 +2548,8 @@ public final class WorkspaceHost {
      * 动画结束后再写一次稳态续租，避免 4 秒租约把进行中的动画取消。
      */
     private static final long ZOOM_ANIM_MS = WorkspaceMotionSpec.DURATION_MS;
+    private static final long DORMANT_TRIM_MS = 5L * 60L * 1000L;
+    private Runnable dormantTrim;
     android.animation.ValueAnimator workspaceAnimator;
     android.animation.ValueAnimator mainSideAnimator;
     private float mainSideFrameX = Float.NaN;
@@ -2562,6 +2567,7 @@ public final class WorkspaceHost {
 
     /** Wait for the real Host buffer/wallpaper before shrinking the existing main surface. */
     private void beginWorkspaceEntry(Runnable ready) {
+        cancelDormantTrim();
         final long generation = ++workspaceGeneration;
         workspaceEntering = true;
         zoomAnimUntil = SystemClock.uptimeMillis() + 1000L;
@@ -4166,7 +4172,15 @@ public final class WorkspaceHost {
                 @Override public void onDisplayAdded(int displayId) {}
                 @Override public void onDisplayRemoved(int displayId) {}
                 @Override public void onDisplayChanged(int displayId) {
-                    if (displayId == Display.DEFAULT_DISPLAY) scheduleDisplayGeometryRefresh();
+                    if (displayId != Display.DEFAULT_DISPLAY) return;
+                    scheduleDisplayGeometryRefresh();
+                    Display display = displayManager == null ? null
+                            : displayManager.getDisplay(Display.DEFAULT_DISPLAY);
+                    boolean displayOn = display != null && display.getState() == Display.STATE_ON;
+                    // USER_PRESENT can precede STATE_ON while screenOn was already set by
+                    // the broadcast. Re-run the idempotent transition so retained privacy
+                    // cannot remain stuck after the physical display becomes ready.
+                    if (display != null) main.post(() -> onScreenState(displayOn));
                 }
             };
             displayManager.registerDisplayListener(displayListener, main);
@@ -4570,7 +4584,12 @@ public final class WorkspaceHost {
 
     /** Publish only confirmed bindings; system_server rechecks each native task before use. */
     private void publishDesktopSideTasks() {
-        desktopSideTaskPublisher.publish();
+        if(desktopPublishQueued)return;
+        desktopPublishQueued=true;
+        main.postDelayed(()->{
+            desktopPublishQueued=false;
+            desktopSideTaskPublisher.publish();
+        },50L);
     }
 
     private void promoteSideTaskForDesktopLaunch(String pkg, int launchUser, ComponentName entry) {
@@ -7261,6 +7280,41 @@ public final class WorkspaceHost {
         cellMovePreview.close();
         cellMovePreview = null;
         if (root != null) root.requestLayout();
+    }
+
+    static void onTrimMemory(int level) {
+        WorkspaceHost h=sInstance;
+        if(h==null)return;
+        h.main.post(()->h.trimMemory(level));
+    }
+
+    private void trimMemory(int level) {
+        if(level<android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
+                && level!=android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)return;
+        if(hostSceneActive()||retainedForLock||promotion!=null||transferBusy)return;
+        if(scene==ACTIVE||scene==RESUMING)return;
+        if(wallpaperBackdropRequested&&level<android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL)return;
+        if(topBar!=null)topBar.trimDormantMemory();
+        releaseWorkspaceBackdrop();
+        if(mainBackdrop!=null&&!mainBackdrop.isRecycled())mainBackdrop.recycle();mainBackdrop=null;
+        if(wallpaperBackdrop!=null&&!wallpaperBackdrop.isRecycled())wallpaperBackdrop.recycle();wallpaperBackdrop=null;
+        if(wellWallpaperBackdrop!=null&&!wellWallpaperBackdrop.isRecycled())wellWallpaperBackdrop.recycle();wellWallpaperBackdrop=null;
+        mainSideBackdrop=null;wallpaperBackdropDirty=true;wallpaperBackdropRequested=false;
+        Warmup.onTrimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN);
+        log("dormant memory trimmed level="+level);
+    }
+
+    private void scheduleDormantTrim() {
+        if(dormantTrim==null)dormantTrim=()->{
+            if(scene==SUSPENDED&&!retainedForLock&&!hostSceneActive())trimMemory(
+                    android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN);
+        };
+        main.removeCallbacks(dormantTrim);
+        main.postDelayed(dormantTrim,DORMANT_TRIM_MS);
+    }
+
+    private void cancelDormantTrim() {
+        if(dormantTrim!=null)main.removeCallbacks(dormantTrim);
     }
 
     private static void releaseCompactSnapshot(Promotion ticket) {

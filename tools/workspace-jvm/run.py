@@ -99,7 +99,7 @@ public class WorkspaceRegression {
   static void retire(Object ctx,Queue handler,Object token,java.util.function.BooleanSupplier current,Runnable release,java.util.function.Consumer<String> log){exitCurrent=current;exit=release;}}
  int backdropAcquires;LiveBackdrop workspaceBackdrop;View workspaceBackdropOwner;View.OnAttachStateChangeListener workspaceBackdropDetach;
  android.animation.ValueAnimator workspaceAnimator;float workspaceAlpha=1f;float mainSideFrameX=Float.NaN;Object mainSideAnimator;
- void writeZoomAnimated(boolean on){zoomWrites++;}void writeZoom(boolean on){zoomWrites++;}void setZoomState(boolean on){zoomed=on;}void scheduleMainCropClear(long d){}void publishDesktopSideTasks(){}
+ void writeZoomAnimated(boolean on){zoomWrites++;}void writeZoom(boolean on){zoomWrites++;}void setZoomState(boolean on){zoomed=on;}void scheduleMainCropClear(long d){}void publishDesktopSideTasks(){}void scheduleDormantTrim(){}void cancelDormantTrim(){}
  void resetTopForSuspend(){}
  boolean retentionAllowed,retainedOnExit;long retainedExitSourceEpoch=-1;int retainedHides;
  boolean canRetainBoundTasks(){return retentionAllowed;}

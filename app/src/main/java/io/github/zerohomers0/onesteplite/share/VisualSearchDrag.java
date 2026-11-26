@@ -21,7 +21,7 @@ import org.json.JSONObject;
 
 /** Turns the selected text or the visible image under a deliberate long press into native content. */
 final class VisualSearchDrag implements AutoCloseable {
-    private static final ExecutorService WORKER=Executors.newSingleThreadExecutor();
+    private static final ExecutorService WORKER=BackgroundExecutor.single("OneStepLite-visual-search");
     private final Activity activity;
     private final WebView web;
     private final Handler main=new Handler(Looper.getMainLooper());

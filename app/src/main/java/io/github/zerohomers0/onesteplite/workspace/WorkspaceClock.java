@@ -84,9 +84,12 @@ final class WorkspaceClock extends View {
         float d=getResources().getDisplayMetrics().density,font=getResources().getDisplayMetrics().scaledDensity;
         float anchor=startInset>=0?startInset:20*d,cy=getHeight()*.5f;
         getLocationOnScreen(screenPoint);
-        int key=java.util.Objects.hash(System.identityHashCode(wallpaper),wallpaperWidth,wallpaperHeight,
-                screenPoint[0],screenPoint[1],getWidth(),getHeight(),HyperOsStyle.dark(getContext()),
-                HyperOsStyle.textPrimary(getContext()));
+        int key=System.identityHashCode(wallpaper);
+        key=31*key+wallpaperWidth;key=31*key+wallpaperHeight;
+        key=31*key+screenPoint[0];key=31*key+screenPoint[1];
+        key=31*key+getWidth();key=31*key+getHeight();
+        key=31*key+(HyperOsStyle.dark(getContext())?1:0);
+        key=31*key+HyperOsStyle.textPrimary(getContext());
         if(!inkValid || key!=inkKey){
             inkKey=key;inkValid=true;
             inkColor=HyperOsStyle.dark(getContext())?0xffffffff:HyperOsStyle.wallpaperTextColor(wallpaper,wallpaperWidth,wallpaperHeight,

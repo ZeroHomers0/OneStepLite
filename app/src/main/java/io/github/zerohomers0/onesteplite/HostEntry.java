@@ -143,7 +143,10 @@ public class HostEntry implements IXposedHookLoadPackage {
     static final long sZoomWatcherStarted = System.currentTimeMillis();
     static final KeyguardZoom sKeyguardZoom = new KeyguardZoom();
     static final ZoomChannelState sZoomChannels = new ZoomChannelState(sZoomWatcherStarted);
-    static volatile android.os.FileObserver sZoomFileObserver;
+    static volatile android.os.FileObserver[] sZoomFileObservers;
+    static volatile boolean sSystemZoomObserverArmed;
+    static volatile boolean sZoomWatchScreenOn = true;
+    static boolean sZoomWatchQueued;
     static volatile Handler sZoomBridgeHandler;
     static volatile boolean sHostZoomed;
     static volatile long sUnlockPhysicalShadeGeneration, sUnlockPhysicalShadeUntil;
@@ -202,8 +205,8 @@ public class HostEntry implements IXposedHookLoadPackage {
         installRotationAndFocusHooks(cl);
         captureSystemContext(cl);
         installDesktopIconLaunchBridge(cl);
-        startZoomFileWatcher();
         installZoomFileObserver();
+        startZoomFileWatcher();
     }
     private boolean installDisplayContentHook(ClassLoader cl){
         try{
@@ -315,11 +318,22 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
     static void startZoomFileWatcher(){
         try{
-            BackgroundExecutor.schedule(HostEntry::pollZoomFiles,0L);
+            armZoomWatch(0L);
             log("ZOOM lease watcher armed; transforms only on locked WMS handler");
         }catch(Throwable failure){log("ZOOM watcher failed: "+failure);}
     }
+    static synchronized void onZoomScreenState(boolean on){
+        sZoomWatchScreenOn=on;
+        if(on)armZoomWatch(0L);
+    }
+    private static synchronized void armZoomWatch(long delay){
+        if(sZoomWatchQueued||!sZoomWatchScreenOn)return;
+        sZoomWatchQueued=true;
+        BackgroundExecutor.schedule(HostEntry::pollZoomFiles,delay);
+    }
     private static void pollZoomFiles(){
+        synchronized(HostEntry.class){sZoomWatchQueued=false;}
+        if(!sZoomWatchScreenOn)return;
         try{
             java.io.File systemFile=new java.io.File("/data/system/onesteplite-zoom");
             java.io.File uiFile=new java.io.File("/data/user_de/0/com.android.systemui/files/onesteplite-zoom");
@@ -329,7 +343,8 @@ public class HostEntry implements IXposedHookLoadPackage {
         }catch(Throwable ignored){
             // FileObserver/settings/broadcast paths remain authoritative; this is a bounded fallback.
         }finally{
-            BackgroundExecutor.schedule(HostEntry::pollZoomFiles,sZoomed||sZoomScale<1f?250L:10_000L);
+            long idle=sSystemZoomObserverArmed?60_000L:10_000L;
+            armZoomWatch(sZoomed||sZoomScale<1f?250L:idle);
         }
     }
     static volatile boolean sZoomBridgeArmed;
@@ -400,6 +415,8 @@ public class HostEntry implements IXposedHookLoadPackage {
             filter.addAction(RetainedWindow.ACTION);
             filter.addAction(SwapOverlayBridge.ACTION);
             filter.addAction(Actions.TRANSFER_TOUCH);
+            filter.addAction(Intent.ACTION_SCREEN_OFF);
+            filter.addAction(Intent.ACTION_SCREEN_ON);
             filter.addAction(InputTrace.ACTION);
             filter.addAction(BottomReplayInput.ACTION);
             filter.addAction(DesktopLaunchBridge.ACTION);
@@ -978,7 +995,8 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     /** 宿主写 SystemUI 私有文件时立即处理，避免 250ms 轮询造成的桥/缩放不同帧。 */
     static void installZoomFileObserver() {
-        ZoomFileObserverHooks.install(observer -> sZoomFileObserver = observer,
+        sSystemZoomObserverArmed=ZoomFileObserverHooks.install(
+                observers -> sZoomFileObservers=observers,
                 HostEntry::readAndDispatchZoom, HostEntry::log);
     }
 
@@ -2608,9 +2626,27 @@ public class HostEntry implements IXposedHookLoadPackage {
         finally { if (tx != null) try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ } }
     }
 
+    private static void installMemoryCallbacks(Context context) {
+        try {
+            context.registerComponentCallbacks(new android.content.ComponentCallbacks2() {
+                @Override public void onConfigurationChanged(android.content.res.Configuration configuration) {}
+                @Override public void onLowMemory() {
+                    Warmup.onTrimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE);
+                    WorkspaceHost.onTrimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE);
+                }
+                @Override public void onTrimMemory(int level) {
+                    Warmup.onTrimMemory(level);
+                    WorkspaceHost.onTrimMemory(level);
+                }
+            });
+        } catch (Throwable unavailable) {
+            log("memory callbacks unavailable: " + unavailable);
+        }
+    }
+
     private void hookApplication(ClassLoader cl) {
         SystemUiHooks.install(cl, context -> {
-            sContext=context;Warmup.start(context,cl);
+            sContext=context;Warmup.start(context,cl);installMemoryCallbacks(context);
             log("captured Context -> " + context);scheduleStart();
         }, HostEntry::log);
     }

@@ -9,6 +9,11 @@ root = Path(__file__).resolve().parents[2]
 src=package_dir(root,sys.argv[2] if len(sys.argv)>2 else None)
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
 source = (src/'HostEntry.java').read_text(encoding='utf8')
+hooks=(src/'ZoomFileObserverHooks.java').read_text(encoding='utf-8-sig')
+if '/data/system' not in hooks or '/data/user_de/0/com.android.systemui/files' not in hooks:
+    raise AssertionError('zoom events must observe both current and legacy storage')
+if 'sSystemZoomObserverArmed?60_000L:10_000L' not in source:
+    raise AssertionError('successful system observation must extend the idle fallback')
 start = source.index('    private void applyDisplayZoomLocked(ZoomTarget target, float scale,\n            float offsetY, float offsetX, ZoomCommit commit)')
 native = source.index('    void applyDisplayZoomLocked(ZoomTarget target, float scale,\n            float offsetY, float offsetX, ZoomCommit commit, boolean nativeVisibility)')
 pos = source.index('{', native)+1; depth = 1

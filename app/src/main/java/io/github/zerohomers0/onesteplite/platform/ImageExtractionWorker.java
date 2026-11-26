@@ -8,7 +8,8 @@ import java.util.concurrent.TimeUnit;
 final class ImageExtractionWorker {
     // Binder calls can outlive their lease. Leave one worker available for a subsequent gesture.
     private final ThreadPoolExecutor executor=
-            new ThreadPoolExecutor(2,2,30L,TimeUnit.SECONDS,new ArrayBlockingQueue<>(1));
+            new ThreadPoolExecutor(2,2,30L,TimeUnit.SECONDS,new ArrayBlockingQueue<>(1),
+                    BackgroundExecutor.daemonFactory("OneStepLite-image-extract"));
 
     ImageExtractionWorker() {
         executor.allowCoreThreadTimeOut(true);

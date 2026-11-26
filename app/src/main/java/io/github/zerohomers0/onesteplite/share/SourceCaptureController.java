@@ -27,7 +27,7 @@ import java.util.function.Supplier;
 
 /** Explicit main-window crop; closed scenes discard buffers and any unconsumed private capture. */
 final class SourceCaptureController implements AutoCloseable {
-    private static final ExecutorService WORKER=Executors.newSingleThreadExecutor();
+    private static final ExecutorService WORKER=BackgroundExecutor.single("OneStepLite-source-capture");
     private final View anchor;
     private final Context context;
     private final BooleanSupplier ready;

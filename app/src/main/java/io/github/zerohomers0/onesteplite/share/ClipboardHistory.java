@@ -9,17 +9,13 @@ import android.os.Looper;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 /** Fixed bounded text history listens only while the workspace is active; sensitive clips are skipped. */
 final class ClipboardHistory {
     private static final int LIMIT=64;
-    private static final ExecutorService WORKER=Executors.newSingleThreadExecutor(runnable->{
-        Thread thread=new Thread(runnable,"OneStepLite-clipboard-history");
-        thread.setDaemon(true);return thread;
-    });
+    private static final ExecutorService WORKER=BackgroundExecutor.single("OneStepLite-clipboard-history");
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     private final Context context;
     private final ClipboardManager clipboard;

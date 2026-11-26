@@ -5,6 +5,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from source_paths import package_dir
 root=Path(__file__).resolve().parents[2];src=package_dir(root);out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 source=(src/'ContentPanel.java').read_text(encoding='utf-8-sig')
+if 'java.util.Set<String> ordered=new java.util.HashSet<>();' not in source or '!order.contains(key)' in source:
+    raise AssertionError('content ordering must use set membership rather than repeated list scans')
 def member(signature):
     start=source.index(signature);end=source.index('{',start)+1;depth=1
     while depth:

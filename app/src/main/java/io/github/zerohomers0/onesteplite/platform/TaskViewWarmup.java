@@ -40,7 +40,7 @@ final class TaskViewWarmup {
             context = base.createDisplayContext(display).createWindowContext(
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null);
             configuration = configuration(context);
-            create(generation, 5);
+            create(generation, 2);
         } catch (Throwable unavailable) { clear();prepared = true; }
     }
     private static void create(int owner, int remaining) {
@@ -59,6 +59,12 @@ final class TaskViewWarmup {
             }));
         } catch (Throwable unavailable) { pending = 0; }
     }
+    static void trimForMemory() {
+        MAIN.post(() -> {
+            if (!claimed) clear();
+        });
+    }
+
     static Object take(Context target, Object creator) {
         claimed = true;
         if (factory != creator || user != CurrentUser.id()

@@ -31,7 +31,7 @@ final class ContentPanel {
     private final View anchor;
     private final Runnable capture;
     private final java.util.function.Supplier<android.graphics.Rect> bounds;
-    private static final ExecutorService WORKER = Executors.newSingleThreadExecutor();
+    private static final ExecutorService WORKER = BackgroundExecutor.single("OneStepLite-content-panel");
     private Dialog dialog;
     private ContentPanelLayout shell;
     private ContentPanelActions panelActions;
@@ -251,11 +251,12 @@ final class ContentPanel {
                 java.util.Set<String> existing=preferences().getStringSet("hidden_"+page,
                         java.util.Collections.emptySet());
                 java.util.List<String> order=new java.util.ArrayList<>();
+                java.util.Set<String> ordered=new java.util.HashSet<>();
                 for(String key:preferences().getString("hidden_order_"+page,"").split("\n"))
-                    if(!key.isEmpty() && existing.contains(key) && !order.contains(key))order.add(key);
-                for(String key:existing)if(!order.contains(key))order.add(key);
-                for(String key:mounted)if(!order.contains(key))order.add(key);
-                for(String key:scanned)if(!order.contains(key))order.add(key);
+                    if(!key.isEmpty() && existing.contains(key) && ordered.add(key))order.add(key);
+                for(String key:existing)if(ordered.add(key))order.add(key);
+                for(String key:mounted)if(ordered.add(key))order.add(key);
+                for(String key:scanned)if(ordered.add(key))order.add(key);
                 while(order.size()>256)order.remove(0);
                 java.util.LinkedHashSet<String> merged=new java.util.LinkedHashSet<>(order);
                 preferences().edit().putStringSet("hidden_"+page,merged)
@@ -559,9 +560,11 @@ final class ContentPanel {
         anchor.post(()->{
             if(!valid(token,user))return;
             boolean heading=false;
+            java.util.Set<String> knownTexts=new java.util.HashSet<>();
+            for(ContentEntry row:entries.values())if(row.text!=null)knownTexts.add(row.text);
             for(ContentEntry entry:rows) {
                 if(entry.addedAt<=clearedAt)continue;
-                if(entries.values().stream().anyMatch(row->entry.text.equals(row.text)))continue;
+                if(entry.text!=null && !knownTexts.add(entry.text))continue;
                 if(!heading){shell.heading("应用分享的文字",contentWidth);heading=true;}
                 addEntry(entry);
             }
@@ -794,10 +797,11 @@ final class ContentPanel {
             clipboardError="当前剪贴板暂不支持此内容";
         }
         try {
+            java.util.Set<String> currentKeys=new java.util.HashSet<>();
+            for(ContentEntry row:current)currentKeys.add(row.key);
             for(ClipboardHistory.Record record:history.records()) {
                 String key="text:"+record.text;
-                boolean duplicate=false;for(ContentEntry row:current)if(row.key.equals(key)){duplicate=true;break;}
-                if(duplicate)continue;
+                if(!currentKeys.add(key))continue;
                 historyRows.add(new ContentEntry(key,(record.pinned?"已固定 · ":"")+record.text,
                         "text/plain",record.text,null,null,-1,record.time));
             }

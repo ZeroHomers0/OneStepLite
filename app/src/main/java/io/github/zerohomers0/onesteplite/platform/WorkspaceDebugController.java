@@ -84,6 +84,9 @@ final class WorkspaceDebugController {
     }
 
     void debugDumpViews() {
-        host.main.post(() -> WorkspaceDiagnostics.dumpViewTree(host.root, WorkspaceHost::log));
+        host.main.post(() -> {
+            WorkspaceHost.log(BackgroundExecutor.diagnostics());
+            WorkspaceDiagnostics.dumpViewTree(host.root, WorkspaceHost::log);
+        });
     }
 }

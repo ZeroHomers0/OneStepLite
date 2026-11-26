@@ -32,7 +32,7 @@ import java.util.function.Supplier;
 
 /** Owns only the content rail and drag session; task promotion stays with the Host. */
 final class ShareWorkspace extends FrameLayout {
-    private static final ExecutorService WORKER = Executors.newSingleThreadExecutor();
+    private static final ExecutorService WORKER = BackgroundExecutor.single("OneStepLite-share-rail");
     private final HorizontalScrollView scroll;
     private final FrameLayout shareFace;
     private final LinearLayout targets;

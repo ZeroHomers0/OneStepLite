@@ -17,8 +17,8 @@ import java.util.concurrent.Executors;
 
 /** Full settings page: cancel stale loads, serialize each selection's persistence without leaving. */
 final class ShortcutManagementPage extends FrameLayout {
-    private static final ExecutorService APP_WORKER=Executors.newSingleThreadExecutor();
-    private static final ExecutorService SHARE_WORKER=Executors.newSingleThreadExecutor();
+    private static final ExecutorService APP_WORKER=BackgroundExecutor.single("OneStepLite-shortcuts-apps");
+    private static final ExecutorService SHARE_WORKER=BackgroundExecutor.single("OneStepLite-shortcuts-share");
     private final boolean applications;
     private final Bundle restored;
     private final Warmup warmup;

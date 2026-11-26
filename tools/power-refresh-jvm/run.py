@@ -5,6 +5,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from source_paths import package_dir
 src = package_dir(Path(__file__).resolve().parents[2])
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
+warmup=(src/'Warmup.java').read_text(encoding='utf-8-sig')
+if 'firstUseOnly' not in warmup or 'usedBefore(base)' not in warmup:
+    raise AssertionError('first workspace use must skip heavy background warmup')
+taskview=(src/'TaskViewWarmup.java').read_text(encoding='utf-8-sig')
+if 'create(generation, 2)' not in taskview:
+    raise AssertionError('boot TaskView warmup must stay bounded to two views')
+host=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+if 'DORMANT_TRIM_MS' not in host or 'desktopPublishQueued' not in host:
+    raise AssertionError('dormant trim and publish coalescing must remain wired')
+hostentry=(src/'HostEntry.java').read_text(encoding='utf-8-sig')
+if 'sZoomWatchScreenOn' not in hostentry or 'onZoomScreenState(false)' not in (src/'ZoomBridgeReceiver.java').read_text(encoding='utf-8-sig'):
+    raise AssertionError('zoom watchdog must stop while the screen is off')
+clock=(src/'WorkspaceClock.java').read_text(encoding='utf-8-sig')
+if 'Objects.hash(' in clock:
+    raise AssertionError('clock draw path still allocates a varargs hash array each frame')
 def member(file, signature):
     text = (src / file).read_text(encoding='utf-8-sig')
     start = text.index(signature); end = text.index('{', start) + 1; depth = 1
@@ -22,7 +37,7 @@ for signature in ['    void requestOpenedAppsRefresh(', '    void setWorkspaceAc
 host = member('WorkspaceHost.java', '    private void startWorkspaceHeartbeat(')
 host += member('WorkspaceHost.java', '    private void setZoomState(')
 body = '''package io.github.zerohomers0.onesteplite;
-import java.util.*;
+import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.*;
 public class PowerRefreshRegression {
  static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
  static class Queue {
@@ -63,7 +78,7 @@ __RAIL__
   void ensureCellBackground(Slot s){}void reapplyScale(Slot s){repairs++;}void scheduleSideVisibilityRepair(Slot s){}
 __HOST__
  }
- public static void main(String[] args){
+ public static void main(String[] args)throws Exception{
   Rail r=new Rail();for(int i=0;i<20;i++)r.requestOpenedAppsRefresh();
   check(r.pending.size()==1&&r.pending.values().iterator().next()==100L,"task bursts coalesce before querying Binder");
   r.run();check(r.reads==1&&r.updates==1&&r.pending.isEmpty(),"visible rail refresh is event-driven");
@@ -92,6 +107,18 @@ __HOST__
   check(RoutineLog.allow("writeZoom failed: test",1000)&&RoutineLog.allow("writeZoom failed: test",1001),"errors are never throttled");
   for(int i=0;i<200;i++)RoutineLog.allow("task window state task="+i,1000);
   check(RoutineLog.allow("WM zoom applied scale=test",31001),"diagnostic cache is bounded");
+  CountDownLatch poolRan=new CountDownLatch(1);AtomicReference<String> poolThread=new AtomicReference<>();boolean[] poolDaemon={false};
+  BackgroundExecutor.execute(()->{poolThread.set(Thread.currentThread().getName());poolDaemon[0]=Thread.currentThread().isDaemon();poolRan.countDown();});
+  check(poolRan.await(2,TimeUnit.SECONDS)&&poolThread.get()!=null&&poolThread.get().startsWith("OneStepLite-background"),
+        "shared background work uses a named pool");
+  check(poolDaemon[0],"background pool workers are daemon threads");
+  String poolDiagnostics=null;
+  for(int i=0;i<200;i++){String current=BackgroundExecutor.diagnostics();
+    if(current.contains("completed=1")&&current.contains("queued=0")&&current.contains("active=0")){poolDiagnostics=current;break;}
+    Thread.sleep(2);}
+  check(poolDiagnostics!=null,"background pool accounting settles after completion");
+  check(poolDiagnostics.contains("submitted=1")&&poolDiagnostics.contains("failed=0")&&poolDiagnostics.contains("maxMs="),
+        "background pool diagnostics expose queue, result and duration state");
   System.out.println("Production power refresh lifecycle checks="+checks+" passed");
  }
 }'''.replace('__RAIL__', rail).replace('__HOST__', host.replace('WorkspaceHost.this', 'thisHost()'))
@@ -100,5 +127,5 @@ body = body.replace('static Host sInstance;', 'Host thisHost(){return this;}stat
 p = out/'PowerRefreshRegression.java'; p.write_text(body, encoding='utf-8')
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 anim=out/'android/animation/ValueAnimator.java';anim.parent.mkdir(parents=True,exist_ok=True);anim.write_text('package android.animation;public class ValueAnimator{public void cancel(){}}',encoding='utf-8')
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(p),str(src/'RoutineLog.java'),str(anim)],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(p),str(src/'RoutineLog.java'),str(src/'BackgroundExecutor.java'),str(anim)],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.PowerRefreshRegression'],check=True)

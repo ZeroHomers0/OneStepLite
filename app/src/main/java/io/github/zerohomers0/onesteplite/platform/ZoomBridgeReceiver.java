@@ -14,6 +14,8 @@ final class ZoomBridgeReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context ignored,Intent intent){
         if(intent==null)return;
         String action=intent.getAction();
+        if(Intent.ACTION_SCREEN_OFF.equals(action)){onZoomScreenState(false);return;}
+        if(Intent.ACTION_SCREEN_ON.equals(action)){onZoomScreenState(true);return;}
         if(RetainedWindow.ACTION.equals(action))handleRetained(intent);
         else if(UnlockHandoff.RELEASE.equals(action))handleUnlockRelease(intent);
         else if(BottomReplayInput.ACTION.equals(action))BottomReplayInput.setMode(intent.getIntExtra("mode",0));

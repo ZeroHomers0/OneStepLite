@@ -36,6 +36,7 @@ final class PortalSource implements AutoCloseable {
     private static final java.util.concurrent.ExecutorService PREVIEW_WORKER=
             new java.util.concurrent.ThreadPoolExecutor(1,1,0,TimeUnit.MILLISECONDS,
                     new java.util.concurrent.ArrayBlockingQueue<>(1),
+                    BackgroundExecutor.daemonFactory("OneStepLite-portal-preview"),
                     new java.util.concurrent.ThreadPoolExecutor.DiscardOldestPolicy());
     private volatile Bundle liftCandidate;
     private long liftAt;

@@ -57,6 +57,7 @@ paths=[]
 for name,body in files.items():
     path=out/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(body,encoding='utf-8');paths.append(str(path))
 paths.append(str(src/'MediaStoreImageBridge.java'))
+paths.append(str(src/'BackgroundExecutor.java'))
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.PortalMediaRegression'],check=True)

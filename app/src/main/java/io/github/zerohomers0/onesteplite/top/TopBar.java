@@ -158,6 +158,14 @@ final class TopBar extends FrameLayout {
         quickRail.setApps(QuickAppPins.arrange(getContext(), availableApps));
     }
     void closeContentUi() { if (shareWorkspace != null) shareWorkspace.close(); }
+    void trimDormantMemory() {
+        closeContentUi();
+        availableApps=java.util.Collections.emptyList();
+        quickRail.setApps(java.util.Collections.emptyList());
+        glassWallpaper=null;glassWidth=0;glassHeight=0;setBackground(null);
+        if(clock!=null)clock.setWallpaper(null,0,0);
+        invalidate();
+    }
     boolean onWindowContentDrag(android.view.DragEvent event, String targetPackage) {
         return dragShareEnabled && shareWorkspace != null && shareWorkspace.onWindowDrag(event, targetPackage,
                 !isShown() || listener.contentRailCovered());

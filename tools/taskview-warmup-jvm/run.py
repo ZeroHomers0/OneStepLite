@@ -31,19 +31,19 @@ public class TaskViewWarmupRegression {
  static void prepare(Context c,Object factory){TaskViewWarmup.configure(c,Runnable::run,factory);Handler.drain();TaskViewWarmup.prepare();Handler.drain();}
  public static void main(String[]args){
   Context c=new Context();Object factory=new Object();prepare(c,factory);
-  check(ShellCompat.creates==5&&c.contexts==1,"boot creates five empty unattached views using one context");
-  for(int i=0;i<20;i++)TaskViewWarmup.prepare();Handler.drain();check(ShellCompat.creates==5,"completed warmup never replenishes or polls");
-  for(int i=0;i<5;i++)check(TaskViewWarmup.take(c,factory)!=null,"first host borrows a prepared view");
+  check(ShellCompat.creates==2&&c.contexts==1,"boot creates two empty unattached views using one context");
+  for(int i=0;i<20;i++)TaskViewWarmup.prepare();Handler.drain();check(ShellCompat.creates==2,"completed warmup never replenishes or polls");
+  for(int i=0;i<2;i++)check(TaskViewWarmup.take(c,factory)!=null,"first host borrows a prepared view");
   check(TaskViewWarmup.take(c,factory)==null,"cache exhaustion returns to native factory path");
-  TaskViewWarmup.prepare();Handler.drain();check(ShellCompat.creates==5,"demand permanently retires boot preparation");
+  TaskViewWarmup.prepare();Handler.drain();check(ShellCompat.creates==2,"demand permanently retires boot preparation");
   c=new Context();factory=new Object();prepare(c,factory);int releases=ShellCompat.releases;c.resources.config.densityDpi++;
-  check(TaskViewWarmup.take(c,factory)==null&&ShellCompat.releases==releases+5,"changed resources discard incompatible views");
+  check(TaskViewWarmup.take(c,factory)==null&&ShellCompat.releases==releases+2,"changed resources discard incompatible views");
   c=new Context();factory=new Object();prepare(c,factory);releases=ShellCompat.releases;CurrentUser.user++;
-  check(TaskViewWarmup.take(c,factory)==null&&ShellCompat.releases==releases+5,"foreign user cannot reuse cached views");
+  check(TaskViewWarmup.take(c,factory)==null&&ShellCompat.releases==releases+2,"foreign user cannot reuse cached views");
   android.provider.Settings.Global.boot++;TaskViewWarmup.userChanged();prepare(c,factory);check(TaskViewWarmup.take(c,factory)!=null,"user change permits a fresh bounded preparation");
   EntryGuard.open=false;int before=ShellCompat.creates;c=new Context();factory=new Object();prepare(c,factory);
   check(ShellCompat.creates==before,"locked boot never constructs a TaskView");EntryGuard.open=true;TaskViewWarmup.prepare();Handler.drain();
-  check(ShellCompat.creates==before+5,"authenticated wake enables one preparation");
+  check(ShellCompat.creates==before+2,"authenticated wake enables one preparation");
   ShellCompat.defer=true;c=new Context();factory=new Object();TaskViewWarmup.configure(c,Runnable::run,factory);Handler.drain();TaskViewWarmup.prepare();
   Runnable late=ShellCompat.callbacks.remove(0);TaskViewWarmup.userChanged();releases=ShellCompat.releases;late.run();Handler.drain();
   check(ShellCompat.releases==releases+1,"stale creation callback releases its own view");

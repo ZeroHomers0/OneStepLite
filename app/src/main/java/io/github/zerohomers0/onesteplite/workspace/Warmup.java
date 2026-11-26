@@ -26,6 +26,8 @@ import de.robv.android.xposed.XposedHelpers;
 final class Warmup {
     private static final Object LOCK = new Object();
     private static final String USER_SWITCHED = "android.intent.action.USER_SWITCHED";
+    private static final String PREFS = "workspace_warmup";
+    private static final String USED = "workspace_used";
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final ScheduledExecutorService WORK = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(() -> {
@@ -123,7 +125,11 @@ final class Warmup {
             if (cached == null) pendingApps.add(new PendingApps(user, ready));
         }
         if (cached != null) deliver(context, new PendingApps(user, ready), cached);
-        else schedule(context, 0L);
+        else {
+            boolean firstUse = !usedBefore(context);
+            markUsed(context);
+            schedule(context, 0L, firstUse);
+        }
     }
 
     /** Nonblocking ownership transfer: no capture, rendering or Binder calls on the opening frame. */
@@ -136,21 +142,27 @@ final class Warmup {
     }
 
     private static void schedule(Context context, long delayMillis) {
+        schedule(context, delayMillis, false);
+    }
+
+    private static void schedule(Context context, long delayMillis, boolean firstUseOnly) {
         synchronized (LOCK) {
             if (scheduled != null) scheduled.cancel(false);
-            scheduled = WORK.schedule(() -> prepare(context), delayMillis, TimeUnit.MILLISECONDS);
+            scheduled = WORK.schedule(() -> prepare(context, firstUseOnly), delayMillis, TimeUnit.MILLISECONDS);
         }
     }
 
-    private static void prepare(Context base) {
+    private static void prepare(Context base, boolean firstUseOnly) {
         try {
             preloadClasses();
+            if (!firstUseOnly && !usedBefore(base)) return;
+            boolean prewarmHeavy = !firstUseOnly;
             int user = currentUser();
             if (user < 0) return;
             Context context = userContext(base, user);
             UserManager userManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
             if (userManager == null || !userManager.isUserUnlocked()) return;
-            whenUiIdle(TaskViewWarmup::prepare);
+            if (prewarmHeavy) whenUiIdle(TaskViewWarmup::prepare);
             long request;
             boolean needApps, needWallpaper;
             synchronized (LOCK) {
@@ -182,10 +194,10 @@ final class Warmup {
             }
             // Shortcut delivery never waits for the heavier wallpaper blur.
             for (PendingApps pending : callbacks) deliver(base, pending, ready, request);
-            prepareChrome(base,user,ready,request);
+            if (prewarmHeavy) prepareChrome(base,user,ready,request);
             Bitmap blurred = null,well=null;
             int width = 0, height = 0;
-            if (needWallpaper) {
+            if (prewarmHeavy && needWallpaper) {
                 WindowManager windows = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
                 if (windows != null) {
                     Point size = new Point();
@@ -215,6 +227,39 @@ final class Warmup {
                 }
             }
         } catch (Throwable error) { failed("background cache", error); }
+    }
+
+    static void onTrimMemory(int level) {
+        if (level < android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
+                && level != android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) return;
+        TaskViewWarmup.trimForMemory();
+        ChromeWarmup.invalidate(false);
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+                || level == android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+                || level == android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
+            synchronized (LOCK) {
+                generation++;
+                apps = Collections.emptyList();appsLoaded=false;appsPreparedAt=0L;
+                wallpaperPrepared=false;
+                if(wallpaper!=null && !wallpaper.isRecycled())wallpaper.recycle();
+                if(wellWallpaper!=null && !wellWallpaper.isRecycled())wellWallpaper.recycle();
+                wallpaper=null;wellWallpaper=null;
+            }
+        }
+    }
+
+    private static boolean usedBefore(Context context) {
+        try {
+            return context.createDeviceProtectedStorageContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getBoolean(USED, false);
+        } catch (Throwable unavailable) { return false; }
+    }
+
+    private static void markUsed(Context context) {
+        try {
+            context.createDeviceProtectedStorageContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .edit().putBoolean(USED, true).apply();
+        } catch (Throwable ignored) { /* Warmup remains optional. */ }
     }
 
     private static void whenUiIdle(Runnable action) {
