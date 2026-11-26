@@ -5,14 +5,17 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from source_paths import package_dir
 src=package_dir(Path(__file__).resolve().parents[2]);out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 files={
-'android/util/Log.java':'package android.util;public class Log{public static int w(String t,String m,Throwable e){return 0;}}',
+'android/util/Log.java':'package android.util;public class Log{public static int w(String t,String m,Throwable e){return 0;}public static int i(String t,String m){return 0;}}',
+'android/os/IBinder.java':'package android.os;public interface IBinder{}',
 'android/os/Handler.java':'''package android.os;public class Handler{public java.util.Set<Runnable> delayed=new java.util.HashSet<>();public void post(Runnable r){r.run();}public void postDelayed(Runnable r,long t){delayed.add(r);}public void removeCallbacks(Runnable r){delayed.remove(r);}}''',
 'android/os/PersistableBundle.java':'''package android.os;public class PersistableBundle{public void putString(String k,String v){}}''',
 'android/content/ClipData.java':'''package android.content;public class ClipData{public String mime="text";public Description getDescription(){return new Description();}public class Description{public boolean hasMimeType(String type){return type.equals(mime+"/*");}public android.os.PersistableBundle getExtras(){return new android.os.PersistableBundle();}public void setExtras(Object o){}}}''',
 'android/view/View.java':'package android.view;public class View{public static final int DRAG_FLAG_GLOBAL=256;}',
 'android/content/Context.java':'''package android.content;public class Context{public Resources getResources(){return new Resources();}public static class Resources{public Metrics getDisplayMetrics(){return new Metrics();}}public static class Metrics{public int heightPixels=1000;}}''',
 'android/graphics/Point.java':'package android.graphics;public class Point{public int x,y;}',
-'android/graphics/Rect.java':'package android.graphics;public class Rect{public int top=700;}',
+'android/graphics/Rect.java':'package android.graphics;public class Rect{public int left,top,right,bottom;public Rect(){}public Rect(int l,int t,int r,int b){left=l;top=t;right=r;bottom=b;}public boolean contains(int x,int y){return x>=left&&x<right&&y>=top&&y<bottom;}}',
+'android/content/ClipDescription.java':'package android.content;public class ClipDescription{public String mime="image";public boolean hasMimeType(String type){return type.equals(mime+"/*");}}',
+'android/view/WindowManager.java':'package android.view;public class WindowManager{public static class LayoutParams{public static final int FLAG_SECURE=8192;public String packageName;public int flags;}}',
 'android/graphics/Canvas.java':'package android.graphics;public class Canvas{public void drawColor(int c,Object m){}}',
 'android/graphics/Color.java':'package android.graphics;public class Color{public static int TRANSPARENT=0;}',
 'android/graphics/PorterDuff.java':'package android.graphics;public class PorterDuff{public static class Mode{public static Object CLEAR=new Object();}}',
@@ -21,7 +24,7 @@ files={
 'de/robv/android/xposed/XC_MethodHook.java':'''package de.robv.android.xposed;public class XC_MethodHook{protected void beforeHookedMethod(MethodHookParam p){}public void fire(MethodHookParam p){beforeHookedMethod(p);}public static class MethodHookParam{public Object thisObject;public Object[] args;public Object result;public void setResult(Object r){result=r;}}}''',
 'de/robv/android/xposed/XposedBridge.java':'''package de.robv.android.xposed;public class XposedBridge{public static java.util.Map<String,XC_MethodHook> hooks=new java.util.HashMap<>();public static java.util.Set<Object> hookAllMethods(Class<?> c,String m,XC_MethodHook h){hooks.put(m,h);return java.util.Set.of(h);}}''',
 'de/robv/android/xposed/XposedHelpers.java':'''package de.robv.android.xposed;public class XposedHelpers{public static java.util.Map<Object,java.util.Map<String,Object>> extras=new java.util.IdentityHashMap<>();
-public static Class<?> findClass(String n,ClassLoader l){return Object.class;}public static Object getObjectField(Object o,String n){try{return o.getClass().getField(n).get(o);}catch(Exception e){throw new RuntimeException(e);}}
+public static Class<?> findClass(String n,ClassLoader l){if(n.equals("com.android.server.wm.DragDropController"))try{return Class.forName("io.github.zerohomers0.onesteplite.NativeGeometryRegression$DragDropController");}catch(Exception e){throw new RuntimeException(e);}return Object.class;}public static Object getObjectField(Object o,String n){try{return o.getClass().getField(n).get(o);}catch(Exception e){throw new RuntimeException(e);}}
 public static int getIntField(Object o,String n){return (Integer)getObjectField(o,n);}
 public static float getFloatField(Object o,String n){return (Float)getObjectField(o,n);}public static void setFloatField(Object o,String n,float v){try{o.getClass().getField(n).setFloat(o,v);}catch(Exception e){throw new RuntimeException(e);}}
 public static Object getAdditionalInstanceField(Object o,String n){return extras.getOrDefault(o,java.util.Map.of()).get(n);}public static void setAdditionalInstanceField(Object o,String n,Object v){extras.computeIfAbsent(o,k->new java.util.HashMap<>()).put(n,v);}public static void removeAdditionalInstanceField(Object o,String n){extras.get(o).remove(n);}
@@ -32,15 +35,19 @@ class ContentDragShadow{int recycled;void recycleThumbnail(){recycled++;}}
 class NativeContentDragCard{static boolean files(android.content.ClipData c){return c.mime.equals("file");}}
 class PortalDragInput{static Object originalWindow(Object w){return ((NativeGeometryRegression.Target)w).original;}}
 class WindowIdentity{static boolean ownsPicker(Object w,Object d){return false;}
-static boolean ownsShareReceiver(Object w){return ((NativeGeometryRegression.Target)w).shareReceiver;}}
+static boolean ownsShareReceiver(Object w){return ((NativeGeometryRegression.Target)w).shareReceiver;}
+static boolean ownsDropRelay(Object w,Object d){return ((NativeGeometryRegression.Target)w).relay;}}
 class Tags{static final String PROBE="test";}
+class Packages{static final String SYSTEM_UI="com.android.systemui";}
 public class NativeGeometryRegression{
-public static class State{public Object mLocalWin=new Object();public SurfaceControl mSurfaceControl=new SurfaceControl();public float mThumbOffsetY=107,mCurrentX=500,mCurrentY=870;public Set<Object> mNotifiedWindows=new HashSet<>();public Wm mService=new Wm();public android.content.ClipData mData;public int mFlags,ended;public void endDragLocked(boolean consumed,boolean relinquish){if(consumed||relinquish)throw new AssertionError("cancel must not report success");ended++;}}
+public static class State{public Object mLocalWin=new Object();public SurfaceControl mSurfaceControl=new SurfaceControl();public float mThumbOffsetY=107,mCurrentX=500,mCurrentY=870,mCurrentDisplayX,mCurrentDisplayY;public Set<Object> mNotifiedWindows=new HashSet<>();public Wm mService=new Wm();public android.content.ClipData mData;public android.content.ClipDescription mDataDescription=new android.content.ClipDescription();public Object mCurrentDisplayContent;public int mSourceUserId,mFlags,ended;public void endDragLocked(boolean consumed,boolean relinquish){if(consumed||relinquish)throw new AssertionError("cancel must not report success");ended++;}public boolean isWindowNotified(Object w){return mNotifiedWindows.contains(w);}public void sendDragStartedIfNeededLocked(Object w){mNotifiedWindows.add(w);}}
 public static class RomState extends State{public float mCurrentDisplayX=500,mCurrentDisplayY=870;}
 public static class Wm{public Map<Object,Object> mWindowMap=new HashMap<>(),mInputToWindowMap=new HashMap<>();public Object mGlobalLock=new Object();public Handler mH=new Handler();public android.content.Context mContext=new android.content.Context();}
-public static class Target{public Object mInputChannelToken=new Object(),original;public int mOwnerUid=12345;public boolean shareReceiver;public String pkg="com.tencent.mobileqq";public String getOwningPackage(){return pkg;}public float translateToWindowX(float x){return x*.75f-20;}public float translateToWindowY(float y){return y*.75f-200;}}
+public static class Token implements android.os.IBinder{}
+public static class Target{public android.os.IBinder mInputChannelToken=new Token();public Object original;public int mOwnerUid=12345,mBaseLayer=1;public boolean shareReceiver,relay,visible=true;public String pkg="com.tencent.mobileqq";public Display display;public Rect bounds=new Rect(0,0,1080,2400);public WindowManager.LayoutParams mAttrs=new WindowManager.LayoutParams();public String getOwningPackage(){return pkg;}public boolean isVisible(){return visible;}public Object getDisplayContent(){return display;}public Object getTask(){return new Task();}public int getOwningUid(){return mOwnerUid;}public Rect getBounds(){return bounds;}public float translateToWindowX(float x){return x*.75f-20;}public float translateToWindowY(float y){return y*.75f-200;}public static class Task{public int getWindowingMode(){return 1;}}}
 public static class Display{public Wm mWmService=new Wm();public Object mInputMethodWindow;public Target target=new Target();public Display(){target.pkg="other";}public Object getTouchableWinAtPointLocked(float x,float y){return y>=940&&y<1000?target:null;}}
 public static class Controller{public State mDragState=new State();}
+public static class DragDropController{public State mDragState;public Wm mService;public DragDropController(State s,Wm w){mDragState=s;mService=w;}public void reportDropWindow(android.os.IBinder token,float x,float y,float rawX,float rawY){}}
 static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
 static XC_MethodHook.MethodHookParam event(State state,Object...args){var p=new XC_MethodHook.MethodHookParam();p.thisObject=state;p.args=args;return p;}
 public static void main(String[] args){
@@ -161,6 +168,15 @@ for(String app:List.of("com.tencent.mm","other.source")){
     XposedBridge.hooks.get("reportDropWindowLock").fire(portalDrop);
     check(Boolean.FALSE.equals(portalDrop.result),"validated portal source cancels even without a public clip");
 }
+controller=new Controller();state=controller.mDragState;display=new Display();state.mCurrentDisplayContent=display;state.mSourceUserId=0;state.mDataDescription=new android.content.ClipDescription();state.mDataDescription.mime="image";
+Target qq=new Target();qq.pkg="com.tencent.mobileqq";qq.mOwnerUid=10001;qq.display=display;state.mLocalWin=new Object();state.mService=display.mWmService;state.mService.mWindowMap.put(state.mLocalWin,qq);
+Target host=new Target();host.pkg="com.android.systemui";host.mOwnerUid=10228;host.relay=true;state.mService.mInputToWindowMap.put(host.mInputChannelToken,host);
+Target wechat=new Target();wechat.pkg="com.tencent.mm";wechat.mOwnerUid=10002;wechat.display=display;wechat.mAttrs.packageName=wechat.pkg;wechat.mBaseLayer=20;state.mService.mWindowMap.put(wechat.mInputChannelToken,wechat);state.mNotifiedWindows.add(wechat);
+var controller2=new DragDropController(state,state.mService);
+check(XposedBridge.hooks.containsKey("reportDropWindow"),"retarget hook installed");
+var retarget=new XC_MethodHook.MethodHookParam();retarget.thisObject=controller2;retarget.args=new Object[]{host.mInputChannelToken,100f,900f,800f,900f};
+XposedBridge.hooks.get("reportDropWindow").fire(retarget);
+check(retarget.args[0]==wechat.mInputChannelToken&&(Float)retarget.args[1]==580f&&(Float)retarget.args[2]==475f&&state.mCurrentDisplayX==800f,"promoted image DROP is retargeted to the fullscreen app window");
 System.out.println("Production native drag geometry checks="+checks+" passed (WM doubles; device pending)");}}
 '''
 }

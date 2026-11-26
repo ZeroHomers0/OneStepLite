@@ -31,6 +31,33 @@ final class WindowIdentity {
         return owns(window, display, 2);
     }
 
+    /** Host and transition-cover windows may receive a DROP on behalf of a promoted task. */
+    static boolean ownsDropRelay(Object window,Object display) {
+        return ownsHost(window,display) || ownsTransitionInput(window,display);
+    }
+
+    private static boolean ownsTransitionInput(Object window,Object display) {
+        if (window == null || display == null) return false;
+        try {
+            if (XposedHelpers.callMethod(window, "getDisplayContent") != display) return false;
+            WindowManager.LayoutParams attrs = (WindowManager.LayoutParams)
+                    XposedHelpers.getObjectField(window, "mAttrs");
+            if (attrs.type != WindowTypes.APPLICATION_OVERLAY
+                    || !Packages.SYSTEM_UI.equals(attrs.packageName)
+                    || (attrs.flags & WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED) != 0
+                    || !"TransitionInput".contentEquals(attrs.getTitle())) return false;
+            int uid = XposedHelpers.getIntField(window, "mOwnerUid");
+            Object session = XposedHelpers.getObjectField(window, "mSession");
+            if (uid < 0 || session == null || XposedHelpers.getIntField(session, "mUid") != uid) return false;
+            Object service = XposedHelpers.getObjectField(display, "mWmService");
+            Context context = (Context) XposedHelpers.getObjectField(service, "mContext");
+            String[] packages = context.getPackageManager().getPackagesForUid(uid);
+            return packages != null && Arrays.asList(packages).contains(Packages.SYSTEM_UI);
+        } catch (Throwable unavailable) {
+            return false;
+        }
+    }
+
     private static boolean owns(Object window, Object display, int scope) {
         if (window == null || display == null) return false;
         try {

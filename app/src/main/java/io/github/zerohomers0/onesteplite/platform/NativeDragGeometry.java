@@ -1,8 +1,11 @@
 package io.github.zerohomers0.onesteplite;
 
 import android.content.ClipData;
+import android.content.ClipDescription;
+import android.graphics.Rect;
 import android.os.Handler;
 import android.view.SurfaceControl;
+import android.view.WindowManager;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import de.robv.android.xposed.XC_MethodHook;
@@ -36,9 +39,93 @@ final class NativeDragGeometry {
                     if(value instanceof Session){((Session)value).stop();XposedHelpers.removeAdditionalInstanceField(call.thisObject,KEY);}
                 }
             });
+            try {
+                Class<?> controller=XposedHelpers.findClass("com.android.server.wm.DragDropController",loader);
+                XposedBridge.hookAllMethods(controller,"reportDropWindow",new XC_MethodHook(){
+                    @Override protected void beforeHookedMethod(MethodHookParam call){
+                        try{retarget(call);}catch(Throwable unavailable){
+                            android.util.Log.w(Tags.PROBE,"native image drag retarget skipped",unavailable);
+                        }
+                    }
+                });
+            }catch(Throwable unavailable){
+                android.util.Log.w(Tags.PROBE,"native image drag retarget unavailable",unavailable);
+            }
             return true;
         }catch(Throwable unavailable){return false;}
     }
+    /** Redirect an image DROP owned by the workspace host to the promoted main window. */
+    private static void retarget(XC_MethodHook.MethodHookParam call) {
+        if(call.args.length!=5 || !(call.args[0] instanceof android.os.IBinder token))return;
+        Object controller=call.thisObject;
+        Object state=XposedHelpers.getObjectField(controller,"mDragState");
+        if(state==null)return;
+        Object description=XposedHelpers.getObjectField(state,"mDataDescription");
+        if(!(description instanceof ClipDescription clip) || !clip.hasMimeType("image/*"))return;
+        Object display=XposedHelpers.getObjectField(state,"mCurrentDisplayContent");
+        Object wm=XposedHelpers.getObjectField(controller,"mService");
+        if(display==null || wm==null)return;
+        Object source=((java.util.Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap"))
+                .get(XposedHelpers.getObjectField(state,"mLocalWin"));
+        if(source==null)return;
+        Object original=PortalDragInput.originalWindow(source);
+        if(original!=null)source=original;
+        Object sourceWindow=XposedHelpers.callMethod(
+                XposedHelpers.getObjectField(wm,"mInputToWindowMap"),"get",token);
+        if(!WindowIdentity.ownsDropRelay(sourceWindow,display))return;
+        float rawX=((Number)call.args[3]).floatValue(),rawY=((Number)call.args[4]).floatValue();
+        if(!Float.isFinite(rawX) || !Float.isFinite(rawY))return;
+        java.util.ArrayList<Object> targets=promotedMainCandidates(state,wm,display,source,rawX,rawY);
+        for(Object target:targets) {
+            try {
+                XposedHelpers.setFloatField(state,"mCurrentDisplayX",rawX);
+                XposedHelpers.setFloatField(state,"mCurrentDisplayY",rawY);
+                if(!Boolean.TRUE.equals(XposedHelpers.callMethod(state,"isWindowNotified",target)))
+                    XposedHelpers.callMethod(state,"sendDragStartedIfNeededLocked",target);
+                if(!Boolean.TRUE.equals(XposedHelpers.callMethod(state,"isWindowNotified",target)))continue;
+                call.args[0]=XposedHelpers.getObjectField(target,"mInputChannelToken");
+                call.args[1]=XposedHelpers.callMethod(target,"translateToWindowX",rawX);
+                call.args[2]=XposedHelpers.callMethod(target,"translateToWindowY",rawY);
+                android.util.Log.i(Tags.PROBE,"native image drag retargeted to promoted main");
+                return;
+            }catch(Throwable unavailable){
+                android.util.Log.w(Tags.PROBE,"native image drag candidate skipped",unavailable);
+            }
+        }
+    }
+
+    private static java.util.ArrayList<Object> promotedMainCandidates(Object state,Object wm,Object display,
+            Object source,float rawX,float rawY) {
+        java.util.ArrayList<Object> result=new java.util.ArrayList<>();
+        java.util.ArrayList<Integer> layers=new java.util.ArrayList<>();
+        int sourceUser=XposedHelpers.getIntField(state,"mSourceUserId");
+        String sourcePackage=String.valueOf(XposedHelpers.callMethod(source,"getOwningPackage"));
+        for(Object window:((java.util.Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap")).values()) {
+            try {
+                if(window==source || !Boolean.TRUE.equals(XposedHelpers.callMethod(window,"isVisible"))
+                        || XposedHelpers.callMethod(window,"getDisplayContent")!=display)continue;
+                WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)
+                        XposedHelpers.getObjectField(window,"mAttrs");
+                if(Packages.SYSTEM_UI.equals(attrs.packageName)
+                        || (attrs.flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)continue;
+                Object task=XposedHelpers.callMethod(window,"getTask");
+                if(task==null || !Integer.valueOf(1).equals(XposedHelpers.callMethod(task,"getWindowingMode")))continue;
+                int uid=XposedHelpers.getIntField(window,"mOwnerUid");
+                if(uid<0 || uid/100000!=sourceUser)continue;
+                String pkg=String.valueOf(XposedHelpers.callMethod(window,"getOwningPackage"));
+                if(pkg.equals(sourcePackage))continue;
+                Rect bounds=(Rect)XposedHelpers.callMethod(window,"getBounds");
+                if(bounds==null || !bounds.contains((int)rawX,(int)rawY))continue;
+                int layer=0;
+                try{layer=XposedHelpers.getIntField(window,"mBaseLayer");}catch(Throwable ignored){}
+                int insert=0;
+                while(insert<layers.size() && layers.get(insert)>=layer)insert++;
+                layers.add(insert,layer);result.add(insert,window);
+            }catch(Throwable ignored){}
+        }
+        return result;
+    }
+
     private static boolean sameSourceContentDrop(Object state,Object inputToken) {
         if(inputToken==null)return false;
         try{

@@ -20,7 +20,6 @@ import android.widget.EditText;
 import android.widget.TextView;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
 
@@ -31,7 +30,10 @@ final class ViewImageSource {
     private static final String HOME_IMAGE="com.miui.newhome.view.GestureImage";
     private static final String LARK_IMAGE="com.ss.android.lark.imagewidget.largeimage.LargeImageView";
     private static final ExecutorService WORKER=Executors.newSingleThreadExecutor();
-    private static final AtomicBoolean BUSY=new AtomicBoolean();
+    private static final ImageExtractionLease LEASE=new ImageExtractionLease();
+    private static final Handler MAIN=new Handler(Looper.getMainLooper());
+    private static final long EXTRACTION_TIMEOUT_MS=5000L;
+    private static Bitmap pendingSemanticImage;
     private static boolean installed;
     private Runnable hold;
     private View host;
@@ -68,7 +70,7 @@ final class ViewImageSource {
         }
         if(hold!=null)host.removeCallbacks(hold);
         hold=null;host=null;
-        if(action!=MotionEvent.ACTION_DOWN || BUSY.get() || !event.isFromSource(android.view.InputDevice.SOURCE_TOUCHSCREEN)
+        if(action!=MotionEvent.ACTION_DOWN || LEASE.busy() || !event.isFromSource(android.view.InputDevice.SOURCE_TOUCHSCREEN)
                 || (activity.getWindow().getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)return;
         View decor=activity.getWindow().peekDecorView();
         if(decor==null || !decor.hasWindowFocus())return;
@@ -168,85 +170,102 @@ final class ViewImageSource {
 
     private static void offer(Activity activity,View decor,View view,Drawable drawable,boolean text,
             boolean semantic,long down,int x,int y,int minImage) {
-        if(!BUSY.compareAndSet(false,true))return;
+        int lease=LEASE.begin();
+        if(lease==0)return;
+        MAIN.postDelayed(()->{
+            if(!LEASE.expire(lease))return;
+            Bitmap pending=pendingSemanticImage;pendingSemanticImage=null;
+            if(pending!=null && !pending.isRecycled())pending.recycle();
+            ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.TIMEOUT);
+        },EXTRACTION_TIMEOUT_MS);
         android.content.Context context=activity.getApplicationContext();
         Handler main=new Handler(Looper.getMainLooper());
         WORKER.execute(()->{
             try {
+                if(!LEASE.active(lease))return;
                 String pkg=context.getPackageName();
                 Bundle touch=new Bundle();touch.putLong("down",down);
                 Bundle state=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_view_status",pkg,touch);
                 if(state==null || state.getLong("down")!=down || !state.getBoolean("prefer_image")
                         || !main.post(()->{
                             try {
+                                if(!LEASE.active(lease))return;
                                 if(canRead(activity,decor,view,x,y) && (text || stillImage(pkg,view,drawable))) {
-                                    if(semantic)offerSemantic(activity,context,decor,view,state,x,y,minImage,main);
-                                    else if(text)offerText(context,view,state);
-                                    else render(context,view,drawable,state);
+                                    if(semantic)offerSemantic(activity,context,decor,view,state,x,y,minImage,main,lease);
+                                    else if(text)offerText(context,view,state,lease);
+                                    else render(context,view,drawable,state,lease);
                                     return;
                                 }
                             } catch(RuntimeException unavailable) {
                                 ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.UNSUPPORTED);
                             }
-                            BUSY.set(false);
-                        }))BUSY.set(false);
-            } catch(RuntimeException unavailable){BUSY.set(false);}
+                            finish(lease);
+                        }))finish(lease);
+            } catch(RuntimeException unavailable){finish(lease);}
         });
     }
 
-    private static void offerText(android.content.Context context,View view,Bundle state) {
-        if(!readableText(view)){BUSY.set(false);return;}
+    private static void finish(int lease){LEASE.finish(lease);}
+
+    private static void offerText(android.content.Context context,View view,Bundle state,int lease) {
+        if(!LEASE.active(lease))return;
+        if(!readableText(view)){finish(lease);return;}
         TextView words=(TextView)view;
         CharSequence value=words.getText();
         int start=words.getSelectionStart(),end=words.getSelectionEnd();
         boolean selected=start>=0 && end>=0 && start!=end && Math.max(start,end)<=value.length();
         if(selected)value=value.subSequence(Math.min(start,end),Math.max(start,end));
-        if(value.length()>ContentSharePolicy.MAX_TEXT){BUSY.set(false);return;}
+        if(value.length()>ContentSharePolicy.MAX_TEXT){finish(lease);return;}
         String text=value.toString();
-        if(text.isBlank()){BUSY.set(false);return;}
-        submitText(context,state,text,selected);
+        if(text.isBlank()){finish(lease);return;}
+        submitText(context,state,text,selected,lease);
     }
 
     private static void offerSemantic(Activity activity,android.content.Context context,View decor,
-            View view,Bundle state,int x,int y,int minImage,Handler main) {
+            View view,Bundle state,int x,int y,int minImage,Handler main,int lease) {
+        if(!LEASE.active(lease))return;
         ViewSemanticContent content=ViewSemanticContent.find(view,x,y,minImage);
-        if(content==null){BUSY.set(false);return;}
-        if(content.text()!=null){submitText(context,state,content.text(),content.selected());return;}
+        if(content==null){finish(lease);return;}
+        if(content.text()!=null){submitText(context,state,content.text(),content.selected(),lease);return;}
         Rect region=new Rect(content.image());
         int[] location=new int[2];
         view.getLocationInWindow(location);
         region.offset(location[0],location[1]);
         int[] size=ContentCapturePolicy.fit(region.width(),region.height());
         Bitmap image=Bitmap.createBitmap(size[0],size[1],Bitmap.Config.ARGB_8888);
+        pendingSemanticImage=image;
         try {
             PixelCopy.request(activity.getWindow(),region,image,result->{
                 try {
-                    if(result==PixelCopy.SUCCESS && canRead(activity,decor,view,x,y)){
+                    if(result==PixelCopy.SUCCESS && LEASE.active(lease) && canRead(activity,decor,view,x,y)){
                         ViewSemanticContent current=ViewSemanticContent.find(view,x,y,minImage);
                         int[] now=new int[2];view.getLocationInWindow(now);
                         if(current!=null && content.image().equals(current.image())
                                 && now[0]==location[0] && now[1]==location[1]){
-                            submitImage(context,state,image);
+                            if(pendingSemanticImage==image)pendingSemanticImage=null;
+                            submitImage(context,state,image,lease);
                             return;
                         }
                     }
                 } catch(RuntimeException unavailable){
                     ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.UNSUPPORTED);
                 }
-                image.recycle();BUSY.set(false);
+                if(pendingSemanticImage==image)pendingSemanticImage=null;
+                image.recycle();finish(lease);
             },main);
         } catch(RuntimeException unavailable){
+            if(pendingSemanticImage==image)pendingSemanticImage=null;
             image.recycle();
-            throw unavailable;
+            finish(lease);
         }
     }
 
-    private static void submitText(android.content.Context context,Bundle state,String text,boolean selected) {
+    private static void submitText(android.content.Context context,Bundle state,String text,boolean selected,int lease) {
         state.putString("text",text);
         state.putBoolean("selected",selected);
         WORKER.execute(()->{
-            try { submit(context,state); }
-            finally { BUSY.set(false); }
+            try { if(LEASE.active(lease))submit(context,state); }
+            finally { finish(lease); }
         });
     }
 
@@ -258,11 +277,12 @@ final class ViewImageSource {
         } catch(RuntimeException unavailable){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.UNSUPPORTED);}
     }
 
-    private static void render(android.content.Context context,View view,Drawable drawable,Bundle state) {
+    private static void render(android.content.Context context,View view,Drawable drawable,Bundle state,int lease) {
+        if(!LEASE.active(lease))return;
         Bitmap image=null;
         try {
             Rect bounds=drawable==null?new Rect(0,0,view.getWidth(),view.getHeight()):drawable.getBounds();
-            if(bounds.width()<=0 || bounds.height()<=0){BUSY.set(false);return;}
+            if(bounds.width()<=0 || bounds.height()<=0){finish(lease);return;}
             int[] size=ContentCapturePolicy.fit(bounds.width(),bounds.height());
             if(drawable instanceof BitmapDrawable raster && raster.getBitmap()!=null
                     && raster.getBitmap().getConfig()==Bitmap.Config.HARDWARE) {
@@ -278,17 +298,18 @@ final class ViewImageSource {
                 canvas.translate(-bounds.left,-bounds.top);
                 if(drawable==null)view.draw(canvas);else drawable.draw(canvas);
             }
-            if(image==null){BUSY.set(false);return;}
+            if(image==null){finish(lease);return;}
         } catch(RuntimeException unavailable) {
             if(image!=null)image.recycle();
-            BUSY.set(false);return;
+            finish(lease);return;
         }
-        submitImage(context,state,image);
+        submitImage(context,state,image,lease);
     }
 
-    private static void submitImage(android.content.Context context,Bundle state,Bitmap captured) {
+    private static void submitImage(android.content.Context context,Bundle state,Bitmap captured,int lease) {
         WORKER.execute(()->{
             try {
+                if(!LEASE.active(lease))return;
                 if(SystemExtractPayload.hasNoVisiblePixels(captured)){
                     ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_CONTENT);
                     return;
@@ -297,7 +318,7 @@ final class ViewImageSource {
                 ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_ENCODE,ShareDiagnostics.Code.ACCEPTED);
                 submit(context,state);
             } catch(RuntimeException unavailable){ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_ENCODE,ShareDiagnostics.Code.FAILED);}
-            finally{captured.recycle();BUSY.set(false);}
+            finally{captured.recycle();finish(lease);}
         });
     }
 }
