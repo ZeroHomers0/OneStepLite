@@ -153,15 +153,34 @@ public final class ContentInboxProvider extends ContentProvider {
     }
 
     static synchronized void append(Context context,JSONArray added) {
+        append(context,added,false);
+    }
+
+    static synchronized void appendCapture(Context context,JSONObject capture) {
+        append(context,new JSONArray().put(capture),true);
+    }
+
+    private static void append(Context context,JSONArray added,boolean capture) {
         JSONArray old=rows(context),all=new JSONArray();
         for(int i=0;i<added.length();i++)all.put(added.optJSONObject(i));
         for(int i=0;i<old.length();i++)all.put(old.optJSONObject(i));
-        if(all.length()>128)throw new IllegalStateException("Inbox full; wait for retained items to expire");
-        long bytes=0;for(int i=0;i<all.length();i++) {
+        int normal=0,reserved=0;long bytes=0;
+        for(int i=0;i<all.length();i++) {
             JSONObject row=all.optJSONObject(i);
+            if(row.optBoolean("capture_reserve") && row.optBoolean("captured") && !row.has("document_uri")){
+                reserved++;continue;
+            }
+            normal++;
             if(!row.has("document_uri"))bytes+=file(context,row.optString("id")).length();
         }
-        if(bytes>ContentInboxPolicy.MAX_TOTAL)throw new IllegalStateException("Inbox byte budget exceeded");
+        if(!ContentInboxPolicy.withinInbox(normal,bytes)){
+            if(!ContentInboxPolicy.canReserveCapture(capture,reserved)){
+                if(capture)ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_STORE,ShareDiagnostics.Code.CAPACITY);
+                throw new IllegalStateException("Inbox capacity exceeded");
+            }
+            try {added.getJSONObject(0).put("capture_reserve",true);}
+            catch(org.json.JSONException invalid){throw new IllegalStateException("Invalid capture record",invalid);}
+        }
         if(!context.getSharedPreferences("content_inbox",Context.MODE_PRIVATE).edit().putString("rows",all.toString()).commit())
             throw new IllegalStateException("Inbox metadata save failed");
     }

@@ -4,9 +4,9 @@ import java.util.ArrayDeque;
 
 /** Fixed diagnostic codes only: no application text, URI, filename, package or capability enters the log. */
 final class ShareDiagnostics {
-    enum Stage { EXTRACT, POINTER, DRAG, COPY, DELIVERY, READ }
+    enum Stage { EXTRACT, IMAGE_ENCODE, IMAGE_STORE, IMAGE_LIFT, POINTER, DRAG, COPY, DELIVERY, READ }
     enum Code { READY, NO_SESSION, NO_CONTENT, UNSUPPORTED, ACCEPTED, REJECTED, FAILED, CANCELLED,
-        TIMEOUT, STARTED, READABLE, OPENED, LAUNCHED }
+        TIMEOUT, STARTED, READABLE, OPENED, LAUNCHED, CAPACITY }
     private static final ArrayDeque<String> recent=new ArrayDeque<>();
     private static final java.util.Map<String,Long> last=new java.util.HashMap<>();
     private ShareDiagnostics(){}

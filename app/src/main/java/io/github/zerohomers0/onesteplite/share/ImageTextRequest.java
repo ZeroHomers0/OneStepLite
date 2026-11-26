@@ -22,6 +22,7 @@ final class ImageTextRequest implements AutoCloseable {
     private final Handler main=new Handler(Looper.getMainLooper());
     private final Context context;
     private final Uri source;
+    private final java.util.concurrent.atomic.AtomicReference<Bitmap> pendingImage;
     private final BiConsumer<String,String> result;
     private final CountDownLatch connected=new CountDownLatch(1);
     private final String address=UUID.randomUUID().toString();
@@ -37,7 +38,14 @@ final class ImageTextRequest implements AutoCloseable {
         @Override public void onBindingDied(ComponentName name){service=null;connected.countDown();}
     };
     ImageTextRequest(Context context,Uri source,BiConsumer<String,String> result) {
+        this(context,source,null,result);
+    }
+    ImageTextRequest(Context context,Bitmap image,BiConsumer<String,String> result) {
+        this(context,null,image,result);
+    }
+    private ImageTextRequest(Context context,Uri source,Bitmap image,BiConsumer<String,String> result) {
         this.context=context;this.source=source;this.result=result;
+        pendingImage=new java.util.concurrent.atomic.AtomicReference<>(image);
     }
     void start() {
         if(closed || started)return;started=true;
@@ -55,13 +63,14 @@ final class ImageTextRequest implements AutoCloseable {
         try {
             if(!connected.await(10,TimeUnit.SECONDS) || closed || service==null)throw new IllegalStateException("系统识字服务未就绪");
             core=service;
-            bitmap=ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.getContentResolver(),source),(decoder,info,input)->{
+            bitmap=pendingImage.getAndSet(null);
+            if(bitmap==null && source!=null)bitmap=ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.getContentResolver(),source),(decoder,info,input)->{
                 int width=info.getSize().getWidth(),height=info.getSize().getHeight();
                 if((long)width*height>ContentCapturePolicy.MAX_CAPTURE_PIXELS)throw new IllegalArgumentException("Image too large");
                 int[] size=ContentCapturePolicy.fit(width,height);decoder.setTargetSize(size[0],size[1]);
                 decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
             });
-            if(!closed)text=OcrWire.recognize(OcrWire.acquire(core,address),bitmap);
+            if(!closed && bitmap!=null)text=OcrWire.recognize(OcrWire.acquire(core,address),bitmap);
             if(text==null || text.trim().isEmpty())error="没有识别到文字";
         }catch(Exception unavailable){error="图片识字失败，请确认系统智能服务可用";
             android.util.Log.w(Tags.PROBE,"image text recognition unavailable",unavailable);
@@ -76,6 +85,7 @@ final class ImageTextRequest implements AutoCloseable {
     }
     @Override public void close() {
         if(closed)return;closed=true;main.removeCallbacks(timeout);connected.countDown();
+        Bitmap pending=pendingImage.getAndSet(null);if(pending!=null)pending.recycle();
         if(bound){bound=false;try{context.unbindService(connection);}catch(RuntimeException unavailable){
             android.util.Log.w(Tags.PROBE,"OCR binding cleanup failed",unavailable);}}
     }

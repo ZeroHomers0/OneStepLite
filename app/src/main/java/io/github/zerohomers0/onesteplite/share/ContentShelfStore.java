@@ -40,9 +40,14 @@ final class ContentShelfStore {
                             .put("time",System.currentTimeMillis());rows.put(found);}
                     found.put("staged",true).remove("shelf_removed");
                 }
-                int count=0;for(int i=0;i<rows.length();i++)if(rows.getJSONObject(i).optBoolean("staged"))count++;
+                int count=0,ordinary=0;
+                for(int i=0;i<rows.length();i++){
+                    JSONObject row=rows.getJSONObject(i);
+                    if(row.optBoolean("staged"))count++;
+                    if(!row.optBoolean("capture_reserve"))ordinary++;
+                }
                 if(count>64)throw new IllegalStateException("Shelf full");
-                if(rows.length()>128)throw new IllegalStateException("Inbox full");
+                if(ordinary>ContentInboxPolicy.MAX_RECORDS)throw new IllegalStateException("Inbox full");
                 save(context,rows);
             }catch(org.json.JSONException invalid){throw new IllegalStateException(invalid);}
         }

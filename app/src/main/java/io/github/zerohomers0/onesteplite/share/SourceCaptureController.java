@@ -106,7 +106,11 @@ final class SourceCaptureController implements AutoCloseable {
             main.post(()->{
                 if(!valid(token)){captured.recycle();if(token==generation)close();return;}
                 synchronized(pixels){snapshot=captured;}
-                if(textResult!=null){busy=true;WORKER.execute(()->encode(token,new Rect(0,0,captured.getWidth(),captured.getHeight())));return;}
+                if(textResult!=null){
+                    busy=true;
+                    Rect full=new Rect(0,0,captured.getWidth(),captured.getHeight());
+                    WORKER.execute(()->encode(token,full,true));return;
+                }
                 try{showCrop();}catch(RuntimeException unavailable){message("无法打开框选页面");close();}
             });
         } catch(Throwable unavailable) {
@@ -155,10 +159,10 @@ final class SourceCaptureController implements AutoCloseable {
             message("选区太小，请重新框选");return;
         }
         setPreparing(true);int token=generation;
-        WORKER.execute(()->encode(token,selection));
+        WORKER.execute(()->encode(token,selection,false));
     }
 
-    private void encode(int token,Rect selection) {
+    private void encode(int token,Rect selection,boolean recognize) {
         Bitmap picture=null;String created=null;
         try {
             int[] size=ContentCapturePolicy.fit(selection.width(),selection.height());
@@ -166,6 +170,14 @@ final class SourceCaptureController implements AutoCloseable {
                 if(token!=generation || snapshot==null)return;
                 picture=Bitmap.createBitmap(size[0],size[1],Bitmap.Config.ARGB_8888);
                 new Canvas(picture).drawBitmap(snapshot,selection,new Rect(0,0,size[0],size[1]),null);
+            }
+            if(recognize) {
+                Bitmap input=picture;
+                if(main.post(()->{
+                    if(!valid(token)){input.recycle();if(token==generation)close();return;}
+                    recognizeCapture(token,input);
+                }))picture=null;
+                return;
             }
             byte[] encoded=CaptureImageEncoder.encode(picture);
             if(token!=generation || !WallpaperSnapshot.canCapture(context))return;
@@ -176,7 +188,6 @@ final class SourceCaptureController implements AutoCloseable {
             main.post(()->{
                 if(!valid(token)){readyPicture.recycle();discard(id);if(token==generation)close();return;}
                 storedId=id;result=readyPicture;busy=false;
-                if(textResult!=null){recognizeCapture(token,Uri.parse(reply.getString("uri")));return;}
                 try{showResult(Uri.parse(reply.getString("uri")));}
                 catch(RuntimeException unavailable){message("无法显示截取图片");close();return;}
                 synchronized(pixels){if(snapshot!=null){snapshot.recycle();snapshot=null;}}
@@ -186,9 +197,9 @@ final class SourceCaptureController implements AutoCloseable {
         } finally {if(picture!=null)picture.recycle();if(created!=null)discard(created);}
     }
 
-    private void recognizeCapture(int token,Uri uri){
+    private void recognizeCapture(int token,Bitmap image){
         ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.STARTED);
-        recognition=new ImageTextRequest(context,uri,(text,error)->{
+        recognition=new ImageTextRequest(context,image,(text,error)->{
             if(!valid(token)){close();return;}
             java.util.function.Consumer<String> completed=textResult;
             close();if(error!=null){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.FAILED);message(error);return;}

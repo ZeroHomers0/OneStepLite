@@ -36,6 +36,18 @@ final class CaptureInboxStore {
         },"SharedImageRetention").start();
     }
     static Bundle store(Context context,byte[] encoded) {
+        long identity=android.os.Binder.clearCallingIdentity();
+        try {
+            Bundle result=storeAsOwner(context,encoded);
+            ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_STORE,ShareDiagnostics.Code.ACCEPTED);
+            return result;
+        } catch(RuntimeException failure){
+            ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_STORE,ShareDiagnostics.Code.FAILED);
+            throw failure;
+        }
+        finally {android.os.Binder.restoreCallingIdentity(identity);}
+    }
+    private static Bundle storeAsOwner(Context context,byte[] encoded) {
         if(encoded==null || encoded.length>ContentCapturePolicy.MAX_ENCODED)throw new IllegalArgumentException("Oversized capture");
         BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;
         BitmapFactory.decodeByteArray(encoded,0,encoded.length,options);
@@ -47,7 +59,7 @@ final class CaptureInboxStore {
                 try(FileOutputStream output=new FileOutputStream(file)){output.write(encoded);}
                 JSONObject row=new JSONObject().put("id",id).put("name","主窗截取.jpg").put("mime","image/jpeg")
                         .put("captured",true).put("time",System.currentTimeMillis());
-                ContentInboxProvider.append(context,new JSONArray().put(row));
+                ContentInboxProvider.appendCapture(context,row);
                 context.grantUriPermission(Packages.SYSTEM_UI,ContentInboxProvider.uri(id),Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 Bundle result=new Bundle();result.putString("id",id);result.putString("uri",ContentInboxProvider.uri(id).toString());return result;
             } catch(Exception failure){

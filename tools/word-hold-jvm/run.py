@@ -11,14 +11,14 @@ def member(signature):
         depth+=(source[end]=='{')-(source[end]=='}');end+=1
     return source[start:end]
 files={
- 'android/os/Bundle.java':'package android.os;public class Bundle{public boolean lift;public String uri;public boolean region;public void putBoolean(String k,boolean v){lift=v;}public String getString(String key){return uri;}public boolean getBoolean(String key){return region;}}',
+ 'android/os/Bundle.java':'package android.os;public class Bundle{public boolean lift;public String uri;public boolean region;public void putBoolean(String k,boolean v){lift=v;}public String getString(String key){return "uri".equals(key)?uri:null;}public boolean getBoolean(String key){return region;}}',
  'android/os/SystemClock.java':'package android.os;public class SystemClock{public static long now=1100;public static long uptimeMillis(){return now;}}',
  'android/widget/Toast.java':'package android.widget;public class Toast{public static int shown;public static final int LENGTH_SHORT=0;public static Toast makeText(Object c,String s,int d){return new Toast();}public void show(){shown++;}}',
  'android/view/InputDevice.java':'package android.view;public class InputDevice{public static final int SOURCE_TOUCHSCREEN=4098;}',
  'android/view/ViewConfiguration.java':'package android.view;public class ViewConfiguration{public static ViewConfiguration get(Object c){return new ViewConfiguration();}public static int getLongPressTimeout(){return 500;}public int getScaledTouchSlop(){return 8;}}',
  'io/github/zerohomers0/onesteplite/WordHoldRegression.java':'''package io.github.zerohomers0.onesteplite;
 import java.util.*;import java.util.function.*;import android.os.Bundle;import java.util.concurrent.CountDownLatch;import java.util.concurrent.atomic.AtomicBoolean;
-class ShareDiagnostics{enum Stage{DRAG}enum Code{FAILED,CANCELLED}static void event(Stage stage,Code code){}}
+class ShareDiagnostics{enum Stage{DRAG,IMAGE_LIFT}enum Code{FAILED,CANCELLED}static void event(Stage stage,Code code){}}
 class MotionEvent{
  static final int ACTION_DOWN=0,ACTION_UP=1,ACTION_MOVE=2,ACTION_CANCEL=3,ACTION_POINTER_UP=6;
  int action,count=1;long down=1000;float x=50,y=50;boolean recycled;
@@ -35,6 +35,7 @@ public class WordHoldRegression{
  static class Anchor{Object getContext(){return this;}}
  Object window,selection;MotionEvent pointer;Runnable pendingWords,fallbackJob;float wordX,wordY,fallbackX,fallbackY;boolean validGesture,fallbackIssued,selectingDrag;
  Bundle liftCandidate;float downX,downY;long liftAt;boolean liftEligible,startingDrag;
+ String nativeCaptureId;int discardedCaptures;void discardCapture(String id){if(id!=null)discardedCaptures++;}
  int discarded;void clearLiftCandidate(){if(liftCandidate!=null)discarded++;liftCandidate=null;}
  int lifts;void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired){if(request.lift)lifts++;}
  void clearWindow(){window=null;startingDrag=false;validGesture=false;}
@@ -103,6 +104,8 @@ public class WordHoldRegression{
  h=fresh();h.window=new Object();h.finishRejectedLift(true);
  check(h.window==null&&h.opens==0&&android.widget.Toast.shown==1,"rejected single-finger lift reports failure without opening words or preview");
  h.finishRejectedLift(false);check(android.widget.Toast.shown==1,"cancelled input does not show a retry prompt");
+ h.nativeCaptureId="capture";h.finishRejectedLift(false);
+ check(h.nativeCaptureId==null&&h.discardedCaptures==1,"a failed image lift releases its private capture");
  System.out.println("Production word hold cancellation checks="+checks+" passed");
  }
 }

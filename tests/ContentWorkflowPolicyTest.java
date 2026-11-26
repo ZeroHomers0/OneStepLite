@@ -41,6 +41,10 @@ public final class ContentWorkflowPolicyTest {
         check(!ContentInboxPolicy.withinBudget(ContentInboxPolicy.MAX_FILE+1,ContentInboxPolicy.MAX_TOTAL),"file cap");
         check(!ContentInboxPolicy.withinBudget(10,9),"remaining total cap");
         check(!ContentInboxPolicy.withinBudget(0,-1),"full cache rejects even empty new file");
+        check(ContentInboxPolicy.withinInbox(128,ContentInboxPolicy.MAX_TOTAL)
+                && !ContentInboxPolicy.withinInbox(129,ContentInboxPolicy.MAX_TOTAL),"ordinary inbox retains its original limits");
+        check(ContentInboxPolicy.canReserveCapture(true,7) && !ContentInboxPolicy.canReserveCapture(true,8)
+                && !ContentInboxPolicy.canReserveCapture(false,0),"reserve is bounded and only available to captures");
         check(ContentInboxPolicy.liveLaunch(30000,0)&&!ContentInboxPolicy.liveLaunch(30001,0),"token expiry exact");
         check(!ContentInboxPolicy.liveLaunch(0,1),"clock rollback rejects token");
         check(DropDelegationPolicy.allowed(1000,1000,0,10123,true,true,true),"same-user real drop allowed");

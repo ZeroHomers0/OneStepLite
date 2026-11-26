@@ -69,7 +69,7 @@ final class PortalRelay {
             if(image!=null) {
                 Bundle stored=CaptureInboxStore.store(context,image);id=stored.getString("id");
                 request.putString("uri",stored.getString("uri"));
-                if(view)request.putString("view_capture_id",id);
+                request.putString("capture_id",id);
             }
             Bundle result=PortalWire.call(target,PortalWire.OFFER,request);
             if(id!=null && (result==null || !result.getBoolean("accepted")))CaptureInboxStore.discard(context,id);

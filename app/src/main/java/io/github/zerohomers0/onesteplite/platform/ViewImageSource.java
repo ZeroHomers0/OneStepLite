@@ -294,8 +294,9 @@ final class ViewImageSource {
                     return;
                 }
                 state.putByteArray("image",CaptureImageEncoder.encode(captured));
+                ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_ENCODE,ShareDiagnostics.Code.ACCEPTED);
                 submit(context,state);
-            } catch(RuntimeException unavailable){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.UNSUPPORTED);}
+            } catch(RuntimeException unavailable){ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_ENCODE,ShareDiagnostics.Code.FAILED);}
             finally{captured.recycle();BUSY.set(false);}
         });
     }

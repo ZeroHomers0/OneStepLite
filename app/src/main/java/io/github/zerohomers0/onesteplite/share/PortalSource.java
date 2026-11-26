@@ -150,6 +150,7 @@ final class PortalSource implements AutoCloseable {
         if(held<longPress+150L || android.os.SystemClock.uptimeMillis()<liftAt || !live())return;
         Bundle request=liftCandidate;liftCandidate=null;
         request.putBoolean("lift",true);offer(request,new Bundle[1],new CountDownLatch(1),new AtomicBoolean());
+        if(window==null && request.getString("capture_id")!=null)discardCapture(request.getString("capture_id"));
     }
 
     private void clearLiftCandidate() {
@@ -161,7 +162,10 @@ final class PortalSource implements AutoCloseable {
         if(candidate==null)return;
         android.graphics.Bitmap bitmap=candidate.getParcelable("preview",android.graphics.Bitmap.class);
         if(bitmap!=null)bitmap.recycle();
-        String id=candidate.getString("view_capture_id");
+        discardCapture(candidate.getString("capture_id"));
+    }
+
+    private void discardCapture(String id) {
         if(id==null)return;
         android.content.ContentResolver resolver=anchor.getContext().getContentResolver();
         java.util.concurrent.CompletableFuture.runAsync(()->{
@@ -249,10 +253,14 @@ final class PortalSource implements AutoCloseable {
     }
 
     private android.graphics.Bitmap nativePreview;
+    private String nativeCaptureId;
 
     @android.annotation.SuppressLint("RtlHardcoded") // Physical display coordinates, not layout direction.
     private void startNativeLift(Bundle request,String uri,String text,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
         nativePreview=request.getParcelable("preview",android.graphics.Bitmap.class);
+        nativeCaptureId=request.getString("capture_id");
+        request.remove("capture_id");
+        if(uri!=null)ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,ShareDiagnostics.Code.STARTED);
         ClipData clip=uri==null?ClipData.newPlainText("提取文字",text):new ClipData("提取图片",new String[]{"image/jpeg"},
                 new ClipData.Item(android.net.Uri.parse(uri)));
         android.os.PersistableBundle metadata=new android.os.PersistableBundle();
@@ -273,7 +281,15 @@ final class PortalSource implements AutoCloseable {
         PortalInputCompat.bindSource(attrs,request.getString("source"),pointer);
         HostWindowPolicy.configure(attrs);window.setAlpha(0f);
         window.setOnDragListener((view,event)->{
-            if(event.getAction()==DragEvent.ACTION_DRAG_ENDED)main.post(this::clearWindow);
+            if(event.getAction()==DragEvent.ACTION_DRAG_ENDED){
+                boolean delivered=event.getResult();
+                main.post(()->{
+                    if(window!=view)return;
+                    if(!delivered)discardCapture(nativeCaptureId);
+                    nativeCaptureId=null;
+                    clearWindow();
+                });
+            }
             return event.getAction()!=DragEvent.ACTION_DROP;
         });
         FrameLayout sourceWindow=window;
@@ -331,6 +347,10 @@ final class PortalSource implements AutoCloseable {
     }
 
     private void finishRejectedLift(boolean current) {
+        if(nativeCaptureId!=null){
+            ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,ShareDiagnostics.Code.FAILED);
+            discardCapture(nativeCaptureId);nativeCaptureId=null;
+        }
         ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,current?ShareDiagnostics.Code.FAILED:ShareDiagnostics.Code.CANCELLED);
         clearWindow();
         if(current && ready.getAsBoolean())android.widget.Toast.makeText(anchor.getContext(),
@@ -364,6 +384,8 @@ final class PortalSource implements AutoCloseable {
     }
     private void clearWindow() {
         main.removeCallbacks(expire);
+        if(startingDrag)discardCapture(nativeCaptureId);
+        nativeCaptureId=null;
         startingDrag=false;
         android.graphics.Bitmap preview=nativePreview;nativePreview=null;
         if(window==null){if(preview!=null)preview.recycle();return;}
