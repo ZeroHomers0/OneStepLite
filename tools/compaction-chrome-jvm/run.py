@@ -87,6 +87,7 @@ public class CompactionChromeRegression {
  void drawLiveEmptyHints(Object c,WorkspaceLayout a,WorkspaceLayout b,int mask){}
  void finishCellLayout(){layouts++;}
  void updateCellSurfaceVisibility(Slot s){}
+ void updateTopBarState(){}
  void compactCells(){compactPending=false;}
  void finishPendingSuspend(){}
  static void log(String message){}
@@ -95,7 +96,7 @@ public class CompactionChromeRegression {
   CELL_SLOT_COUNT=cells;slots[5].occupied=occupiedTop;slots[1].occupied=true;
   sideBackingViews[5].alpha=.73f;slots[5].hint.alpha=.61f;
   sideBackingViews[4].alpha=.42f;slots[4].hint.alpha=.32f;
-  animateCellMoves(List.of(new CellMovePlan(slots[1],new Rect(0,300))),1<<1);
+  animateCellMoves(List.of(new CellMovePlan(slots[1],new Rect(0,300))),1<<1,false);
   check(cellMotion!=null&&cellMotion.started&&transferBusy,"ordinary compaction started");
   check(sideBackingViews[5].alpha==.73f&&slots[5].hint.alpha==.61f,
     "ordinary compaction must never hide independent TOP wallpaper or empty hint");
@@ -114,9 +115,13 @@ public class CompactionChromeRegression {
   for(int cells:new int[]{4,5})for(boolean top:new boolean[]{false,true})
    new CompactionChromeRegression().checkRange(cells,top);
   var h=new CompactionChromeRegression();LiveBackdrop.fail=true;
-  h.animateCellMoves(List.of(new CellMovePlan(h.slots[1],new Rect(0,300))),0);
+  h.animateCellMoves(List.of(new CellMovePlan(h.slots[1],new Rect(0,300))),0,false);
   check(h.cellMotion==null&&!h.transferBusy&&h.layouts==1,"failed backdrop retains live owner layout");
   check(h.sideBackingViews[5].alpha==1&&h.slots[5].hint.alpha==1,"failure leaves TOP untouched");
+  h=new CompactionChromeRegression();LiveBackdrop.fail=false;h.slots[2].controller=null;
+  h.animateCellMoves(List.of(new CellMovePlan(h.slots[1],new Rect(0,300)),
+    new CellMovePlan(h.slots[2],new Rect(0,500))),0,true);
+  check(h.cellMotion==null&&!h.transferBusy&&h.layouts==1,"a missing exchange surface settles both windows without a one-sided animation");
   System.out.println("actual compaction chrome checks="+checks+" passed");
  }
 }

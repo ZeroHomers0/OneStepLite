@@ -27,6 +27,7 @@ public class SideTouchRegression {
  static class Dismiss{void follow(float dx){}void settle(boolean done){}}Dismiss sideDismiss;Object promotion,cellMotion;Slot sideDismissSlot;boolean transferBusy,taskCellsCovered,mainOnRight=true;long sceneEpoch=1;
  boolean followSideDismiss(Slot s,MotionEvent e){return true;}
  boolean beginSideDismiss(Slot s,MotionEvent e){return false;}
+ void scheduleSideReorder(Slot s){}
  void dismissSideToBackground(Slot s){}void log(String s){}void onSlotTapped(int i){taps++;}void compactCells(){compactions++;}void transferTouchToTask(Slot s,long t){transfers++;}
  boolean ownsViewOrController(Object v){for(Slot s:slots)if(s.view==v)return true;return false;}
  void install(){Class<?>view=View.class;ClassLoader cl=getClass().getClassLoader();List<Object>installed=new ArrayList<>();

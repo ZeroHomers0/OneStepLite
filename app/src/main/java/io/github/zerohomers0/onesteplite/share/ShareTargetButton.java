@@ -16,7 +16,8 @@ final class ShareTargetButton extends ImageView {
     ShareTargetButton(Context context,ShareTarget target) {
         super(context);setTag(target);setImageDrawable(target.icon);setScaleType(ScaleType.FIT_CENTER);
         setContentDescription(target.label+(target.enabled?"":"，不支持当前内容"));setTooltipText(target.label);
-        setAlpha(target.enabled?1f:.3f);int inset=Math.round(HyperOsStyle.dp(context,6));
+        setAlpha(target.enabled?1f:.3f);
+        int inset=HyperOsStyle.dp(context,(QuickAppRail.CELL_WIDTH_DP-QuickAppRail.ICON_SIZE_DP)/2f);
         setPadding(inset,inset,inset,inset);
     }
 

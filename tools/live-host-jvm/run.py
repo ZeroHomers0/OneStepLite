@@ -55,7 +55,7 @@ public class LiveHostRegression {
  static class Promotion {
   static class Backdrop {int closes;void close(){closes++;}void closeAfterFrame(View v){if(v!=null&&v.layouts==0)throw new AssertionError("backdrop retired before Host restoration");closes++;}} Backdrop liveBackdrop;
   Slot slot; int taskId; Object token; LiveTask previousMain=new LiveTask(1,new Object());
-  boolean cancelled, nativeCompleting, nativeSubmitted, cancelRequested, externalLaunch, nativeHome, nativeFlip, nativeCollect;
+  boolean cancelled, nativeCompleting, nativeSubmitted, cancelRequested, externalLaunch, nativeHome, nativeFlip, nativeCollect,keepTopBarAppearance;
   long liveZoomGuardUntil;Runnable collectionLaunch;
   long sceneEpoch=7,bindingEpoch=3; LiveSwapVisualLease liveVisual;
   ArrayList<LiveSwapVisualLease> peerVisuals=new ArrayList<>();
@@ -118,6 +118,7 @@ public class LiveHostRegression {
  void writeZoom(boolean on){}
  void updateCellSurfaceVisibility(Slot s){}
  void resumeNotificationLaunch(Promotion p){}
+ int barRefreshes;void updateTopBarState(){barRefreshes++;}
  void updateHint(Slot s){}
  void updateTouchRegion(Slot s){}
  void finishPromotionFocus(Promotion p,Runnable done,int attempt){focuses++;focus=done;}
@@ -143,6 +144,7 @@ public class LiveHostRegression {
  }
  void nativeRoleCompletion(){
   Promotion p=promotion;Object old=p.token,next=p.previousMain.token;LiveSwapVisualLease visual=p.liveVisual;
+  p.keepTopBarAppearance=true;
   p.slot.controller.mTaskToken=next;
   finishLiveSwap(p,new LiveSwap.Result(true,true,null));
   check(promotion==p&&!p.cancelled&&p.nativeCompleting,"retain ticket through final focus");
@@ -151,6 +153,7 @@ public class LiveHostRegression {
   check(inputPass&&!visual.restored,"leave visual hole until facade commit plus focus");
   finishLiveSwap(p,new LiveSwap.Result(true,true,null));check(clears==1&&focuses==1,"duplicate recovery cannot bind twice");
   focus.run();check(promotion==null&&p.cancelled&&!inputPass&&visual.restored&&statusBar.finishes==1&&suspends==1,"unique final cleanup restores visuals/input then deferred exit");
+  check(barRefreshes==1,"a position swap refreshes toolbar state after native cleanup");
  }
  void cancellation(){
   Promotion p=promotion;p.nativeSubmitted=true;LiveSwap.cancels=0;

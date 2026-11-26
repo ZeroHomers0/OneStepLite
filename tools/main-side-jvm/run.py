@@ -38,6 +38,7 @@ public class SideSwitchRegression {
  void updateTouchRegion(Slot slot){slot.touchBlocked=liveSwapInputBlocked;}void updateChromeClip(){}
  void rememberMainSide(){saved++;remembered=mainOnRight;}void writeZoomAnimated(boolean on){check(on,"side switch never restores fullscreen");zoomWrites++;workspaceZoomStart=1032;}
  void setMainSide(boolean right){applyMainLayout(makeAdaptiveLayout(right));rememberMainSide();zoomWrites++;}
+ int topBarRefreshes;void updateTopBarState(){check(mainSideAnimator==null&&!transferBusy,"bar refresh runs after the side switch unlocks");topBarRefreshes++;}
  void finishPendingSuspend(){}void log(String s){}
 '''+methods+'''
  public static void main(String[]args){
@@ -53,6 +54,7 @@ public class SideSwitchRegression {
    enter.end();check(Float.isNaN(h.mainSideFrameX)&&h.mainSideBackdrop==null,"settled layout releases temporary substrate and geometry");
    check(h.mainSideAnimator==null&&!h.liveSwapInputBlocked&&h.slots[1].view.x==h.layout.cellX&&h.slots[1].hint.x==h.layout.cellX&&h.sideBackingViews[1].x==h.layout.cellX,"completion keeps actual target layout for TaskView, hint and backing");
    check(!h.slots[1].touchBlocked&&h.slots[1].hint.hit(h.layout.cellX+135)&&!h.slots[1].hint.hit((old?0:810)+135),"only target-side add button receives clicks after unblock");
+   check(h.topBarRefreshes==1,"settling refreshes the bar once");
    check(h.root.layouts==1&&h.root.invalidates>1,"native input insets recalculated after animation completion");
    check(h.slots[0].view.x==0&&h.slots[4].view.x==0,"native main and video parents never translated by cell animation");
   }

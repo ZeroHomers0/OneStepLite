@@ -33,6 +33,7 @@ final class QuickAppRail extends View {
     private int activeIndex;
     private List<QuickApp> apps;
     static final String APP_DRAG_MIME="application/vnd.onesteplite.quick-app";
+    static final int CELL_WIDTH_DP = 50, ICON_SIZE_DP = 38;
     private final Runnable pressDrag=this::startAppDrag;
     private boolean down;
     private float downX;
@@ -78,9 +79,9 @@ final class QuickAppRail extends View {
         this.apps = list == null ? Collections.emptyList() : Collections.unmodifiableList(new java.util.ArrayList<>(list));
         this.listener = listener;
         float f = context.getResources().getDisplayMetrics().density;
-        this.tileWidth = 50.0f * f;
+        this.tileWidth = CELL_WIDTH_DP * f;
         this.padding = 10.0f * f;
-        this.iconSize = 35.0f * f;
+        this.iconSize = ICON_SIZE_DP * f;
         ViewConfiguration config = ViewConfiguration.get(context);
         this.touchSlop = config.getScaledTouchSlop();
         this.minimumVelocity = config.getScaledMinimumFlingVelocity();

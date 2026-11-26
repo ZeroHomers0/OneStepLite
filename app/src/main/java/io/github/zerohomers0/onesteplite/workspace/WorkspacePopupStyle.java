@@ -125,7 +125,8 @@ final class WorkspacePopupStyle {
             row.addView(subtitle,new android.widget.LinearLayout.LayoutParams(0,-2,1));
         }
         if(trailingAction!=null){
-            android.widget.LinearLayout.LayoutParams actionBounds=new android.widget.LinearLayout.LayoutParams(-2,height);
+            int actionWidth=trailingAction instanceof IconButton?height:-2;
+            android.widget.LinearLayout.LayoutParams actionBounds=new android.widget.LinearLayout.LayoutParams(actionWidth,height);
             actionBounds.setMarginEnd(dp(context,8));
             row.addView(trailingAction,actionBounds);
         }

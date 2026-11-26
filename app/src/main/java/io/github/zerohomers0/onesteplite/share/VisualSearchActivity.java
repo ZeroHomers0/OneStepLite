@@ -48,7 +48,6 @@ public final class VisualSearchActivity extends Activity {
     private void createPage(){
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setBackgroundColor(HyperOsStyle.page(this));
         IconButton retry=new IconButton(this,IconButton.RETRY,"重试");
-        retry.setMinimumWidth(HyperOsStyle.dp(this,44));
         retry.setTooltipText("重试");
         retry.setOnClickListener(view->{if(form!=null)submit();});
         WorkspacePopupStyle.heading(page,"图片搜索",this::finish,retry);

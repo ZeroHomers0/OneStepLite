@@ -24,6 +24,7 @@ final class TopBar extends FrameLayout {
         default void onContentShare(android.content.ComponentName target, Runnable launch) { launch.run(); }
         default Rect contentBounds() { return null; }
         default boolean canShareContent(){return false;}
+        default boolean isActiveContentSource(String packageName){return false;}
         default boolean contentRailCovered(){return false;}
         default String contentHoverKey(String packageName){return null;}
         default void onContentHover(String key){}
@@ -87,6 +88,7 @@ final class TopBar extends FrameLayout {
                 text -> {header.setHint(text);if(tabletHeader!=null)tabletHeader.setHint(text);},
                 () -> this.listener.contentBounds());
         addView(shareWorkspace, new LayoutParams(-1, 1));
+        shareWorkspace.setActiveViewSource(pkg->this.listener.isActiveContentSource(pkg));
         shareWorkspace.setMainOnRight(mainOnRight);quickRail.setMainOnRight(mainOnRight);
         shareWorkspace.setCoveredSource(()->!isShown() || this.listener.contentRailCovered());
         shareWorkspace.setWindowHover(pkg->this.listener.contentHoverKey(pkg),key->this.listener.onContentHover(key));

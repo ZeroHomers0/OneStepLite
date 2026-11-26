@@ -57,6 +57,7 @@ public class SideDismissRegression {
  }
  boolean isActive(Slot s){return s==slots[1];} static void log(String s){}
  void onSlotTapped(int i){taps++;}void compactCells(){compactions++;}
+ void scheduleSideReorder(Slot s){}
  void clearSlot(Slot s){s.occupied=false;s.taskId=-1;s.taskEpoch++;clears++;compactPending=true;}
  void finishPendingSuspend(){}
  void returnToSystem(Slot s,boolean front,Runnable ok,Consumer<String> bad){returns++;this.front=front;success=ok;failure=bad;transferBusy=true;}

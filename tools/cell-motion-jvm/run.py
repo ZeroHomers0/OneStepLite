@@ -53,6 +53,15 @@ public class CellMotionRegression {
   ValueAnimator.latest.end();owner.draw();check(moving.surfaceY==100&&moving.ty==100&&completed[0]==1,"setY final layout must not be undone by restoring the old translation");
   var secondMove=new CellMotion(owner,List.of(new CellMotion.Move(moving,4,100,4,300,()->true)),()->moving.setY(300),()->{},s->{});
   secondMove.start();owner.flush();ValueAnimator.latest.frame(.5f);owner.draw();check(moving.surfaceY==200,"next compaction starts at committed position, without accumulated stale offset");ValueAnimator.latest.end();owner.draw();check(moving.surfaceY==300,"consecutive absolute setY commits retain the destination");
+  View exchange=new View(),upper=new View(),lower=new View();exchange.children.add(upper);exchange.children.add(lower);
+  upper.setY(100);lower.setY(300);Object upperTask=upper.task,lowerTask=lower.task;int[] exchanged={0};
+  var pair=new CellMotion(exchange,List.of(new CellMotion.Move(upper,4,100,4,300,()->true),
+    new CellMotion.Move(lower,4,300,4,100,()->true)),()->{upper.setY(300);lower.setY(100);},()->exchanged[0]++,s->{});
+  pair.start();exchange.flush();ValueAnimator.latest.frame(.25f);exchange.draw();
+  check(upper.surfaceY==150&&lower.surfaceY==250,"opposed windows travel from both original positions in the same frame");
+  ValueAnimator.latest.end();check(exchanged[0]==0,"paired movement retains ownership until the destination frame");
+  exchange.draw();check(exchanged[0]==1&&upper.surfaceY==300&&lower.surfaceY==100
+    &&upper.task==upperTask&&lower.task==lowerTask,"paired movement commits swapped positions and original tasks together");
   View commit=new View();List<Boolean>handoffs=new ArrayList<>();CollectFrame.await(commit,()->true,handoffs::add);
   check(handoffs.isEmpty()&&commit.invalidates==1,"collect must retain real upper layer until Host empty hint removal commits");commit.draw();
   check(handoffs.equals(List.of(true))&&commit.deadlines.isEmpty()&&commit.listeners.isEmpty(),"committed handoff releases hooks/deadline");commit.expire();commit.draw();check(handoffs.size()==1,"handoff completed twice");

@@ -17,7 +17,7 @@ final class WorkspaceCellStyle {
         paint.setColor(WELL_COLOR);
         canvas.drawCircle(x, y, well, paint);
         paint.setColor(WELL_ICON_COLOR);
-        paint.setStrokeWidth(Math.max(1.5f, density * 1.65f));
+        paint.setStrokeWidth(Math.max(1.5f, density * 2f));
         paint.setStrokeCap(Paint.Cap.ROUND);
         float arm = well * .30f;
         canvas.drawLine(x - arm, y, x + arm, y, paint);

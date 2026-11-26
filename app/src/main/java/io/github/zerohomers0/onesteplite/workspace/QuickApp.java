@@ -33,6 +33,17 @@ final class QuickApp {
     }
 
     static List<QuickApp> load(Context ctx) {
+        List<QuickApp> list = launcherEntries(ctx);
+        return sortByUsage(ctx,list);
+    }
+
+    static List<QuickApp> loadAlphabetical(Context ctx) {
+        List<QuickApp> list = launcherEntries(ctx);
+        list.sort((a,b)->a.label.compareToIgnoreCase(b.label));
+        return list;
+    }
+
+    private static List<QuickApp> launcherEntries(Context ctx) {
         PackageManager pm = ctx.getPackageManager();
         Intent main = new Intent(Intent.ACTION_MAIN);
         main.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -56,6 +67,10 @@ final class QuickApp {
             }
             list.add(new QuickApp(label == null ? pkg : label.toString(), component, icon));
         }
+        return list;
+    }
+
+    private static List<QuickApp> sortByUsage(Context ctx,List<QuickApp> list) {
         Map<String, UsageStats> usage = Collections.emptyMap();
         try {
             UsageStatsManager stats = (UsageStatsManager) ctx.getSystemService(Context.USAGE_STATS_SERVICE);

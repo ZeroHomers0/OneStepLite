@@ -84,6 +84,10 @@ final class ShareWorkspace extends FrameLayout {
     private Consumer<String> hoverActivate=value->{};
     private BiConsumer<Boolean,ClipData> resultSink=this::onDeliveryResult;
 
+    void setActiveViewSource(java.util.function.Predicate<String> source) {
+        if(portal!=null)portal.setActiveViewSource(source);
+    }
+
     ShareWorkspace(Context context, View normalRail, BooleanSupplier ready,
             BiConsumer<ComponentName, Runnable> dispatch, Consumer<String> hint,
             Supplier<android.graphics.Rect> bounds) {
@@ -356,12 +360,12 @@ final class ShareWorkspace extends FrameLayout {
         if(imageDrag && !shareOnly) {
             ShareTarget recognize=new ShareTarget(IMAGE_TEXT,"识别文字",new ShareActionIcon("recognize"),true);
             ShareTargetButton icon=new ShareTargetButton(getContext(),recognize);icon.setMainOnRight(mainRight);
-            targets.addView(icon,new LinearLayout.LayoutParams(dp(50),-1));
+            targets.addView(icon,new LinearLayout.LayoutParams(dp(QuickAppRail.CELL_WIDTH_DP),-1));
         }
         for (ShareTarget entry : entries) {
             ShareTargetButton icon = new ShareTargetButton(getContext(),entry);
             icon.setMainOnRight(mainRight);
-            targets.addView(icon, new LinearLayout.LayoutParams(dp(50), -1));
+            targets.addView(icon, new LinearLayout.LayoutParams(dp(QuickAppRail.CELL_WIDTH_DP), -1));
         }
         if (entries.isEmpty() && targets.getChildCount()==0) {
             TextView empty = new TextView(getContext());

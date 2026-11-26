@@ -29,6 +29,7 @@ final class PortalSource implements AutoCloseable {
     private final Supplier<Rect> bounds;
     private final java.util.function.Consumer<android.net.Uri> imagePreview;
     private final SourceCaptureController fallbackCapture;
+    private java.util.function.Predicate<String> activeViewSource=pkg->false;
     private Runnable fallbackJob;
     private boolean fallbackIssued;
     private float fallbackX,fallbackY;
@@ -66,6 +67,7 @@ final class PortalSource implements AutoCloseable {
         this.anchor=anchor;this.ready=ready;this.bounds=bounds;this.imagePreview=imagePreview;
         fallbackCapture=new SourceCaptureController(anchor,()->ready.getAsBoolean() && selection==null && !selectingDrag,bounds);
     }
+    void setActiveViewSource(java.util.function.Predicate<String> source){activeViewSource=source;}
     void start() {
         if(input!=null)return;
         try {
@@ -136,10 +138,12 @@ final class PortalSource implements AutoCloseable {
         int slop=android.view.ViewConfiguration.get(anchor.getContext()).getScaledTouchSlop();
         long held=android.os.SystemClock.uptimeMillis()-event.getDownTime();
         int longPress=android.view.ViewConfiguration.getLongPressTimeout();
-        if(held<longPress && Math.hypot(event.getRawX()-downX,event.getRawY()-downY)>slop)
+        double distance=Math.hypot(event.getRawX()-downX,event.getRawY()-downY);
+        if(held<longPress && distance>slop)
             liftEligible=false;
-        if(liftCandidate==null || Math.hypot(event.getRawX()-downX,event.getRawY()-downY)<=slop)return;
-        if(held<longPress){clearLiftCandidate();return;}
+        if(liftCandidate==null)return;
+        if(held<longPress){if(!liftEligible)clearLiftCandidate();return;}
+        if(distance<=slop*1.5f)return;
         if(held<longPress+150L || android.os.SystemClock.uptimeMillis()<liftAt || !live())return;
         Bundle request=liftCandidate;liftCandidate=null;
         request.putBoolean("lift",true);offer(request,new Bundle[1],new CountDownLatch(1),new AtomicBoolean());
@@ -174,7 +178,7 @@ final class PortalSource implements AutoCloseable {
         main.post(()->{
             try {
             if(expired.get()){done.countDown();return;}
-            if(code==PortalWire.STATUS)result[0]=status();
+            if(code==PortalWire.STATUS)result[0]=status(request);
             else if(request!=null && live() && window==null && selection==null && !selectingDrag
                     && request.getInt("generation")==generation
                     && PortalGesturePolicy.offer(request.getLong("down"),pointer.getDownTime(),issued,android.os.SystemClock.uptimeMillis()))
@@ -187,8 +191,10 @@ final class PortalSource implements AutoCloseable {
         catch(InterruptedException interrupted){Thread.currentThread().interrupt();expired.set(true);return null;}
         return result[0];
     }
-    private Bundle status() {
+    private Bundle status(Bundle request) {
         if(!live() || window!=null || selection!=null)return null;
+        if(request!=null && (request.getLong("down")!=pointer.getDownTime() || !liftEligible
+                || pointer.getPointerCount()!=1 || !activeViewSource.test(request.getString("source"))))return null;
         issued=android.os.SystemClock.uptimeMillis();Bundle state=new Bundle();
         state.putLong("down",pointer.getDownTime());state.putInt("generation",generation);
         state.putBoolean("prefer_image",pointer.getPointerCount()==1);return state;
@@ -196,9 +202,12 @@ final class PortalSource implements AutoCloseable {
     private void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
         String uri=request.getString("uri"),text=request.getString("text");
         boolean region=request.getBoolean("region_only");
-        if(request.getBoolean("view_image") && pointer.getPointerCount()!=1){done.countDown();return;}
+        if(request.getBoolean("view_source") && (pointer.getPointerCount()!=1
+                || !activeViewSource.test(request.getString("source")))){done.countDown();return;}
         if(!region && uri==null && (text==null || text.isEmpty() || text.length()>ContentSharePolicy.MAX_TEXT)){done.countDown();return;}
         Rect rect=sourceRect(request);
+        if(pointer.getPointerCount()==2 && rect!=null
+                && rect.bottom<=SourceCaptureController.statusBarBottom(anchor)){done.countDown();return;}
         if(region && (pointer.getPointerCount()!=1 || rect==null || !rect.contains((int)downX,(int)downY))){
             done.countDown();return;
         }
@@ -300,7 +309,7 @@ final class PortalSource implements AutoCloseable {
         boolean image=uri!=null || request.getBoolean("region_only");
         long now=android.os.SystemClock.uptimeMillis();
         liftAt=pointer.getDownTime()+android.view.ViewConfiguration.getLongPressTimeout()+150L;
-        if(image && priority<PortalGesturePolicy.SYSTEM_IMAGE)
+        if(image && priority<PortalGesturePolicy.SYSTEM_IMAGE || priority==PortalGesturePolicy.VIEW_TEXT)
             liftAt=Math.max(liftAt,now+PortalGesturePolicy.PREFERRED_SOURCE_WAIT_MS);
         if(priority==PortalGesturePolicy.REGION)liftAt=Math.max(liftAt,now+350L);
         if(uri!=null)prepareLiftPreview(candidate,android.net.Uri.parse(uri));

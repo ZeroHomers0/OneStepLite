@@ -2953,6 +2953,7 @@ public final class WorkspaceHost {
         }
         @Override public boolean dispatchTouchEvent(MotionEvent event) {
             if (transitionInput != null && transitionInput.consume(event.getActionMasked())) return true;
+            if (mainSideAnimator != null || cellMotion != null || sideCompacting) return true;
             boolean wasCaptured = sideCaptured;
             if (trackSideScroll(event)) {
                 if (!wasCaptured && event.getActionMasked() == MotionEvent.ACTION_MOVE) {
@@ -3057,6 +3058,7 @@ public final class WorkspaceHost {
             @Override public boolean canShareContent() {
                 return scene==ACTIVE && screenOn && !keyguardLocked && promotion==null && !transferBusy && !taskCellsCovered;
             }
+            @Override public boolean isActiveContentSource(String pkg) { return isFocusedContentSource(pkg); }
             @Override public boolean contentRailCovered() {
                 return topFace || videoPane!=null && videoPane.embedded();
             }
@@ -3067,8 +3069,12 @@ public final class WorkspaceHost {
                 ?workspaceTopHole():null);
         topBar=chrome.bar;topStripBacking=chrome.backing;topLiveClip=chrome.clip;
         topBar.applyOptions(workspaceOptions);
-        root.setOnDragListener((view, event) -> event.getLocalState() instanceof QuickApp
-                ? onQuickAppDrag(view,event,(QuickApp)event.getLocalState()) : onWindowContentDrag(event));
+        root.setOnDragListener((view, event) -> {
+            Object source=event.getLocalState();
+            if(source instanceof SideReorderDrag drag)return onSideReorderDrag(view,event,drag);
+            if(source instanceof QuickApp app)return onQuickAppDrag(view,event,app);
+            return onWindowContentDrag(event);
+        });
         refreshQuickApps();
         createTopPresentation();
         videoPane=topPresentation.video();
@@ -3085,6 +3091,22 @@ public final class WorkspaceHost {
 
     private Runnable workspaceHeartbeat;
     private long lastWorkspaceRepair;
+
+    private boolean isFocusedContentSource(String pkg) {
+        if(pkg==null)return false;
+        try {
+            for(Object info:rootInfos()) {
+                if(!(info instanceof android.app.TaskInfo task) || task.topActivity==null
+                        || !pkg.equals(task.topActivity.getPackageName())
+                        || XposedHelpers.getIntField(info,"displayId")!=0
+                        || !XposedHelpers.getBooleanField(info,"isFocused")
+                        || !XposedHelpers.getBooleanField(info,"isVisible")
+                        || !Integer.valueOf(1).equals(XposedHelpers.callMethod(info,"getWindowingMode")))continue;
+                if(!isSideToken(XposedHelpers.getObjectField(info,"token")))return true;
+            }
+        } catch(Exception unavailable){return false;}
+        return false;
+    }
 
     /** Renew the 15-second zoom lease; full recovery is an infrequent fallback. */
     private void startWorkspaceHeartbeat() {
@@ -4196,7 +4218,9 @@ public final class WorkspaceHost {
         if (workspaceAnimator != null || workspaceAlpha < 1f) return;
         boolean available = scene == ACTIVE && screenOn && !keyguardLocked
                 && promotion == null && !transferBusy;
-        if (topBar != null) {
+        // Moving the workspace chrome does not change the current button appearance.
+        if (topBar != null && mainSideAnimator == null && cellMotion == null
+                && (promotion == null || !promotion.keepTopBarAppearance)) {
             topBar.setAlpha(available ? 1f : 0.92f);
             topBar.setSendMainToTopEnabled(available && mainCanFillTop());
         }
@@ -4834,11 +4858,127 @@ public final class WorkspaceHost {
         int split=key==null?-1:key.indexOf('\n');if(split<1)return;
         String pkg=key.substring(0,split);
         if(!key.equals(contentHoverKeyFor(pkg)))return;
-        contentDropHighlight.close();promoteForNotification(pkg,currentUserId(),()->{});
+        contentDropHighlight.close();
+        if(promoteForNotification(pkg,currentUserId(),()->{}))promotion.dragHover=true;
     }
 
     private android.graphics.drawable.GradientDrawable quickDropOutline;
     private int quickDropIndex=-1;
+
+    private static final String SIDE_REORDER_MIME="application/vnd.onesteplite.side-reorder";
+
+    private void scheduleSideReorder(Slot slot) {
+        MotionEvent down=slot.bufferedDown;
+        long pressedAt=down.getDownTime();
+        SideReorderDrag drag=new SideReorderDrag(slot,slot.index,slot.taskEpoch,sceneEpoch,pressedAt);
+        main.postDelayed(()->{
+            if(slot.bufferedDown!=down || down.getDownTime()!=pressedAt || slot.injecting
+                    || !canReorderFrom(drag))return;
+            android.content.ClipData clip=new android.content.ClipData("小窗排序",
+                    new String[]{SIDE_REORDER_MIME},new android.content.ClipData.Item(""));
+            slot.injecting=true;
+            try {
+                if(slot.view.startDragAndDrop(clip,sideReorderShadow(slot),drag,0)) {
+                    sideArmed=false;
+                    recycleSideVelocity();
+                    slot.view.performHapticFeedback(android.view.HapticFeedbackConstants.DRAG_START);
+                    return;
+                }
+            } catch(RuntimeException unavailable) {
+                log("side reorder drag unavailable: "+unavailable);
+            }
+            slot.injecting=false;
+        },ViewConfiguration.getLongPressTimeout());
+    }
+
+    private View.DragShadowBuilder sideReorderShadow(Slot slot) {
+        android.graphics.drawable.Drawable icon;
+        try { icon=ctx.getPackageManager().getApplicationIcon(slot.pkg); }
+        catch(android.content.pm.PackageManager.NameNotFoundException unavailable) {
+            icon=ctx.getPackageManager().getDefaultActivityIcon();
+        }
+        android.graphics.drawable.Drawable glyph=icon;
+        int edge=HyperOsStyle.dp(ctx,QuickAppRail.ICON_SIZE_DP);
+        return new View.DragShadowBuilder() {
+            @Override public void onProvideShadowMetrics(android.graphics.Point size,android.graphics.Point touch) {
+                size.set(edge,edge);touch.set(edge/2,edge/2);
+            }
+            @Override public void onDrawShadow(android.graphics.Canvas canvas) {
+                glyph.setBounds(0,0,edge,edge);glyph.draw(canvas);
+            }
+        };
+    }
+
+    private boolean canReorderFrom(SideReorderDrag drag) {
+        return root!=null && canMoveSideRows() && !sideCaptured && !isSideMotionRunning()
+                && drag.scene()==sceneEpoch && drag.source().taskEpoch==drag.binding()
+                && drag.source().index==drag.position() && isReorderableSide(drag.source());
+    }
+
+    private boolean isReorderableSide(Slot slot) {
+        return slot.index>SLOT_MAIN && slot.index<CELL_SLOT_COUNT && isActive(slot) && presentsSlot(slot)
+                && slot.occupied && slot.taskToken!=null && slot.view!=null && slot.view.isShown() && slot.rect!=null
+                && !slot.promoting && !slot.launching && !slot.closing && !slot.frozen && !slot.parked
+                && !slot.carrier && !slot.nativeReleasePending;
+    }
+
+    private boolean onSideReorderDrag(View target,android.view.DragEvent event,SideReorderDrag drag) {
+        int action=event.getAction();
+        if(action==android.view.DragEvent.ACTION_DRAG_ENDED || action==android.view.DragEvent.ACTION_DRAG_EXITED) {
+            showQuickDrop(target,null);
+            Slot source=drag.source();
+            if(action==android.view.DragEvent.ACTION_DRAG_ENDED && drag.scene()==sceneEpoch
+                    && source.bufferedDown!=null && source.bufferedDown.getDownTime()==drag.down()) {
+                recycleBuffered(source);
+                source.injecting=false;
+                if(compactPending)requestCompaction();
+            }
+            return true;
+        }
+        if(target!=root || !canReorderFrom(drag)) {
+            showQuickDrop(target,null);return false;
+        }
+        if(action==android.view.DragEvent.ACTION_DRAG_STARTED)
+            return event.getClipDescription()!=null && event.getClipDescription().hasMimeType(SIDE_REORDER_MIME);
+        Slot match=null;
+        for(int index=1;index<CELL_SLOT_COUNT;index++) {
+            Slot candidate=slots[index];
+            if(candidate==drag.source() || !isReorderableSide(candidate))continue;
+            int[] rect=candidate.rect;
+            if(event.getX()>=rect[0] && event.getX()<rect[2] && event.getY()>=rect[1] && event.getY()<rect[3]) {
+                match=candidate;break;
+            }
+        }
+        if(action!=android.view.DragEvent.ACTION_DROP){showQuickDrop(target,match);return true;}
+        showQuickDrop(target,null);
+        if(match==null || !controllerOwns(drag.source(),drag.source().taskId,drag.source().taskToken)
+                || !controllerOwns(match,match.taskId,match.taskToken))return false;
+        reorderSideSlots(drag.source(),match);
+        return true;
+    }
+
+    private void reorderSideSlots(Slot source,Slot target) {
+        if(source.sideRow>=0 && target.sideRow>=0) {
+            int sourceRow=source.sideRow,targetRow=target.sideRow;
+            java.util.Collections.swap(sideOrder,sourceRow,targetRow);
+            mapSideSlots(Math.round(sideOffset));
+            if(android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                sideCompactionShift.put(source,(float)(sourceRow-targetRow));
+                sideCompactionShift.put(target,(float)(targetRow-sourceRow));
+                animateSideCompaction();
+            } else commitSideScrollPosition();
+            return;
+        }
+        int from=source.index,to=target.index;
+        int[] fromRect=source.rect,toRect=target.rect;
+        SlotPositions.swap(slots,from,to);
+        source.rect=toRect;target.rect=fromRect;
+        syncSlotWindowState(source);syncSlotWindowState(target);
+        if(!android.animation.ValueAnimator.areAnimatorsEnabled()){finishCellLayout();return;}
+        animateCellMoves(java.util.List.of(
+                new CellMovePlan(source,new Rect(fromRect[0],fromRect[1],fromRect[2],fromRect[3])),
+                new CellMovePlan(target,new Rect(toRect[0],toRect[1],toRect[2],toRect[3]))),0,true);
+    }
 
     private boolean onQuickAppDrag(View target,android.view.DragEvent event,QuickApp app) {
         int action=event.getAction();
@@ -5642,6 +5782,7 @@ public final class WorkspaceHost {
         for(Slot slot:slots)if(slot!=null&&slot.index>SLOT_MAIN&&slot.index!=SLOT_TOP)updateTouchRegion(slot);
         if(root!=null){root.requestLayout();root.invalidate();}
         updateChromeClip();
+        updateTopBarState();
     }
 
     private void cancelMainSideSwitch() {
@@ -5805,7 +5946,7 @@ public final class WorkspaceHost {
     /**
      * 触摸规则（官方OneStepLite语义 + 演示需要）：
      *   主区由系统处理，宿主不接收其触摸；
-     *   小窗有任务 → 轻点=与主窗交换；滑动取消轻点，始终不操作小窗；
+     *   小窗有任务 → 轻点与主窗交换；长按可交换小窗顺序；
      *   空槽 → 不消费，交给宿主点击处理。
      */
     private boolean onSlotTouch(int slotIndex, MotionEvent e) {
@@ -5835,6 +5976,7 @@ public final class WorkspaceHost {
                 slot.touchSceneEpoch = sceneEpoch;
                 slot.touchAxis = SideGestureAxis.UNDECIDED;
                 slot.injecting = false;
+                scheduleSideReorder(slot);
                 return true;
             }
             case MotionEvent.ACTION_MOVE: {
@@ -6289,6 +6431,8 @@ public final class WorkspaceHost {
         ticket.bindingEpoch = cellSlot.taskEpoch;
         ticket.previousMainOnRight = mainOnRight;
         ticket.targetMainOnRight = mainOnRight;
+        ticket.keepTopBarAppearance = layout != null && !layout.tabletLandscape
+                && workspaceOptions.mainOnRightAfterSwap(mainOnRight) != mainOnRight;
         promotion = ticket;
         if (desktopLaunch) ticket.slot.promoting = true;
         statusBar.hideFor(ticket, () -> {
@@ -7053,6 +7197,7 @@ public final class WorkspaceHost {
         // The draw also restores backing/hints and removes the wallpaper lease.
         // A gesture begun while the real tasks were borrowed remains consumed to UP.
         setLiveSwapInputBlocked(false);
+        if(ticket.keepTopBarAppearance && promotion==null)updateTopBarState();
         resumeNotificationLaunch(ticket);
     }
 
@@ -7111,6 +7256,12 @@ public final class WorkspaceHost {
     }
 
     private void finishSwapPreview(Object statusOwner, long settleMs) {
+        if(statusOwner instanceof Promotion ticket && ticket.dragHover){
+            // Once the hovered task has actually taken focus, release the full-screen input
+            // cover so the original native drag can reach its new main-window drop zone.
+            closeSwapPreview(statusOwner);
+            return;
+        }
         // Two host frames settle the replacement SurfaceView before revealing it.
         SwapPreview expected = swapPreview;
         Runnable reveal = () -> {
@@ -7405,6 +7556,7 @@ public final class WorkspaceHost {
         traceSwapEvent("Home-cover-and-focus-confirmed");
         ticket.cancelled = true;
         promotion = null;
+        if(ticket.keepTopBarAppearance)updateTopBarState();
         resumeNotificationLaunch(ticket);
         coveredHome = new HomeTaskReturn(ticket.taskId, ticket.token,
                 ticket.homeBeforeCover.id, ticket.homeBeforeCover.token);
@@ -7523,6 +7675,7 @@ public final class WorkspaceHost {
                 && mainOnRight != ticket.previousMainOnRight) {
             setMainSide(ticket.previousMainOnRight);
         }
+        if(ticket.keepTopBarAppearance)updateTopBarState();
         closeSwapPreview(ticket);
         Slot slot = ticket.slot;
         resumeNotificationLaunch(ticket);
@@ -8437,7 +8590,7 @@ public final class WorkspaceHost {
                 break;
             }
         }
-        if (!moves.isEmpty()) animateCellMoves(moves, initialEmptySlots);
+        if (!moves.isEmpty()) animateCellMoves(moves, initialEmptySlots,false);
     }
 
     private void requestCompaction() {
@@ -8477,7 +8630,7 @@ public final class WorkspaceHost {
         return (initialEmptySlots | ~occupiedSlots) & ((1 << SLOT_COUNT) - 2);
     }
 
-    private void animateCellMoves(java.util.List<CellMovePlan> plans, int initialEmptySlots) {
+    private void animateCellMoves(java.util.List<CellMovePlan> plans, int initialEmptySlots, boolean paired) {
         final FrameLayout movingRoot = root;
         final long epoch = sceneEpoch;
         final java.util.List<CellMotion.Move> moves = new java.util.ArrayList<>();
@@ -8499,7 +8652,7 @@ public final class WorkspaceHost {
                         slot.rect[0], slot.rect[1], () -> cellMoveCurrent(slot, movingRoot, epoch, binding,
                         id, token, controller, movingView, surface)));
             }
-            if (moves.isEmpty()) { finishCellLayout(); return; }
+            if (moves.isEmpty() || paired && moves.size()!=plans.size()) { finishCellLayout(); return; }
             // Preserve existing empty pluses and reveal vacated sources. An occupied
             // intermediate destination never acquires a one-frame '+' during travel.
             final int revealEmptySlots = compactionHintMask(initialEmptySlots, occupiedSlots);
@@ -8530,6 +8683,7 @@ public final class WorkspaceHost {
                         if (cellMotion != run[0]) return;
                         cellMotion = null;
                         transferBusy = false;
+                        updateTopBarState();
                         // finishCellLayout ran while cellMotion still owned visibility.
                         // Reconcile now, including the empty old source's resize background.
                         for (Slot cell : slots) updateCellSurfaceVisibility(cell);

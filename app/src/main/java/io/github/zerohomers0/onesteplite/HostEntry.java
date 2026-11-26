@@ -63,13 +63,6 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
-        if (ViewImageSource.supports(lpparam.packageName)) {
-            if(lpparam.packageName.equals(lpparam.processName)) {
-                try{ViewImageSource.install();}
-                catch(Throwable unavailable){log("View image source unavailable: "+unavailable);}
-            }
-            return;
-        }
         if (SystemExtractHooks.PACKAGE.equals(lpparam.packageName)) {
             SystemExtractHooks.install(lpparam.classLoader);
             return;
@@ -98,7 +91,11 @@ public class HostEntry implements IXposedHookLoadPackage {
             return;
         }
         if (!SYSTEMUI.equals(lpparam.packageName)) {
-            // Raw correction is owned by the system publisher; never invert it twice in apps.
+            if (lpparam.appInfo != null && ViewImageSource.supportsUid(lpparam.appInfo.uid)
+                    && !HostEntry.class.getPackageName().equals(lpparam.packageName)) {
+                try { ViewImageSource.install(); }
+                catch (Throwable unavailable) { log("View content source unavailable: " + unavailable); }
+            }
             return;
         }
         final ClassLoader cl = lpparam.classLoader;

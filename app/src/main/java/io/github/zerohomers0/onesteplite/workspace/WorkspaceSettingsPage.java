@@ -28,6 +28,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
     private final int primary, secondary, surface;
     private final int[] scrollPositions = new int[APP_DRAG + 1];
     private ShortcutManagementPage shortcutPage;
+    private final ShortcutManagementPage.Warmup shortcutWarmup=new ShortcutManagementPage.Warmup();
     private Bundle shortcutDraft;
     private final android.database.ContentObserver gestureObserver =
             new android.database.ContentObserver(new android.os.Handler(android.os.Looper.getMainLooper())) {
@@ -120,11 +121,12 @@ final class WorkspaceSettingsPage extends FrameLayout {
 
     private void showShortcuts(int next) {
         activity.setPageTitle(next==APPS?"管理快捷应用":"管理分享入口");
-        shortcutPage=new ShortcutManagementPage(activity,next==APPS,shortcutDraft,()->show(HOME,true));
+        shortcutPage=new ShortcutManagementPage(activity,next==APPS,shortcutDraft,shortcutWarmup);
         addView(shortcutPage,new FrameLayout.LayoutParams(-1,-1));
     }
 
     private void home() {
+        shortcutWarmup.prepare(activity);
         WorkspaceOptions options = WorkspaceSettingsStore.read(activity);
         section("外观");
         LinearLayout appearance = card();

@@ -69,6 +69,9 @@ public class WordHoldRegression{
  h=fresh();h.liftCandidate=new Bundle();h.motion(new MotionEvent(1));check(h.liftCandidate==null&&h.lifts==0&&h.discarded==1,"stationary release discards exactly once");
  h=fresh();h.liftCandidate=new Bundle();move=new MotionEvent(2);move.x=90;h.motion(move);check(h.lifts==0&&h.liftCandidate==null,"ordinary scrolling before long press never initiates drag");
  h=fresh();h.liftCandidate=new Bundle();android.os.SystemClock.now=1800;move=new MotionEvent(2);move.x=90;h.motion(move);check(h.lifts==1&&h.discarded==0,"long press movement transfers the candidate without discarding it");
+ h=fresh();h.liftCandidate=new Bundle();android.os.SystemClock.now=1800;move=new MotionEvent(2);move.x=61;
+ h.motion(move);check(h.lifts==0&&h.liftCandidate!=null,"small post-hold movement leaves the app menu alone");
+ move.x=63;h.motion(move);check(h.lifts==1,"movement beyond one and a half touch slops starts a lift");
  h=fresh();h.liftCandidate=new Bundle();android.os.SystemClock.now=1550;
  move=new MotionEvent(2);move.x=90;h.motion(move);check(h.lifts==0&&h.liftCandidate!=null,"movement during the system-menu grace period retains the candidate without lifting");
  android.os.SystemClock.now=1660;h.motion(move);check(h.lifts==1&&h.liftCandidate==null,"continued movement after the grace period starts one drag");

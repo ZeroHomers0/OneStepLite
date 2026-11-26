@@ -125,6 +125,7 @@ public class HostRevealOrderTest {
         void close(Runnable r){closed=true;detached=r;}
         void detach(){Runnable r=detached;detached=null;if(r!=null)r.run();}
     }
+    static class Promotion {boolean dragHover;}
     Queue root=new Queue(),main=new Queue();
     Status statusBar=new Status();
     Object promotion;
@@ -155,6 +156,11 @@ public class HostRevealOrderTest {
         var newer=new SwapPreview();h.swapPreview=newer;h.swapPreviewStatusOwner=second;h.statusBar.begin(second);
         h.main.next();check(!newer.closed&&h.statusBar.hidden);
         h.closeSwapPreview(second);check(newer.closed&&h.statusBar.hidden);newer.detach();check(!h.statusBar.hidden);
+        var drag=new Promotion();drag.dragHover=true;
+        var cover=new SwapPreview();h.swapPreview=cover;h.swapPreviewStatusOwner=drag;h.statusBar.begin(drag);
+        h.finishSwapPreview(drag,120);
+        check(cover.closed&&h.swapPreview==null&&h.root.tasks.isEmpty());
+        cover.detach();check(!h.statusBar.hidden);
         System.out.println("HostRevealOrder checks="+checks+" passed");
     }
 }

@@ -56,6 +56,10 @@ final class SourceCaptureController implements AutoCloseable {
     }
 
     void open(Rect suggested) {
+        open(suggested,null);
+    }
+
+    private void open(Rect suggested,java.util.function.Consumer<String> recognize) {
         close();Rect mainBounds=bounds.get();
         if(!ready.getAsBoolean() || mainBounds==null || mainBounds.isEmpty() || !ContentAccessCompat.currentProcessUser())return;
         if(suggested!=null && (!mainBounds.contains(suggested)
@@ -66,6 +70,11 @@ final class SourceCaptureController implements AutoCloseable {
         initialCrop=suggested==null?null:new Rect(suggested);
         if(initialCrop!=null)initialCrop.offset(-requested.left,-requested.top);
         Rect region=new Rect(requested);
+        if(recognize!=null){
+            region.top=Math.max(region.top,statusBarBottom(anchor));
+            if(region.isEmpty()){close();return;}
+            textResult=recognize;
+        }
         // OEM WMS can retain a dismissed dialog surface beyond the next two UI frames.
         // This is a one-shot settling delay, not a compositor-commit acknowledgement.
         main.postDelayed(()->{
@@ -75,7 +84,16 @@ final class SourceCaptureController implements AutoCloseable {
         main.postDelayed(()->{if(token==generation && dialog==null && recognition==null)close();},10_000L);
     }
 
-    void extractText(java.util.function.Consumer<String> completed){open();if(!closed)textResult=completed;}
+    void extractText(java.util.function.Consumer<String> completed){open(null,completed);}
+
+    static int statusBarBottom(View anchor) {
+        android.view.WindowInsets insets=anchor.getRootWindowInsets();
+        if(insets!=null){
+            int top=insets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.statusBars()).top;
+            if(top>0)return top;
+        }
+        return DeviceProfile.statusBarHeightPx(anchor.getContext());
+    }
 
     private void capture(int token,Rect region) {
         Bitmap frame=null;

@@ -50,9 +50,10 @@ files.update({
     'android/graphics/drawable/ColorDrawable.java': 'package android.graphics.drawable;public class ColorDrawable {public ColorDrawable(int c){}}',
     'android/util/Log.java': 'package android.util;public class Log {public static void w(String t,String s,Throwable e){}}',
     'android/view/MotionEvent.java': 'package android.view;public class MotionEvent {public static final int ACTION_DOWN=0,ACTION_UP=1;public int action;public MotionEvent(int a){action=a;}public int getActionMasked(){return action;}public float getX(){return 0;}public float getY(){return 0;}}',
-    'android/view/Gravity.java': 'package android.view;public class Gravity {public static final int TOP=1,START=2,CENTER=4;}',
+    'android/view/Gravity.java': 'package android.view;public class Gravity {public static final int CENTER=4;}',
     'android/view/View.java': '''package android.view;public class View {
-        public static final int VISIBLE=0,INVISIBLE=4,GONE=8,IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS=4;
+        public static final int VISIBLE=0,INVISIBLE=4,GONE=8,IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS=4,LAYOUT_DIRECTION_LTR=0;
+        public void setLayoutDirection(int direction){}
         public float translationZ;public void setTranslationZ(float z){translationZ=z;}public int backgroundColor;public int visibility;public float alpha=1f;public boolean enabled=true,attached=true,clickable;protected android.content.Context context;
         public View(android.content.Context c){context=c;}public android.content.Context getContext(){return context;}
         public android.content.res.Resources getResources(){return context.getResources();}
@@ -91,8 +92,9 @@ files.update({
     'android/widget/LinearLayout.java': 'package android.widget;public class LinearLayout extends FrameLayout {public LinearLayout(android.content.Context c){super(c);}public void setGravity(int i){}}',
     'android/widget/PopupWindow.java': '''package android.widget;public class PopupWindow {
         public static final int INPUT_METHOD_NOT_NEEDED=1;public boolean showing;
-        public PopupWindow(Object c,int w,int h,boolean f){}public boolean isShowing(){return showing;}
-        public void showAtLocation(Object v,int g,int x,int y){showing=true;}public void dismiss(){showing=false;}
+        public final int width,height;public int x,y;
+        public PopupWindow(Object c,int w,int h,boolean f){width=w;height=h;}public boolean isShowing(){return showing;}
+        public void showAtLocation(Object v,int g,int x,int y){showing=true;this.x=x;this.y=y;}public void dismiss(){showing=false;}
         public void setBackgroundDrawable(Object d){}public void setOutsideTouchable(boolean b){}public void setTouchModal(boolean b){}public void setInputMethodMode(int i){}}
     ''',
     'de/robv/android/xposed/XposedHelpers.java': '''package de.robv.android.xposed;public class XposedHelpers {
@@ -101,8 +103,14 @@ files.update({
     ''',
     'io/github/zerohomers0/onesteplite/VideoDock.java': 'package io.github.zerohomers0.onesteplite;class VideoDock {static final String HOST="host",STATE="state",COMMAND="command";}',
     'io/github/zerohomers0/onesteplite/EntryGuard.java': 'package io.github.zerohomers0.onesteplite;class EntryGuard {static boolean allowed=true;static boolean canOpen(Object c){return allowed;}}',
-    'io/github/zerohomers0/onesteplite/HyperOsStyle.java': 'package io.github.zerohomers0.onesteplite;class HyperOsStyle {static Object controlButton(Object c,boolean s,float r){return null;}}',
-    'io/github/zerohomers0/onesteplite/IconButton.java': 'package io.github.zerohomers0.onesteplite;class IconButton extends android.view.View {static final int PLAY=1,PAUSE=2,VIDEO_RETURN=3,VIDEO_FIT=4,VIDEO_FILL=5;IconButton(android.content.Context c,int i,String t){super(c);}void setIcon(int i){}}',
+    'io/github/zerohomers0/onesteplite/IconButton.java': '''package io.github.zerohomers0.onesteplite;class IconButton extends android.view.View {
+        static final int PLAY=1,PAUSE=2,VIDEO_RETURN=3,VIDEO_FIT=4,VIDEO_FILL=5,TOP_CONTROL_TOUCH_DP=40,TOP_CONTROL_MARGIN_DP=12;
+        static final int TOP_CONTROL_GRAVITY=3;
+        IconButton(android.content.Context c){super(c);}void setIcon(int i){}
+        static IconButton topControl(android.content.Context c,int icon,String text,Runnable action){
+            IconButton button=new IconButton(c);button.setOnClickListener(view->action.run());return button;
+        }}
+    ''',
     'io/github/zerohomers0/onesteplite/VideoPaneRegression.java': '''package io.github.zerohomers0.onesteplite;
         import android.animation.ValueAnimator;import android.os.*;import android.view.*;import android.widget.*;import android.content.*;
         import de.robv.android.xposed.XposedHelpers;
@@ -130,6 +138,10 @@ files.update({
                 ValueAnimator incoming=ValueAnimator.all.get(ValueAnimator.all.size()-1);incoming.step(.5f);
                 check(surface.alpha==.5f&&video.alpha==.5f,"view and carrier agree on the video fade");incoming.end();
                 check(surface.alpha==1f&&((PopupWindow)field(pane,"popup")).isShowing(),"ready video and exit controls are visible");
+                PopupWindow controlsPopup=(PopupWindow)field(pane,"popup");
+                check(controlsPopup.x+controlsPopup.width==pane.getWidth()-12
+                        &&controlsPopup.y+controlsPopup.height==pane.getHeight()-12&&controlsPopup.height==40,
+                        "video controls align with the shared upper exit touch bounds");
                 check(pane.backgroundColor==0xff000000,"fitted player letterboxing covers the original header for nonstandard aspect ratios");
                 check(handler.timers.isEmpty()&&((PopupWindow)field(pane,"popup")).isShowing(),"video controls remain reachable without a fallible native touch wakeup");
                 video.performClick();check(((PopupWindow)field(pane,"popup")).isShowing(),"single tap restores video controls");

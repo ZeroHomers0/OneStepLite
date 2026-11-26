@@ -4,11 +4,17 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.drawable.InsetDrawable;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 
 /** Toolbar icons keep their touch target without painting a button plate. */
 final class IconButton extends View {
+    static final int TOP_CONTROL_TOUCH_DP = 40;
+    static final int TOP_CONTROL_MARGIN_DP = 12;
+    static final int TOP_CONTROL_GRAVITY = Gravity.getAbsoluteGravity(Gravity.TOP | Gravity.START, LAYOUT_DIRECTION_LTR);
+    private static final int TOP_CONTROL_PLATE_DP = 20;
     static final int SETTINGS = 0, CLOSE = 10, SIDE_LEFT = 13, SIDE_RIGHT = 14,
             PLAY = 16, PAUSE = 17, VIDEO_RETURN = 18, TOP_APP = 19, EXPAND_LEFT = 20, EXPAND_RIGHT = 21,
             VIDEO_FIT = 22, VIDEO_FILL = 23, CONTENT = 24, CAPTURE = 25, MORE = 26, CHECK = 27,
@@ -20,6 +26,7 @@ final class IconButton extends View {
     private final Path tile=IconContour.create(38);
     private int foreground;
     private boolean compactGlyph;
+    private boolean topControl;
     private final android.graphics.LinearGradient contentGradient = new android.graphics.LinearGradient(
             0,0,30,38,new int[]{0xff80ceff,0xff4b93f6,0xff3758d7},null,
             android.graphics.Shader.TileMode.CLAMP);
@@ -33,6 +40,17 @@ final class IconButton extends View {
     void setIcon(int value) {icon=value;invalidate();}
 
     void setIconColor(int color) { foreground = color; invalidate(); }
+
+    static IconButton topControl(Context context, int icon, String description, Runnable action) {
+        IconButton button = new IconButton(context, icon, description);
+        button.topControl = true;
+        button.setTooltipText(description);
+        int inset = HyperOsStyle.dp(context, (TOP_CONTROL_TOUCH_DP - TOP_CONTROL_PLATE_DP) / 2f);
+        button.setBackground(new InsetDrawable(
+                HyperOsStyle.controlButton(context, false, TOP_CONTROL_PLATE_DP / 2f), inset));
+        button.setOnClickListener(view -> action.run());
+        return button;
+    }
 
     @Override public void setEnabled(boolean enabled) {
         super.setEnabled(enabled);
@@ -61,7 +79,8 @@ final class IconButton extends View {
         super.onDraw(canvas);
         if(icon==CONTENT) {drawContentIcon(canvas);return;}
         int save = canvas.save();
-        float size = Math.min(HyperOsStyle.dp(getContext(), compactGlyph ? 24f : 26f), Math.min(getWidth(), getHeight()) * .84f);
+        float glyphDp = topControl ? 13f : compactGlyph ? 24f : 26f;
+        float size = Math.min(HyperOsStyle.dp(getContext(), glyphDp), Math.min(getWidth(), getHeight()) * .84f);
         canvas.translate((getWidth() - size) / 2f, (getHeight() - size) / 2f);
         canvas.scale(size / 24f, size / 24f);
         paint.setStyle(Paint.Style.STROKE);

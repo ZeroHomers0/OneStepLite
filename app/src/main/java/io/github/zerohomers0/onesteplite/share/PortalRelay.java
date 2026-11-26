@@ -24,32 +24,45 @@ final class PortalRelay {
             return new Bundle();
         }
         boolean view="portal_view_status".equals(method) || "portal_view_offer".equals(method);
-        if(view?(!ViewImageSource.supports(caller) || !names.contains(caller))
+        if(view?(!ViewImageSource.supportsUid(uid) || !names.contains(caller) || context.getPackageName().equals(caller))
                 :!names.contains(PortalWire.PACKAGE) && !names.contains(SystemExtractHooks.PACKAGE))
             throw new SecurityException("Not an extraction service");
         IBinder target;synchronized(PortalRelay.class){target=host;}
         if(target==null || !target.isBinderAlive()){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_SESSION);return null;}
+        Bundle viewSource=null;
+        if(view){
+            viewSource=new Bundle();viewSource.putString("source",caller);
+            viewSource.putLong("down",data==null?0:data.getLong("down"));
+        }
         if("portal_status".equals(method) || "portal_view_status".equals(method))
-            return PortalWire.call(target,PortalWire.STATUS,null);
+            return PortalWire.call(target,PortalWire.STATUS,viewSource);
         if(!"portal_offer".equals(method) && !"portal_view_offer".equals(method) || data==null)
             throw new IllegalArgumentException("Source operation");
         byte[] image=data.getByteArray("image");String id=null;
-        if(view && (image==null || data.containsKey("text")))throw new IllegalArgumentException("Missing view image");
+        String words=data.getString("text");
+        if(view && (image==null?(words==null || words.isBlank() || words.length()>ContentSharePolicy.MAX_TEXT)
+                :data.containsKey("text")))throw new IllegalArgumentException("Invalid view content");
+        if(view){
+            Bundle state=PortalWire.call(target,PortalWire.STATUS,viewSource);
+            if(state==null || state.getLong("down")!=data.getLong("down")
+                    || state.getInt("generation")!=data.getInt("generation"))return null;
+        }
         boolean region=!view && image==null && !data.containsKey("text") && data.getBoolean("region_only");
         Bundle request=new Bundle();request.putLong("down",data.getLong("down"));
         request.putInt("generation",data.getInt("generation"));request.putString("text",data.getString("text"));
         String source=view?caller:data.getString("source");
         if(source==null || source.isEmpty() || source.length()>255)throw new IllegalArgumentException("Source identity missing");
         request.putString("source",source);
-        if(view)request.putBoolean("view_image",true);
+        if(view)request.putBoolean("view_source",true);
         request.putBoolean("region_only",region);
         if(!view){
             request.putIntArray("source_rect",data.getIntArray("source_rect"));
             request.putFloatArray("source_touch",data.getFloatArray("source_touch"));
         }
         boolean system=names.contains(SystemExtractHooks.PACKAGE);
-        int priority=region?PortalGesturePolicy.REGION:image==null?(system?PortalGesturePolicy.SYSTEM_TEXT:PortalGesturePolicy.PORTAL_TEXT)
-                :view?PortalGesturePolicy.VIEW_IMAGE
+        int priority=view?(image!=null?PortalGesturePolicy.VIEW_IMAGE
+                :data.getBoolean("selected")?PortalGesturePolicy.VIEW_SELECTION:PortalGesturePolicy.VIEW_TEXT)
+                :region?PortalGesturePolicy.REGION:image==null?(system?PortalGesturePolicy.SYSTEM_TEXT:PortalGesturePolicy.PORTAL_TEXT)
                 :system?PortalGesturePolicy.SYSTEM_IMAGE:PortalGesturePolicy.PORTAL_IMAGE;
         request.putInt("source_priority",priority);
         try {
@@ -63,4 +76,5 @@ final class PortalRelay {
             return result;
         } catch(RuntimeException failure){if(id!=null)CaptureInboxStore.discard(context,id);throw failure;}
     }
+
 }

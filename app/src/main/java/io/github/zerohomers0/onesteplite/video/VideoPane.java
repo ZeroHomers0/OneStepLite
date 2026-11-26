@@ -34,6 +34,7 @@ final class VideoPane extends FrameLayout implements SurfaceHolder.Callback {
     private final IconButton toggle;
     private final IconButton fit;
     private final PopupWindow popup;
+    private final int controlSize, controlsWidth;
     private final Handler handler;
     private final BooleanSupplier allowed;
     private final Consumer<Boolean> changed;
@@ -74,15 +75,14 @@ final class VideoPane extends FrameLayout implements SurfaceHolder.Callback {
         });
         addView(video,new FrameLayout.LayoutParams(-1,-1));
         controls=new LinearLayout(context);controls.setGravity(Gravity.CENTER);
-        toggle=button(IconButton.PLAY,"播放视频",()->{command("toggle");showControls();});
-        LinearLayout.LayoutParams toggleBounds=new LinearLayout.LayoutParams(dp(40),dp(40));
-        toggleBounds.rightMargin=dp(8);controls.addView(toggle,toggleBounds);
-        fit=button(IconButton.VIDEO_FILL,"填满顶栏",this::toggleFit);
-        LinearLayout.LayoutParams fitBounds=new LinearLayout.LayoutParams(dp(40),dp(40));
-        fitBounds.rightMargin=dp(8);controls.addView(fit,fitBounds);
-        controls.addView(button(IconButton.VIDEO_RETURN,"退出顶栏，返回播放器小窗",this::dismiss),
-                new LinearLayout.LayoutParams(dp(40),dp(40)));
-        popup=new PopupWindow(controls,dp(136),dp(40),false);
+        controls.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        controlSize=dp(IconButton.TOP_CONTROL_TOUCH_DP);
+        int gap=dp(8);
+        toggle=addControl(IconButton.PLAY,"播放视频",()->{command("toggle");showControls();},gap);
+        fit=addControl(IconButton.VIDEO_FILL,"填满顶栏",this::toggleFit,gap);
+        addControl(IconButton.VIDEO_RETURN,"退出顶栏，返回播放器小窗",this::dismiss,0);
+        controlsWidth=3*controlSize+2*gap;
+        popup=new PopupWindow(controls,controlsWidth,controlSize,false);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         popup.setOutsideTouchable(false);popup.setTouchModal(false);
         popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
@@ -91,10 +91,12 @@ final class VideoPane extends FrameLayout implements SurfaceHolder.Callback {
 
     boolean embedded() {return embedded;}
 
-    private IconButton button(int icon,String text,Runnable action) {
-        IconButton button=new IconButton(getContext(),icon,text);button.setTooltipText(text);
-        button.setBackground(HyperOsStyle.controlButton(getContext(),false,20f));
-        button.setOnClickListener(view->action.run());return button;
+    private IconButton addControl(int icon,String text,Runnable action,int rightMargin) {
+        IconButton button=IconButton.topControl(getContext(),icon,text,action);
+        LinearLayout.LayoutParams bounds=new LinearLayout.LayoutParams(controlSize,controlSize);
+        bounds.rightMargin=rightMargin;
+        controls.addView(button,bounds);
+        return button;
     }
 
     private int dp(float value) {return Math.round(value*getResources().getDisplayMetrics().density);}
@@ -138,8 +140,10 @@ final class VideoPane extends FrameLayout implements SurfaceHolder.Callback {
         if(!isAttachedToWindow() || !embedded || dismissing)return;
         if(popup.isShowing())return;
         int[] origin=new int[2];getLocationOnScreen(origin);controls.setAlpha(opacity);
-        try {popup.showAtLocation(this,Gravity.TOP|Gravity.START,
-                origin[0]+Math.max(0,getWidth()-dp(148)),origin[1]+Math.max(0,getHeight()-dp(52)));}
+        int margin=dp(IconButton.TOP_CONTROL_MARGIN_DP);
+        try {popup.showAtLocation(this,IconButton.TOP_CONTROL_GRAVITY,
+                origin[0]+Math.max(0,getWidth()-controlsWidth-margin),
+                origin[1]+Math.max(0,getHeight()-controlSize-margin));}
         catch(RuntimeException unavailable) {popup.dismiss();}
     }
 

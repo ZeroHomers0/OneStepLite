@@ -20,7 +20,7 @@ cell_source=(package_dir(root)/'CellMovePlan.java').read_text(encoding='utf-8-si
 methods+='\n'+method(cell_source,'final class CellMovePlan {')
 source=(package_dir(root)/'PendingSidePromotion.java').read_text(encoding='utf-8-sig')
 methods+='\n'+method(source,'final class PendingSidePromotion')
-parts=['    private boolean compactScrollingSideRows()', '    private void mapSideSlots(',
+parts=['    private boolean compactScrollingSideRows()', '    private void reorderSideSlots(', '    private void mapSideSlots(',
        '    private int maxSideOffset()', '    private void finishSideScroll()',
        '    private void commitSideScrollPosition()', '    private boolean nearSideViewport(']
 methods+='\n'+'\n'.join(method(host,s) for s in parts)
@@ -53,7 +53,7 @@ public class HomeCompactRegression {
   VisibilityRepair visibilityRepair=new VisibilityRepair();PendingSidePromotion pendingSidePromotion;
   Slot(int i){index=i;}public int position(){return index;}public void position(int v){index=v;}
  }
- static class Promotion{Slot slot;boolean cancelled,cancelRequested,externalLaunch,previousMainOnRight,targetMainOnRight;long sceneEpoch,bindingEpoch;int taskId;Object token;Home homeBeforeCover=new Home();Promotion(Slot s,Slot[] slots){this(s);}Promotion(Slot s){slot=s;taskId=s.taskId;token=s.taskToken;}}
+ static class Promotion{Slot slot;boolean cancelled,cancelRequested,externalLaunch,previousMainOnRight,targetMainOnRight,keepTopBarAppearance;long sceneEpoch,bindingEpoch;int taskId;Object token;Home homeBeforeCover=new Home();Promotion(Slot s,Slot[] slots){this(s);}Promotion(Slot s){slot=s;taskId=s.taskId;token=s.taskToken;}}
  static class Home{int id=1;Object token=new Object();}
  static class HomeTaskReturn{int app;HomeTaskReturn(int a,Object b,int c,Object d){app=a;}}
  static class Layout{boolean tabletLandscape;int[]cellBounds(int i){return new int[]{0,100+i*100,100,200+i*100};}}
@@ -92,13 +92,15 @@ public class HomeCompactRegression {
  Main main=new Main();Map<Integer,WindowState> taskWindowStates=new HashMap<>();final Object taskWindowStatesLock=new Object();
  int focusDone,previewFinished,registrations;boolean mainOnRight=true;
  void resumeNotificationLaunch(Promotion p){}void traceSwapEvent(String s){}void releaseCompactSnapshot(Promotion p){}void finishSwapPreview(Promotion p,long d){previewFinished++;}
+ void updateTopBarState(){}
  void releaseRetainedTopSnapshot(){}
  void finishPendingSuspend(){focusDone++;}void log(String s){}void closeSwapPreview(){}
  void recycleBuffered(Slot s){s.bufferedDown=null;}
  void updateHint(Slot s){s.view.hintUpdates++;}void updateTouchRegion(Slot s){s.view.touchUpdates++;}
  void applyRect(Slot s){s.view.rectUpdates++;}void reapplyScale(Slot s){}
  // This suite checks the real owner/geometry algorithm; surface frames have their own actual-class suite.
- void animateCellMoves(List<CellMovePlan> moves,int emptySlots){for(Slot s:slots){applyRect(s);updateHint(s);updateTouchRegion(s);}}
+ void animateCellMoves(List<CellMovePlan> moves,int emptySlots,boolean paired){finishCellLayout();}
+ void finishCellLayout(){for(Slot s:slots){applyRect(s);updateHint(s);updateTouchRegion(s);}}
  void requestCompaction(){compactPending=true;}
  void publishDesktopSideTasks(){registrations++;}
  boolean isActive(Slot s){return s.index>0&&s.index<SLOT_COUNT&&slots[s.index]==s;}
@@ -170,7 +172,18 @@ public class HomeCompactRegression {
   check(h.sideScrolling&&h.sideOffset==1f&&h.slots[1]==third&&h.slots[2]==fourth&&h.slots[3]==fifth,
         "reopening brings back the preserved scroll position and live owners");
  }
+ static void reorderOwners() {
+  var h=new HomeCompactRegression();Slot one=h.slots[1],two=h.slots[2],three=h.slots[3];
+  h.reorderSideSlots(one,three);
+  check(h.slots[1]==three&&h.slots[2]==two&&h.slots[3]==one
+    &&three.rect[1]==100&&one.rect[1]==300&&one.windowState.slotIndex==3,"fixed reorder keeps owner bindings and changes physical positions");
+  h.sideOrder.addAll(List.of(three,two,one));h.sideScrolling=true;h.mapSideSlots(0);
+  h.reorderSideSlots(three,two);
+  check(h.slots[1]==two&&h.slots[2]==three&&h.sideOrder.get(0)==two
+    &&h.sideCompactionShift.get(two)==1f&&h.sideCompactionShift.get(three)==-1f,"scrolling reorder updates the persistent row order and animation offsets");
+ }
  public static void main(String[]args){
+  reorderOwners();
   for(int selected=1;selected<=4;selected++){
    var tablet=new HomeCompactRegression();tablet.layout.tabletLandscape=true;
    tablet.SLOT_COUNT=6;tablet.CELL_SLOT_COUNT=5;tablet.SLOT_TOP=5;tablet.slots=new Slot[6];

@@ -2,7 +2,6 @@ package io.github.zerohomers0.onesteplite;
 
 import android.content.Context;
 import android.graphics.PixelFormat;
-import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
@@ -24,18 +23,16 @@ final class TopOverlayControls implements AutoCloseable {
     void show(int nextWidth, int nextHeight) {
         if (plate != null && width == nextWidth && height == nextHeight) return;
         close();
-        int size = HyperOsStyle.dp(context, 40f), margin = HyperOsStyle.dp(context, 12f);
+        int size = HyperOsStyle.dp(context, IconButton.TOP_CONTROL_TOUCH_DP);
+        int margin = HyperOsStyle.dp(context, IconButton.TOP_CONTROL_MARGIN_DP);
         FrameLayout content = new FrameLayout(context);
-        IconButton button = new IconButton(context, IconButton.CLOSE, "退出顶栏，应用回到主窗");
-        button.setTooltipText("退出顶栏，应用回到主窗");
-        button.setBackground(HyperOsStyle.controlButton(context, false, 20f));
-        button.setOnClickListener(view -> exit.run());
+        IconButton button = IconButton.topControl(context, IconButton.CLOSE, "退出顶栏，应用回到主窗", exit);
         content.addView(button, new FrameLayout.LayoutParams(size, size));
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(size, size,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
-        params.gravity = Gravity.TOP | Gravity.START;
+        params.gravity = IconButton.TOP_CONTROL_GRAVITY;
         params.x = Math.max(0, nextWidth - size - margin);
         params.y = Math.max(0, nextHeight - size - margin);
         params.setTitle("OneStepLiteTopExit");
