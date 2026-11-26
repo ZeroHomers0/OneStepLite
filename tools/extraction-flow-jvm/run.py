@@ -11,10 +11,10 @@ files={
 'android/graphics/PointF.java':'package android.graphics;public class PointF{public final float x,y;public PointF(float x,float y){this.x=x;this.y=y;}}',
 'android/graphics/Rect.java':'package android.graphics;public class Rect{public final int left,top,right,bottom;public Rect(int l,int t,int r,int b){left=l;top=t;right=r;bottom=b;}public boolean isEmpty(){return left>=right||top>=bottom;}}',
 'android/graphics/Bitmap.java':'''package android.graphics;public class Bitmap{public int width=32,height=16;public boolean recycled,transparent;public int dot=-1;public enum Config{HARDWARE,SOFTWARE}public Config getConfig(){return Config.SOFTWARE;}public boolean hasAlpha(){return true;}public int getPixel(int x,int y){return transparent&&x+y*width!=dot?0:0xff000000;}public void getPixels(int[] row,int offset,int stride,int x,int y,int w,int h){for(int i=0;i<w;i++)row[offset+i]=getPixel(x+i,y);}public int getWidth(){return width;}public int getHeight(){return height;}public boolean isRecycled(){return recycled;}public void recycle(){recycled=true;}public static Bitmap createScaledBitmap(Bitmap b,int w,int h,boolean f){if(w==b.width&&h==b.height)return b;Bitmap v=new Bitmap();v.width=w;v.height=h;return v;}}''',
-'android/content/Context.java':'''package android.content;public class Context{public static Context current;public boolean authorized=true;public int statuses,offers;public boolean live=true,preferImage;public int reject;public java.util.List<android.os.Bundle> payloads=new java.util.ArrayList<>();
+'android/content/Context.java':'''package android.content;public class Context{public static Context current;public boolean authorized=true;public int statuses,offers;public boolean live=true,preferImage;public String readySource;public int reject;public java.util.List<android.os.Bundle> payloads=new java.util.ArrayList<>();
 public Manager getPackageManager(){return new Manager();}public class Manager{public String[] getPackagesForUid(int uid){return new String[]{authorized?"source.app":"foreign"};}}
 public Resolver getContentResolver(){return new Resolver();}public class Resolver{public android.os.Bundle call(Object u,String method,String arg,android.os.Bundle b){
-if(android.os.Binder.uid!=20200)throw new AssertionError("Binder identity not cleared");if(method.equals("portal_status")){statuses++;if(!live)return null;android.os.Bundle state=new android.os.Bundle();state.putString("gesture","fixed");state.putBoolean("prefer_image",preferImage);return state;}
+if(android.os.Binder.uid!=20200)throw new AssertionError("Binder identity not cleared");if(method.equals("portal_status")){statuses++;if(!live)return null;android.os.Bundle state=new android.os.Bundle();state.putString("gesture","fixed");state.putBoolean("prefer_image",preferImage);state.putString("ready_image_source",readySource);return state;}
 offers++;payloads.add(b);android.os.Bundle result=new android.os.Bundle();result.put("accepted",offers>reject);return result;}}}''',
 'android/util/Log.java':'package android.util;public class Log{public static java.util.List<String> logs=new java.util.ArrayList<>();public static int i(String t,String v){logs.add(v);return 0;}public static int w(String t,String s,Throwable e){return 0;}}',
 'de/robv/android/xposed/XC_MethodHook.java':'''package de.robv.android.xposed;public class XC_MethodHook{
@@ -106,6 +106,14 @@ check(!pick.handled&&c.offers==2,"Portal image placeholder does not become a tex
 words.image=Map.of("pick_mode","查看图片");pick=params(c,words);textHook.fire(pick);textHook.complete(pick);
 check(pick.handled&&c.offers==3&&c.payloads.get(2).getString("text").equals("查看图片"),
       "actual text containing the image label is preserved");
+c=new Context();c.preferImage=true;c.readySource="source.app";pick=params(c,new Pick());
+pickHook.fire(pick);pickHook.complete(pick);
+check(pick.handled&&c.offers==0,"an already staged image from this source suppresses the competing OEM sidebar");
+c.readySource="other.app";pick=params(c,new Pick());pickHook.fire(pick);pickHook.complete(pick);
+check(!pick.handled,"a staged image from another source cannot suppress the OEM sidebar");
+c.readySource="source.app";c.preferImage=false;pick=params(c,new Pick());
+pickHook.fire(pick);pickHook.complete(pick);
+check(!pick.handled,"two-finger image behavior stays on the OEM path");
 SystemClock.now=100000;ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.READY);int count=android.util.Log.logs.size();ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.READY);check(android.util.Log.logs.size()==count,"repeated normal stages are rate-limited");
 ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.FAILED);ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.FAILED);check(android.util.Log.logs.size()==count+2,"failures remain observable");
 for(int i=0;i<80;i++){SystemClock.now++;ShareDiagnostics.event(ShareDiagnostics.Stage.COPY,ShareDiagnostics.Code.FAILED);}String report=ShareDiagnostics.snapshot();check(report.split("\\n").length==64,"diagnostic memory bounded");check(!report.contains("valid text")&&!report.contains("source.app")&&!report.contains("content://"),"diagnostics contain codes only");

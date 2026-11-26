@@ -204,7 +204,11 @@ final class PortalSource implements AutoCloseable {
                 || pointer.getPointerCount()!=1 || !activeViewSource.test(request.getString("source"))))return null;
         issued=android.os.SystemClock.uptimeMillis();Bundle state=new Bundle();
         state.putLong("down",pointer.getDownTime());state.putInt("generation",generation);
-        state.putBoolean("prefer_image",pointer.getPointerCount()==1);return state;
+        state.putBoolean("prefer_image",pointer.getPointerCount()==1);
+        if(request==null && liftEligible && pointer.getPointerCount()==1 && liftCandidate!=null
+                && liftCandidate.getString("uri")!=null)
+            state.putString("ready_image_source",liftCandidate.getString("source"));
+        return state;
     }
     private void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
         String uri=request.getString("uri"),text=request.getString("text");

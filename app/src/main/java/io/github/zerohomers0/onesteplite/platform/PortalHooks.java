@@ -47,6 +47,12 @@ final class PortalHooks {
                             Bundle state=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_status",null,null);
                             if(state==null){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_SESSION);return;}
                             Object injector=XposedHelpers.callMethod(call.args[0],"getInjectorToken");
+                            String readySource=state.getString("ready_image_source");
+                            if(imageMethod && state.getBoolean("prefer_image") && readySource!=null && injector!=null
+                                    && readySource.equals(XposedHelpers.callMethod(injector,"getPkgName"))){
+                                call.setResult(null);
+                                return;
+                            }
                             Object values=XposedHelpers.callMethod(call.args[0],"getParams",imageMethod?"image_pick":"text_pick");
                             if(SystemExtractPayload.append(injector,values,imageMethod,state)){
                                 if(!imageMethod && "图片".equals(state.getString("text").strip())){

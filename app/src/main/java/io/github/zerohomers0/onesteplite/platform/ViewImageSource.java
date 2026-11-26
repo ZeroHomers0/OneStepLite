@@ -33,7 +33,6 @@ final class ViewImageSource {
     private static final ImageExtractionLease LEASE=new ImageExtractionLease();
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     private static final long EXTRACTION_TIMEOUT_MS=5000L;
-    private static Bitmap pendingSemanticImage;
     private static boolean installed;
     private Runnable hold;
     private View host;
@@ -81,7 +80,6 @@ final class ViewImageSource {
         long timeout=ViewConfiguration.getLongPressTimeout();
         host=decor;hold=()->{
             hold=null;host=null;
-            if(!decor.hasWindowFocus())return;
             int minImage=Math.round(56*decor.getResources().getDisplayMetrics().density);
             View view=findContent(pkg,decor,rawX,rawY,minImage);
             if(view==null)return;
@@ -104,12 +102,18 @@ final class ViewImageSource {
         views.push(decor);
         int[] position=new int[2];
         Rect screen=new Rect(),visible=new Rect();
-        View semantic=null;
+        View semantic=null,words=null;
         for(int inspected=0;inspected<256 && !views.isEmpty();inspected++) {
             View view=views.pop();
             if(!view.isShown() || view.getAlpha()<=0 || view.isAccessibilityDataSensitive())continue;
             if(!hits(view,x,y,screen,visible,position))continue;
-            if(readableText(view) || view.getWidth()>=minSize && view.getHeight()>=minSize
+            if(readableText(view)){
+                TextView text=(TextView)view;
+                if(text.getSelectionStart()>=0 && text.getSelectionEnd()>=0
+                        && text.getSelectionStart()!=text.getSelectionEnd())return view;
+                if(words==null)words=view;
+            }
+            if(view.getWidth()>=minSize && view.getHeight()>=minSize
                     && (imageDrawable(pkg,view)!=null || declaredImage(pkg,view)))return view;
             if(semantic==null && !view.onCheckIsTextEditor() && view.getAccessibilityNodeProvider()!=null)
                 semantic=view;
@@ -117,7 +121,7 @@ final class ViewImageSource {
                 for(int i=Math.max(0,group.getChildCount()-128);i<group.getChildCount();i++)views.push(group.getChildAt(i));
             }
         }
-        return semantic;
+        return words!=null?words:semantic;
     }
 
     private static boolean readableText(View view) {
@@ -127,7 +131,7 @@ final class ViewImageSource {
     }
 
     private static boolean canRead(Activity activity,View decor,View view,int x,int y) {
-        if(!decor.hasWindowFocus() || !view.isAttachedToWindow() || !view.isShown() || view.getAlpha()<=0
+        if(view.getRootView()!=decor || !view.isAttachedToWindow() || !view.isShown() || view.getAlpha()<=0
                 || view.isAccessibilityDataSensitive()
                 || (activity.getWindow().getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)return false;
         return hits(view,x,y,new Rect(),new Rect(),new int[2]);
@@ -174,8 +178,6 @@ final class ViewImageSource {
         if(lease==0)return;
         MAIN.postDelayed(()->{
             if(!LEASE.expire(lease))return;
-            Bitmap pending=pendingSemanticImage;pendingSemanticImage=null;
-            if(pending!=null && !pending.isRecycled())pending.recycle();
             ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.TIMEOUT);
         },EXTRACTION_TIMEOUT_MS);
         android.content.Context context=activity.getApplicationContext();
@@ -192,8 +194,9 @@ final class ViewImageSource {
                                 if(!LEASE.active(lease))return;
                                 if(canRead(activity,decor,view,x,y) && (text || stillImage(pkg,view,drawable))) {
                                     if(semantic)offerSemantic(activity,context,decor,view,state,x,y,minImage,main,lease);
-                                    else if(text)offerText(context,view,state,lease);
-                                    else render(context,view,drawable,state,lease);
+                                    else if(text && decor.hasWindowFocus())offerText(context,view,state,lease);
+                                    else if(!text)offerImage(activity,context,decor,view,drawable,state,x,y,main,lease);
+                                    else finish(lease);
                                     return;
                                 }
                             } catch(RuntimeException unavailable) {
@@ -226,23 +229,45 @@ final class ViewImageSource {
         if(!LEASE.active(lease))return;
         ViewSemanticContent content=ViewSemanticContent.find(view,x,y,minImage);
         if(content==null){finish(lease);return;}
-        if(content.text()!=null){submitText(context,state,content.text(),content.selected(),lease);return;}
-        Rect region=new Rect(content.image());
+        if(content.text()!=null){
+            if(decor.hasWindowFocus())submitText(context,state,content.text(),content.selected(),lease);
+            else finish(lease);
+            return;
+        }
+        copyImage(activity,context,decor,view,state,x,y,main,lease,content.image(),()->{
+            ViewSemanticContent current=ViewSemanticContent.find(view,x,y,minImage);
+            return current!=null && content.image().equals(current.image());
+        });
+    }
+
+    private static void offerImage(Activity activity,android.content.Context context,View decor,
+            View view,Drawable drawable,Bundle state,int x,int y,Handler main,int lease) {
+        Bitmap image=render(view,drawable);
+        if(image!=null){submitImage(context,state,image,lease);return;}
+        Rect visible=new Rect();
+        if(!view.getLocalVisibleRect(visible)){finish(lease);return;}
+        copyImage(activity,context,decor,view,state,x,y,main,lease,visible,()->{
+            Rect current=new Rect();
+            return stillImage(context.getPackageName(),view,drawable)
+                    && view.getLocalVisibleRect(current) && visible.equals(current);
+        });
+    }
+
+    private static void copyImage(Activity activity,android.content.Context context,View decor,
+            View view,Bundle state,int x,int y,Handler main,int lease,Rect local,
+            java.util.function.BooleanSupplier imageCurrent) {
+        Rect region=new Rect(local);
         int[] location=new int[2];
         view.getLocationInWindow(location);
         region.offset(location[0],location[1]);
         int[] size=ContentCapturePolicy.fit(region.width(),region.height());
         Bitmap image=Bitmap.createBitmap(size[0],size[1],Bitmap.Config.ARGB_8888);
-        pendingSemanticImage=image;
         try {
             PixelCopy.request(activity.getWindow(),region,image,result->{
                 try {
                     if(result==PixelCopy.SUCCESS && LEASE.active(lease) && canRead(activity,decor,view,x,y)){
-                        ViewSemanticContent current=ViewSemanticContent.find(view,x,y,minImage);
                         int[] now=new int[2];view.getLocationInWindow(now);
-                        if(current!=null && content.image().equals(current.image())
-                                && now[0]==location[0] && now[1]==location[1]){
-                            if(pendingSemanticImage==image)pendingSemanticImage=null;
+                        if(now[0]==location[0] && now[1]==location[1] && imageCurrent.getAsBoolean()){
                             submitImage(context,state,image,lease);
                             return;
                         }
@@ -250,11 +275,9 @@ final class ViewImageSource {
                 } catch(RuntimeException unavailable){
                     ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.UNSUPPORTED);
                 }
-                if(pendingSemanticImage==image)pendingSemanticImage=null;
                 image.recycle();finish(lease);
             },main);
         } catch(RuntimeException unavailable){
-            if(pendingSemanticImage==image)pendingSemanticImage=null;
             image.recycle();
             finish(lease);
         }
@@ -277,12 +300,11 @@ final class ViewImageSource {
         } catch(RuntimeException unavailable){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.UNSUPPORTED);}
     }
 
-    private static void render(android.content.Context context,View view,Drawable drawable,Bundle state,int lease) {
-        if(!LEASE.active(lease))return;
+    private static Bitmap render(View view,Drawable drawable) {
         Bitmap image=null;
         try {
             Rect bounds=drawable==null?new Rect(0,0,view.getWidth(),view.getHeight()):drawable.getBounds();
-            if(bounds.width()<=0 || bounds.height()<=0){finish(lease);return;}
+            if(bounds.width()<=0 || bounds.height()<=0)return null;
             int[] size=ContentCapturePolicy.fit(bounds.width(),bounds.height());
             if(drawable instanceof BitmapDrawable raster && raster.getBitmap()!=null
                     && raster.getBitmap().getConfig()==Bitmap.Config.HARDWARE) {
@@ -298,12 +320,11 @@ final class ViewImageSource {
                 canvas.translate(-bounds.left,-bounds.top);
                 if(drawable==null)view.draw(canvas);else drawable.draw(canvas);
             }
-            if(image==null){finish(lease);return;}
+            return image;
         } catch(RuntimeException unavailable) {
             if(image!=null)image.recycle();
-            finish(lease);return;
+            return null;
         }
-        submitImage(context,state,image,lease);
     }
 
     private static void submitImage(android.content.Context context,Bundle state,Bitmap captured,int lease) {
