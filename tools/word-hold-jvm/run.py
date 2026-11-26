@@ -11,7 +11,7 @@ def member(signature):
         depth+=(source[end]=='{')-(source[end]=='}');end+=1
     return source[start:end]
 files={
- 'android/os/Bundle.java':'package android.os;public class Bundle{public boolean lift;public void putBoolean(String k,boolean v){lift=v;}}',
+ 'android/os/Bundle.java':'package android.os;public class Bundle{public boolean lift;public String uri;public boolean region;public void putBoolean(String k,boolean v){lift=v;}public String getString(String key){return uri;}public boolean getBoolean(String key){return region;}}',
  'android/os/SystemClock.java':'package android.os;public class SystemClock{public static long now=1100;public static long uptimeMillis(){return now;}}',
  'android/widget/Toast.java':'package android.widget;public class Toast{public static int shown;public static final int LENGTH_SHORT=0;public static Toast makeText(Object c,String s,int d){return new Toast();}public void show(){shown++;}}',
  'android/view/InputDevice.java':'package android.view;public class InputDevice{public static final int SOURCE_TOUCHSCREEN=4098;}',
@@ -72,6 +72,12 @@ public class WordHoldRegression{
  h=fresh();h.liftCandidate=new Bundle();android.os.SystemClock.now=1800;move=new MotionEvent(2);move.x=61;
  h.motion(move);check(h.lifts==0&&h.liftCandidate!=null,"small post-hold movement leaves the app menu alone");
  move.x=63;h.motion(move);check(h.lifts==1,"movement beyond one and a half touch slops starts a lift");
+ h=fresh();h.liftCandidate=new Bundle();h.liftCandidate.uri="content://image";android.os.SystemClock.now=1800;
+ move=new MotionEvent(2);move.x=61;h.motion(move);
+ check(h.lifts==1,"an image still uses the original movement threshold");
+ h=fresh();h.liftCandidate=new Bundle();h.liftCandidate.region=true;android.os.SystemClock.now=1800;
+ move=new MotionEvent(2);move.x=61;h.motion(move);
+ check(h.lifts==1,"a region fallback uses the same threshold as a direct image");
  h=fresh();h.liftCandidate=new Bundle();android.os.SystemClock.now=1550;
  move=new MotionEvent(2);move.x=90;h.motion(move);check(h.lifts==0&&h.liftCandidate!=null,"movement during the system-menu grace period retains the candidate without lifting");
  android.os.SystemClock.now=1660;h.motion(move);check(h.lifts==1&&h.liftCandidate==null,"continued movement after the grace period starts one drag");

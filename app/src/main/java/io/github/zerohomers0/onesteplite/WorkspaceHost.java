@@ -3095,14 +3095,20 @@ public final class WorkspaceHost {
     private boolean isFocusedContentSource(String pkg) {
         if(pkg==null)return false;
         try {
-            for(Object info:rootInfos()) {
-                if(!(info instanceof android.app.TaskInfo task) || task.topActivity==null
-                        || !pkg.equals(task.topActivity.getPackageName())
-                        || XposedHelpers.getIntField(info,"displayId")!=0
-                        || !XposedHelpers.getBooleanField(info,"isFocused")
-                        || !XposedHelpers.getBooleanField(info,"isVisible")
-                        || !Integer.valueOf(1).equals(XposedHelpers.callMethod(info,"getWindowingMode")))continue;
-                if(!isSideToken(XposedHelpers.getObjectField(info,"token")))return true;
+            LiveTask mainTask=findMainTask();
+            if(mainTask!=null) {
+                Object info=rootInfo(mainTask);
+                if(info==null)return false;
+                Object page=XposedHelpers.getObjectField(info,"topActivity");
+                return page instanceof ComponentName component
+                        ?pkg.equals(component.getPackageName()):pkg.equals(mainTask.pkg);
+            }
+            for(Object info:rootInfos()){
+                if(isHomeRoot(info) && XposedHelpers.getBooleanField(info,"isVisible")
+                        && XposedHelpers.getBooleanField(info,"isFocused")) {
+                    Object page=XposedHelpers.getObjectField(info,"topActivity");
+                    if(page instanceof ComponentName component && pkg.equals(component.getPackageName()))return true;
+                }
             }
         } catch(Exception unavailable){return false;}
         return false;

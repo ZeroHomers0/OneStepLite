@@ -143,7 +143,10 @@ final class PortalSource implements AutoCloseable {
             liftEligible=false;
         if(liftCandidate==null)return;
         if(held<longPress){if(!liftEligible)clearLiftCandidate();return;}
-        if(distance<=slop*1.5f)return;
+        // Image pickup can finish after the first MOVE. Use the original image
+        // threshold so a drag already recognized by the OEM is not lost.
+        boolean image=liftCandidate.getString("uri")!=null || liftCandidate.getBoolean("region_only");
+        if(distance<=slop*(image?1f:1.5f))return;
         if(held<longPress+150L || android.os.SystemClock.uptimeMillis()<liftAt || !live())return;
         Bundle request=liftCandidate;liftCandidate=null;
         request.putBoolean("lift",true);offer(request,new Bundle[1],new CountDownLatch(1),new AtomicBoolean());

@@ -56,16 +56,23 @@ final class ViewImageSource {
 
     private void touch(Activity activity,MotionEvent event) {
         int action=event.getActionMasked();
-        if(action==MotionEvent.ACTION_MOVE && hold!=null && event.getPointerCount()==1
-                && Math.hypot(event.getX()-x,event.getY()-y)<=ViewConfiguration.get(activity).getScaledTouchSlop())
-            return;
+        if(action==MotionEvent.ACTION_MOVE && hold!=null && event.getPointerCount()==1) {
+            if(Math.hypot(event.getRawX()-x,event.getRawY()-y)<=ViewConfiguration.get(activity).getScaledTouchSlop())
+                return;
+            if(event.getEventTime()-event.getDownTime()>=ViewConfiguration.getLongPressTimeout()) {
+                Runnable pending=hold;
+                host.removeCallbacks(pending);
+                pending.run();
+                return;
+            }
+        }
         if(hold!=null)host.removeCallbacks(hold);
         hold=null;host=null;
         if(action!=MotionEvent.ACTION_DOWN || BUSY.get() || !event.isFromSource(android.view.InputDevice.SOURCE_TOUCHSCREEN)
                 || (activity.getWindow().getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)return;
         View decor=activity.getWindow().peekDecorView();
         if(decor==null || !decor.hasWindowFocus())return;
-        x=event.getX();y=event.getY();
+        x=event.getRawX();y=event.getRawY();
         String pkg=activity.getPackageName();
         int rawX=(int)event.getRawX(),rawY=(int)event.getRawY();
         long down=event.getDownTime();
@@ -94,20 +101,16 @@ final class ViewImageSource {
         java.util.ArrayDeque<View> views=new java.util.ArrayDeque<>();
         views.push(decor);
         int[] position=new int[2];
-        Rect visible=new Rect();
+        Rect screen=new Rect(),visible=new Rect();
         View semantic=null;
         for(int inspected=0;inspected<256 && !views.isEmpty();inspected++) {
             View view=views.pop();
             if(!view.isShown() || view.getAlpha()<=0 || view.isAccessibilityDataSensitive())continue;
-            view.getLocationOnScreen(position);
-            if(x<position[0] || y<position[1] || x>=position[0]+view.getWidth() || y>=position[1]+view.getHeight())
-                continue;
-            if(view.getLocalVisibleRect(visible) && visible.contains(x-position[0],y-position[1])) {
-                if(readableText(view) || view.getWidth()>=minSize && view.getHeight()>=minSize
-                        && (imageDrawable(pkg,view)!=null || declaredImage(pkg,view)))return view;
-                if(semantic==null && !view.onCheckIsTextEditor() && view.getAccessibilityNodeProvider()!=null)
-                    semantic=view;
-            }
+            if(!hits(view,x,y,screen,visible,position))continue;
+            if(readableText(view) || view.getWidth()>=minSize && view.getHeight()>=minSize
+                    && (imageDrawable(pkg,view)!=null || declaredImage(pkg,view)))return view;
+            if(semantic==null && !view.onCheckIsTextEditor() && view.getAccessibilityNodeProvider()!=null)
+                semantic=view;
             if(view instanceof ViewGroup group) {
                 for(int i=Math.max(0,group.getChildCount()-128);i<group.getChildCount();i++)views.push(group.getChildAt(i));
             }
@@ -125,10 +128,20 @@ final class ViewImageSource {
         if(!decor.hasWindowFocus() || !view.isAttachedToWindow() || !view.isShown() || view.getAlpha()<=0
                 || view.isAccessibilityDataSensitive()
                 || (activity.getWindow().getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE)!=0)return false;
-        int[] at=new int[2];
-        view.getLocationOnScreen(at);
-        Rect bounds=new Rect();
-        return view.getLocalVisibleRect(bounds) && bounds.contains(x-at[0],y-at[1]);
+        return hits(view,x,y,new Rect(),new Rect(),new int[2]);
+    }
+
+    private static boolean hits(View view,int x,int y,Rect screen,Rect visible,int[] position) {
+        int width=view.getWidth(),height=view.getHeight();
+        if(width<=0 || height<=0 || !view.getLocalVisibleRect(visible))return false;
+        if(!ViewScreenBounds.read(view,screen)){
+            view.getLocationOnScreen(position);
+            screen.set(position[0],position[1],position[0]+width,position[1]+height);
+        }
+        if(!screen.contains(x,y))return false;
+        int localX=(int)((x-screen.left)*(double)width/screen.width());
+        int localY=(int)((y-screen.top)*(double)height/screen.height());
+        return visible.contains(localX,localY);
     }
 
     private static Drawable imageDrawable(String pkg,View view) {
