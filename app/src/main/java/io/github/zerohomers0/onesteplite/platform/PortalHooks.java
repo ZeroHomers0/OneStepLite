@@ -10,6 +10,7 @@ import de.robv.android.xposed.XposedHelpers;
 /** Optional OEM extraction adapter; an unaccepted offer leaves the OEM operation intact. */
 final class PortalHooks {
     private static final ThreadLocal<ImagePick> IMAGE_PICK=new ThreadLocal<>();
+    private static final ThreadLocal<Object> SUPPRESSED_IMAGE_TASK=new ThreadLocal<>();
     private static final String IMAGE_PICK_KEY="onesteplite_image_pick";
 
     private static final class ImagePick {
@@ -18,6 +19,8 @@ final class PortalHooks {
         Object injector;
         Object mode;
         Bitmap bitmap;
+        Context owner;
+        boolean offered;
         ImagePick(ImagePick parent){this.parent=parent;}
     }
 
@@ -25,6 +28,7 @@ final class PortalHooks {
     static void install(ClassLoader loader) {
         try {
             Class<?> service=XposedHelpers.findClass("com.miui.contentextension.services.TextContentExtensionService",loader);
+            installImageTaskHandoff(loader,service);
             boolean observesBitmap=!XposedBridge.hookAllMethods(service,"setBitmap",new XC_MethodHook(){
                 @Override protected void afterHookedMethod(MethodHookParam call) {
                     ImagePick image=IMAGE_PICK.get();
@@ -61,7 +65,7 @@ final class PortalHooks {
                                 }
                                 if(offer(context,state))call.setResult(null);
                             }else if(image!=null && injector!=null){
-                                image.injector=injector;image.mode=values;image.state=state;
+                                image.injector=injector;image.mode=values;image.state=state;image.owner=context;
                             }else ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_CONTENT);
                         } catch(Throwable unavailable){
                             ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.UNSUPPORTED);
@@ -72,7 +76,7 @@ final class PortalHooks {
                         ImagePick image=(ImagePick)call.getObjectExtra(IMAGE_PICK_KEY);
                         if(image==null)return;
                         if(image.parent==null)IMAGE_PICK.remove();else IMAGE_PICK.set(image.parent);
-                        if(image.state==null || call.hasThrowable())return;
+                        if(image.state==null || image.offered || call.hasThrowable())return;
                         try {
                             if(SystemExtractPayload.append(image.injector,image.bitmap,true,image.state)){
                                 SystemExtractPayload.copyGeometry(image.mode,true,image.state);
@@ -94,6 +98,47 @@ final class PortalHooks {
             android.util.Log.w(Tags.PROBE,"portal extraction adapter unavailable",unavailable);
         }
     }
+
+    private static void installImageTaskHandoff(ClassLoader loader,Class<?> service) {
+        try {
+            if(XposedBridge.hookAllMethods(service,"startPickImageTask",new XC_MethodHook(){
+                @Override protected void beforeHookedMethod(MethodHookParam call) {
+                    Object owner=SUPPRESSED_IMAGE_TASK.get();
+                    if(owner!=null && owner==call.thisObject)call.setResult(null);
+                }
+            }).isEmpty())return;
+            Class<?> worker=XposedHelpers.findClass("com.miui.contentextension.setting.TaplusWorker",loader);
+            XposedBridge.hookAllMethods(worker,"postToMain",new XC_MethodHook(){
+                @Override protected void beforeHookedMethod(MethodHookParam call) {
+                    ImagePick image=IMAGE_PICK.get();
+                    if(image==null || image.state==null || image.offered || image.bitmap==null
+                            || !image.state.getBoolean("prefer_image") || call.args.length!=1
+                            || !(call.args[0] instanceof Runnable task))return;
+                    try {
+                        if(!SystemExtractPayload.append(image.injector,image.bitmap,true,image.state))return;
+                        SystemExtractPayload.copyGeometry(image.mode,true,image.state);
+                        image.offered=true;
+                        if(!offer(image.owner,image.state))return;
+                        Context owner=image.owner;
+                        call.args[0]=(Runnable)()->{
+                            Object previous=SUPPRESSED_IMAGE_TASK.get();
+                            SUPPRESSED_IMAGE_TASK.set(owner);
+                            try {task.run();}
+                            finally {
+                                if(previous==null)SUPPRESSED_IMAGE_TASK.remove();
+                                else SUPPRESSED_IMAGE_TASK.set(previous);
+                            }
+                        };
+                    }catch(Throwable unavailable){
+                        ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.UNSUPPORTED);
+                    }
+                }
+            });
+        }catch(Throwable unavailable){
+            // ROMs without this worker keep their original post-pick fallback.
+        }
+    }
+
     private static boolean offer(Context context,Bundle state) {
         Bundle result=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_offer",null,state);
         boolean accepted=result!=null && result.getBoolean("accepted");
