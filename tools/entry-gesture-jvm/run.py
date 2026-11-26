@@ -92,7 +92,7 @@ public class EntryGestureRegression {
  static void two(int action,float y){MotionEvent e=new MotionEvent(action,300,y,time+=70);e.count=2;e.x1=650;e.y1=y;InputMonitorCompat.latest.listener.onInputEvent(e);}
  static void horizontal(int action,float x,float x1){MotionEvent e=new MotionEvent(action,x,300,time+=70);e.count=2;e.x1=x1;e.y1=300;InputMonitorCompat.latest.listener.onInputEvent(e);}
  static void reset(int rotation,int width,int height)throws Exception {
-  Handler.drain();HotZoneGesture.suspend();HotZoneGesture.raiseAll(ctx);HotZoneGesture.setEntryGesture(0);
+  Handler.drain();HotZoneGesture.suspend();HotZoneGesture.raiseAll();HotZoneGesture.setEntryGesture(0);
   android.provider.Settings.Global.hide=0;android.provider.Settings.Global.fail=false;
   android.util.DisplayMetrics.defaultDensity=1;WorkspaceHost.active=false;WorkspaceHost.pendingRight=null;WorkspaceHost.token=null;EntryGuard.open=true;DeviceProfile.tablet=false;
   ctx.wm.display.rotation=rotation;ctx.wm.display.width=width;ctx.wm.display.height=height;

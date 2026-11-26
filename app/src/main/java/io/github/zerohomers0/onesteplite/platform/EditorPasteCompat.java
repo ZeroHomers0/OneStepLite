@@ -110,14 +110,14 @@ final class EditorPasteCompat {
         }
         void register() {
             if(registry!=null || !context.getSystemService(UserManager.class).isUserUnlocked() || !registering.compareAndSet(false,true))return;
-            new Thread(()->{
+            BackgroundExecutor.execute(()->{
                 try{Bundle request=new Bundle();request.putBinder("host",endpoint);
                     Bundle reply=context.getContentResolver().call(ContentInboxProvider.ROOT,"paste_register",null,request);
                     IBinder token=reply==null?null:reply.getBinder("registry");
                     if(token!=null){registry=token;token.linkToDeath(()->registry=null,0);}
                 }catch(Exception unavailable){registry=null;android.util.Log.w(Tags.PROBE,"editor paste registration unavailable",unavailable);}
                 finally{registering.set(false);}
-            },"EditorPasteRegistration").start();
+            });
         }
         private Bundle snapshot() {
             if(!active.getAsBoolean() || context.getSystemService(android.app.KeyguardManager.class).isKeyguardLocked())return null;

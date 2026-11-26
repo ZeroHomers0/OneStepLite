@@ -151,7 +151,7 @@ final class PortalSource implements AutoCloseable {
         if(held<longPress+150L || android.os.SystemClock.uptimeMillis()<liftAt || !live())return;
         Bundle request=liftCandidate;liftCandidate=null;
         request.putBoolean("lift",true);offer(request,new Bundle[1],new CountDownLatch(1),new AtomicBoolean());
-        if(window==null && request.getString("capture_id")!=null)discardCapture(request.getString("capture_id"));
+        if(window==null){discardCapture(request.getString("capture_id"));discardPublication(request.getString("cleanup_uri"));}
     }
 
     private void clearLiftCandidate() {
@@ -164,6 +164,17 @@ final class PortalSource implements AutoCloseable {
         android.graphics.Bitmap bitmap=candidate.getParcelable("preview",android.graphics.Bitmap.class);
         if(bitmap!=null)bitmap.recycle();
         discardCapture(candidate.getString("capture_id"));
+        discardPublication(candidate.getString("cleanup_uri"));
+    }
+
+    private void discardPublication(String uri) {
+        if(uri==null)return;
+        android.content.ContentResolver resolver=anchor.getContext().getContentResolver();
+        java.util.concurrent.CompletableFuture.runAsync(()->{
+            Bundle request=new Bundle();request.putString("uri",uri);
+            try{resolver.call(ContentInboxProvider.ROOT,"portal_discard_media",null,request);}
+            catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"temporary media cleanup deferred",unavailable);}
+        });
     }
 
     private void discardCapture(String id) {
@@ -266,13 +277,13 @@ final class PortalSource implements AutoCloseable {
     }
 
     private android.graphics.Bitmap nativePreview;
-    private String nativeCaptureId;
+    private String nativeCaptureId,nativeCleanupUri;
 
     @android.annotation.SuppressLint("RtlHardcoded") // Physical display coordinates, not layout direction.
     private void startNativeLift(Bundle request,String uri,String text,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
         nativePreview=request.getParcelable("preview",android.graphics.Bitmap.class);
         nativeCaptureId=request.getString("capture_id");
-        request.remove("capture_id");
+        nativeCleanupUri=request.getString("cleanup_uri");
         if(uri!=null)ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,ShareDiagnostics.Code.STARTED);
         ClipData clip=uri==null?ClipData.newPlainText("提取文字",text):new ClipData("提取图片",new String[]{"image/jpeg"},
                 new ClipData.Item(android.net.Uri.parse(uri)));
@@ -298,8 +309,8 @@ final class PortalSource implements AutoCloseable {
                 boolean delivered=event.getResult();
                 main.post(()->{
                     if(window!=view)return;
-                    if(!delivered)discardCapture(nativeCaptureId);
-                    nativeCaptureId=null;
+                    if(!delivered){discardCapture(nativeCaptureId);discardPublication(nativeCleanupUri);}
+                    nativeCaptureId=null;nativeCleanupUri=null;
                     clearWindow();
                 });
             }
@@ -362,9 +373,10 @@ final class PortalSource implements AutoCloseable {
     }
 
     private void finishRejectedLift(boolean current) {
-        if(nativeCaptureId!=null){
+        if(nativeCaptureId!=null || nativeCleanupUri!=null){
             ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,ShareDiagnostics.Code.FAILED);
-            discardCapture(nativeCaptureId);nativeCaptureId=null;
+            discardCapture(nativeCaptureId);discardPublication(nativeCleanupUri);
+            nativeCaptureId=null;nativeCleanupUri=null;
         }
         ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,current?ShareDiagnostics.Code.FAILED:ShareDiagnostics.Code.CANCELLED);
         clearWindow();
@@ -399,8 +411,8 @@ final class PortalSource implements AutoCloseable {
     }
     private void clearWindow() {
         main.removeCallbacks(expire);
-        if(startingDrag)discardCapture(nativeCaptureId);
-        nativeCaptureId=null;
+        if(startingDrag){discardCapture(nativeCaptureId);discardPublication(nativeCleanupUri);}
+        nativeCaptureId=null;nativeCleanupUri=null;
         startingDrag=false;
         windowRequest=null;
         android.graphics.Bitmap preview=nativePreview;nativePreview=null;

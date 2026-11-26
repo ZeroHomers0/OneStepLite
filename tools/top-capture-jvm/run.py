@@ -3,7 +3,7 @@ from pathlib import Path
 import os,subprocess,sys
 import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1])); from source_paths import package_dir
 root=Path(__file__).resolve().parents[2]
-source=(package_dir(root)/'SwapPreview.java').read_text(encoding='utf-8')
+source=(package_dir(root)/'ScreenCaptureCompat.java').read_text(encoding='utf-8')
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 def member(signature):
     start=source.index(signature);end=source.index('{',start)+1;depth=1

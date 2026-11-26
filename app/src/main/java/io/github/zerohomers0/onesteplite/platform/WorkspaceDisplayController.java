@@ -59,70 +59,80 @@ final class WorkspaceDisplayController {
 
     void refreshDisplayGeometry() {
         if (host.root == null || host.displayManager == null) return;
-        if (host.cellMotion != null || host.promotion != null && host.promotion.nativeSwap) {
-            int oldWidth = host.screenW;
-            int oldHeight = host.screenH;
-            int oldRotation = host.displayRotation;
-            readDisplayGeometry();
-            int newWidth = host.screenW;
-            int newHeight = host.screenH;
-            int newRotation = host.displayRotation;
-            // Display notifications also report non-geometric changes. Keep the
-            // in-flight coordinate space intact until its finish or rollback.
-            host.screenW = oldWidth;
-            host.screenH = oldHeight;
-            host.displayRotation = oldRotation;
-            if (oldWidth == newWidth && oldHeight == newHeight && oldRotation == newRotation) {
-                if (host.cellMotion != null) log.accept("unchanged display geometry retains real cell motion");
-                return;
+        if (handleLiveGeometryChange()) return;
+        if (deferGeometryChange()) return;
+        applyGeometryChange();
+    }
+    private boolean handleLiveGeometryChange() {
+            if (host.cellMotion != null || host.promotion != null && host.promotion.nativeSwap) {
+                int oldWidth = host.screenW;
+                int oldHeight = host.screenH;
+                int oldRotation = host.displayRotation;
+                readDisplayGeometry();
+                int newWidth = host.screenW;
+                int newHeight = host.screenH;
+                int newRotation = host.displayRotation;
+                // Display notifications also report non-geometric changes. Keep the
+                // in-flight coordinate space intact until its finish or rollback.
+                host.screenW = oldWidth;
+                host.screenH = oldHeight;
+                host.displayRotation = oldRotation;
+                if (oldWidth == newWidth && oldHeight == newHeight && oldRotation == newRotation) {
+                    if (host.cellMotion != null) log.accept("unchanged display geometry retains real cell motion");
+                    return true;
+                }
+                if (host.cellMotion != null) {
+                    host.cellMotion.finish();
+                    scheduleDisplayGeometryRefresh();
+                    return true;
+                }
+                host.geometryRefreshAfterLive = true;
+                host.coordinatorFailPromotion(host.promotion, "display geometry changed during live swap "
+                        + oldWidth + "x" + oldHeight + " r" + oldRotation
+                        + " -> " + newWidth + "x" + newHeight + " r" + newRotation);
+                return true;
             }
-            if (host.cellMotion != null) {
-                host.cellMotion.finish();
-                scheduleDisplayGeometryRefresh();
-                return;
+        return false;
+    }
+    private boolean deferGeometryChange() {
+            if (host.transferBusy || host.cellMovePreview != null) {
+                if (host.geometryRefreshDeferrals++ < 8) {
+                    scheduleDisplayGeometryRefresh();
+                    return true;
+                }
             }
-            host.geometryRefreshAfterLive = true;
-            host.coordinatorFailPromotion(host.promotion, "display geometry changed during live swap "
-                    + oldWidth + "x" + oldHeight + " r" + oldRotation
-                    + " -> " + newWidth + "x" + newHeight + " r" + newRotation);
-            return;
-        }
-        if (host.transferBusy || host.swapPreview != null || host.cellMovePreview != null) {
-            if (host.geometryRefreshDeferrals++ < 8) {
-                scheduleDisplayGeometryRefresh();
-                return;
-            }
-        }
         host.geometryRefreshDeferrals = 0;
-        int oldWidth = host.screenW;
-        int oldHeight = host.screenH;
-        int oldRotation = host.displayRotation;
+        return false;
+    }
+    private void applyGeometryChange() {
+        int[] old={host.screenW,host.screenH,host.displayRotation};
+        if(!prepareGeometry(old))return;
+        host.layout=host.coordinatorMakeAdaptiveLayout(host.mainOnRight);
+        applyGeometryLayout(old);
+    }
+    private boolean prepareGeometry(int[] old) {
         readDisplayGeometry();
-        if(host.layout!=null && host.scene==WorkspaceHost.ACTIVE && (oldWidth!=host.screenW || oldHeight!=host.screenH)) {
-            host.screenW=oldWidth;host.screenH=oldHeight;host.displayRotation=oldRotation;
+        if(host.layout!=null && host.scene==WorkspaceHost.ACTIVE
+                && (old[0]!=host.screenW || old[1]!=host.screenH)) {
+            host.screenW=old[0];host.screenH=old[1];host.displayRotation=old[2];
             log.accept("display capacity change: return all real tasks before changing layout");
-            host.coordinatorSuspendSession("display-layout-change");
-            return;
+            host.coordinatorSuspendSession("display-layout-change");return false;
         }
-        if (NativeLandscapePolicy.shouldRestoreFromDisplay(
-                host.landscapeSuspended, host.scene == WorkspaceHost.SUSPENDED, host.displayRotation)) {
-            log.accept("restore workspace after native landscape rotation=" + host.displayRotation);
-            host.coordinatorResumeSession();
-            return;
+        if(NativeLandscapePolicy.shouldRestoreFromDisplay(host.landscapeSuspended,
+                host.scene==WorkspaceHost.SUSPENDED,host.displayRotation)) {
+            log.accept("restore workspace after native landscape rotation="+host.displayRotation);
+            host.coordinatorResumeSession();return false;
         }
-        if (!DeviceProfile.isTablet(host.ctx)
-                && host.displayRotation != FullscreenRotationPolicy.portraitDisplayRotation()) {
-            if (oldRotation != host.displayRotation) {
-                log.accept("workspace retains portrait geometry during display rotation "
-                        + host.displayRotation + "; waiting for WM portrait configuration");
-            }
-            return;
+        if(!DeviceProfile.isTablet(host.ctx) && host.displayRotation!=FullscreenRotationPolicy.portraitDisplayRotation()) {
+            if(old[2]!=host.displayRotation)log.accept("workspace retains portrait geometry during display rotation "
+                    +host.displayRotation+"; waiting for WM portrait configuration");
+            return false;
         }
-        if ((oldWidth == host.screenW && oldHeight == host.screenH && oldRotation == host.displayRotation)
-                || host.screenW <= 0 || host.screenH <= 0) return;
-
-        host.layout = host.coordinatorMakeAdaptiveLayout(host.mainOnRight);
-        host.CELL_SLOT_COUNT=1+host.layout.cellCount;
+        return (old[0]!=host.screenW || old[1]!=host.screenH || old[2]!=host.displayRotation)
+                && host.screenW>0 && host.screenH>0;
+    }
+    private void applyGeometryLayout(int[] old) {
+                host.CELL_SLOT_COUNT=1+host.layout.cellCount;
         host.mainOnRight=host.layout.mainOnRight;
         for(Slot saved:host.slots) if(saved.sideRow < 0 && saved.index>=host.CELL_SLOT_COUNT && saved.index!=WorkspaceHost.coordinatorSlotTop()
                 && saved.parked) {
@@ -201,8 +211,12 @@ final class WorkspaceDisplayController {
                 if (slot.index > WorkspaceHost.coordinatorSlotMain() && slot.occupied && !slot.carrier) host.coordinatorReapplyScale(slot);
             }
         }, queued ? 180L : 0L);
-        log.accept("display geometry changed " + oldWidth + "x" + oldHeight + " r" + oldRotation
+        log.accept("display geometry changed " + old[0] + "x" + old[1] + " r" + old[2]
                 + " -> " + host.screenW + "x" + host.screenH + " r" + host.displayRotation
                 + " queuedTaskBounds=" + queued + " " + host.layout.describe());
+
+
     }
+
+
 }

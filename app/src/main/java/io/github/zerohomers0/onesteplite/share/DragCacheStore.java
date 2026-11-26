@@ -22,6 +22,7 @@ final class DragCacheStore {
     private static final long MAX_TOTAL=256L*1024L*1024L;
     private static final int MAX_ENTRIES=64;
     private static final String PREFS="drag_cache";
+    private static final long COPY_TIMEOUT_MS=60_000L;
     private DragCacheStore(){}
 
     static Bundle store(Context context,byte[] bytes,String name,String mime) throws IOException {
@@ -51,16 +52,16 @@ final class DragCacheStore {
         String cleanMime=mime==null || mime.isBlank()?"application/octet-stream":mime;
         String cleanName=cleanName(name,cleanMime);
         File target=file(context,id),temporary=new File(target.getPath()+".tmp");
-        long size=0L;
+        long size=0L;long started=android.os.SystemClock.uptimeMillis();
         try(FileOutputStream output=new FileOutputStream(temporary)) {
             byte[] buffer=new byte[64*1024];int read;
             while((read=input.read(buffer))>=0) {
                 if(read==0)continue;
                 size+=read;
                 if(size>ContentInboxPolicy.MAX_FILE)throw new IOException("Drag content too large");
+                if(android.os.SystemClock.uptimeMillis()-started>COPY_TIMEOUT_MS)throw new IOException("Drag content read timeout");
                 output.write(buffer,0,read);
             }
-            output.getFD().sync();
         } catch(IOException | RuntimeException failure){
             if(!temporary.delete())temporary.deleteOnExit();
             throw failure;
@@ -141,7 +142,7 @@ final class DragCacheStore {
 
     static Uri uri(String id){return ContentInboxProvider.ROOT.buildUpon().appendPath("drag").appendPath(id).build();}
 
-    static JSONObject find(Context context,Uri uri){
+    static synchronized JSONObject find(Context context,Uri uri){
         if(!isDragUri(uri))return null;
         JSONArray rows=load(context);cleanupLocked(context,rows);return find(rows,uri.getPathSegments().get(1));
     }
@@ -151,7 +152,7 @@ final class DragCacheStore {
         return new File(context.getCacheDir(),"drag-"+id+".bin");
     }
 
-    static void discard(Context context,String id){
+    static synchronized void discard(Context context,String id){
         JSONArray rows=load(context),kept=new JSONArray();boolean found=false;
         for(int i=0;i<rows.length();i++) {
             JSONObject row=rows.optJSONObject(i);
@@ -165,9 +166,9 @@ final class DragCacheStore {
         }
     }
 
-    static boolean contains(Context context,String id){return find(load(context),id)!=null;}
+    static synchronized boolean contains(Context context,String id){return find(load(context),id)!=null;}
 
-    static void markShared(Context context,ClipData clip){
+    static synchronized void markShared(Context context,ClipData clip){
         if(clip==null)return;
         try {
             JSONArray rows=load(context);boolean changed=false;
@@ -181,9 +182,9 @@ final class DragCacheStore {
         catch(org.json.JSONException invalid){android.util.Log.w(Tags.PROBE,"drag retention update invalid",invalid);}
     }
 
-    static void cleanup(Context context){JSONArray rows=load(context);cleanupLocked(context,rows);}
+    static synchronized void cleanup(Context context){JSONArray rows=load(context);cleanupLocked(context,rows);}
 
-    private static void add(Context context,JSONObject added){
+    private static synchronized void add(Context context,JSONObject added){
         JSONArray old=load(context),all=new JSONArray().put(added);
         for(int i=0;i<old.length();i++)all.put(old.optJSONObject(i));
         cleanupLocked(context,all);
@@ -223,8 +224,7 @@ final class DragCacheStore {
         catch(org.json.JSONException invalid){return new JSONArray();}
     }
     private static void save(Context context,JSONArray rows){
-        if(!context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString("rows",rows.toString()).commit())
-            throw new IllegalStateException("Drag cache metadata save failed");
+        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString("rows",rows.toString()).apply();
     }
     private static boolean validId(String id){return id!=null && id.matches("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}");}
     private static String cleanName(String name,String mime){

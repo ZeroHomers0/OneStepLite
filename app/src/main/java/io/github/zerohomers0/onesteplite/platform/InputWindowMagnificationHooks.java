@@ -12,12 +12,11 @@ import java.util.function.Supplier;
 final class InputWindowMagnificationHooks {
     private InputWindowMagnificationHooks() {}
 
-    static void install(ClassLoader loader, BooleanSupplier zoomed,
-            Supplier<Object> displayContent, LongSupplier shadeGeneration,
-            LongSupplier shadeUntil, Consumer<String> log) {
-        // Use WM's own visual AND input-window magnification path for system input UI.
-        // The target normally excludes IME and conditionally excludes the navigation bar.
-        // Do not change accessibility settings or pretend that a mouse is connected.
+    static void install(ClassLoader loader, BooleanSupplier zoomed, Supplier<Object> displayContent, LongSupplier shadeGeneration, LongSupplier shadeUntil, Consumer<String> log) {
+        installMagnificationPolicy(loader, zoomed, displayContent, shadeGeneration, shadeUntil, log);
+        installImeTargeting(loader, zoomed, displayContent, log);
+    }
+    private static void installMagnificationPolicy(ClassLoader loader, BooleanSupplier zoomed, Supplier<Object> displayContent, LongSupplier shadeGeneration, LongSupplier shadeUntil, Consumer<String> log) {
         try {
             Class<?> window = XposedHelpers.findClass(
                     "com.android.server.wm.WindowState", loader);
@@ -65,6 +64,9 @@ final class InputWindowMagnificationHooks {
         } catch (Throwable error) {
             log.accept("input UI magnification unavailable: " + error);
         }
+
+    }
+    private static void installImeTargeting(ClassLoader loader, BooleanSupplier zoomed, Supplier<Object> displayContent, Consumer<String> log) {
         try {
             Class<?> window = XposedHelpers.findClass(
                     "com.android.server.wm.WindowState", loader);
@@ -114,5 +116,7 @@ final class InputWindowMagnificationHooks {
         } catch (Throwable error) {
             log.accept("side IME exclusion unavailable: " + error);
         }
+
     }
+
 }

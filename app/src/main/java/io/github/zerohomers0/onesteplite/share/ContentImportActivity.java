@@ -68,7 +68,7 @@ public final class ContentImportActivity extends Activity {
         Intent share=pendingShare;pendingShare=null;
         getWindow().getDecorView().postDelayed(()->{
             if(isFinishing() || isDestroyed())return;
-            new Thread(()->deliverPrepared(share.getClipData()==null?fromExtras(share):share.getClipData(),share),"ContentShareDelivery").start();
+            BackgroundExecutor.execute(()->deliverPrepared(share.getClipData()==null?fromExtras(share):share.getClipData(),share));
         },80L);
     }
 
@@ -90,13 +90,17 @@ public final class ContentImportActivity extends Activity {
             ClipData prepared=owned;
             ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.READY);
             runOnUiThread(()->{
-                if(isFinishing() || isDestroyed() || cancelled.get() || !ShareDelivery.active(receipt)){outcome(false,prepared);finish();return;}
-                try{startActivity(share);CaptureInboxStore.shared(this,share);outcome(true,prepared);
-                    ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.LAUNCHED);}
-                catch(RuntimeException unavailable){outcome(false,prepared);message("目标暂时无法接收，内容已保留，可换个入口重试");}
-                finish();
+                if(isFinishing() || isDestroyed() || cancelled.get() || !ShareDelivery.active(receipt)){
+                    MediaStoreImageBridge.discardClipAsync(this,prepared);outcome(false,prepared);finish();return;
+                }
+                try{startActivity(share);}
+                catch(RuntimeException unavailable){MediaStoreImageBridge.discardClipAsync(this,prepared);
+                    outcome(false,prepared);message("目标暂时无法接收，内容已保留，可换个入口重试");finish();return;}
+                try{CaptureInboxStore.shared(this,share);}catch(RuntimeException deferred){android.util.Log.w(Tags.PROBE,"shared image retention deferred",deferred);}
+                outcome(true,prepared);ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.LAUNCHED);finish();
             });
         }catch(Exception unavailable){ShareDiagnostics.event(ShareDiagnostics.Stage.DELIVERY,ShareDiagnostics.Code.FAILED);
+            MediaStoreImageBridge.discardClipAsync(this,owned);
             outcome(false,owned);runOnUiThread(()->{message("无法准备此操作，内容已保留");finish();});}
     }
     private void outcome(boolean success,ClipData clip) {
@@ -115,7 +119,7 @@ public final class ContentImportActivity extends Activity {
         if(data.getClipData()!=null)for(int i=0;i<data.getClipData().getItemCount();i++)uris.add(data.getClipData().getItemAt(i).getUri());
         else if(data.getData()!=null)uris.add(data.getData());
         if(uris.isEmpty() || uris.size()>ContentSharePolicy.MAX_ITEMS){message("一次最多选择32个文件");finish();return;}
-        new Thread(()->{
+        BackgroundExecutor.execute(()->{
             ArrayList<Uri> acquired=new ArrayList<>();
             try {
                 JSONArray rows=new JSONArray();
@@ -143,7 +147,7 @@ public final class ContentImportActivity extends Activity {
                 catch(RuntimeException ignored){}
                 runOnUiThread(()->{message("无法保留所选文件的读取权限，请重新选择");finish();});
             }
-        },"ContentDocumentSelection").start();
+        });
     }
 
     private void importContent(Intent incoming) {
@@ -151,7 +155,7 @@ public final class ContentImportActivity extends Activity {
         if(!BUSY.compareAndSet(false,true)){message("另一次导入尚未完成");finish();return;}
         importing=true;
         ShareDiagnostics.event(ShareDiagnostics.Stage.COPY,ShareDiagnostics.Code.STARTED);
-        new Thread(()->{
+        BackgroundExecutor.execute(()->{
             ArrayList<File> created=new ArrayList<>();
             try {
                 ClipData clip=incoming.getClipData();
@@ -202,7 +206,7 @@ public final class ContentImportActivity extends Activity {
                 String detail=importFailure(error);
                 runOnUiThread(()->{if(!cancelled.get())message(detail);finish();});
             } finally {releaseDelegatedRead();BUSY.set(false);}
-        },"ContentInboxImport").start();
+        });
     }
 
     private ClipData storeTransient(SharePayload payload) throws Exception {

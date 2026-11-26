@@ -194,36 +194,7 @@ final class InputTrace {
                 "onMotionEvent", "native-edge-back-motion");
         hook(cl, "com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler",
                 "handleMotionEvent", "native-edge-back-handle");
-        try {
-            Class<?> util = XposedHelpers.findClass("com.android.wm.shell.shared.TransitionUtil", cl);
-            retain(XposedBridge.hookAllMethods(util, "newTarget", new TraceHook() {
-                @Override protected void after(MethodHookParam p) {
-                    int offset = RecentsWallpaper.argumentOffset(p.args);
-                    if (!active() || p.hasThrowable() || offset < 0) return;
-                    Object info = p.args[2 + offset];
-                    line("nativeTarget args=" + p.args.length + " type="
-                            + XposedHelpers.callMethod(info, "getType") + " roots="
-                            + XposedHelpers.callMethod(info, "getRootCount")
-                            + " main=" + (WorkspaceHost.activeMainTransform() != null));
-                    int count = 0;
-                    for (Object change : (List<?>) XposedHelpers.callMethod(info, "getChanges")) {
-                        if (++count > 6) break;
-                        Object task = XposedHelpers.callMethod(change, "getTaskInfo");
-                        line("nativeChange mode=" + XposedHelpers.callMethod(change, "getMode")
-                                + " flags=" + XposedHelpers.callMethod(change, "getFlags")
-                                + " parent=" + (XposedHelpers.callMethod(change, "getParent") != null)
-                                + " task=" + (task == null ? -1 : XposedHelpers.getIntField(task, "taskId"))
-                                + " activity=" + (task == null ? -1 : XposedHelpers.callMethod(task, "getActivityType"))
-                                + " windowing=" + (task == null ? -1 : XposedHelpers.callMethod(task, "getWindowingMode"))
-                                + " taskParent=" + (task != null && Boolean.TRUE.equals(XposedHelpers.callMethod(task, "hasParentTask")))
-                                + " rotation=" + XposedHelpers.callMethod(change, "getStartRotation")
-                                + "," + XposedHelpers.callMethod(change, "getEndRotation")
-                                + " bounds=" + XposedHelpers.callMethod(change, "getStartAbsBounds"));
-                    }
-                }
-            }));
-        } catch (Throwable error) { unavailable(error); }
-        retain(XposedBridge.hookAllMethods(HotZoneGesture.class, "onMotion", new TraceHook() {
+                hookTransitionUtil(cl);retain(XposedBridge.hookAllMethods(HotZoneGesture.class, "onMotion", new TraceHook() {
             @Override protected void before(MethodHookParam p) {
                 if (!active() || p.args.length != 1 || !(p.args[0] instanceof MotionEvent e)) return;
                 event("onesteplite-corner-spy", e);
@@ -381,72 +352,7 @@ final class InputTrace {
     }
 
     private static void hookSystemServer(ClassLoader cl) {
-        try {
-            Set<XC_MethodHook.Unhook> hooks = XposedBridge.hookAllMethods(XposedHelpers.findClass(
-                    "android.hardware.input.InputManager", cl), "injectInputEvent", new TraceHook() {
-                @Override protected void after(MethodHookParam p) {
-                    if (!active() || p.args.length < 3 || !(p.args[0] instanceof android.view.KeyEvent e)
-                            || e.getKeyCode() != android.view.KeyEvent.KEYCODE_BACK) return;
-                    line("back-dispatch action=" + e.getAction() + " eventTime=" + e.getEventTime()
-                            + " targetUid=" + p.args[2] + " result=" + Boolean.TRUE.equals(p.getResult())
-                            + " error=" + p.hasThrowable());
-                }
-            });
-            retain(hooks);
-            line("observer=back-dispatch installed=" + !hooks.isEmpty());
-        } catch (Throwable ignored) { line("observer=back-dispatch installed=false"); }
-        try {
-            Class<?> window = XposedHelpers.findClass("com.android.server.wm.WindowState", cl);
-            retain(XposedBridge.hookAllMethods(window, "canReceiveKeys", new TraceHook() {
-                @Override protected void after(MethodHookParam p) {
-                    if (!active() || Boolean.TRUE.equals(readingFocus.get())
-                            || p.hasThrowable() || p.args.length != 0) return;
-                    Object task = XposedHelpers.callMethod(p.thisObject, "getTask");
-                    if (task == null || !Integer.valueOf(6).equals(
-                            XposedHelpers.callMethod(task, "getWindowingMode"))) return;
-                    synchronized (InputTrace.class) {
-                        if (focusSamples++ >= 12) return;
-                    }
-                    readingFocus.set(Boolean.TRUE);
-                    try {
-                        Object display = XposedHelpers.callMethod(p.thisObject, "getDisplayContent");
-                        line("focusCandidate task=" + XposedHelpers.getIntField(task, "mTaskId")
-                                + " nativeKeys=" + p.getResult()
-                                + " topLease=" + DesktopLaunchBridge.ownsTopTask(task)
-                                + " passiveLease=" + (DesktopLaunchBridge.recentsLease(task) != null)
-                                + " appFocused=" + ImePolicy.isTopAppFocused(task, display)
-                                + " reason=" + XposedHelpers.callMethod(
-                                        p.thisObject, "canReceiveKeysReason", false));
-                    } finally { readingFocus.remove(); }
-                }
-            }));
-            Class<?> display = XposedHelpers.findClass("com.android.server.wm.DisplayContent", cl);
-            retain(XposedBridge.hookAllMethods(display, "findFocusedWindow", new TraceHook() {
-                @Override protected void after(MethodHookParam p) {
-                    if (!active()) return;
-                    Object focused = p.getResult();
-                    Object task = focused == null ? null : XposedHelpers.callMethod(focused, "getTask");
-                    synchronized (InputTrace.class) { if (focusSamples++ >= 12) return; }
-                    line("focusScan resultTask=" + (task == null ? -1
-                            : XposedHelpers.getIntField(task, "mTaskId")));
-                }
-            }));
-        } catch (Throwable error) { unavailable(error); }
-        try {
-            Class<?> dispatcher = XposedHelpers.findClass("com.android.server.wm.PointerEventDispatcher", cl);
-            retain(XposedBridge.hookAllMethods(dispatcher, "onInputEvent", new TraceHook() {
-                @Override protected void before(MethodHookParam p) {
-                    if (p.thisObject == globalReceiver && active() && p.args.length == 1
-                            && p.args[0] instanceof MotionEvent e) event("legacy-global-monitor", e);
-                }
-            }));
-            Object service = XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("android.os.ServiceManager", cl), "getService", "input");
-            globalChannel = PassiveInputChannel.open(service, "OneStepLiteSixSecondTrace", cl);
-            globalReceiver = XposedHelpers.newInstance(dispatcher, globalChannel.input);
-            line("legacy-global-monitor installed=true");
-        } catch (Throwable error) { unavailable(error); }
-        hook(cl, "com.android.server.input.MiuiInputManagerService",
+                hookBackDispatch(cl);hookFocusScan(cl);hookLegacyGlobalInput(cl);hook(cl, "com.android.server.input.MiuiInputManagerService",
                 "beforeNotifyMotion", "miui-before-notify");
         hook(cl, "com.android.server.input.MiuiInputManagerService",
                 "notifyTouchMotionEvent", "miui-touch-notify");
@@ -588,5 +494,111 @@ final class InputTrace {
         if (surface == null) return "none";
         try { return String.valueOf(XposedHelpers.callMethod(surface, "getLayerId")); }
         catch (Throwable ignored) { return "unavailable"; }
+    }
+
+    private static void hookTransitionUtil(ClassLoader cl) {
+try {
+            Class<?> util = XposedHelpers.findClass("com.android.wm.shell.shared.TransitionUtil", cl);
+            retain(XposedBridge.hookAllMethods(util, "newTarget", new TraceHook() {
+                @Override protected void after(MethodHookParam p) {
+                    int offset = RecentsWallpaper.argumentOffset(p.args);
+                    if (!active() || p.hasThrowable() || offset < 0) return;
+                    Object info = p.args[2 + offset];
+                    line("nativeTarget args=" + p.args.length + " type="
+                            + XposedHelpers.callMethod(info, "getType") + " roots="
+                            + XposedHelpers.callMethod(info, "getRootCount")
+                            + " main=" + (WorkspaceHost.activeMainTransform() != null));
+                    int count = 0;
+                    for (Object change : (List<?>) XposedHelpers.callMethod(info, "getChanges")) {
+                        if (++count > 6) break;
+                        Object task = XposedHelpers.callMethod(change, "getTaskInfo");
+                        line("nativeChange mode=" + XposedHelpers.callMethod(change, "getMode")
+                                + " flags=" + XposedHelpers.callMethod(change, "getFlags")
+                                + " parent=" + (XposedHelpers.callMethod(change, "getParent") != null)
+                                + " task=" + (task == null ? -1 : XposedHelpers.getIntField(task, "taskId"))
+                                + " activity=" + (task == null ? -1 : XposedHelpers.callMethod(task, "getActivityType"))
+                                + " windowing=" + (task == null ? -1 : XposedHelpers.callMethod(task, "getWindowingMode"))
+                                + " taskParent=" + (task != null && Boolean.TRUE.equals(XposedHelpers.callMethod(task, "hasParentTask")))
+                                + " rotation=" + XposedHelpers.callMethod(change, "getStartRotation")
+                                + "," + XposedHelpers.callMethod(change, "getEndRotation")
+                                + " bounds=" + XposedHelpers.callMethod(change, "getStartAbsBounds"));
+                    }
+                }
+            }));
+        } catch (Throwable error) { unavailable(error); }
+    }
+
+    private static void hookBackDispatch(ClassLoader cl) {
+try {
+            Set<XC_MethodHook.Unhook> hooks = XposedBridge.hookAllMethods(XposedHelpers.findClass(
+                    "android.hardware.input.InputManager", cl), "injectInputEvent", new TraceHook() {
+                @Override protected void after(MethodHookParam p) {
+                    if (!active() || p.args.length < 3 || !(p.args[0] instanceof android.view.KeyEvent e)
+                            || e.getKeyCode() != android.view.KeyEvent.KEYCODE_BACK) return;
+                    line("back-dispatch action=" + e.getAction() + " eventTime=" + e.getEventTime()
+                            + " targetUid=" + p.args[2] + " result=" + Boolean.TRUE.equals(p.getResult())
+                            + " error=" + p.hasThrowable());
+                }
+            });
+            retain(hooks);
+            line("observer=back-dispatch installed=" + !hooks.isEmpty());
+        } catch (Throwable ignored) { line("observer=back-dispatch installed=false"); }
+    }
+
+    private static void hookFocusScan(ClassLoader cl) {
+try {
+            Class<?> window = XposedHelpers.findClass("com.android.server.wm.WindowState", cl);
+            retain(XposedBridge.hookAllMethods(window, "canReceiveKeys", new TraceHook() {
+                @Override protected void after(MethodHookParam p) {
+                    if (!active() || Boolean.TRUE.equals(readingFocus.get())
+                            || p.hasThrowable() || p.args.length != 0) return;
+                    Object task = XposedHelpers.callMethod(p.thisObject, "getTask");
+                    if (task == null || !Integer.valueOf(6).equals(
+                            XposedHelpers.callMethod(task, "getWindowingMode"))) return;
+                    synchronized (InputTrace.class) {
+                        if (focusSamples++ >= 12) return;
+                    }
+                    readingFocus.set(Boolean.TRUE);
+                    try {
+                        Object display = XposedHelpers.callMethod(p.thisObject, "getDisplayContent");
+                        line("focusCandidate task=" + XposedHelpers.getIntField(task, "mTaskId")
+                                + " nativeKeys=" + p.getResult()
+                                + " topLease=" + DesktopLaunchBridge.ownsTopTask(task)
+                                + " passiveLease=" + (DesktopLaunchBridge.recentsLease(task) != null)
+                                + " appFocused=" + ImePolicy.isTopAppFocused(task, display)
+                                + " reason=" + XposedHelpers.callMethod(
+                                        p.thisObject, "canReceiveKeysReason", false));
+                    } finally { readingFocus.remove(); }
+                }
+            }));
+            Class<?> display = XposedHelpers.findClass("com.android.server.wm.DisplayContent", cl);
+            retain(XposedBridge.hookAllMethods(display, "findFocusedWindow", new TraceHook() {
+                @Override protected void after(MethodHookParam p) {
+                    if (!active()) return;
+                    Object focused = p.getResult();
+                    Object task = focused == null ? null : XposedHelpers.callMethod(focused, "getTask");
+                    synchronized (InputTrace.class) { if (focusSamples++ >= 12) return; }
+                    line("focusScan resultTask=" + (task == null ? -1
+                            : XposedHelpers.getIntField(task, "mTaskId")));
+                }
+            }));
+        } catch (Throwable error) { unavailable(error); }
+    }
+
+    private static void hookLegacyGlobalInput(ClassLoader cl) {
+try {
+            Class<?> dispatcher = XposedHelpers.findClass("com.android.server.wm.PointerEventDispatcher", cl);
+            retain(XposedBridge.hookAllMethods(dispatcher, "onInputEvent", new TraceHook() {
+                @Override protected void before(MethodHookParam p) {
+                    if (p.thisObject == globalReceiver && active() && p.args.length == 1
+                            && p.args[0] instanceof MotionEvent e) event("legacy-global-monitor", e);
+                }
+            }));
+            Object service = XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("android.os.ServiceManager", cl), "getService", "input");
+            globalChannel = PassiveInputChannel.open(service, "OneStepLiteSixSecondTrace", cl);
+            globalReceiver = XposedHelpers.newInstance(dispatcher, globalChannel.input);
+            line("legacy-global-monitor installed=true");
+        } catch (Throwable error) { unavailable(error); }
     }
 }

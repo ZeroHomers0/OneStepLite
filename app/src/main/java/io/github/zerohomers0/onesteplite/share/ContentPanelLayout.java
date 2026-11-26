@@ -67,6 +67,10 @@ final class ContentPanelLayout extends LinearLayout {
             tab.setMinHeight(dp(36));tab.setMaxLines(1);tab.setIncludeFontPadding(false);
             tab.setGravity(Gravity.CENTER);tab.setTextColor(HyperOsStyle.textPrimary(context));
             tab.setOnClickListener(v->select.accept(index));tabs.add(tab);
+            GradientDrawable tabFace=new GradientDrawable();tabFace.setColor(android.graphics.Color.TRANSPARENT);
+            face.setCornerRadius(dp(8));
+            tab.setBackground(new RippleDrawable(ColorStateList.valueOf(
+                    (HyperOsStyle.CONTROL_ACCENT&0x00ffffff)|0x1c000000),face,null));
             LayoutParams cell=new LayoutParams(0,-2,1);header.addView(tab,cell);
         }
         this.track.addView(header,new android.widget.FrameLayout.LayoutParams(-1,-2));
@@ -205,11 +209,6 @@ final class ContentPanelLayout extends LinearLayout {
             scroll.animate().translationX(0).alpha(1).setDuration(240).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();}
         for(int i=0;i<tabs.size();i++) {
             tabs.get(i).setSelected(i==page);
-            GradientDrawable face=new GradientDrawable();
-            face.setColor(android.graphics.Color.TRANSPARENT);
-            face.setCornerRadius(dp(8));
-            tabs.get(i).setBackground(new RippleDrawable(ColorStateList.valueOf(
-                    (HyperOsStyle.CONTROL_ACCENT&0x00ffffff)|0x1c000000),face,null));
             tabs.get(i).setTypeface(Typeface.DEFAULT,i==page?Typeface.BOLD:Typeface.NORMAL);
             tabs.get(i).setTextColor(i==page?HyperOsStyle.CONTROL_ACCENT:HyperOsStyle.textSecondary(getContext()));
         }

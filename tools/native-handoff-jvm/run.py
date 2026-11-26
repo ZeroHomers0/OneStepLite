@@ -7,13 +7,16 @@ root=Path(__file__).resolve().parents[2]
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 src=package_dir(root)
 source=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-start=source.index('    private void handoffPromotedTask(')
-brace=source.index('{',start);end=brace+1;depth=1
-while depth:
-    if source[end]=='{':depth+=1
-    elif source[end]=='}':depth-=1
-    end+=1
-method=source[start:end]
+def extract(signature):
+    start=source.index(signature)
+    brace=source.index('{',start);end=brace+1;depth=1
+    while depth:
+        if source[end]=='{':depth+=1
+        elif source[end]=='}':depth-=1
+        end+=1
+    return source[start:end]
+method=extract('    private void handoffPromotedTask(')+'\n'+extract('    private void commitPromotedHandoff(')
+
 files={
 'android/graphics/Rect.java': 'package android.graphics;public class Rect {public Rect(int a,int b,int c,int d){}}',
 'android/util/SparseArray.java': '''package android.util;public class SparseArray<T>{

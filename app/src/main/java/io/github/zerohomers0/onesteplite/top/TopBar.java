@@ -39,6 +39,8 @@ final class TopBar extends FrameLayout {
     private Bitmap glassWallpaper;
     private int glassWidth, glassHeight, statusBarInset, tabletHeaderHeight;
     private boolean mainOnRight, tabletToolsExpanded;
+    private android.animation.ValueAnimator tabletToolsAnimator;
+    private final Rect tabletClip=new Rect();
     private boolean followTopBarSide=true;
     private RectF workspaceMain;
     private TopBarGeometry geometry;
@@ -50,7 +52,6 @@ final class TopBar extends FrameLayout {
                     || getWindowVisibility() != VISIBLE) return;
             java.util.Set<String> packages = listener.openedAppPackages();
             if (packages != null) quickRail.setOpenedPackages(packages);
-            postDelayed(this, 30000L);
         }
     };
 
@@ -128,7 +129,17 @@ final class TopBar extends FrameLayout {
     }
     void setWorkspaceMainHole(RectF hole) {
         workspaceMain = hole == null ? null : new RectF(hole);
+        if(workspaceMain==null)resetRevealAlpha();
         invalidate(); header.invalidate();
+    }
+    private void resetRevealAlpha(){
+        if(clock!=null)clock.setAlpha(1f);
+        header.resetRevealAlpha();
+        if(tabletHeader!=null)tabletHeader.resetRevealAlpha();
+    }
+    private void applyAlpha(View child,float reveal){
+        float target=Math.max(0f,Math.min(1f,reveal));
+        if(Math.abs(child.getAlpha()-target)>.01f)child.setAlpha(target);
     }
     private float reveal(float l, float t, float r, float b) {
         if (workspaceMain == null) return 1f;
@@ -139,9 +150,8 @@ final class TopBar extends FrameLayout {
         if (child == header || child == quickRail || child == shareWorkspace || workspaceMain == null)
             return super.drawChild(canvas, child, time);
         float alpha = reveal(child.getLeft(), child.getTop(), child.getRight(), child.getBottom());
-        if (alpha <= 0) return false;
-        int save=canvas.saveLayerAlpha(child.getLeft(),child.getTop(),child.getRight(),child.getBottom(),Math.round(255*alpha));
-        boolean drawn=super.drawChild(canvas,child,time);canvas.restoreToCount(save);return drawn;
+        applyAlpha(child,alpha);
+        return alpha>0 && super.drawChild(canvas,child,time);
     }
     void setQuickApps(List<QuickApp> apps) {
         availableApps = new java.util.ArrayList<>(apps);
@@ -168,16 +178,41 @@ final class TopBar extends FrameLayout {
         tabletHeader=new Header(getContext(),tools);requestLayout();return tabletHeader;
     }
     void clearTabletHeader() {
+        if(tabletToolsAnimator!=null){tabletToolsAnimator.cancel();tabletToolsAnimator=null;}
         tabletHeader=null;tabletHeaderHeight=0;tabletToolsExpanded=false;
         header.setVisibility(VISIBLE);setClipBounds(null);clock.setVisibility(VISIBLE);requestLayout();
     }
     void setTabletToolsExpanded(boolean expanded,boolean animate) {
         tabletToolsExpanded=expanded;listener.onTaskCellsCovered(expanded);
-        setVisibility(expanded?VISIBLE:INVISIBLE);renderTabletTools();
+        if(tabletToolsAnimator!=null){tabletToolsAnimator.cancel();tabletToolsAnimator=null;}
+        if(!animate || !android.animation.ValueAnimator.areAnimatorsEnabled()){
+            setVisibility(expanded?VISIBLE:INVISIBLE);renderTabletTools();
+        }else{
+            setVisibility(VISIBLE);
+            int top=Math.max(tabletHeaderHeight,getHeight());
+            float from=expanded?top:tabletHeaderHeight,to=expanded?tabletHeaderHeight:top;
+            tabletToolsAnimator=android.animation.ValueAnimator.ofFloat(from,to);
+            tabletToolsAnimator.setDuration(180L);
+            tabletToolsAnimator.setInterpolator(new android.view.animation.DecelerateInterpolator());
+            tabletToolsAnimator.addUpdateListener(value->{
+                tabletClip.set(0,Math.round((Float)value.getAnimatedValue()),getWidth(),getHeight());
+                setClipBounds(tabletClip);
+            });
+            tabletToolsAnimator.addListener(new android.animation.AnimatorListenerAdapter(){
+                @Override public void onAnimationEnd(android.animation.Animator animation){
+                    if(tabletToolsAnimator==animation)tabletToolsAnimator=null;
+                    if(!tabletToolsExpanded)setVisibility(INVISIBLE);else renderTabletTools();
+                }
+            });
+            tabletToolsAnimator.start();
+        }
         if(workspaceActive && dragShareEnabled && shareWorkspace!=null)shareWorkspace.setActive(true);
     }
     private void renderTabletTools() {
-        if(tabletHeaderHeight>0)setClipBounds(new Rect(0,tabletHeaderHeight,getWidth(),getHeight()));
+        if(tabletHeaderHeight>0){
+            tabletClip.set(0,tabletToolsExpanded?tabletHeaderHeight:getHeight(),getWidth(),getHeight());
+            setClipBounds(tabletClip);
+        }
     }
     @Override protected void onConfigurationChanged(android.content.res.Configuration configuration) {
         super.onConfigurationChanged(configuration);
@@ -193,7 +228,7 @@ final class TopBar extends FrameLayout {
         super.onAttachedToWindow();requestOpenedAppsRefresh();
     }
     @Override protected void onDetachedFromWindow() {
-        removeCallbacks(refreshOpenedApps);super.onDetachedFromWindow();
+        removeCallbacks(refreshOpenedApps);if(tabletToolsAnimator!=null){tabletToolsAnimator.cancel();tabletToolsAnimator=null;}super.onDetachedFromWindow();
     }
     @Override protected void onVisibilityChanged(View view,int visibility) {
         super.onVisibilityChanged(view,visibility);
@@ -304,9 +339,17 @@ final class TopBar extends FrameLayout {
             if(this==tabletHeader||workspaceMain==null)return super.drawChild(canvas,child,time);
             float a=reveal(getLeft()+child.getLeft(),getTop()+child.getTop(),
                     getLeft()+child.getRight(),getTop()+child.getBottom());
-            if(a<=0)return false;
-            int s=canvas.saveLayerAlpha(child.getLeft(),child.getTop(),child.getRight(),child.getBottom(),Math.round(255*a));
-            boolean drawn=super.drawChild(canvas,child,time);canvas.restoreToCount(s);return drawn;
+            applyAlpha(child,a);
+            return a>0 && super.drawChild(canvas,child,time);
+        }
+        private float baseAlpha(View child){return child.isEnabled()?1f:.32f;}
+        private void applyAlpha(View child,float reveal){
+            float target=baseAlpha(child)*Math.max(0f,Math.min(1f,reveal));
+            if(Math.abs(child.getAlpha()-target)>.01f)child.setAlpha(target);
+        }
+        private void resetRevealAlpha(){
+            for(View child:buttons)child.setAlpha(baseAlpha(child));
+            title.setAlpha(baseAlpha(title));
         }
         @Override protected void onMeasure(int ws,int hs) {
             int w=MeasureSpec.getSize(ws),h=MeasureSpec.getSize(hs);

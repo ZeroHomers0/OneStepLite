@@ -43,21 +43,21 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  */
 public class HostEntry implements IXposedHookLoadPackage {
 
-    private static final String TAG = Tags.PROBE;
+    static final String TAG = Tags.PROBE;
 
     /** Generated from version.json by both build paths. */
-    private static final String RUNTIME_MARKER = BuildIdentity.RUNTIME_MARKER;
-    private static final String SYSTEMUI = Packages.SYSTEM_UI;
-    private static final String DESKTOP_ICON_LAUNCH_ACTION = Actions.DESKTOP_ICON_LAUNCH;
-    private static final long LAUNCH_DELAY_MS = 12_000L;   // 等开机稳定
+    static final String RUNTIME_MARKER = BuildIdentity.RUNTIME_MARKER;
+    static final String SYSTEMUI = Packages.SYSTEM_UI;
+    static final String DESKTOP_ICON_LAUNCH_ACTION = Actions.DESKTOP_ICON_LAUNCH;
+    static final long LAUNCH_DELAY_MS = 12_000L;   // 等开机稳定
 
     /** 试验方框的位置与尺寸（后面要换成自适应布局）。 */
 
-    private static volatile Context sContext;
-    private static volatile Object sTaskViewFactory;
-    private static volatile Object sTaskViewTransitions;
-    private static volatile Executor sShellExecutor;
-    private static volatile boolean sStarted;
+    static volatile Context sContext;
+    static volatile Object sTaskViewFactory;
+    static volatile Object sTaskViewTransitions;
+    static volatile Executor sShellExecutor;
+    static volatile boolean sStarted;
 
     private final TopFocusNotification topFocusNotification = new TopFocusNotification();
 
@@ -124,62 +124,62 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static void hookMiTypeAutoFloating(ClassLoader cl) {
+    static void hookMiTypeAutoFloating(ClassLoader cl) {
         MiTypeHooks.install(cl, RUNTIME_MARKER, HostEntry::log);
     }
 
     // ---------------------------------------------------------------- v1.1.0：系统框架整屏缩放（R2 同款）
 
-    private static volatile Object sDisplayContent;
-    private static volatile Object sSystemContext;
-    private static volatile boolean sZoomed;
-    private static volatile ZoomTarget sZoomTarget;
+    static volatile Object sDisplayContent;
+    static volatile Object sSystemContext;
+    static volatile boolean sZoomed;
+    static volatile ZoomTarget sZoomTarget;
     /** 缩放动画只在 WM handler 上创建/取消；帧内矩阵仍在 mGlobalLock 内应用。 */
-    private static volatile ValueAnimator sZoomAnimator;
-    private static volatile String sZoomAnimKey;
-    private static volatile boolean sZoomFrameApply;
-    private static volatile PathInterpolator zoomAnimInterpolator;
-    private static volatile float sZoomScale = 1f, sZoomOffset, sZoomOffsetX;
-    private static final long sZoomWatcherStarted = System.currentTimeMillis();
-    private static final KeyguardZoom sKeyguardZoom = new KeyguardZoom();
-    private static final ZoomChannelState sZoomChannels = new ZoomChannelState(sZoomWatcherStarted);
-    private static volatile android.os.FileObserver sZoomFileObserver;
-    private static volatile Handler sZoomBridgeHandler;
-    private static volatile boolean sHostZoomed;
-    private static volatile long sUnlockPhysicalShadeGeneration, sUnlockPhysicalShadeUntil;
-    private static final RetainedWindow sRetainedWindow = new RetainedWindow();
-    private static volatile String sZoomReadError;
-    private static volatile String sZoomLastSeen;
-    private static volatile String sZoomLastDispatched;
-    private static volatile String sZoomLastTargetNull;
-    private static ZoomCommit sLiveZoomCommit;
-    private static long sLiveZoomIssued;
-    private static volatile boolean sFullscreenRotationActive;
-    private static volatile int sHeldDisplayRotation;
-    private static volatile Object sFixedRotationApp;
-    private static volatile int sNativeLandscapeState = NativeLandscapePolicy.INACTIVE;
+    static volatile ValueAnimator sZoomAnimator;
+    static volatile String sZoomAnimKey;
+    static volatile boolean sZoomFrameApply;
+    static volatile PathInterpolator zoomAnimInterpolator;
+    static volatile float sZoomScale = 1f, sZoomOffset, sZoomOffsetX;
+    static final long sZoomWatcherStarted = System.currentTimeMillis();
+    static final KeyguardZoom sKeyguardZoom = new KeyguardZoom();
+    static final ZoomChannelState sZoomChannels = new ZoomChannelState(sZoomWatcherStarted);
+    static volatile android.os.FileObserver sZoomFileObserver;
+    static volatile Handler sZoomBridgeHandler;
+    static volatile boolean sHostZoomed;
+    static volatile long sUnlockPhysicalShadeGeneration, sUnlockPhysicalShadeUntil;
+    static final RetainedWindow sRetainedWindow = new RetainedWindow();
+    static volatile String sZoomReadError;
+    static volatile String sZoomLastSeen;
+    static volatile String sZoomLastDispatched;
+    static volatile String sZoomLastTargetNull;
+    static ZoomCommit sLiveZoomCommit;
+    static long sLiveZoomIssued;
+    static volatile boolean sFullscreenRotationActive;
+    static volatile int sHeldDisplayRotation;
+    static volatile Object sFixedRotationApp;
+    static volatile int sNativeLandscapeState = NativeLandscapePolicy.INACTIVE;
     /** Accessed only under the WMS global lock; these are per-token, not display launches. */
-    private static final java.util.Map<Object, Integer> sTaskRotations =
+    static final java.util.Map<Object, Integer> sTaskRotations =
             new java.util.WeakHashMap<>();
-    private static final java.util.Map<Object, java.lang.ref.WeakReference<Object>> sTaskRotationTransforms =
+    static final java.util.Map<Object, java.lang.ref.WeakReference<Object>> sTaskRotationTransforms =
             new java.util.WeakHashMap<>();
     /** Only surfaces actually written by our WM magnification, under its global lock. */
-    private static final java.util.Map<Object, Object> sMagnifiedSurfaces =
+    static final java.util.Map<Object, Object> sMagnifiedSurfaces =
             new java.util.WeakHashMap<>();
-    private static final java.util.Map<Object, Object> sMagnificationFinishReplays =
+    static final java.util.Map<Object, Object> sMagnificationFinishReplays =
             new java.util.WeakHashMap<>();
-    private static final java.util.Map<Object, Object> sHomeTransitionInfos =
+    static final java.util.Map<Object, Object> sHomeTransitionInfos =
             new java.util.WeakHashMap<>();
-    private static final ThreadLocal<Boolean> sFinalMagnificationSnapshot = new ThreadLocal<>();
-    private static final ThreadLocal<Object> sMagnificationFinishInfo = new ThreadLocal<>();
-    private static final NativeFreeformStartGate sNativeFreeformStart = new NativeFreeformStartGate();
-    private static final NativeFreeformStartGate sLiveSwapZoomSurfaces = new NativeFreeformStartGate();
+    static final ThreadLocal<Boolean> sFinalMagnificationSnapshot = new ThreadLocal<>();
+    static final ThreadLocal<Object> sMagnificationFinishInfo = new ThreadLocal<>();
+    static final NativeFreeformStartGate sNativeFreeformStart = new NativeFreeformStartGate();
+    static final NativeFreeformStartGate sLiveSwapZoomSurfaces = new NativeFreeformStartGate();
     /** Per-task state survives top-activity changes and main/side ownership swaps. */
-    private static final java.util.Map<Object, TaskWindowState> sTaskWindowStates =
+    static final java.util.Map<Object, TaskWindowState> sTaskWindowStates =
             new java.util.WeakHashMap<>();
-    private static java.lang.reflect.Method sTaskRotationResolver;
-    private static boolean sUpdatingTaskRotation;
-    private static final java.util.Map<Object, String> sGestureSurfaces =
+    static java.lang.reflect.Method sTaskRotationResolver;
+    static boolean sUpdatingTaskRotation;
+    static final java.util.Map<Object, String> sGestureSurfaces =
             new java.util.WeakHashMap<>();
 
     static void setHostZoomed(boolean zoomed) {
@@ -196,87 +196,65 @@ public class HostEntry implements IXposedHookLoadPackage {
         log("=== attached to system_server (android) " + RUNTIME_MARKER);
         Recents.install(cl);
         NativeRawInputBridge.install();
-        try {
-            Class<?> dc = XposedHelpers.findClass("com.android.server.wm.DisplayContent", cl);
-            XposedBridge.hookAllMethods(dc, "configureSurfaces", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    Object self = param.thisObject;
-                    try {
-                        Object type = XposedHelpers.callMethod(self, "getDisplayId");
-                        if (type instanceof Integer && ((Integer) type).intValue() != 0) {
-                            return;
-                        }
-                        sDisplayContent = self;
-                        PortalDragInput.observeDisplay(self,cl,HostEntry::dragShareActive);
-                        Object service = XposedHelpers.getObjectField(self, "mWmService");
-                        Object lock = XposedHelpers.getObjectField(service, "mGlobalLock");
-                        Object handler = XposedHelpers.getObjectField(service, "mH");
-                        if (!(handler instanceof Handler)) {
-                            throw new IllegalStateException("WMS.mH is not a Handler");
-                        }
-                        // configureSurfaces creates a new display surface even for the same DC.
-                        // New identity invalidates deduplication after a real surface rebuild.
-                        cancelZoomAnimation(null);
-                        sZoomAnimKey = null;
-                        sZoomTarget = new ZoomTarget(HostEntry.this, self, lock, (Handler) handler,
-                                () -> sZoomTarget, error -> {
-                                    log("WM zoom request stopped; no same-state retry: " + error);
-                                    XposedBridge.log(error);
-                                });
-                        // Lock entry must be able to hide the opening main task in the
-                        // same WM transaction that restores physical geometry, without
-                        // waiting for the Host broadcast round trip.
-                        sRetainedWindow.setGlobalLock(lock);
-                        armZoomBridge(service);
-                        dispatchCurrentZoom();
-                        log("captured DisplayContent(display 0) with WM handler/global lock -> " + self);
-                    } catch (Throwable t) {
-                        sZoomTarget = null;
-                        log("capture DisplayContent failed: " + t);
-                    }
+        if(!installDisplayContentHook(cl))return;
+        installInputHooks(cl);
+        installKeyguardHooks(cl);
+        installRotationAndFocusHooks(cl);
+        captureSystemContext(cl);
+        installDesktopIconLaunchBridge(cl);
+        startZoomFileWatcher();
+        installZoomFileObserver();
+    }
+    private boolean installDisplayContentHook(ClassLoader cl){
+        try{
+            Class<?> dc=XposedHelpers.findClass("com.android.server.wm.DisplayContent",cl);
+            XposedBridge.hookAllMethods(dc,"configureSurfaces",new XC_MethodHook(){
+                @Override protected void afterHookedMethod(MethodHookParam param){
+                    Object self=param.thisObject;
+                    try{
+                        Object type=XposedHelpers.callMethod(self,"getDisplayId");
+                        if(type instanceof Integer && ((Integer)type).intValue()!=0)return;
+                        sDisplayContent=self;PortalDragInput.observeDisplay(self,cl,HostEntry::dragShareActive);
+                        Object service=XposedHelpers.getObjectField(self,"mWmService");
+                        Object lock=XposedHelpers.getObjectField(service,"mGlobalLock");
+                        Object handler=XposedHelpers.getObjectField(service,"mH");
+                        if(!(handler instanceof Handler))throw new IllegalStateException("WMS.mH is not a Handler");
+                        cancelZoomAnimation(null);sZoomAnimKey=null;
+                        sZoomTarget=new ZoomTarget(HostEntry.this,self,lock,(Handler)handler,()->sZoomTarget,error->{
+                            log("WM zoom request stopped; no same-state retry: "+error);XposedBridge.log(error);
+                        });
+                        sRetainedWindow.setGlobalLock(lock);armZoomBridge(service);dispatchCurrentZoom();
+                        log("captured DisplayContent(display 0) with WM handler/global lock -> "+self);
+                    }catch(Throwable failure){sZoomTarget=null;log("capture DisplayContent failed: "+failure);}
                 }
             });
-            log("DisplayContent#configureSurfaces hooked");
-        } catch (Throwable t) {
-            log("hookSystemServer hook failed: " + t);
-            return;
-        }
-        RecentsInput.install(cl, () -> sZoomed
-                ? new float[]{sZoomScale, sZoomOffset, sZoomOffsetX} : null);
-        WallpaperScale.install(cl, () -> {
-            ZoomTarget target = sZoomTarget;
-            return sZoomed && target != null && target.display == sDisplayContent
-                    ? target.display : null;
+            log("DisplayContent#configureSurfaces hooked");return true;
+        }catch(Throwable failure){log("hookSystemServer hook failed: "+failure);return false;}
+    }    private void installInputHooks(ClassLoader cl){
+        RecentsInput.install(cl,()->sZoomed?new float[]{sZoomScale,sZoomOffset,sZoomOffsetX}:null);
+        WallpaperScale.install(cl,()->{
+            ZoomTarget target=sZoomTarget;
+            return sZoomed && target!=null && target.display==sDisplayContent?target.display:null;
         });
         installMagnificationSurfaceTracking(cl);
-        try {
-            KeyguardZoom.Reset resetForLock=() -> {
-                ZoomTarget target = sZoomTarget;
-                if (target == null) return;
-                synchronized (target.globalLock) {
-                    if (target != sZoomTarget || target.display != sDisplayContent) return;
-                    long now = System.currentTimeMillis();
-                    synchronized (sZoomChannels) { sZoomChannels.offer("1 0 0", now, now); }
-                    sUnlockPhysicalShadeGeneration = 0;
-                    sUnlockPhysicalShadeUntil = 0;
-                    target.dispatch.invalidateLastAttempt();
-                    target.owner.cancelZoomAnimation(target);
-                    if (!sZoomed) return;
-                    Object tx = XposedHelpers.callMethod(target.display, "getPendingTransaction");
-                    if (!sLiveSwapZoomSurfaces.begin(target.display, tx))
-                        throw new IllegalStateException("native lock-entry surface scope busy");
-                    try {
-                        // Hide the opening main task before restoring physical
-                        // geometry: the restore makes it full screen, and the Host
-                        // only learns about the lock through a later broadcast.
-                        sRetainedWindow.holdOpeningMainForLock(target.display);
-                        target.owner.applyDisplayZoomLocked(target, 1f, 0f, 0f, null, true);
-                        reapplyFinalMagnification(target.display, tx);
-                    } finally { sLiveSwapZoomSurfaces.finish(target.display, tx); }
-                    log("native keyguard entry restored physical geometry before visibility");
-                }
-            };
+        InputWindowMagnificationHooks.install(cl,()->sZoomed,()->sDisplayContent,
+                ()->sUnlockPhysicalShadeGeneration,()->sUnlockPhysicalShadeUntil,HostEntry::log);
+        NavigationGestureSurfaceHooks.install(cl,new NavigationGestureSurfaceHooks.Host(){
+            @Override public Context systemContext(){return (Context)sSystemContext;}
+            @Override public java.util.Map<Object,String> gestureSurfaces(){return sGestureSurfaces;}
+            @Override public ZoomTarget zoomTarget(){return sZoomTarget;}
+            @Override public float zoomScale(){return sZoomScale;}
+            @Override public float zoomOffsetX(){return sZoomOffsetX;}
+            @Override public float zoomOffsetY(){return sZoomOffset;}
+            @Override public void applyGestureSurfaces(ZoomTarget target,float scale,float offsetY,float offsetX){
+                HostEntry.this.applyGestureSurfacesLocked(target,scale,offsetY,offsetX);
+            }
+        },HostEntry::log);
+        TaskResizeableHooks.install(cl,()->sFullscreenRotationActive,HostEntry::isSideTask,HostEntry::log);
+    }
+    private void installKeyguardHooks(ClassLoader cl){
+        try{
+            KeyguardZoom.Reset resetForLock=HostEntry::resetForLock;
             sKeyguardZoom.install(cl,resetForLock);
             sKeyguardZoom.installSleep(cl,()->{
                 Handler bridge=sZoomBridgeHandler;
@@ -285,22 +263,39 @@ public class HostEntry implements IXposedHookLoadPackage {
                     try{resetForLock.run();}catch(Throwable failure){log("early sleep geometry barrier: "+failure);}
                 });
             });
-
             log("native keyguard zoom barrier armed");
-        } catch (Throwable unavailable) { log("native keyguard zoom barrier unavailable: " + unavailable); }
-        try {
-            sRetainedWindow.install(cl, () -> sDisplayContent,
-                    () -> !sKeyguardZoom.sleeping()&&EntryGuard.canOpen(sWmsContext), (tx, generation, scale, x, y) -> {
-                // Visibility is readiness evidence only. The authenticated, correlated
-                // Host handoff owns geometry and the release of all held main surfaces.
-                log("native retained Host ready; waiting for correlated unlock commit generation="+generation);
-                Context nativeContext=sWmsContext;Handler bridge=sZoomBridgeHandler;
-                if(nativeContext!=null&&bridge!=null)bridge.post(()->nativeContext.sendBroadcast(
-                        new Intent(RetainedWindow.READY).setPackage(SYSTEMUI).putExtra("generation",generation),
-                        android.Manifest.permission.WRITE_SECURE_SETTINGS));
-
-            });
-        } catch (Throwable error) { log("native retained visibility hook unavailable: " + error); }
+        }catch(Throwable unavailable){log("native keyguard zoom barrier unavailable: "+unavailable);}
+        try{
+            sRetainedWindow.install(cl,()->sDisplayContent,()->!sKeyguardZoom.sleeping()&&EntryGuard.canOpen(sWmsContext),
+                    (tx,generation,scale,x,y)->{
+                        log("native retained Host ready; waiting for correlated unlock commit generation="+generation);
+                        Context nativeContext=sWmsContext;Handler bridge=sZoomBridgeHandler;
+                        if(nativeContext!=null&&bridge!=null)bridge.post(()->nativeContext.sendBroadcast(
+                                new Intent(RetainedWindow.READY).setPackage(SYSTEMUI).putExtra("generation",generation),
+                                android.Manifest.permission.WRITE_SECURE_SETTINGS));
+                    });
+        }catch(Throwable error){log("native retained visibility hook unavailable: "+error);}
+    }    static void resetForLock() throws Throwable{
+        ZoomTarget target=sZoomTarget;if(target==null)return;
+        synchronized(target.globalLock){
+            if(target!=sZoomTarget || target.display!=sDisplayContent)return;
+            long now=System.currentTimeMillis();
+            synchronized(sZoomChannels){sZoomChannels.offer("1 0 0",now,now);}
+            sUnlockPhysicalShadeGeneration=0;sUnlockPhysicalShadeUntil=0;
+            target.dispatch.invalidateLastAttempt();target.owner.cancelZoomAnimation(target);
+            if(!sZoomed)return;
+            Object tx=XposedHelpers.callMethod(target.display,"getPendingTransaction");
+            if(!sLiveSwapZoomSurfaces.begin(target.display,tx))
+                throw new IllegalStateException("native lock-entry surface scope busy");
+            try{
+                sRetainedWindow.holdOpeningMainForLock(target.display);
+                target.owner.applyDisplayZoomLocked(target,1f,0f,0f,null,true);
+                reapplyFinalMagnification(target.display,tx);
+            }finally{sLiveSwapZoomSurfaces.finish(target.display,tx);}
+            log("native keyguard entry restored physical geometry before visibility");
+        }
+    }
+    private void installRotationAndFocusHooks(ClassLoader cl){
         hookMagnificationReplayAfterTransition(cl);
         installNativeFreeformCoexistence(cl);
         installFixedMainRotationHooks(cl);
@@ -309,131 +304,84 @@ public class HostEntry implements IXposedHookLoadPackage {
         installSideSystemBarPolicy(cl);
         installWorkspaceFocus(cl);
         installWorkspaceRunningTasks(cl);
-        InputWindowMagnificationHooks.install(cl, () -> sZoomed, () -> sDisplayContent,
-                () -> sUnlockPhysicalShadeGeneration, () -> sUnlockPhysicalShadeUntil,
-                HostEntry::log);
-        NavigationGestureSurfaceHooks.install(cl, new NavigationGestureSurfaceHooks.Host() {
-            @Override public Context systemContext() { return (Context) sSystemContext; }
-            @Override public java.util.Map<Object, String> gestureSurfaces() {
-                return sGestureSurfaces;
-            }
-            @Override public ZoomTarget zoomTarget() { return sZoomTarget; }
-            @Override public float zoomScale() { return sZoomScale; }
-            @Override public float zoomOffsetX() { return sZoomOffsetX; }
-            @Override public float zoomOffsetY() { return sZoomOffset; }
-            @Override public void applyGestureSurfaces(
-                    ZoomTarget target, float scale, float offsetY, float offsetX) {
-                HostEntry.this.applyGestureSurfacesLocked(target, scale, offsetY, offsetX);
-            }
-        }, HostEntry::log);
-        TaskResizeableHooks.install(cl, () -> sFullscreenRotationActive,
-                HostEntry::isSideTask, HostEntry::log);
-        try {
-            Class<?> at = XposedHelpers.findClass("android.app.ActivityThread", cl);
-            Object thread = XposedHelpers.callStaticMethod(at, "currentActivityThread");
-            Object ctx = thread == null ? null
-                    : XposedHelpers.callMethod(thread, "getSystemContext");
-            sSystemContext = ctx;
-            log("system context -> " + ctx);
-        } catch (Throwable t) {
-            log("system context failed: " + t);
-        }
-        installDesktopIconLaunchBridge(cl);
-        // 文件只作备用；所有通道共享有时限的最新请求，读取失败不能撤销有效广播。
-        //   onesteplite-zoom 内容 "scale offsetY offsetX"（如 "0.7472 622 273"），"1 0 0" = 还原；
-        //   动画行为 "anim <scale> <offsetY> <offsetX> <durationMs>"，从当前 spec 起步。
-        // SystemUI 私有文件用 FileObserver 即时触发（宿主自己写，用于呼出动画与后续交换动画）；
-        // 250ms 轮询只作兜底，并保留 adb/root 写 /data/system/onesteplite-zoom 的调试通道。
-        try {
-            Thread watcher = new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    while (!Thread.currentThread().isInterrupted()) {
-                        try {
-                            java.io.File f1 = new java.io.File("/data/system/onesteplite-zoom");
-                            java.io.File f2 = new java.io.File(
-                                    "/data/user_de/0/com.android.systemui/files/onesteplite-zoom");
-                            java.io.File f = f1;
-                            if (f2.exists() && (!f1.exists()
-                                    || f2.lastModified() > f1.lastModified())) {
-                                f = f2;
-                            }
-                            readAndDispatchZoom(f);
-                            Thread.sleep(250L);
-                        } catch (InterruptedException stopped) {
-                            Thread.currentThread().interrupt();
-                            return;
-                        } catch (Throwable t) {
-                            try {
-                                Thread.sleep(2000L);
-                            } catch (InterruptedException ignored) {
-                                Thread.currentThread().interrupt();
-                                return;
-                            }
-                        }
-                    }
-                }
-            }, "onesteplite-zoom-watch");
-            watcher.setDaemon(true);
-            watcher.start();
+    }
+    static void captureSystemContext(ClassLoader cl){
+        try{
+            Class<?> at=XposedHelpers.findClass("android.app.ActivityThread",cl);
+            Object thread=XposedHelpers.callStaticMethod(at,"currentActivityThread");
+            Object context=thread==null?null:XposedHelpers.callMethod(thread,"getSystemContext");
+            sSystemContext=context;log("system context -> "+context);
+        }catch(Throwable failure){log("system context failed: "+failure);}
+    }
+    static void startZoomFileWatcher(){
+        try{
+            BackgroundExecutor.schedule(HostEntry::pollZoomFiles,0L);
             log("ZOOM lease watcher armed; transforms only on locked WMS handler");
-        } catch (Throwable t) {
-            log("ZOOM watcher failed: " + t);
-        }
-        installZoomFileObserver();
+        }catch(Throwable failure){log("ZOOM watcher failed: "+failure);}
     }
+    private static void pollZoomFiles(){
+        try{
+            java.io.File systemFile=new java.io.File("/data/system/onesteplite-zoom");
+            java.io.File uiFile=new java.io.File("/data/user_de/0/com.android.systemui/files/onesteplite-zoom");
+            java.io.File file=systemFile;
+            if(uiFile.exists()&&(!systemFile.exists()||uiFile.lastModified()>systemFile.lastModified()))file=uiFile;
+            readAndDispatchZoom(file);
+        }catch(Throwable ignored){
+            // FileObserver/settings/broadcast paths remain authoritative; this is a bounded fallback.
+        }finally{
+            BackgroundExecutor.schedule(HostEntry::pollZoomFiles,sZoomed||sZoomScale<1f?250L:10_000L);
+        }
+    }
+    static volatile boolean sZoomBridgeArmed;
+    static volatile android.content.Context sWmsContext;
+    static volatile String sLastSettingsZoom;
+    static boolean sZoomSettingsWatcherArmed;
+    static android.database.ContentObserver sZoomSettingsObserver;
 
-    private static volatile boolean sZoomBridgeArmed;
-    private static volatile android.content.Context sWmsContext;
-    private static volatile String sLastSettingsZoom;
-    private static boolean sZoomSettingsWatcherArmed;
-
-    /** Settings.Global 通道：SystemUI 有 WRITE_SECURE_SETTINGS，system_server 读取不受文件权限影响。 */
-    private static synchronized void startZoomSettingsWatcher() {
+    /** Settings.Global observer avoids a permanent Binder polling thread. */
+    static synchronized void startZoomSettingsWatcher() {
         if (sZoomSettingsWatcherArmed) return;
+        android.content.Context context = sWmsContext;
+        if (context == null) return;
+        android.database.ContentObserver observer = new android.database.ContentObserver(
+                new Handler(Looper.getMainLooper())) {
+            @Override public void onChange(boolean selfChange) { readZoomSetting(context); }
+        };
         try {
-            Thread thread = new Thread(() -> {
-                while (!Thread.currentThread().isInterrupted()) {
-                    try {
-                        android.content.Context context = sWmsContext;
-                        if (context != null) {
-                            String value = android.provider.Settings.Global.getString(
-                                    context.getContentResolver(), "onesteplite_zoom");
-                            synchronized (sZoomChannels) {
-                                long now = System.currentTimeMillis();
-                                boolean accepted = sZoomChannels.offerEncoded(value, now);
-                                if (accepted && !java.util.Objects.equals(value, sLastSettingsZoom)) {
-                                    log("zoom settings received: " + value);
-                                }
-                                sLastSettingsZoom = value;
-                                dispatchCurrentZoom();
-                            }
-                        }
-                        Thread.sleep(200L);
-                    } catch (InterruptedException stopped) {
-                        Thread.currentThread().interrupt();
-                        return;
-                    } catch (Throwable ignored) {
-                        try { Thread.sleep(1000L); } catch (InterruptedException stopped) { Thread.currentThread().interrupt(); return; }
-                    }
-                }
-            }, "onesteplite-zoom-settings");
-            thread.setDaemon(true);
-            thread.start();
+            context.getContentResolver().registerContentObserver(
+                    android.provider.Settings.Global.getUriFor("onesteplite_zoom"), false, observer);
+            sZoomSettingsObserver = observer;
             sZoomSettingsWatcherArmed = true;
-            log("zoom settings watcher armed");
+            readZoomSetting(context);
+            log("zoom settings observer armed");
         } catch (Throwable error) {
-            log("zoom settings watcher failed: " + error);
+            sZoomSettingsObserver = null;
+            log("zoom settings observer failed: " + error);
         }
     }
-    private static volatile boolean sDragShareEnabled=true;
+    static void readZoomSetting(android.content.Context context) {
+        try {
+            String value = android.provider.Settings.Global.getString(
+                    context.getContentResolver(), "onesteplite_zoom");
+            synchronized (sZoomChannels) {
+                long now = System.currentTimeMillis();
+                boolean accepted = sZoomChannels.offerEncoded(value, now);
+                if (accepted && !java.util.Objects.equals(value, sLastSettingsZoom))
+                    log("zoom settings received: " + value);
+                sLastSettingsZoom = value;
+                dispatchCurrentZoom();
+            }
+        } catch (Throwable error) { log("zoom settings read failed: " + error); }
+    }
 
-    private static boolean dragShareActive() {
+    static volatile boolean sDragShareEnabled=true;
+
+    static boolean dragShareActive() {
         return sDragShareEnabled && sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping();
     }
 
     /** 文件通道在部分机型被 SELinux/权限挡住；再开一条 SystemUI -> system_server 的广播直投。 */
-    private static synchronized void armZoomBridge(Object service) {
+    static synchronized void armZoomBridge(Object service) {
         try {
             final Context context = (Context) XposedHelpers.getObjectField(service, "mContext");
             sWmsContext = context;
@@ -445,152 +393,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             Handler handler = new Handler(thread.getLooper());
             sZoomBridgeHandler = handler;
             sRetainedWindow.setHandler(handler);
-            BroadcastReceiver receiver = new BroadcastReceiver() {
-                @Override
-                public void onReceive(Context c, Intent intent) {
-                    if (intent == null) return;
-                    if (RetainedWindow.ACTION.equals(intent.getAction())) {
-                        ZoomTarget target = sZoomTarget;
-                        android.os.Bundle reply = null;
-                        if (target != null) synchronized (target.globalLock) {
-                            if (target == sZoomTarget && !EntryGuard.canOpen(context))
-                                reply = sRetainedWindow.retain(target.display, intent);
-                        }
-                        setResultExtras(reply); setResultCode(reply == null ? 0 : -1);
-                        return;
-                    }
-                    if (UnlockHandoff.RELEASE.equals(intent.getAction())) {
-                        ZoomTarget target = sZoomTarget;
-                        long generation = intent.getLongExtra(LiveSwapZoomProtocol.GENERATION, 0);
-                        boolean completed=intent.getBooleanExtra(UnlockHandoff.COMPLETED,true);
-                        boolean workspace=intent.getBooleanExtra(UnlockHandoff.WORKSPACE,false);
-                        float retainedScale=Float.intBitsToFloat(intent.getIntExtra(LiveSwapZoomProtocol.SCALE,0));
-                        float retainedX=Float.intBitsToFloat(intent.getIntExtra(LiveSwapZoomProtocol.X,0));
-                        float retainedY=Float.intBitsToFloat(intent.getIntExtra(LiveSwapZoomProtocol.Y,0));
-                        if(workspace && (!Float.isFinite(retainedScale) || retainedScale<=0 || retainedScale>=1
-                                || !Float.isFinite(retainedX) || !Float.isFinite(retainedY)))return;
-                        if (target != null) target.handler.post(() -> {
-                            synchronized (target.globalLock) {
-                                if (target != sZoomTarget || generation == 0
-                                        || generation != sUnlockPhysicalShadeGeneration) return;
-                                sUnlockPhysicalShadeGeneration = 0;
-                                try {
-                                    Object tx = XposedHelpers.callMethod(target.display, "getPendingTransaction");
-                                    boolean authenticated=!sKeyguardZoom.sleeping()&&EntryGuard.canOpen(context);
-                                    // Failure/exit has no presented workspace. Restore physical
-                                    // geometry before unmasking its main surface in the same tx.
-                                    sRetainedWindow.finishAuthenticatedRelease(target.display,tx,authenticated,completed,workspace,()->{
-                                        target.owner.applyDisplayZoomLocked(target,1f,0f,0f,null,true);
-                                        reapplyFinalMagnification(target.display,tx);
-                                    },()->{
-                                        String retained=retainedScale+" "+retainedY+" "+retainedX;
-                                        if(!sZoomChannels.supersedes(sLiveZoomIssued,retained))
-                                            target.owner.applyDisplayZoomLocked(target,retainedScale,retainedY,retainedX);
-                                        reapplyFinalMagnification(target.display,tx);
-                                    });
-                                    reapplyFinalMagnification(target.display, tx);
-                                    XposedHelpers.callMethod(tx, "apply");
-                                } catch (Throwable error) { log("unlock shade release unavailable: " + error); }
-                            }
-                        });
-                        return;
-                    }
-                    if (BottomReplayInput.ACTION.equals(intent.getAction())) {
-                        BottomReplayInput.setMode(intent.getIntExtra("mode", 0));
-                        return;
-                    }
-
-                    if (WorkspaceBackdrop.ACTION.equals(intent.getAction())) {
-                        ZoomTarget target=sZoomTarget;
-                        if(target==null || target.display!=sDisplayContent)return;
-                        try {
-                            synchronized(target.globalLock) {
-                                android.os.Bundle reply=WorkspaceBackdrop.capture(target.display,intent);
-                                if(reply!=null) {setResultExtras(reply);setResultCode(-1);}
-                            }
-                        } catch(Throwable error) {log("workspace wallpaper parent rejected: "+error);}
-                        return;
-                    }
-                    if(SwapOverlayBridge.ACTION.equals(intent.getAction())) {
-                        try {
-                            if(!sZoomed || sZoomTarget==null || sDisplayContent==null)return;
-                            synchronized(sZoomTarget.globalLock) {
-                                setResultExtras(SwapOverlayBridge.capture(sDisplayContent,intent));
-                                setResultCode(-1);
-                            }
-                        } catch(Throwable unavailable) {log("live toolbox native capture refused: "+unavailable);}
-                        return;
-                    }
-                    if (LiveSwapZoomProtocol.APPLY.equals(intent.getAction())) {
-                        receiveLiveZoom(context, intent);
-                        return;
-                    }
-                    if (InputTrace.ACTION.equals(intent.getAction())) {
-
-                        if (intent.getBooleanExtra("stopInputTrace", false)) {
-                            InputTrace.stop();
-                            return;
-                        }
-                        ZoomTarget target = sZoomTarget;
-                        if (target != null) target.handler.post(() -> {
-                            if (target != sZoomTarget) return;
-                            InputTrace.arm(context, true, target.display.getClass().getClassLoader());
-                            synchronized (target.globalLock) {
-                                InputTrace.captureDisplay(target.display);
-                            }
-                        });
-                        return;
-                    }
-                    if (DesktopLaunchBridge.PREPARE_TOP.equals(intent.getAction())) {
-                        boolean prepared=false;
-                        if(sZoomed && sFullscreenRotationActive && sDisplayContent!=null)
-                            synchronized(XposedHelpers.getObjectField(service,"mGlobalLock")) {
-                                prepared=DesktopLaunchBridge.prepareTop(service,intent);
-                            }
-                        setResultCode(prepared ? -1 : 0);
-                        return;
-                    }
-                    if (DesktopLaunchBridge.ACTION.equals(intent.getAction())) {
-                        if (DesktopLaunchBridge.update(intent)) {
-                            Recents.registryChanged(service);
-                            DesktopLaunchBridge.refreshTopInput(service);
-                            try {
-                                if (sZoomed) synchronized (XposedHelpers.getObjectField(service, "mGlobalLock")) {
-                                    TopInsets.refresh(sDisplayContent, DesktopLaunchBridge::ownsTopTask);
-                                    ZoomTarget target = sZoomTarget;
-                                    if (sFullscreenRotationActive && target != null
-                                            && target.display == sDisplayContent)
-                                        target.owner.refreshTaskRotationLocked(sDisplayContent);
-                                    XposedHelpers.callMethod(service, "updateFocusedWindowLocked", 0, true);
-                                }
-                            } catch (Throwable unavailable) {log("workspace lease focus refresh skipped: "+unavailable);}
-                        }
-                        return;
-                    }
-                    if (Actions.TRANSFER_TOUCH.equals(intent.getAction())) {
-                        SideTouchTransfer.transfer(intent, () -> sZoomTarget, () -> sZoomScale, HostEntry::log);
-                        return;
-                    }
-                    try {
-                        synchronized (sZoomChannels) {
-                            long now = System.currentTimeMillis();
-                            String encoded = intent.getStringExtra("request");
-                            if (encoded != null) {
-                                sZoomChannels.offerEncoded(encoded, now);
-                            } else {
-                                // Preserve explicit adb diagnostics and older host senders.
-                                float scale = intent.getFloatExtra("scale", 1f);
-                                float y = intent.getFloatExtra("offsetY", 0f);
-                                float x = intent.getFloatExtra("offsetX", 0f);
-                                sZoomChannels.offer(scale + " " + y + " " + x, now, now);
-                            }
-                            dispatchCurrentZoom();
-                        }
-                    } catch (Throwable error) {
-                        log("zoom broadcast submit failed: " + error);
-                    }
-                }
-            };
+            BroadcastReceiver receiver = new ZoomBridgeReceiver(context,service);
             IntentFilter filter = new IntentFilter(Actions.ZOOM);
             filter.addAction(LiveSwapZoomProtocol.APPLY);
             filter.addAction(UnlockHandoff.RELEASE);
@@ -615,7 +418,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
     /** Snapshot operations only. Shell merges and applies them with the task handoff. */
-    private static Object createMagnificationFinishReplay(Object display) throws Exception {
+    static Object createMagnificationFinishReplay(Object display) throws Exception {
         Object replay = Class.forName("android.view.SurfaceControl$Transaction")
                 .getDeclaredConstructor().newInstance();
         try {
@@ -627,11 +430,11 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static void reapplyFinalMagnification(Object display, Object transaction) {
+    static void reapplyFinalMagnification(Object display, Object transaction) {
         reapplyFinalMagnification(display, transaction, null);
     }
 
-    private static void reapplyFinalMagnification(Object display, Object transaction, Object info) {
+    static void reapplyFinalMagnification(Object display, Object transaction, Object info) {
         Boolean previous = sFinalMagnificationSnapshot.get();
         Object previousInfo = sMagnificationFinishInfo.get();
         sFinalMagnificationSnapshot.set(Boolean.TRUE);
@@ -646,7 +449,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static void receiveLiveZoom(Context context, Intent intent) {
+    static void receiveLiveZoom(Context context, Intent intent) {
         long generation = intent.getLongExtra(LiveSwapZoomProtocol.GENERATION, 0L);
         long issued = intent.getLongExtra(LiveSwapZoomProtocol.ISSUED, 0L);
         float scale = Float.intBitsToFloat(intent.getIntExtra(LiveSwapZoomProtocol.SCALE, 0));
@@ -718,7 +521,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         });
     }
     /** watcher 与 FileObserver 共用：读文件、按租约解析、投递到 WM handler。 */
-    private static void readAndDispatchZoom(java.io.File f) {
+    static void readAndDispatchZoom(java.io.File f) {
         String cur = "";
         long modified = 0L;
         Throwable readError = null;
@@ -756,7 +559,7 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     /** Replay on target creation and restore only when the shared host lease expires. */
-    private static void dispatchCurrentZoom() {
+    static void dispatchCurrentZoom() {
         synchronized (sZoomChannels) {
             long now = System.currentTimeMillis();
             ZoomChannelState.Request selected = sZoomChannels.current(now);
@@ -787,6 +590,11 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     /** Preserve active WM magnification after Shell resets its transition targets. */
     private void hookMagnificationReplayAfterTransition(ClassLoader cl) {
+        installTransitionMagnificationStart(cl);
+        installTransitionMagnificationFinish(cl);
+        installTopRotationTransition(cl);
+    }
+    private void installTransitionMagnificationStart(ClassLoader cl){
         TransitionMagnificationStartHooks.install(cl, new TransitionMagnificationStartHooks.Host() {
             @Override public boolean zoomed() { return sZoomed; }
             @Override public ZoomTarget zoomTarget() { return sZoomTarget; }
@@ -805,6 +613,8 @@ public class HostEntry implements IXposedHookLoadPackage {
             @Override public float zoomOffsetX() { return sZoomOffsetX; }
             @Override public float zoomOffsetY() { return sZoomOffset; }
         }, HostEntry::log);
+    }
+    private void installTransitionMagnificationFinish(ClassLoader cl){
         TransitionMagnificationFinishHooks.install(cl, new TransitionMagnificationFinishHooks.Host() {
             @Override public ZoomTarget zoomTarget() { return sZoomTarget; }
             @Override public boolean zoomed() { return sZoomed; }
@@ -823,6 +633,8 @@ public class HostEntry implements IXposedHookLoadPackage {
                 HostEntry.layerWorkspaceWithNativeFreeforms(display, transaction);
             }
         }, HostEntry::log);
+    }
+    private void installTopRotationTransition(ClassLoader cl){
         try {
             Class<?> transition = XposedHelpers.findClass(
                     "com.android.server.wm.Transition", cl);
@@ -887,7 +699,8 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static void finishNativeFreeformStart(ZoomTarget target, Object start) {
+
+    static void finishNativeFreeformStart(ZoomTarget target, Object start) {
         synchronized (target.globalLock) {
             if (!sNativeFreeformStart.finish(target.display, start) || target != sZoomTarget) return;
             try {
@@ -901,13 +714,13 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static final SystemUiRotation sMainSystemUiRotation = new SystemUiRotation();
-    private static final MainWindowClip sMainWindowClip = new MainWindowClip();
-    private static final TopSystemBars sTopSystemBars = new TopSystemBars();
-    private static final ImeProcessConfiguration sMainImeProcessConfiguration =
+    static final SystemUiRotation sMainSystemUiRotation = new SystemUiRotation();
+    static final MainWindowClip sMainWindowClip = new MainWindowClip();
+    static final TopSystemBars sTopSystemBars = new TopSystemBars();
+    static final ImeProcessConfiguration sMainImeProcessConfiguration =
             new ImeProcessConfiguration();
-    private static final ImeViewport sInteractiveImeViewport = new ImeViewport();
-    private static Object sPublishedMainUiState;
+    static final ImeViewport sInteractiveImeViewport = new ImeViewport();
+    static Object sPublishedMainUiState;
     private boolean systemUiRotationFailureLogged;
     private final ImeTargetRefresh imeTargetRefresh = new ImeTargetRefresh();
 
@@ -937,7 +750,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static void publishMainUiConfiguration(Object app) {
+    static void publishMainUiConfiguration(Object app) {
         try {
             Object state = app == null ? null : XposedHelpers.getObjectField(app, "mFixedRotationTransformState");
             if (state == sPublishedMainUiState) return;
@@ -1080,9 +893,9 @@ public class HostEntry implements IXposedHookLoadPackage {
         }, HostEntry::log);
     }
 
-    private static final PassBlurCoordinates sPassBlurCoordinates = new PassBlurCoordinates();
+    static final PassBlurCoordinates sPassBlurCoordinates = new PassBlurCoordinates();
 
-    private static void stagePassBlurCoordinates(Object display, Object transaction, Object spec) {
+    static void stagePassBlurCoordinates(Object display, Object transaction, Object spec) {
         ZoomTarget target = sZoomTarget;
         if (target == null || display != target.display || display != sDisplayContent
                 || !Thread.holdsLock(target.globalLock)) return;
@@ -1096,7 +909,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static void rememberMagnifiedSurface(Object container, Object spec) {
+    static void rememberMagnifiedSurface(Object container, Object spec) {
         ZoomTarget target = sZoomTarget;
         if (!sZoomed || target == null || spec == null
                 || target.display != sDisplayContent || !Thread.holdsLock(target.globalLock)) return;
@@ -1112,7 +925,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static int restoreExitedMagnificationLocked(ZoomTarget target) {
+    static int restoreExitedMagnificationLocked(ZoomTarget target) {
         if (target == null || target != sZoomTarget || target.display != sDisplayContent
                 || sZoomed || !Thread.holdsLock(target.globalLock)) return 0;
         int restored = 0;
@@ -1164,7 +977,7 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     /** 宿主写 SystemUI 私有文件时立即处理，避免 250ms 轮询造成的桥/缩放不同帧。 */
-    private static void installZoomFileObserver() {
+    static void installZoomFileObserver() {
         ZoomFileObserverHooks.install(observer -> sZoomFileObserver = observer,
                 HostEntry::readAndDispatchZoom, HostEntry::log);
     }
@@ -1233,7 +1046,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static boolean cropFixedMainTouchableRegion(Object window,
+    static boolean cropFixedMainTouchableRegion(Object window,
             android.graphics.Region region) {
         ZoomTarget target = sZoomTarget;
         if (!sZoomed || !sFullscreenRotationActive || window == null || region == null
@@ -1349,19 +1162,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             if (task != null && XposedHelpers.callMethod(task, "topRunningActivity") != activity) {
                 return Boolean.FALSE;
             }
-            if (home || (multiWindow && !sideTask)) {
-                // A promoted token keeps its local transform in the side slot. Do not
-                // let WM promote that transform to mFixedRotationLaunchingApp.
-                Object previous = sFixedRotationApp;
-                if (previous != null) {
-                    if (!isSideFixedTask(previous)) {
-                        releaseTaskRotationLocked(previous,
-                                home ? "main activity left for home" : "main activity left fullscreen");
-                    }
-                    if (sFixedRotationApp == previous) sFixedRotationApp = null;
-                }
-                return Boolean.FALSE;
-            }
+            if (home || (multiWindow && !sideTask)) return releaseMainForHomeLocked(activity,home,sideTask);
             if (NativeLandscapePolicy.suppressesLocalRotation(
                     sNativeLandscapeState, sideTask, home)) {
                 // The workspace is temporarily suspended while the native display owns
@@ -1399,51 +1200,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                     animateTaskRotationLocked(activity, oldRotation, rotation);
                 return Boolean.FALSE;
             }
-            boolean transformed = Boolean.TRUE.equals(XposedHelpers.callMethod(
-                    activity, "hasFixedRotationTransform"));
-            Integer existingRotation = sTaskRotations.get(activity);
-            java.lang.ref.WeakReference<Object> lease = sTaskRotationTransforms.get(activity);
-            if (transformed && existingRotation != null && lease != null
-                    && lease.get() != XposedHelpers.getObjectField(
-                    activity, "mFixedRotationTransformState")) {
-                releaseTaskRotationLocked(activity, "native transform owner changed");
-                return Boolean.FALSE;
-            }
-            if (transformed && existingRotation == null) {
-                // Leave a native, in-flight rotation under its original owner's lifecycle.
-                return Boolean.FALSE;
-            }
-            if (!transformed || existingRotation == null || existingRotation != rotation) {
-                if (sTaskRotations.containsKey(activity)
-                        && !releaseTaskRotationLocked(activity, "task direction changed"))
-                    return Boolean.FALSE;
-                if (!sideTask) sFixedRotationApp = activity;
-                sTaskRotations.put(activity, rotation);
-                try {
-                    Object previousApplying=sApplyingSideRotationActivity;
-                    sApplyingSideRotationActivity=sideTask?activity:null;
-                    try{XposedHelpers.callMethod(display,"startFixedRotationTransform",activity,rotation);}
-                    finally{sApplyingSideRotationActivity=previousApplying;}
-                    Object installed = XposedHelpers.getObjectField(
-                            activity, "mFixedRotationTransformState");
-                    if (installed == null) throw new IllegalStateException("native transform not installed");
-                    sTaskRotationTransforms.put(activity, new java.lang.ref.WeakReference<>(installed));
-                    animateTaskRotationLocked(activity,
-                            existingRotation == null ? sHeldDisplayRotation : existingRotation, rotation);
-                } catch (Throwable error) {
-                    releaseTaskRotationLocked(activity, "failed transform cleanup");
-                    throw error;
-                }
-                log("task rotation: task=" + XposedHelpers.callMethod(activity, "getRootTaskId")
-                        + " request=" + overrideOrientation + " resolved=" + resolvedRotation
-                        + " rotationLocked=" + resolution.rotationLocked
-                        + " held=" + sHeldDisplayRotation
-                        + " existing=" + existingRotation + " taskRotation=" + rotation
-                        + " localToken=true source=" + source);
-            } else {
-                if (!sideTask) sFixedRotationApp = activity;
-            }
-            return Boolean.TRUE;
+            return applyLocalTaskRotationLocked(display,activity,sideTask,resolution,source);
         } catch (Throwable error) {
             log("fixed rotation apply failed source=" + source + ": " + error);
             XposedBridge.log(error);
@@ -1453,7 +1210,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static Object sApplyingSideRotationActivity;
+    static Object sApplyingSideRotationActivity;
     private android.content.res.Configuration ownedSideRotationConfigurationLocked(Object activity,Object task){
         if(!SideRoleChange.isSide(task)||isUpperLandscapeTask(task))return null;
         TaskWindowState history=sTaskWindowStates.get(task);Integer rotation=sTaskRotations.get(activity);
@@ -1552,7 +1309,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             // A synchronous broadcast can invert with ActivityManagerService and
             // deadlock system_server, so hand it to the existing private bridge thread.
             if (bridge != null) bridge.post(send);
-            else new Thread(send, "onesteplite-landscape-bridge").start();
+            else BackgroundExecutor.execute(send);
         } catch (Throwable error) {
             sNativeLandscapeState = NativeLandscapePolicy.INACTIVE;
             log("native landscape bridge failed: " + error);
@@ -1845,7 +1602,7 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     private final java.util.Map<Object,String> topTaskSignals=new java.util.WeakHashMap<>();
-    private static long topWorkspaceGeneration;
+    static long topWorkspaceGeneration;
 
     /** Observe late fullscreen/insets changes too; players often hide bars after orientation. */
     private void refreshWideVideoSignal(Object window) {
@@ -1925,7 +1682,7 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     /** Only our translucent mode6 role with a wide root opts out of local portrait rotation. */
-    private static boolean isUpperLandscapeTask(Object task) {
+    static boolean isUpperLandscapeTask(Object task) {
         try {
             if(!SideRoleChange.isSide(task))return false;
             return DesktopLaunchBridge.ownsTopViewport(task);
@@ -2001,7 +1758,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }, 400);
     }
 
-    private void refreshTaskRotationLocked(Object display) {
+    void refreshTaskRotationLocked(Object display) {
         Object top = XposedHelpers.callMethod(display, "topRunningActivity");
         java.util.ArrayList<Object> activities = new java.util.ArrayList<>(sTaskRotations.keySet());
         // Reconcile old owners first. The confirmed current main must win over a departing main.
@@ -2063,10 +1820,10 @@ public class HostEntry implements IXposedHookLoadPackage {
         return TopRotation.rotation(resolved);
     }
 
-    private static final java.util.Map<Object, Rect> sTopRotationBounds = new java.util.WeakHashMap<>();
-    private static final java.util.Set<Object> sTopRotationConfigurationRelease =
+    static final java.util.Map<Object, Rect> sTopRotationBounds = new java.util.WeakHashMap<>();
+    static final java.util.Set<Object> sTopRotationConfigurationRelease =
             java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
-    private static final java.util.Map<Object, TopRelaunchScope>
+    static final java.util.Map<Object, TopRelaunchScope>
             sTopRotationRelaunchScopes = new java.util.WeakHashMap<>();
 
     private boolean preserveTopWindowForRelaunch(Object activity, int changes) {
@@ -2186,7 +1943,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static boolean isSideTask(Object task) {
+    static boolean isSideTask(Object task) {
         try {
             return Integer.valueOf(6).equals(XposedHelpers.callMethod(
                             task, "getWindowingMode"))
@@ -2197,9 +1954,9 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static final ThreadLocal<Boolean> sReadingWorkspaceFocus = new ThreadLocal<>();
-    private static final ThreadLocal<Object> sWindowFocusScanDisplay = new ThreadLocal<>();
-    private static final ThreadLocal<Boolean> sWorkspaceLauncherTaskQuery = new ThreadLocal<>();
+    static final ThreadLocal<Boolean> sReadingWorkspaceFocus = new ThreadLocal<>();
+    static final ThreadLocal<Object> sWindowFocusScanDisplay = new ThreadLocal<>();
+    static final ThreadLocal<Boolean> sWorkspaceLauncherTaskQuery = new ThreadLocal<>();
 
     private void installWorkspaceRunningTasks(ClassLoader cl) {
         WorkspaceRunningTasksHooks.install(cl, () -> sSystemContext, () -> sDisplayContent,
@@ -2250,23 +2007,23 @@ public class HostEntry implements IXposedHookLoadPackage {
         } catch (Throwable error) { log("native freeform coexistence hook unavailable: " + error); }
     }
 
-    private static Object sNativeFreeformLayerAnchor;
-    private static final ModalWindowLayers sModalWindowLayers = new ModalWindowLayers();
-    private static final java.util.Map<Object, NativeHostLayer> sNativeFreeformHostLayers =
+    static Object sNativeFreeformLayerAnchor;
+    static final ModalWindowLayers sModalWindowLayers = new ModalWindowLayers();
+    static final java.util.Map<Object, NativeHostLayer> sNativeFreeformHostLayers =
             new java.util.IdentityHashMap<>();
-    private static void installNativeFreeformPin(ClassLoader cl) {
+    static void installNativeFreeformPin(ClassLoader cl) {
         NativeFreeformPinHooks.install(cl, HostEntry::releaseNativeForegroundPinLayers, HostEntry::log);
     }
 
 
-    private static boolean isNativeForegroundPin(Object task) {
+    static boolean isNativeForegroundPin(Object task) {
         Object manager = NativeFreeformPinHooks.manager();
         if(manager==null)manager=NativeFreeformTouchExclusionHooks.manager();
         return manager != null && Boolean.TRUE.equals(XposedHelpers.callMethod(manager,
                 "getMiuiFreeformIsForegroundPin", XposedHelpers.getIntField(task, "mTaskId")));
     }
 
-    private static void releaseNativeForegroundPinLayers(Object manager, int taskId) {
+    static void releaseNativeForegroundPinLayers(Object manager, int taskId) {
         NativeFreeformPinHooks.setManager(manager);
         ZoomTarget target = sZoomTarget;
         if (!sZoomed || target == null) return;
@@ -2288,7 +2045,7 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     /** Amend WM's own layer transaction; never reparent or transform an OEM task. */
-    private static void layerWorkspaceWithNativeFreeforms(Object display, Object transaction) {
+    static void layerWorkspaceWithNativeFreeforms(Object display, Object transaction) {
         boolean touchExclusionChanged = false;
         Object[] highestFreeform = {null};
         java.util.List<Object> hosts = workspaceOverlayWindows(display);
@@ -2383,7 +2140,7 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
     /** Exact Host overlays and main status chrome; unrelated system windows retain their native order. */
-    private static java.util.List<Object> workspaceOverlayWindows(Object display) {
+    static java.util.List<Object> workspaceOverlayWindows(Object display) {
         java.util.List<Object> hosts=new java.util.ArrayList<>();
         Consumer<Object> pickHost = window -> {
             WindowManager.LayoutParams attrs = (WindowManager.LayoutParams)
@@ -2403,7 +2160,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         return hosts;
     }
 
-    private static void rememberNativeHostNormalLayer(Object host, NativeHostLayer state) {
+    static void rememberNativeHostNormalLayer(Object host, NativeHostLayer state) {
         int currentLayer = XposedHelpers.getIntField(host, "mLastLayer");
         Object currentRelative = XposedHelpers.getObjectField(host, "mLastRelativeToLayer");
         if (state.nativeAnchor == null || currentRelative != state.nativeAnchor
@@ -2413,7 +2170,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static void restoreNativeHostLayer(Object host, NativeHostLayer state, Object transaction) {
+    static void restoreNativeHostLayer(Object host, NativeHostLayer state, Object transaction) {
         // assignLayer may return early while WM builds transition layers. Use its
         // SurfaceAnimator setter for our own window, preserving any animation leash.
         // Never change the OEM task's parent, layer, visibility or transform.
@@ -2470,17 +2227,17 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private static volatile String sLastDesktopLaunchPackage;
-    private static volatile int sLastDesktopLaunchUser = -1;
-    private static volatile long sLastDesktopLaunchAt;
+    static volatile String sLastDesktopLaunchPackage;
+    static volatile int sLastDesktopLaunchUser = -1;
+    static volatile long sLastDesktopLaunchAt;
 
-    private static int desktopLaunchUser(java.lang.reflect.Method method, Object[] args) {
+    static int desktopLaunchUser(java.lang.reflect.Method method, Object[] args) {
         int callerUser = (Integer) XposedHelpers.callStaticMethod(android.os.UserHandle.class,
                 "getUserId", android.os.Binder.getCallingUid());
         return DesktopIconLaunchPolicy.launchUser(method.getName(), method.getParameterTypes(), args, callerUser);
     }
 
-    private static void forwardDesktopIconLaunch(Object[] args, int launchUser) {
+    static void forwardDesktopIconLaunch(Object[] args, int launchUser) {
         if (args == null || launchUser < 0) return;
         String callerPackage = null;
         android.content.Intent launch = null;
@@ -2629,7 +2386,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         applyDisplayZoomLocked(target, scale, offsetY, offsetX, commit, false);
     }
 
-    private void applyDisplayZoomLocked(ZoomTarget target, float scale,
+    void applyDisplayZoomLocked(ZoomTarget target, float scale,
             float offsetY, float offsetX, ZoomCommit commit, boolean nativeVisibility) throws Throwable {
         if ((!nativeVisibility && Looper.myLooper() != target.handler.getLooper()) || !Thread.holdsLock(target.globalLock)) {
             throw new IllegalStateException("zoom requires the WMS handler and its global lock");
@@ -2665,40 +2422,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         try {
             if (sZoomed) beginFixedMainRotationLocked(dc);
             else endFixedMainRotationLocked(dc);
-            if (commit != null) {
-                Object pending = XposedHelpers.callMethod(dc, "getPendingTransaction");
-                commit.transactionId = ((Number) XposedHelpers.callMethod(pending, "getId")).longValue();
-                if (commit.transactionId == 0L) throw new IllegalStateException("missing WMS transaction id");
-                Class<?> callbackType = XposedHelpers.findClass(
-                        "android.view.SurfaceControl$TransactionCommittedListener", dc.getClass().getClassLoader());
-                Object callback = java.lang.reflect.Proxy.newProxyInstance(callbackType.getClassLoader(),
-                        new Class<?>[]{callbackType}, (proxy, method, args) -> {
-                            if ("hashCode".equals(method.getName())) return System.identityHashCode(proxy);
-                            if ("equals".equals(method.getName())) return args != null && proxy == args[0];
-                            if ("toString".equals(method.getName())) return "OneStepLiteZoomCommit";
-                            if ("onTransactionCommitted".equals(method.getName())) {
-                                boolean exact;
-                                try {
-                                    synchronized (target.globalLock) {
-                                        Object actual = XposedHelpers.getObjectField(dc, "mMagnificationSpec");
-                                        commit.actualScale = actual == null ? 1f : XposedHelpers.getFloatField(actual, "scale");
-                                        commit.actualX = actual == null ? 0f : XposedHelpers.getFloatField(actual, "offsetX");
-                                        commit.actualY = actual == null ? 0f : XposedHelpers.getFloatField(actual, "offsetY");
-                                        exact = commit.applied && target == sZoomTarget
-                                                && sLiveZoomCommit == commit
-                                                && commit.zoom.sameTuple(commit.actualScale, commit.actualX, commit.actualY)
-                                                && commit.zoom.sameTuple(sZoomScale, sZoomOffsetX, sZoomOffset);
-                                    }
-                                    commit.finish(exact, exact ? null : "zoom changed before commit acknowledgement");
-                                } catch (Throwable failure) {
-                                    commit.finish(false, "WMS applied-spec read failed");
-                                }
-                            }
-                            return null;
-                        });
-                java.util.concurrent.Executor executor = runnable -> target.handler.post(runnable);
-                XposedHelpers.callMethod(pending, "addTransactionCommittedListener", executor, callback);
-            }
+            installZoomCommit(target,dc,commit);
             XposedHelpers.callMethod(dc, "applyMagnificationSpec", spec);
         } catch (Throwable error) {
             sZoomed = previous;
@@ -2738,22 +2462,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         //
         // 只在缩放边界做：这是自愈用的清理，不是逐帧几何。动画期间每帧再开一个
         // SurfaceControl.Transaction 并 apply，会让 SF 每帧多收一次事务，正是掉帧来源。
-        Object crop = null;
-        if (!sZoomFrameApply) try {
-            Object layer = XposedHelpers.callMethod(dc, "getWindowingLayer");
-            if (layer != null && Boolean.TRUE.equals(XposedHelpers.callMethod(layer, "isValid"))) {
-                crop = Class.forName("android.view.SurfaceControl$Transaction")
-                        .getDeclaredConstructor().newInstance();
-                XposedHelpers.callMethod(crop, "setWindowCrop", layer, (Object) null);
-                XposedHelpers.callMethod(crop, "apply");
-            }
-        } catch (Throwable failure) {
-            log("display crop clear unavailable: " + failure);
-        } finally {
-            if (crop != null) {
-                try { XposedHelpers.callMethod(crop, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-            }
-        }
+        clearLegacyDisplayCrop(dc);
         // supplies the same matrix and inverse input mapping as the main app windows.
         if (!sZoomFrameApply) {
             log("WM zoom applied scale=" + scale + " offsetY=" + offsetY
@@ -2859,7 +2568,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         log("zoom animation cancelled");
     }
 
-    private static void applyGestureSurfacesLocked(ZoomTarget target, float scale,
+    static void applyGestureSurfacesLocked(ZoomTarget target, float scale,
             float offsetY, float offsetX) {
         if (Looper.myLooper() != target.handler.getLooper() || !Thread.holdsLock(target.globalLock)) return;
         Object tx = null;
@@ -2972,7 +2681,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         }, LAUNCH_DELAY_MS);
     }
 
-    private static void installRetainedWorkspaceWakeHooks(ClassLoader cl) {
+    static void installRetainedWorkspaceWakeHooks(ClassLoader cl) {
         RetainedWorkspaceHooks.install(cl, HostEntry::log);
     }
 
@@ -2982,20 +2691,7 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
 
 
-    /**
-     * 无人值守调试广播（v0.8.0）：
-     *   am broadcast -a io.github.zerohomers0.onesteplite.DEBUG --ei slot 1 --es pkg com.android.settings
-     *   am broadcast -a io.github.zerohomers0.onesteplite.DEBUG --ei slot 1 --ez swap true
-     * 先确保宿主已启动，再转给 WorkspaceHost。
-     */
-    private void handleDebugBroadcast(android.content.Intent intent) {
-        if (sContext == null) return;
-        DebugConsole.handle(intent, sContext, sTaskViewFactory, sShellExecutor,
-                sTaskViewTransitions, HostEntry::log);
-    }
-
-
-    private static void log(String msg) {
+    static void log(String msg) {
         if (!RoutineLog.allow(msg)) return;
         Log.i(TAG, msg);
         try {
@@ -3005,5 +2701,123 @@ public class HostEntry implements IXposedHookLoadPackage {
         }
     }
 
+
+    private Boolean applyLocalTaskRotationLocked(Object display,Object activity,boolean sideTask,
+            TaskRotationResolution resolution,String source) throws Throwable {
+        int overrideOrientation=resolution.overrideOrientation;
+        int resolvedRotation=resolution.resolvedRotation;
+        int rotation=resolution.taskRotation;
+            boolean transformed = Boolean.TRUE.equals(XposedHelpers.callMethod(
+                    activity, "hasFixedRotationTransform"));
+            Integer existingRotation = sTaskRotations.get(activity);
+            java.lang.ref.WeakReference<Object> lease = sTaskRotationTransforms.get(activity);
+            if (transformed && existingRotation != null && lease != null
+                    && lease.get() != XposedHelpers.getObjectField(
+                    activity, "mFixedRotationTransformState")) {
+                releaseTaskRotationLocked(activity, "native transform owner changed");
+                return Boolean.FALSE;
+            }
+            if (transformed && existingRotation == null) {
+                // Leave a native, in-flight rotation under its original owner's lifecycle.
+                return Boolean.FALSE;
+            }
+            if (!transformed || existingRotation == null || existingRotation != rotation) {
+                if (sTaskRotations.containsKey(activity)
+                        && !releaseTaskRotationLocked(activity, "task direction changed"))
+                    return Boolean.FALSE;
+                if (!sideTask) sFixedRotationApp = activity;
+                sTaskRotations.put(activity, rotation);
+                try {
+                    Object previousApplying=sApplyingSideRotationActivity;
+                    sApplyingSideRotationActivity=sideTask?activity:null;
+                    try{XposedHelpers.callMethod(display,"startFixedRotationTransform",activity,rotation);}
+                    finally{sApplyingSideRotationActivity=previousApplying;}
+                    Object installed = XposedHelpers.getObjectField(
+                            activity, "mFixedRotationTransformState");
+                    if (installed == null) throw new IllegalStateException("native transform not installed");
+                    sTaskRotationTransforms.put(activity, new java.lang.ref.WeakReference<>(installed));
+                    animateTaskRotationLocked(activity,
+                            existingRotation == null ? sHeldDisplayRotation : existingRotation, rotation);
+                } catch (Throwable error) {
+                    releaseTaskRotationLocked(activity, "failed transform cleanup");
+                    throw error;
+                }
+                log("task rotation: task=" + XposedHelpers.callMethod(activity, "getRootTaskId")
+                        + " request=" + overrideOrientation + " resolved=" + resolvedRotation
+                        + " rotationLocked=" + resolution.rotationLocked
+                        + " held=" + sHeldDisplayRotation
+                        + " existing=" + existingRotation + " taskRotation=" + rotation
+                        + " localToken=true source=" + source);
+            } else {
+                if (!sideTask) sFixedRotationApp = activity;
+            }
+        return Boolean.TRUE;
+    }
+
+    private Boolean releaseMainForHomeLocked(Object activity,boolean home,boolean sideTask){
+        Object previous=sFixedRotationApp;
+        if(previous!=null){
+            if(!isSideFixedTask(previous))
+                releaseTaskRotationLocked(previous,home?"main activity left for home":"main activity left fullscreen");
+            if(sFixedRotationApp==previous)sFixedRotationApp=null;
+        }
+        return Boolean.FALSE;
+    }
+
+    private static void installZoomCommit(ZoomTarget target,Object dc,ZoomCommit commit) throws Throwable {
+            if (commit != null) {
+                Object pending = XposedHelpers.callMethod(dc, "getPendingTransaction");
+                commit.transactionId = ((Number) XposedHelpers.callMethod(pending, "getId")).longValue();
+                if (commit.transactionId == 0L) throw new IllegalStateException("missing WMS transaction id");
+                Class<?> callbackType = XposedHelpers.findClass(
+                        "android.view.SurfaceControl$TransactionCommittedListener", dc.getClass().getClassLoader());
+                Object callback = java.lang.reflect.Proxy.newProxyInstance(callbackType.getClassLoader(),
+                        new Class<?>[]{callbackType}, (proxy, method, args) -> {
+                            if ("hashCode".equals(method.getName())) return System.identityHashCode(proxy);
+                            if ("equals".equals(method.getName())) return args != null && proxy == args[0];
+                            if ("toString".equals(method.getName())) return "OneStepLiteZoomCommit";
+                            if ("onTransactionCommitted".equals(method.getName())) {
+                                boolean exact;
+                                try {
+                                    synchronized (target.globalLock) {
+                                        Object actual = XposedHelpers.getObjectField(dc, "mMagnificationSpec");
+                                        commit.actualScale = actual == null ? 1f : XposedHelpers.getFloatField(actual, "scale");
+                                        commit.actualX = actual == null ? 0f : XposedHelpers.getFloatField(actual, "offsetX");
+                                        commit.actualY = actual == null ? 0f : XposedHelpers.getFloatField(actual, "offsetY");
+                                        exact = commit.applied && target == sZoomTarget
+                                                && sLiveZoomCommit == commit
+                                                && commit.zoom.sameTuple(commit.actualScale, commit.actualX, commit.actualY)
+                                                && commit.zoom.sameTuple(sZoomScale, sZoomOffsetX, sZoomOffset);
+                                    }
+                                    commit.finish(exact, exact ? null : "zoom changed before commit acknowledgement");
+                                } catch (Throwable failure) {
+                                    commit.finish(false, "WMS applied-spec read failed");
+                                }
+                            }
+                            return null;
+                        });
+                java.util.concurrent.Executor executor = runnable -> target.handler.post(runnable);
+                XposedHelpers.callMethod(pending, "addTransactionCommittedListener", executor, callback);
+            }
+    }
+
+    private static void clearLegacyDisplayCrop(Object dc) {
+        Object crop = null;
+        if (!sZoomFrameApply) try {
+            Object layer = XposedHelpers.callMethod(dc, "getWindowingLayer");
+            if (layer != null && Boolean.TRUE.equals(XposedHelpers.callMethod(layer, "isValid"))) {
+                crop = Class.forName("android.view.SurfaceControl$Transaction")
+                        .getDeclaredConstructor().newInstance();
+                XposedHelpers.callMethod(crop, "setWindowCrop", layer, (Object) null);
+                XposedHelpers.callMethod(crop, "apply");
+            }
+        } catch (Throwable failure) {
+            log("display crop clear unavailable: " + failure);
+        } finally {
+            if (crop != null) {
+                try { XposedHelpers.callMethod(crop, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
+            }
+        }
+    }
 }
 

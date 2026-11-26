@@ -14,6 +14,13 @@ import java.util.Locale;
 /** System time/date broadcasts avoid a background timer and follow timezone changes. */
 final class WorkspaceClock extends View {
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final android.graphics.Typeface TIME_FACE=android.graphics.Typeface.create("sans-serif-medium",0);
+    private static final android.graphics.Typeface DATE_FACE=android.graphics.Typeface.create("sans-serif",android.graphics.Typeface.BOLD);
+    private static final android.graphics.Typeface LUNAR_FACE=android.graphics.Typeface.create("sans-serif-medium",0);
+    private final int[] screenPoint=new int[2];
+    private int inkKey;
+    private int inkColor=0xff000000;
+    private boolean inkValid;
     /** Scratch ink bounds; the clock paints once per frame. */
     private final android.graphics.Rect timeInk=new android.graphics.Rect(),dateInk=new android.graphics.Rect(),lunarInk=new android.graphics.Rect();
     private boolean showLunar=true,showTime=true,showDate=true,registered;
@@ -76,11 +83,19 @@ final class WorkspaceClock extends View {
         if(!showTime && !showDate)return;
         float d=getResources().getDisplayMetrics().density,font=getResources().getDisplayMetrics().scaledDensity;
         float anchor=startInset>=0?startInset:20*d,cy=getHeight()*.5f;
-        paint.setColor(HyperOsStyle.dark(getContext())?0xffffffff:HyperOsStyle.wallpaperTextColor(wallpaper,wallpaperWidth,wallpaperHeight,
-                getLeft(),getTop(),getWidth(),getHeight(),HyperOsStyle.textPrimary(getContext())));paint.setAlpha(255);
-        paint.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
-        android.graphics.Typeface dateFace=android.graphics.Typeface.create("sans-serif",android.graphics.Typeface.BOLD);
-        android.graphics.Typeface lunarFace=android.graphics.Typeface.create("sans-serif-medium",0);
+        getLocationOnScreen(screenPoint);
+        int key=java.util.Objects.hash(System.identityHashCode(wallpaper),wallpaperWidth,wallpaperHeight,
+                screenPoint[0],screenPoint[1],getWidth(),getHeight(),HyperOsStyle.dark(getContext()),
+                HyperOsStyle.textPrimary(getContext()));
+        if(!inkValid || key!=inkKey){
+            inkKey=key;inkValid=true;
+            inkColor=HyperOsStyle.dark(getContext())?0xffffffff:HyperOsStyle.wallpaperTextColor(wallpaper,wallpaperWidth,wallpaperHeight,
+                    screenPoint[0],screenPoint[1],getWidth(),getHeight(),HyperOsStyle.textPrimary(getContext()));
+        }
+        paint.setColor(inkColor);paint.setAlpha(255);
+        paint.setTypeface(TIME_FACE);
+        android.graphics.Typeface dateFace=DATE_FACE;
+        android.graphics.Typeface lunarFace=LUNAR_FACE;
         if(showTime){
             paint.setTextSize(Math.min(46*font,getHeight()*.84f));
             float advance=paint.measureText(time);

@@ -47,7 +47,6 @@ final class Promotion {
     boolean previousMainOnRight;
     boolean targetMainOnRight;
     boolean keepTopBarAppearance;
-    LiveLiftPreview liveLift;
     /** 交换时主任务（previousMain）的真实 leash：桥上给它挖洞做 view 级缩小动画。 */
     Object mainLeash;
     Bitmap compactSnapshot;

@@ -84,6 +84,13 @@ final class HomeTransitionMagnification {
         Object leash = XposedHelpers.callMethod(root, "getLeash");
         if (leash == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid")))
             return false;
+        if (!validChanges(info, nativeChange, collectedTask)) return false;
+        return applyMagnification(info, targets, display, start, root, leash,
+                nativeContainer, collectedContainer, collectedTask, nativeChange != null,
+                scale, x, y);
+    }
+
+    private static boolean validChanges(Object info, Object nativeChange, Object collectedTask) {
         boolean home = nativeChange != null, collected = collectedTask == null;
         for (Object change : (java.util.List<?>) XposedHelpers.callMethod(info, "getChanges")) {
             if (!Integer.valueOf(0).equals(XposedHelpers.callMethod(change, "getStartDisplayId"))
@@ -115,7 +122,12 @@ final class HomeTransitionMagnification {
             if (type == 2 && mode == 3 && !home) home = true;
             else if (type != 1 || (mode != 2 && mode != 4)) return false;
         }
-        if (!home || !collected) return false;
+        return home && collected;
+    }
+
+    private static boolean applyMagnification(Object info, java.util.List<?> targets, Object display,
+            Object start, Object root, Object leash, Object nativeContainer, Object collectedContainer,
+            Object collectedTask, boolean nativeReturnScene, float scale, float x, float y) {
         java.util.List<Object> owners = new java.util.ArrayList<>();
         for (Object target : targets) {
             Object container = XposedHelpers.getObjectField(target, "mContainer");
@@ -145,28 +157,26 @@ final class HomeTransitionMagnification {
             }
             if (rootReference == null) return false;
         }
-        {
-            // With a native mini, WM magnifies individual tasks. After its last
-            // mini closes, WM can magnify the display area above this Root instead.
-            // This also applies to native Recents: its root shares Home's parent.
-            // Express the Root in that parent's coordinates, not physical ones.
-            for (Object parent = XposedHelpers.callMethod(rootReference, "getParent");
-                    parent != null && parent != display;
-                    parent = XposedHelpers.callMethod(parent, "getParent")) {
-                Object spec = XposedHelpers.getObjectField(parent, "mLastMagnificationSpec");
-                if (spec == null) continue;
-                float inherited = ((Number) XposedHelpers.getObjectField(spec, "scale")).floatValue();
-                float inheritedX = ((Number) XposedHelpers.getObjectField(spec, "offsetX")).floatValue();
-                float inheritedY = ((Number) XposedHelpers.getObjectField(spec, "offsetY")).floatValue();
-                if (!(inherited > 0f) || !Float.isFinite(inherited)
-                        || !Float.isFinite(inheritedX) || !Float.isFinite(inheritedY)) return false;
-                parentX = inherited * parentX + inheritedX;
-                parentY = inherited * parentY + inheritedY;
-                parentScale *= inherited;
-            }
-            if (!(parentScale > 0f) || !Float.isFinite(parentScale)
-                    || !Float.isFinite(parentX) || !Float.isFinite(parentY)) return false;
+        // With a native mini, WM magnifies individual tasks. After its last mini
+        // closes, WM can magnify the display area above this Root instead. This also
+        // applies to native Recents: its root shares Home's parent. Express the Root
+        // in that parent's coordinates, not physical ones.
+        for (Object parent = XposedHelpers.callMethod(rootReference, "getParent");
+                parent != null && parent != display;
+                parent = XposedHelpers.callMethod(parent, "getParent")) {
+            Object spec = XposedHelpers.getObjectField(parent, "mLastMagnificationSpec");
+            if (spec == null) continue;
+            float inherited = ((Number) XposedHelpers.getObjectField(spec, "scale")).floatValue();
+            float inheritedX = ((Number) XposedHelpers.getObjectField(spec, "offsetX")).floatValue();
+            float inheritedY = ((Number) XposedHelpers.getObjectField(spec, "offsetY")).floatValue();
+            if (!(inherited > 0f) || !Float.isFinite(inherited)
+                    || !Float.isFinite(inheritedX) || !Float.isFinite(inheritedY)) return false;
+            parentX = inherited * parentX + inheritedX;
+            parentY = inherited * parentY + inheritedY;
+            parentScale *= inherited;
         }
+        if (!(parentScale > 0f) || !Float.isFinite(parentScale)
+                || !Float.isFinite(parentX) || !Float.isFinite(parentY)) return false;
         float rootScale = scale / parentScale;
         float rootX = (x - parentX) / parentScale + rootScale * XposedHelpers.getIntField(offset, "x");
         float rootY = (y - parentY) / parentScale + rootScale * XposedHelpers.getIntField(offset, "y");
@@ -178,14 +188,14 @@ final class HomeTransitionMagnification {
         XposedHelpers.callMethod(start, "setPosition", leash, rootX, rootY);
         for (Object owner : owners) {
             Object task = XposedHelpers.callMethod(owner, "asTask");
-            if (nativeChange != null || task == null || Integer.valueOf(2).equals(
+            if (nativeReturnScene || task == null || Integer.valueOf(2).equals(
                     XposedHelpers.callMethod(task, "getActivityType"))) {
                 activeOwners.add(owner);
                 activeSurfaces.put(owner, XposedHelpers.getObjectField(owner, "mSurfaceControl"));
             }
         }
         activeDisplay = display; activeRoot = leash; activeInfo = info;
-        nativeReturn = nativeChange != null;
+        nativeReturn = nativeReturnScene;
         return true;
     }
 }

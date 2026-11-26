@@ -63,5 +63,5 @@ public class WallpaperRefreshRegression {
  }
 }'''.replace('METHOD',method)
 path=out/'WallpaperRefreshRegression.java';path.write_text(java,'utf-8');jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(path)],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(path),str(src/'BackgroundExecutor.java')],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.WallpaperRefreshRegression'],check=True)

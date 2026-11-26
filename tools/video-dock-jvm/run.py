@@ -59,7 +59,7 @@ public class VideoDockRegression {
  public static void main(String[]args)throws Exception{
   var media=new VideoDockRegression();var player=new MediaController();media.context.media.players.add(player);media.open();
   Handler worker=(Handler)field(media.dock,"handler");worker.drain();
-  check(media.context.media.adds==1&&player.registers==1&&worker.lastDelay==15000L,"media observers replace fast polling with a 15 second watchdog");
+  check(media.context.media.adds==1&&player.registers==1&&worker.lastDelay==30000L,"media observers replace fast polling with a 30 second watchdog");
   int queries=media.context.media.queries;media.open();worker.drain();check(media.context.media.queries==queries,"geometry renewal does not enumerate sessions again");
   player.state.state=2;player.callback.onPlaybackStateChanged(player.state);
   check(((Map<?,?>)field(media.dock,"playStates")).get(player.pkg).equals(2)&&media.context.media.queries==queries,"playback callback updates state without session enumeration");

@@ -27,6 +27,15 @@ final class TransitionMagnificationStartHooks {
                     "com.android.server.wm.Transition", loader);
             XposedBridge.hookAllMethods(transition, "calculateTransitionInfo", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
+                    handleTransitionInfo(host,log,p);
+                }
+            });
+        } catch (Throwable error) {
+            log.accept("transition magnification start hook unavailable: " + error);
+        }
+    }
+
+    private static void handleTransitionInfo(Host host,Consumer<String> log,XC_MethodHook.MethodHookParam p) {
                     ZoomTarget target = host.zoomTarget();
                     if (p.hasThrowable() || !host.zoomed() || target == null
                             || target.display != host.displayContent()
@@ -122,10 +131,6 @@ final class TransitionMagnificationStartHooks {
                     } catch (Throwable error) {
                         log.accept("transition start magnification skipped: " + error);
                     }
-                }
-            });
-        } catch (Throwable error) {
-            log.accept("transition magnification start hook unavailable: " + error);
-        }
+
     }
 }

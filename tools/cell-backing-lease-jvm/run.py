@@ -70,7 +70,7 @@ check('new LiveSwapVisualLease(sideBackingViews[slot.index], null)' not in colle
       'live collect leases only the backing, so the empty-cell hint can flash during the handoff')
 
 # Live flip: only the moving cell is withheld; peers keep their opaque backing.
-swap = member('    private void startLiveSwap(')
+swap = member('    private Object prepareLiveFlip(')
 check('cellBackgrounds[i - 1] = peer == ticket.slot ? null : peer.cellBackground;' in swap,
       'live flip must withhold only the moving cell backing and keep peer backings')
 check('cellBackgrounds[i - 1] = peer.cellBackground;' not in swap,

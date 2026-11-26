@@ -99,7 +99,7 @@ final class SourceCaptureController implements AutoCloseable {
         Bitmap frame=null;
         try {
             if(token!=generation || !WallpaperSnapshot.canCapture(context))return;
-            frame=SwapPreview.captureRegion(context.getClassLoader(),context.getResources().getDisplayMetrics().widthPixels,
+            frame=ScreenCaptureCompat.captureRegion(context.getClassLoader(),context.getResources().getDisplayMetrics().widthPixels,
                     context.getResources().getDisplayMetrics().heightPixels,region);
             if(!WallpaperSnapshot.canCapture(context))throw new IllegalStateException("Scene locked");
             Bitmap captured=frame;frame=null;

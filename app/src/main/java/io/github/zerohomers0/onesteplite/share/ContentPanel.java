@@ -102,7 +102,7 @@ final class ContentPanel {
     }
 
     private Uri watchedMedia;
-    private boolean mediaDirty;
+    private boolean mediaDirty,batchEntries;
     private final Runnable refreshMedia=this::refreshMedia;
     private final android.database.ContentObserver mediaObserver=new android.database.ContentObserver(
             new android.os.Handler(android.os.Looper.getMainLooper())) {
@@ -367,7 +367,7 @@ final class ContentPanel {
         if(signal.isCanceled()){releaseRows(batch);return false;}
         boolean posted=anchor.post(()->{
             if(first)applyMedia(token,user,0,batch,false,unavailable);
-            else if(valid(token,user))for(ContentEntry entry:batch)addEntry(entry);
+            else if(valid(token,user))addEntries(batch);
             else releaseRows(batch);
         });
         if(!posted)releaseRows(batch);
@@ -391,7 +391,7 @@ final class ContentPanel {
         if(refresh && unavailable){releaseRows(rows);return;}
         if(refresh)selection.position(page,scroll.getScrollY());
         grid.removeAllViews();clearEntries();
-        for(ContentEntry entry:rows)addEntry(entry);
+        addEntries(rows);
         if(rows.isEmpty())shell.status(page==1
                 ?(unavailable?"无法读取系统最近文件，可用“更多文件”选择":"暂无可访问的最近文件，可用“更多文件”补充")
                 :(unavailable?"无法读取相册，请检查系统媒体访问权限":"没有可读取的近期图片"));
@@ -416,11 +416,14 @@ final class ContentPanel {
         Context app=context.getApplicationContext();
         try(Cursor cursor=(app==null?context:app).getContentResolver().query(queryUri,new String[]{
                 MediaStore.Images.Media._ID,MediaStore.Images.Media.MIME_TYPE,
-                MediaStore.Images.Media.DATE_ADDED,MediaStore.Images.Media.SIZE},args,signal)) {
+                MediaStore.Images.Media.DATE_ADDED,MediaStore.Images.Media.SIZE,
+                MediaStore.MediaColumns.RELATIVE_PATH,MediaStore.MediaColumns.IS_PENDING,
+                MediaStore.MediaColumns.IS_TRASHED},args,signal)) {
             int count=0;
             while(cursor!=null && cursor.moveToNext() && count++<60 && !signal.isCanceled()) {
                 Uri uri=ContentUris.withAppendedId(collection,cursor.getLong(0));
-                if(hidden.contains(uri.toString()))continue;
+                if(hidden.contains(uri.toString()) || cursor.getInt(5)!=0 || cursor.getInt(6)!=0
+                        || MediaStoreImageBridge.isInternalPath(cursor.getString(4)))continue;
                 String mime=cursor.getString(1);
                 rows.add(new ContentEntry(uri.toString(),"近期图片",mime==null?"image/*":mime,
                         null,uri,null,cursor.isNull(3)?-1:cursor.getLong(3),cursor.getLong(2)*1000L));
@@ -532,7 +535,13 @@ final class ContentPanel {
         params.width=list?contentWidth:imageSize;
         params.height=list?ContentRowStyle.height(context):imageSize;
         if(list)params.setMargins(0,0,0,dp(6));else params.setMargins(dp(2),dp(2),dp(2),dp(2));
-        grid.addView(view,params);tiles.put(entry.key,view);refreshSelection();
+        grid.addView(view,params);tiles.put(entry.key,view);if(!batchEntries)refreshSelection();
+    }
+
+    private void addEntries(java.util.Collection<ContentEntry> rows){
+        batchEntries=true;
+        try{for(ContentEntry entry:rows)addEntry(entry);}
+        finally{batchEntries=false;refreshSelection();}
     }
 
     private void imageHeading(long timestamp) {
@@ -628,7 +637,7 @@ final class ContentPanel {
             items.sort(java.util.Comparator.comparingLong((ContentEntry row)->row.addedAt).reversed());
             boolean posted=anchor.post(()->{
                 if(!valid(token,user)){releaseRows(items);return;}
-                for(ContentEntry item:items)addEntry(item);
+                addEntries(items);
                 if(items.isEmpty())shell.status("将内容拖到顶栏“暂存”\n临时内容保留24小时");restorePosition(token,user);
             });
             if(!posted)releaseRows(items);
@@ -802,11 +811,11 @@ final class ContentPanel {
             java.util.List<ContentEntry> historyRows,String error,int token,int user) {
         if(!valid(token,user))return;
         if(!current.isEmpty())shell.heading("当前剪贴板",contentWidth);
-        for(ContentEntry entry:current)addEntry(entry);
+        addEntries(current);
         if(error!=null)shell.heading(error,contentWidth);
         if(!historyRows.isEmpty()){
             shell.heading("历史",contentWidth);
-            for(ContentEntry entry:historyRows)addEntry(entry);
+            addEntries(historyRows);
         }
         if(entries.isEmpty())shell.status(error==null?"暂无剪贴板内容":error+"\n暂无历史记录");
         restorePosition(token,user);

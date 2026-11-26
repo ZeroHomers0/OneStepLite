@@ -30,6 +30,7 @@ final class TopTaskFrame {
     private final long deadline=SystemClock.uptimeMillis()+2000L;
     private final Runnable pollFrame=this::poll;
     private Runnable drawn;
+    private int pollAttempt;
     private final Runnable timeout=()->fail("top destination draw timed out");
 
     private TopTaskFrame(Handler ui,View view,Executor shell,Target target,BooleanSupplier current,
@@ -48,10 +49,15 @@ final class TopTaskFrame {
         if(!session.active()) {retire();return;}
         if(SystemClock.uptimeMillis()>=deadline) {fail("top destination draw timed out");return;}
         if(view.getWidth()!=target.width || view.getHeight()!=target.height || !view.isAttachedToWindow()) {
-            ui.postDelayed(pollFrame,16L);return;
+            retry();return;
         }
         try {shell.execute(this::checkNative);}
         catch(RuntimeException unavailable) {fail("top frame Shell unavailable");}
+    }
+
+    private void retry() {
+        int delay=Math.min(64,16<<Math.min(pollAttempt++,2));
+        ui.postDelayed(pollFrame,delay);
     }
 
     private void checkNative() {
@@ -65,14 +71,14 @@ final class TopTaskFrame {
                     || !Integer.valueOf(6).equals(XposedHelpers.callMethod(info,"getWindowingMode"))
                     || !target.bounds.equals(XposedHelpers.callMethod(window,"getBounds"))
                     || !Boolean.TRUE.equals(ShellCompat.call(transitions,"isIdle"))) {
-                ui.postDelayed(pollFrame,16L);return;
+                retry();return;
             }
             Object wct=Class.forName("android.window.WindowContainerTransaction").getDeclaredConstructor().newInstance();
             XposedHelpers.callMethod(wct,"setBounds",target.token,target.bounds);
             SyncPreparation.submit(target.controller,wct,ui::post,this::nativeCommitted,
                     error->fail("top destination draw sync failed: "+error));
         } catch(Throwable busy) {
-            ui.postDelayed(pollFrame,16L);
+            retry();
         }
     }
 

@@ -26,7 +26,7 @@ public final class VisualSearchActivity extends Activity {
             SharePayload payload=new SharePayload(getIntent().getClipData());
             if(payload.uris.size()!=1 || !payload.mime.startsWith("image/")
                     || !ContentInboxProvider.AUTHORITY.equals(payload.uris.get(0).getAuthority()))throw new SecurityException("Owned image required");
-            createPage();Uri image=payload.uris.get(0);new Thread(()->prepare(image),"VisualSearchImage").start();
+            createPage();Uri image=payload.uris.get(0);BackgroundExecutor.execute(()->prepare(image));
         }catch(RuntimeException invalid){finish();}
     }
     private void prepare(Uri image){

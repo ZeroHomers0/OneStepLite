@@ -482,7 +482,7 @@ final class ShareWorkspace extends FrameLayout {
             if(deferNextDelivery){
                 deferredDelivery=deliver;
                 deferredDeliveryDeadline=android.os.SystemClock.uptimeMillis()+DEFERRED_DELIVERY_TIMEOUT_MS;
-                scheduleDeferredDelivery(token);
+                scheduleDeferredDelivery(token,0);
             } else deliver.run();
             return true;
         }catch(Exception unavailable){
@@ -551,7 +551,7 @@ final class ShareWorkspace extends FrameLayout {
 
     // Hover promotion temporarily disables canShareContent(). Keep the accepted payload
     // until the promoted task owns the main window, then use the normal delivery route.
-    private void scheduleDeferredDelivery(int token) {
+    private void scheduleDeferredDelivery(int token,int attempt) {
         if(token!=generation || deferredDelivery==null)return;
         if(ready.getAsBoolean() && isAttachedToWindow() && isShown()){
             Runnable deliver=deferredDelivery;deferredDelivery=null;deliver.run();return;
@@ -559,7 +559,8 @@ final class ShareWorkspace extends FrameLayout {
         if(android.os.SystemClock.uptimeMillis()>=deferredDeliveryDeadline){
             deferredDelivery=null;failDelivery(token,user);return;
         }
-        handler.postDelayed(()->scheduleDeferredDelivery(token),50L);
+        handler.postDelayed(()->scheduleDeferredDelivery(token,attempt+1),
+                Math.min(250L,50L<<Math.min(attempt,2)));
     }
 
     private boolean recognizeDrop(DragEvent event,SharePayload payload) {

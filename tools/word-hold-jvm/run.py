@@ -11,7 +11,7 @@ def member(signature):
         depth+=(source[end]=='{')-(source[end]=='}');end+=1
     return source[start:end]
 files={
- 'android/os/Bundle.java':'package android.os;public class Bundle{public boolean lift;public String uri;public boolean region;public void putBoolean(String k,boolean v){lift=v;}public String getString(String key){return "uri".equals(key)?uri:null;}public boolean getBoolean(String key){return region;}}',
+ 'android/os/Bundle.java':'package android.os;public class Bundle{public boolean lift;public String uri,cleanup;public boolean region;public void putBoolean(String k,boolean v){lift=v;}public String getString(String key){if("uri".equals(key))return uri;if("cleanup_uri".equals(key))return cleanup;return null;}public boolean getBoolean(String key){return region;}}',
  'android/os/SystemClock.java':'package android.os;public class SystemClock{public static long now=1100;public static long uptimeMillis(){return now;}}',
  'android/widget/Toast.java':'package android.widget;public class Toast{public static int shown;public static final int LENGTH_SHORT=0;public static Toast makeText(Object c,String s,int d){return new Toast();}public void show(){shown++;}}',
  'android/view/InputDevice.java':'package android.view;public class InputDevice{public static final int SOURCE_TOUCHSCREEN=4098;}',
@@ -36,7 +36,7 @@ public class WordHoldRegression{
  Object window,selection;MotionEvent pointer;Runnable pendingWords,fallbackJob;float wordX,wordY,fallbackX,fallbackY;boolean validGesture,fallbackIssued,selectingDrag;
  Bundle liftCandidate;float downX,downY;long liftAt;boolean liftEligible,startingDrag;
  AtomicBoolean windowRequest;
- String nativeCaptureId;int discardedCaptures;void discardCapture(String id){if(id!=null)discardedCaptures++;}
+ String nativeCaptureId,nativeCleanupUri;int discardedCaptures,discardedPublications;void discardCapture(String id){if(id!=null)discardedCaptures++;}void discardPublication(String uri){if(uri!=null)discardedPublications++;}
  int discarded;void clearLiftCandidate(){if(liftCandidate!=null)discarded++;liftCandidate=null;}
  int lifts;void offer(Bundle request,Bundle[] result,CountDownLatch done,AtomicBoolean expired){if(request.lift)lifts++;}
  void clearWindow(){window=null;startingDrag=false;windowRequest=null;validGesture=false;}
@@ -105,8 +105,8 @@ public class WordHoldRegression{
  h=fresh();h.window=new Object();h.finishRejectedLift(true);
  check(h.window==null&&h.opens==0&&android.widget.Toast.shown==1,"rejected single-finger lift reports failure without opening words or preview");
  h.finishRejectedLift(false);check(android.widget.Toast.shown==1,"cancelled input does not show a retry prompt");
- h.nativeCaptureId="capture";h.finishRejectedLift(false);
- check(h.nativeCaptureId==null&&h.discardedCaptures==1,"a failed image lift releases its private capture");
+ h.nativeCaptureId="capture";h.nativeCleanupUri="content://media/external/images/media/1";h.finishRejectedLift(false);
+ check(h.nativeCaptureId==null&&h.nativeCleanupUri==null&&h.discardedCaptures==1&&h.discardedPublications==1,"a failed image lift releases private capture and published media");
  h=fresh();h.window=new Object();h.startingDrag=true;h.windowRequest=new AtomicBoolean();
  h.clearPendingWindow(new AtomicBoolean(true));
  check(h.window!=null,"an unrelated IPC timeout cannot cancel a pending native drag");

@@ -10,6 +10,7 @@ import android.widget.ImageView;
 final class ShareTargetButton extends ImageView {
     private final Paint badge=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path arrow=new Path();
+    private static final android.view.animation.DecelerateInterpolator HOVER_CURVE=new android.view.animation.DecelerateInterpolator();
     private boolean dragHovered;
     private boolean mainRight;
     void setMainOnRight(boolean right){mainRight=right;invalidate();}
@@ -28,7 +29,7 @@ final class ShareTargetButton extends ImageView {
         if(!android.animation.ValueAnimator.areAnimatorsEnabled()){setScaleX(hovered?1.1f:1);setScaleY(hovered?1.1f:1);return;}
         animate().scaleX(hovered?1.14f:1f).scaleY(hovered?1.14f:1f)
                 .setDuration(hovered?120:100)
-                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+                .setInterpolator(HOVER_CURVE).start();
     }
 
     @Override protected void onDetachedFromWindow() {

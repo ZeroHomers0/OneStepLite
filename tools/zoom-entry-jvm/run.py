@@ -10,11 +10,16 @@ src=package_dir(root,sys.argv[2] if len(sys.argv)>2 else None)
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
 source = (src/'HostEntry.java').read_text(encoding='utf8')
 start = source.index('    private void applyDisplayZoomLocked(ZoomTarget target, float scale,\n            float offsetY, float offsetX, ZoomCommit commit)')
-native = source.index('    private void applyDisplayZoomLocked(ZoomTarget target, float scale,\n            float offsetY, float offsetX, ZoomCommit commit, boolean nativeVisibility)')
+native = source.index('    void applyDisplayZoomLocked(ZoomTarget target, float scale,\n            float offsetY, float offsetX, ZoomCommit commit, boolean nativeVisibility)')
 pos = source.index('{', native)+1; depth = 1
 while depth:
     depth += (source[pos]=='{')-(source[pos]=='}'); pos += 1
-actual = source[start:pos]
+def member(signature):
+    begin=source.index(signature);brace=source.index('{',begin);end=brace+1;depth=1
+    while depth:
+        depth += (source[end]=='{')-(source[end]=='}');end+=1
+    return source[begin:end]
+actual = source[start:pos] + '\n' + member('    private static void installZoomCommit(') + '\n' + member('    private static void clearLegacyDisplayCrop(')
 body = r'''package io.github.zerohomers0.onesteplite;
 public class ZoomEntryRegression {
  static boolean sZoomed,sFullscreenRotationActive,sZoomFrameApply;static int sNativeLandscapeState;static long topWorkspaceGeneration;static float sZoomScale=1,sZoomOffsetX,sZoomOffset;
@@ -39,7 +44,7 @@ public class ZoomEntryRegression {
  }
  void beginFixedMainRotationLocked(Object dc){sFullscreenRotationActive=true;callbacks++;if(!sZoomed)nativeSuspensions++;if(failRotation)throw new IllegalStateException("orientation failure");}
  void endFixedMainRotationLocked(Object dc){sFullscreenRotationActive=false;}
- void layerWorkspaceWithNativeFreeforms(Object d,Object tx){}void restoreExitedMagnificationLocked(ZoomTarget t){}void applyGestureSurfacesLocked(ZoomTarget t,float s,float y,float x){}void log(String s){}
+ void layerWorkspaceWithNativeFreeforms(Object d,Object tx){}void restoreExitedMagnificationLocked(ZoomTarget t){}void applyGestureSurfacesLocked(ZoomTarget t,float s,float y,float x){}static void log(String s){}
  ACTUAL
  static Object sWmsContext=new Object();
  static class EntryGuard {static boolean unlocked=true;static boolean canOpen(Object c){return unlocked;}}

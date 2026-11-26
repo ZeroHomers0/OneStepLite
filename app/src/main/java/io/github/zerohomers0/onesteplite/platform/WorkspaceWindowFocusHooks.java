@@ -8,10 +8,11 @@ import de.robv.android.xposed.XposedHelpers;
 final class WorkspaceWindowFocusHooks {
     private WorkspaceWindowFocusHooks() {}
 
-    static void install(ClassLoader loader, java.util.function.Supplier<ZoomTarget> zoomTarget,
-            java.util.function.Supplier<Object> displayContent,
-            java.util.function.BooleanSupplier zoomed, ThreadLocal<Object> scanDisplay,
-            java.util.function.Consumer<String> log) {
+    static void install(ClassLoader loader, java.util.function.Supplier<ZoomTarget> zoomTarget, java.util.function.Supplier<Object> displayContent, java.util.function.BooleanSupplier zoomed, ThreadLocal<Object> scanDisplay, java.util.function.Consumer<String> log) {
+        installPointerFocus(loader, zoomTarget, displayContent, zoomed, log);
+        installWindowFocus(loader, zoomTarget, displayContent, zoomed, scanDisplay, log);
+    }
+    private static void installPointerFocus(ClassLoader loader, java.util.function.Supplier<ZoomTarget> zoomTarget, java.util.function.Supplier<Object> displayContent, java.util.function.BooleanSupplier zoomed, java.util.function.Consumer<String> log) {
         try {
             Class<?> pointer = XposedHelpers.findClass("com.android.server.wm.PointerEventDispatcher", loader);
             XposedBridge.hookAllMethods(pointer, "onInputEvent", new XC_MethodHook() {
@@ -38,6 +39,9 @@ final class WorkspaceWindowFocusHooks {
             });
             log.accept("workspace TOP focus follows physical pointer DOWN before native edge back");
         } catch (Throwable unavailable) { log.accept("TOP pointer focus hook unavailable: " + unavailable); }
+
+    }
+    private static void installWindowFocus(ClassLoader loader, java.util.function.Supplier<ZoomTarget> zoomTarget, java.util.function.Supplier<Object> displayContent, java.util.function.BooleanSupplier zoomed, ThreadLocal<Object> scanDisplay, java.util.function.Consumer<String> log) {
         try {
             Class<?> display=XposedHelpers.findClass("com.android.server.wm.DisplayContent",loader);
             Class<?> window=XposedHelpers.findClass("com.android.server.wm.WindowState",loader);
@@ -117,5 +121,7 @@ final class WorkspaceWindowFocusHooks {
             }
             log.accept("native window focus scan skips exact passive side leases; TOP remains eligible");
         } catch(Throwable unavailable) {log.accept("workspace window focus hook unavailable: "+unavailable);}
+
     }
+
 }

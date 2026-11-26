@@ -15,7 +15,7 @@ final class CaptureInboxStore {
         java.util.List<android.net.Uri> delivered=new java.util.ArrayList<>(new SharePayload(intent.getClipData()).uris);
         if(delivered.isEmpty())return;
         DragCacheStore.markShared(context,intent.getClipData());
-        new Thread(()->{
+        BackgroundExecutor.execute(()->{
             try {
             if(!WorkspaceSettingsStore.read(context).deleteSharedImages)return;
             synchronized(ContentInboxProvider.class) {
@@ -32,7 +32,7 @@ final class CaptureInboxStore {
                         .putString("rows",rows.toString()).apply();
             }
             }catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"shared image cleanup deferred",unavailable);}
-        },"SharedImageRetention").start();
+        });
     }
     static Bundle store(Context context,byte[] encoded) {
         long identity=android.os.Binder.clearCallingIdentity();
@@ -46,12 +46,15 @@ final class CaptureInboxStore {
         }
         finally {android.os.Binder.restoreCallingIdentity(identity);}
     }
-    private static Bundle storeAsOwner(Context context,byte[] encoded) {
+    static void validateEncoded(byte[] encoded) {
         if(encoded==null || encoded.length>ContentCapturePolicy.MAX_ENCODED)throw new IllegalArgumentException("Oversized capture");
         BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;
         BitmapFactory.decodeByteArray(encoded,0,encoded.length,options);
         if(!ContentCapturePolicy.validImage(encoded.length,options.outWidth,options.outHeight)
                 || !"image/jpeg".equals(options.outMimeType))throw new IllegalArgumentException("Invalid capture");
+    }
+    private static Bundle storeAsOwner(Context context,byte[] encoded) {
+        validateEncoded(encoded);
         try {
             return DragCacheStore.store(context,encoded,"主窗截取.jpg","image/jpeg");
         } catch(java.io.IOException failure){

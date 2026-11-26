@@ -90,87 +90,7 @@ final class LiveSwap {
                     mainScale, mainX, mainY);
             Object wct = pair.windowTransaction(null);
             pair.arm(loader);
-            LiveSwapSession session = new LiveSwapSession(backend, new LiveSwapSession.Scene() {
-                private Throwable cleanupError;
-                private boolean waitingCancel;
-                private boolean delivered;
-                private void background(Object tx, boolean visible) {
-                    if (cellBackground != null && Boolean.TRUE.equals(XposedHelpers.callMethod(cellBackground, "isValid")))
-                        XposedHelpers.callMethod(tx, visible ? "show" : "hide", cellBackground);
-                }
-                @Override public boolean mayStart() { return sceneCurrent.getAsBoolean(); }
-                @Override public LiveSwapSession.Ready resolve(Object info) {
-                    return sceneCurrent.getAsBoolean() ? ownedPair.resolve(info, parentToScreen) : null;
-                }
-                @Override public void prepare(Object start, Object finish, LiveSwapSession.Ready ready) {
-                    if (!sceneCurrent.getAsBoolean()) throw new IllegalStateException("live scene changed before start");
-                    try { ownedPair.prepare(start, finish); }
-                    catch (Exception error) { throw new IllegalStateException("live pair claim failed", error); }
-                    background(start, false);
-                }
-                @Override public void input(Object transaction, LiveSwapGeometry.Frame[] frame) {
-                    if (!sceneCurrent.getAsBoolean()) throw new IllegalStateException("live scene changed mid-frame");
-                    input.accept(frame);
-                }
-                @Override public void finish(Object transaction, boolean failed) {
-                    if (waitingCancel && !ownedPair.originalRoles())
-                        throw new IllegalStateException("pending inverse roles remain unconfirmed");
-                    if (failed) ownedPair.recover(transaction, sideScale);
-                    else ownedPair.finish(transaction, sideScale);
-                    background(transaction, true);
-                }
-                @Override public Object finishWindowTransaction() { return ownedPair.finishWindowTransaction(); }
-                @Override public void requestWaitingCancel() {
-                    waitingCancel = true;
-                    try {
-                        XposedHelpers.callMethod(XposedHelpers.getObjectField(shell, "mOrganizer"),
-                                "applyTransaction", ownedPair.reverseWindowTransaction());
-                    } catch (Exception error) { throw new IllegalStateException("pending reverse WCT failed", error); }
-                }
-                @Override public boolean waitingCancelReady() { return ownedPair.originalRoles(); }
-                @Override public void consumed(Object transaction, boolean aborted) {
-                    ownedPair.recover(transaction, sideScale);
-                    background(transaction, true);
-                }
-                @Override public void complete(SwapSessionState state, Throwable error) {
-                    Runnable deliver = () -> {
-                        if (delivered) return;
-                        delivered = true;
-                        synchronized (ACTIVE) { if (ACTIVE.get(controller) == active) ACTIVE.remove(controller); }
-                        boolean owned = cleanupError == null && ownedPair.sideOwned();
-                        Throwable resultError = error != null ? error : cleanupError;
-                        completed.accept(new Result(state == SwapSessionState.FINISHED
-                                && owned && resultError == null, owned,
-                                owned || ownedPair.originalRoles(), resultError));
-                    };
-                    if (waitingCancel && !ownedPair.originalRoles()) {
-                        // Do not infer roles from an old canonical object after the reverse IPC.
-                        ownedPair.releaseOriginalLeaseWhenSeen();
-                        synchronized (ACTIVE) { if (ACTIVE.get(controller) == active) ACTIVE.remove(controller); }
-                        completed.accept(new Result(false, false, false, error));
-                        return;
-                    }
-                    if (state == SwapSessionState.DECLINED || state == SwapSessionState.FAILED) {
-                        Object tx = backend.newTransaction();
-                        try {
-                            ownedPair.recover(tx, sideScale); background(tx, true);
-                            boolean[] committed = {false};
-                            backend.committed(tx, () -> { committed[0] = true; deliver.run(); });
-                            backend.apply(tx);
-                            backend.await(() -> committed[0], 1500L, acknowledged -> {
-                                if (!acknowledged && !delivered) {
-                                    cleanupError = new IllegalStateException("recovery transaction commit not acknowledged");
-                                    deliver.run();
-                                }
-                            });
-                        }
-                        catch (Throwable failure) { cleanupError = failure; deliver.run(); }
-                        finally { backend.close(tx); }
-                        return;
-                    }
-                    deliver.run();
-                }
-            }, first, second, 300L);
+            LiveSwapSession session = new LiveSwapSession(backend, new PairScene(ownedPair,shell,backend,sceneCurrent,input,completed,active,controller,sideScale,cellBackground,parentToScreen), first, second, 300L);
             active.session = session;
             synchronized (ACTIVE) { ACTIVE.put(controller, active); }
             if (session.start(wct)) return true;
@@ -192,4 +112,96 @@ final class LiveSwap {
         }
     }
 
+
+    private static final class PairScene implements LiveSwapSession.Scene {
+        private final LiveTaskPair pair;private final Object shell;private final LiveSwapSession.ShellBackend backend;
+        private final BooleanSupplier sceneCurrent;private final Consumer<LiveSwapGeometry.Frame[]> input;
+        private final Consumer<Result> completed;private final Active active;private final Object controller;
+        private final float sideScale;private final Object cellBackground;private final LiveSwapGeometry.Affine parentToScreen;
+        private Throwable cleanupError;private boolean waitingCancel,delivered;
+        PairScene(LiveTaskPair pair,Object shell,LiveSwapSession.ShellBackend backend,BooleanSupplier sceneCurrent,
+                Consumer<LiveSwapGeometry.Frame[]> input,Consumer<Result> completed,Active active,Object controller,
+                float sideScale,Object cellBackground,LiveSwapGeometry.Affine parentToScreen){
+            this.pair=pair;this.shell=shell;this.backend=backend;this.sceneCurrent=sceneCurrent;this.input=input;
+            this.completed=completed;this.active=active;this.controller=controller;this.sideScale=sideScale;this.cellBackground=cellBackground;this.parentToScreen=parentToScreen;
+        }
+
+                private void background(Object tx, boolean visible) {
+                    if (cellBackground != null && Boolean.TRUE.equals(XposedHelpers.callMethod(cellBackground, "isValid")))
+                        XposedHelpers.callMethod(tx, visible ? "show" : "hide", cellBackground);
+                }
+                @Override public boolean mayStart() { return sceneCurrent.getAsBoolean(); }
+                @Override public LiveSwapSession.Ready resolve(Object info) {
+                    return sceneCurrent.getAsBoolean() ? pair.resolve(info, parentToScreen) : null;
+                }
+                @Override public void prepare(Object start, Object finish, LiveSwapSession.Ready ready) {
+                    if (!sceneCurrent.getAsBoolean()) throw new IllegalStateException("live scene changed before start");
+                    try { pair.prepare(start, finish); }
+                    catch (Exception error) { throw new IllegalStateException("live pair claim failed", error); }
+                    background(start, false);
+                }
+                @Override public void input(Object transaction, LiveSwapGeometry.Frame[] frame) {
+                    if (!sceneCurrent.getAsBoolean()) throw new IllegalStateException("live scene changed mid-frame");
+                    input.accept(frame);
+                }
+                @Override public void finish(Object transaction, boolean failed) {
+                    if (waitingCancel && !pair.originalRoles())
+                        throw new IllegalStateException("pending inverse roles remain unconfirmed");
+                    if (failed) pair.recover(transaction, sideScale);
+                    else pair.finish(transaction, sideScale);
+                    background(transaction, true);
+                }
+                @Override public Object finishWindowTransaction() { return pair.finishWindowTransaction(); }
+                @Override public void requestWaitingCancel() {
+                    waitingCancel = true;
+                    try {
+                        XposedHelpers.callMethod(XposedHelpers.getObjectField(shell, "mOrganizer"),
+                                "applyTransaction", pair.reverseWindowTransaction());
+                    } catch (Exception error) { throw new IllegalStateException("pending reverse WCT failed", error); }
+                }
+                @Override public boolean waitingCancelReady() { return pair.originalRoles(); }
+                @Override public void consumed(Object transaction, boolean aborted) {
+                    pair.recover(transaction, sideScale);
+                    background(transaction, true);
+                }
+                @Override public void complete(SwapSessionState state, Throwable error) {
+                    Runnable deliver = () -> {
+                        if (delivered) return;
+                        delivered = true;
+                        synchronized (ACTIVE) { if (ACTIVE.get(controller) == active) ACTIVE.remove(controller); }
+                        boolean owned = cleanupError == null && pair.sideOwned();
+                        Throwable resultError = error != null ? error : cleanupError;
+                        completed.accept(new Result(state == SwapSessionState.FINISHED
+                                && owned && resultError == null, owned,
+                                owned || pair.originalRoles(), resultError));
+                    };
+                    if (waitingCancel && !pair.originalRoles()) {
+                        // Do not infer roles from an old canonical object after the reverse IPC.
+                        pair.releaseOriginalLeaseWhenSeen();
+                        synchronized (ACTIVE) { if (ACTIVE.get(controller) == active) ACTIVE.remove(controller); }
+                        completed.accept(new Result(false, false, false, error));
+                        return;
+                    }
+                    if (state == SwapSessionState.DECLINED || state == SwapSessionState.FAILED) {
+                        Object tx = backend.newTransaction();
+                        try {
+                            pair.recover(tx, sideScale); background(tx, true);
+                            boolean[] committed = {false};
+                            backend.committed(tx, () -> { committed[0] = true; deliver.run(); });
+                            backend.apply(tx);
+                            backend.await(() -> committed[0], 1500L, acknowledged -> {
+                                if (!acknowledged && !delivered) {
+                                    cleanupError = new IllegalStateException("recovery transaction commit not acknowledged");
+                                    deliver.run();
+                                }
+                            });
+                        }
+                        catch (Throwable failure) { cleanupError = failure; deliver.run(); }
+                        finally { backend.close(tx); }
+                        return;
+                    }
+                    deliver.run();
+                }
+
+    }
 }

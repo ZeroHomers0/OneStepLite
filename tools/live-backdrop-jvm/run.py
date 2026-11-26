@@ -13,7 +13,7 @@ src=package_dir(root)
 run = (src / 'LiveSwap64.java').read_text(encoding='utf8')
 background = run[run.index('        void background('):run.index('        @Override public void prepare(')]
 host = (src / 'WorkspaceHost.java').read_text(encoding='utf8')
-swap = host[host.index('    private void startLiveSwap('):host.index('    private void drawLiveEmptyHints(')]
+swap = host[host.index('    private Object prepareLiveFlip('):host.index('    private void commitPromotedHandoff(')]
 call = swap[swap.index('ticket.liveBackdrop = LiveBackdrop.create('):]
 call = call[:call.index('canvas ->')]
 side_crops = re.findall(r'liveSideStrip\((?:geometry|target)\)', call)

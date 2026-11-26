@@ -114,8 +114,6 @@ public final class WorkspaceHost {
     volatile boolean screenOn = true;
     private Slot launchCurrentSlot;
     Promotion promotion;
-    SwapPreview swapPreview;
-    private Object swapPreviewStatusOwner;
     private final StatusBar statusBar;
     private volatile HomeTaskReturn coveredHome;
     CellMovePreview cellMovePreview;
@@ -2394,7 +2392,7 @@ public final class WorkspaceHost {
             main.postDelayed(this::refreshOverlayAfterTransition, 120L);
             return;
         }
-        if (swapPreview != null || cellMovePreview != null || promotion != null
+        if (cellMovePreview != null || promotion != null
                 || transferBusy) {
             // Relayouting the host window during the visible bridge brings its
             // SurfaceView children forward for one composition. Retry after handoff.
@@ -2538,7 +2536,7 @@ public final class WorkspaceHost {
         if (!on) unlockGeometryReplay.clear();
         HostEntry.setHostZoomed(on);
         StatusBarSampling.geometryChanged();
-        HotZoneGesture.raiseAll(ctx);
+        HotZoneGesture.raiseAll();
     }
 
     /**
@@ -2904,7 +2902,7 @@ public final class WorkspaceHost {
         loadWallpaperBackdrop();
         beginWorkspaceEntry(null);
         // Keep corner activation disabled while active; HyperOS GestureStub owns back gestures.
-        HotZoneGesture.raiseAll(ctx);
+        HotZoneGesture.raiseAll();
         startWorkspaceHeartbeat();
     }
 
@@ -3028,7 +3026,7 @@ public final class WorkspaceHost {
     try {
         java.util.List<QuickApp> quickApps;
         try {
-            quickApps = Warmup.quickApps(ctx);
+            quickApps = Warmup.quickApps();
         } catch (Throwable error) {
             quickApps = java.util.Collections.emptyList();
             log("top app strip unavailable: " + error);
@@ -3126,7 +3124,7 @@ public final class WorkspaceHost {
                     if (now - lastWorkspaceRepair >= 30000L) {
                         lastWorkspaceRepair = now;
                         if (carrierSlotIndex >= 0) reassertCarrier();
-                        if (!zoomed && !HotZoneGesture.isAttached()) HotZoneGesture.raiseAll(ctx);
+                        if (!zoomed && !HotZoneGesture.isAttached()) HotZoneGesture.raiseAll();
                         for (Slot slot : slots) {
                             if (slot.carrier || slot.index == carriers.leashPocSlot()) continue;
                             ensureCellBackground(slot);
@@ -5149,7 +5147,7 @@ public final class WorkspaceHost {
     }
 
     private boolean parkMainForQuickLaunch(QuickApp entry) {
-        if(!workspaceOptions.parkMainOnLaunch || topTransition!=null || swapPreview!=null
+        if(!workspaceOptions.parkMainOnLaunch || topTransition!=null
                 || cellMotion!=null || workspaceEntering || carrierSlotIndex>=0)return false;
         for(Slot slot:slots)if(slot.launching || slot.promoting || slot.closing)return false;
         for(int index=1;index<CELL_SLOT_COUNT;index++) {
@@ -5965,7 +5963,7 @@ public final class WorkspaceHost {
                     Region touchable = (Region) XposedHelpers.getObjectField(info, "touchableRegion");
                     touchable.setEmpty();
                     if (keyguardLocked || !screenOn) return null;
-                    if (swapPreview != null || cellMovePreview != null) {
+                    if (cellMovePreview != null) {
                         touchable.set(0, 0, screenW, screenH);
                     } else if (liveSwapInputBlocked) {
                         touchable.set(0, 0, screenW, screenH);
@@ -6285,7 +6283,7 @@ public final class WorkspaceHost {
             return;
         }
         if (scene != ACTIVE || !screenOn || keyguardLocked || transferBusy
-                || promotion != null || swapPreview != null
+                || promotion != null
                 || slot.occupied || slot.launching || slot.promoting || slot.frozen
                 || slot.controller == null) return;
         for (Slot other : slots) if (other.launching || other.promoting || other.closing) return;
@@ -6372,9 +6370,7 @@ public final class WorkspaceHost {
         // gradient over the incoming task for a frame.
         ticket.liveVisual = new LiveSwapVisualLease(sideBackingViews[slot.index], slot.hint);
         prepareCellSurface(slot);
-        if (!setLiveSwapInputBlocked(true)) {
-            failPromotion(ticket, "transition input window unavailable"); return;
-        }
+        if (!setLiveSwapInputBlocked(true)) { failPromotion(ticket, "transition input window unavailable"); return; }
         statusBar.hideFor(ticket, () -> failPromotion(ticket, "collect status-bar lease expired"));
         LiveSwapGeometry.Task app = new LiveSwapGeometry.Task(task.id, task.token, width, height,
                 liveMainRect(geometry), liveCellRect(geometry, slot.index));
@@ -6480,7 +6476,7 @@ public final class WorkspaceHost {
         }
         Slot cellSlot = slots[slotIndex];
         if (scene != ACTIVE || !screenOn || keyguardLocked || transferBusy
-                || swapPreview != null || cellSlot.parked
+                || cellSlot.parked
                 || promotion != null || cellSlot.launching || cellSlot.promoting) return;
         if (cellSlot.carrier) {
             // 镜像承载的任务本身仍在主区：把画面移回来即完成“升为主区”。
@@ -6508,8 +6504,6 @@ public final class WorkspaceHost {
         statusBar.hideFor(ticket, () -> {
             if (promotion == ticket && !ticket.cancelled) {
                 failPromotion(ticket, "status-bar lease expired");
-            } else if (swapPreviewStatusOwner == ticket) {
-                closeSwapPreview();
             }
         });
         recycleBuffered(cellSlot);
@@ -6698,29 +6692,7 @@ public final class WorkspaceHost {
         final java.util.List<LiveTaskSwapDriver.Peer> peers = new java.util.ArrayList<>();
         final Object[] cellBackgrounds = new Object[CELL_SLOT_COUNT - 1];
         try {
-            hostSurface = liveHostRootSurface();
-            for (int i = 1; i < CELL_SLOT_COUNT; i++) {
-                Slot peer = slots[i];
-                // The moving cell must not reveal its placeholder inside the settle
-                // transaction: the incoming task has no frame yet, so a stale
-                // page-color backing would flash under it. Peer cells keep theirs.
-                cellBackgrounds[i - 1] = peer == ticket.slot ? null : peer.cellBackground;
-                if (peer == ticket.slot || !peer.occupied) continue;
-                if (peer.parked || peer.frozen || peer.carrier || peer.launching || peer.promoting
-                        || peer.windowMode != 6 || peer.taskToken == null || peer.controller == null)
-                    throw new IllegalStateException("peer not live for flip slot=" + i);
-                ticket.livePeers.add(new LivePeerBinding(peer));
-                Object peerInfo = rootInfo(new LiveTask(peer));
-                if (!ordinaryRoot(peerInfo, 6))
-                    throw new IllegalStateException("peer user or identity changed slot=" + i);
-                peers.add(new LiveTaskSwapDriver.Peer(new LiveSwapGeometry.Task(peer.taskId,
-                        peer.taskToken, width, height, liveCellRect(geometry, i), liveCellRect(target, i)),
-                        peer.controller, XposedHelpers.getIntField(peerInfo, "userId")));
-            }
-            ticket.liveBackdrop = LiveBackdrop.create(hostSurface, wallpaperBackdrop, width, height,
-                    // Include the main/side gap while its normal Host backing is hidden.
-                    liveSideStrip(geometry), liveSideStrip(target),
-                    canvas -> drawLiveEmptyHints(canvas, geometry, target, 0), WorkspaceHost::log);
+            hostSurface = prepareLiveFlip(ticket, geometry, target, width, height, peers, cellBackgrounds);
         } catch (Throwable error) { failPromotion(ticket, "live flip Host preparation: " + error); return; }
         ticket.nativeSwap = true;
         ticket.nativeFlip = true;
@@ -7281,37 +7253,7 @@ public final class WorkspaceHost {
     }
 
     private void closeSwapPreview(Object fallbackStatusOwner) {
-        if (promotion != null) stopLiveLift(promotion);
-        if (swapPreview == null) {
-            statusBar.finish(fallbackStatusOwner);
-            return;
-        }
-        Object statusOwner = swapPreviewStatusOwner;
-        SwapPreview closing = swapPreview;
-        swapPreview = null;
-        swapPreviewStatusOwner = null;
-        // removeView can defer teardown: restore only after the matching root detaches.
-        closing.close(() -> {
-            statusBar.finish(statusOwner);
-            statusBar.finish(fallbackStatusOwner);
-        });
-        if (root != null) root.requestLayout();
-    }
-
-    private void stopLiveLift(Promotion ticket) {
-        if (ticket == null) return;
-        if (ticket.liveLift != null) {
-            if (swapPreview != null) swapPreview.seal();
-            int[] current = ticket.slot.rect;
-            Rect restore = current == null ? null
-                    : new Rect(current[0], current[1], current[2], current[3]);
-            ticket.liveLift.closeAndRestore(restore);
-            ticket.liveLift = null;
-        }
-        if (ticket.slot.view != null) {
-            ticket.slot.view.setElevation(0f);
-            ticket.slot.view.requestLayout();
-        }
+        statusBar.finish(fallbackStatusOwner);
     }
 
     private void closeCellMovePreview() {
@@ -7332,18 +7274,11 @@ public final class WorkspaceHost {
 
     private void finishSwapPreview(Object statusOwner, long settleMs) {
         if(statusOwner instanceof Promotion ticket && ticket.dragHover){
-            // Once the hovered task has actually taken focus, release the full-screen input
-            // cover so the original native drag can reach its new main-window drop zone.
             closeSwapPreview(statusOwner);
             return;
         }
         // Two host frames settle the replacement SurfaceView before revealing it.
-        SwapPreview expected = swapPreview;
-        Runnable reveal = () -> {
-            // A no-preview completion also owns a lease. Old callbacks may never
-            // restore a newer exchange, even when both captured a null bridge.
-            if (swapPreview == expected) closeSwapPreview(statusOwner);
-        };
+        Runnable reveal = () -> closeSwapPreview(statusOwner);
         if (root != null) root.postOnAnimation(() -> root.postOnAnimation(() -> {
             if (settleMs <= 0L) reveal.run();
             else main.postDelayed(reveal, settleMs);
@@ -7467,71 +7402,8 @@ public final class WorkspaceHost {
                     || !Boolean.TRUE.equals(XposedHelpers.callMethod(canonical, "isValid"))) {
                 throw new IllegalStateException("native parent/canonical surface is unavailable");
             }
-            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
-            boolean unregistered = false;
-            try {
-                TopTaskTransition bridge=topTransition;
-                boolean liveCenterReveal=ticket.liveMainReveal && bridge!=null;
-                ticket.liveMainReveal=liveCenterReveal;
-                // A cross-fade hands the task back at its resting workspace frame and
-                // only its alpha moves, so the window never jumps orientation. The
-                // workspace scales the slot's own leash, so the canonical surface must
-                // stay at identity or the window would be scaled twice and shrink.
-                // Prepare every surface operation before changing listener ownership.
-                XposedHelpers.callMethod(area, "reparentToDisplayArea", 0, canonical, tx);
-                XposedHelpers.callMethod(tx, "setMatrix", canonical,
-                        1f, 0f, 0f, 1f);
-                XposedHelpers.callMethod(tx, "setPosition", canonical, 0f, 0f);
-                XposedHelpers.callMethod(tx, "setWindowCrop", canonical,
-                        new Rect(0, 0, screenW, screenH));
-                XposedHelpers.callMethod(tx, "setAlpha", canonical,
-                        liveCenterReveal ? 0f : 1f);
-                XposedHelpers.callMethod(tx, ticket.background ? "hide" : "show", canonical);
-                ticket.handoffAttempted = true;
-                if (owner == HandoffOwner.OUR_CONTROLLER) {
-                    ShellCompat.call(transitions, "unregisterTaskView", controller);
-                    unregistered = true;
-                    ShellCompat.call(organizer, "removeListener", controller);
-                    if (XposedHelpers.callMethod(organizer, "getTaskListener", info, false) != fallback) {
-                        throw new IllegalStateException("native fullscreen listener did not take ownership");
-                    }
-                }
-                // Copied handles still name the same native layer. OS2's vanished
-                // callback detaches it, so finish old-owner cleanup before the
-                // final canonical reparent transaction can become visible.
-                if (owner == HandoffOwner.OUR_CONTROLLER) {
-                    XposedHelpers.callMethod(controller, "onTaskVanished", info);
-                    ShellCompat.call(transitions, "registerTaskView", controller);
-                }
-                boolean waitForCommit = ticket.restoreMainOpacityAfterHandoff;
-                if (waitForCommit) {
-                    try {
-                        XposedHelpers.callMethod(tx, "addTransactionCommittedListener", (Executor) main::post,
-                                (android.view.SurfaceControl.TransactionCommittedListener)
-                                        () -> restoreRetainedMainOpacityAfterHandoff(ticket));
-                    } catch (Throwable unavailable) {
-                        waitForCommit = false;
-                    }
-                }
-                XposedHelpers.callMethod(tx, "apply");
-                if(liveCenterReveal) {
-                    ticket.liveRevealSurface=canonical;
-                    bridge.setLiveSurface(canonical);
-                }
-                unregistered = false;
-                ticket.handoffComplete = true;
-                if (ticket.restoreMainOpacityAfterHandoff && !waitForCommit)
-                    main.post(() -> restoreRetainedMainOpacityAfterHandoff(ticket));
-                traceSwapEvent("after-native-handoff");
-                log("promote native handoff task=" + ticket.taskId + " owner="
-                        + fallback.getClass().getName() + " parent=default-task-display-area");
-            } finally {
-                closeSurfaceObject(tx, "close");
-                // A completed native detach may leave an empty view if re-registration failed.
-                // Keep it frozen for exit rather than restoring a task now owned by fullscreen.
-                if (unregistered) log("promote handoff interrupted; keep target frozen until exit");
-            }
+            commitPromotedHandoff(ticket, organizer, transitions, controller, fallback, info,
+                    owner, area, canonical);
         }
     }
 
@@ -7585,8 +7457,7 @@ public final class WorkspaceHost {
                 log("promote observation task=" + ticket.taskId + " attempt=" + attempt + " " + result);
                 if (done) {
                     traceSwapEvent("promotion-mode1-confirmed");
-                    stopLiveLift(ticket);
-                    ownedTasks.remove(ticket.token);
+                                ownedTasks.remove(ticket.token);
                     clearSlot(ticket.slot);
                     if (ticket.previousMain != null) {
                         releaseCompactSnapshot(ticket);
@@ -7733,7 +7604,6 @@ public final class WorkspaceHost {
         promotion = null;
         releaseCompactSnapshot(ticket);
         if (ticket.liveBackdrop != null) { ticket.liveBackdrop.close(); ticket.liveBackdrop = null; }
-        stopLiveLift(ticket);
         // 桥没有把主任务交给系统就失败时，必须把 view 级动画的变换还原，避免主窗留在格子里。
         if (ticket.mainLeash != null && !ticket.handoffAttempted) {
             try {
@@ -9237,4 +9107,102 @@ public final class WorkspaceHost {
             // 至少保留 logcat
         }
     }
-}
+
+    private Object prepareLiveFlip(Promotion ticket, WorkspaceLayout geometry, WorkspaceLayout target,
+            int width, int height, java.util.List<LiveTaskSwapDriver.Peer> peers,
+            Object[] cellBackgrounds) throws Throwable {
+        Object hostSurface = liveHostRootSurface();
+        for (int i = 1; i < CELL_SLOT_COUNT; i++) {
+            Slot peer = slots[i];
+            // The moving cell must not reveal its placeholder inside the settle
+            // transaction: the incoming task has no frame yet, so a stale page-color
+            // backing would flash under it. Peer cells keep theirs.
+            cellBackgrounds[i - 1] = peer == ticket.slot ? null : peer.cellBackground;
+            if (peer == ticket.slot || !peer.occupied) continue;
+            if (peer.parked || peer.frozen || peer.carrier || peer.launching || peer.promoting
+                    || peer.windowMode != 6 || peer.taskToken == null || peer.controller == null)
+                throw new IllegalStateException("peer not live for flip slot=" + i);
+            ticket.livePeers.add(new LivePeerBinding(peer));
+            Object peerInfo = rootInfo(new LiveTask(peer));
+            if (!ordinaryRoot(peerInfo, 6))
+                throw new IllegalStateException("peer user or identity changed slot=" + i);
+            peers.add(new LiveTaskSwapDriver.Peer(new LiveSwapGeometry.Task(peer.taskId,
+                    peer.taskToken, width, height, liveCellRect(geometry, i), liveCellRect(target, i)),
+                    peer.controller, XposedHelpers.getIntField(peerInfo, "userId")));
+        }
+        ticket.liveBackdrop = LiveBackdrop.create(hostSurface, wallpaperBackdrop, width, height,
+                // Include the main/side gap while its normal Host backing is hidden.
+                liveSideStrip(geometry), liveSideStrip(target),
+                canvas -> drawLiveEmptyHints(canvas, geometry, target, 0), WorkspaceHost::log);
+        return hostSurface;
+    }
+
+    private void commitPromotedHandoff(Promotion ticket,Object organizer,Object transitions,Object controller,
+            Object fallback,Object info,HandoffOwner owner,Object area,Object canonical) throws Exception {
+            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
+                    .getDeclaredConstructor().newInstance();
+            boolean unregistered = false;
+            try {
+                TopTaskTransition bridge=topTransition;
+                boolean liveCenterReveal=ticket.liveMainReveal && bridge!=null;
+                ticket.liveMainReveal=liveCenterReveal;
+                // A cross-fade hands the task back at its resting workspace frame and
+                // only its alpha moves, so the window never jumps orientation. The
+                // workspace scales the slot's own leash, so the canonical surface must
+                // stay at identity or the window would be scaled twice and shrink.
+                // Prepare every surface operation before changing listener ownership.
+                XposedHelpers.callMethod(area, "reparentToDisplayArea", 0, canonical, tx);
+                XposedHelpers.callMethod(tx, "setMatrix", canonical,
+                        1f, 0f, 0f, 1f);
+                XposedHelpers.callMethod(tx, "setPosition", canonical, 0f, 0f);
+                XposedHelpers.callMethod(tx, "setWindowCrop", canonical,
+                        new Rect(0, 0, screenW, screenH));
+                XposedHelpers.callMethod(tx, "setAlpha", canonical,
+                        liveCenterReveal ? 0f : 1f);
+                XposedHelpers.callMethod(tx, ticket.background ? "hide" : "show", canonical);
+                ticket.handoffAttempted = true;
+                if (owner == HandoffOwner.OUR_CONTROLLER) {
+                    ShellCompat.call(transitions, "unregisterTaskView", controller);
+                    unregistered = true;
+                    ShellCompat.call(organizer, "removeListener", controller);
+                    if (XposedHelpers.callMethod(organizer, "getTaskListener", info, false) != fallback) {
+                        throw new IllegalStateException("native fullscreen listener did not take ownership");
+                    }
+                }
+                // Copied handles still name the same native layer. OS2's vanished
+                // callback detaches it, so finish old-owner cleanup before the
+                // final canonical reparent transaction can become visible.
+                if (owner == HandoffOwner.OUR_CONTROLLER) {
+                    XposedHelpers.callMethod(controller, "onTaskVanished", info);
+                    ShellCompat.call(transitions, "registerTaskView", controller);
+                }
+                boolean waitForCommit = ticket.restoreMainOpacityAfterHandoff;
+                if (waitForCommit) {
+                    try {
+                        XposedHelpers.callMethod(tx, "addTransactionCommittedListener", (Executor) main::post,
+                                (android.view.SurfaceControl.TransactionCommittedListener)
+                                        () -> restoreRetainedMainOpacityAfterHandoff(ticket));
+                    } catch (Throwable unavailable) {
+                        waitForCommit = false;
+                    }
+                }
+                XposedHelpers.callMethod(tx, "apply");
+                if(liveCenterReveal) {
+                    ticket.liveRevealSurface=canonical;
+                    bridge.setLiveSurface(canonical);
+                }
+                unregistered = false;
+                ticket.handoffComplete = true;
+                if (ticket.restoreMainOpacityAfterHandoff && !waitForCommit)
+                    main.post(() -> restoreRetainedMainOpacityAfterHandoff(ticket));
+                traceSwapEvent("after-native-handoff");
+                log("promote native handoff task=" + ticket.taskId + " owner="
+                        + fallback.getClass().getName() + " parent=default-task-display-area");
+            } finally {
+                closeSurfaceObject(tx, "close");
+                // A completed native detach may leave an empty view if re-registration failed.
+                // Keep it frozen for exit rather than restoring a task now owned by fullscreen.
+                if (unregistered) log("promote handoff interrupted; keep target frozen until exit");
+            }
+        }
+    }

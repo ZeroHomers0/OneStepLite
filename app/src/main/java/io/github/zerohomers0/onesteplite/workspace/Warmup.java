@@ -103,7 +103,7 @@ final class Warmup {
     }
 
     /** Cache only; a cold open never enumerates packages or loads icons on its UI thread. */
-    static List<QuickApp> quickApps(Context context) {
+    static List<QuickApp> quickApps() {
         int user = currentUser();
         if (user < 0) return Collections.emptyList();
         synchronized (LOCK) {

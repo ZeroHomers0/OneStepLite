@@ -144,7 +144,7 @@ final class VideoDock {
             synchronized (lock) {
                 handler.removeCallbacks(this);
                 if (active && owner != null && owner.isBinderAlive())
-                    handler.postDelayed(this, mediaListenerRegistered && playbackCallbacksReady ? 15000L : 2000L);
+                    handler.postDelayed(this, mediaListenerRegistered && playbackCallbacksReady ? 30000L : 2000L);
             }
         }
     };

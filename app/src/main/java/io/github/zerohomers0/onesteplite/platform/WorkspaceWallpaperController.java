@@ -52,7 +52,7 @@ final class WorkspaceWallpaperController {
         final int width = host.screenW, height = host.screenH;
         final boolean canUseWarmup = !host.wallpaperBackdropDirty;
         final int user = CurrentUser.id();
-        Thread loader = new Thread(() -> {
+        BackgroundExecutor.execute(() -> {
             Bitmap ready = null;
             Bitmap wellReady = null;
             try {
@@ -75,8 +75,7 @@ final class WorkspaceWallpaperController {
             final Bitmap bitmap = ready;
             final Bitmap wellBitmap = wellReady;
             host.main.post(() -> finishWallpaperLoad(request, width, height, bitmap, wellBitmap));
-        }, "OneStepLiteWallpaperBlur");
-        loader.start();
+        });
     }
 
     void finishWallpaperLoad(long request, int width, int height, Bitmap bitmap, Bitmap wellBitmap) {

@@ -21,7 +21,7 @@ public class ContentClipboardRegression{
   final Shell shell=new Shell();final Map<String,ContentEntry> entries=new LinkedHashMap<>();
   int contentWidth=320,restoredToken=-1,restoredUser=-1;
   boolean valid(int token,int user){return token==7&&user==3;}
-  void addEntry(ContentEntry entry){entries.put(entry.key,entry);}
+  void addEntry(ContentEntry entry){entries.put(entry.key,entry);}void addEntries(java.util.Collection<ContentEntry> rows){for(ContentEntry row:rows)addEntry(row);}
   void restorePosition(int token,int user){restoredToken=token;restoredUser=user;}
 __METHOD__
  }

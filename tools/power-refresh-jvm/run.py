@@ -12,6 +12,7 @@ def member(file, signature):
         depth += (text[end] == '{') - (text[end] == '}'); end += 1
     return text[start:end]
 rail = member('TopBar.java', '    private final Runnable refreshOpenedApps =') + ';\n'
+rail += '    private android.animation.ValueAnimator tabletToolsAnimator;\n'
 for signature in ['    void requestOpenedAppsRefresh(', '    void setWorkspaceActive(',
                   '    @Override protected void onAttachedToWindow()',
                   '    @Override protected void onDetachedFromWindow()',
@@ -48,7 +49,7 @@ public class PowerRefreshRegression {
 __RAIL__
  }
  static class SystemClock {static long now=40000;static long uptimeMillis(){return now;}}
- static class HotZoneGesture {static boolean isAttached(){return true;}static void raiseAll(Object c){}}
+ static class HotZoneGesture {static boolean isAttached(){return true;}static void raiseAll(){}}
  static class HostEntry {static void setHostZoomed(boolean b){}}
  static class StatusBarSampling {static void geometryChanged(){}}
  static class Host {
@@ -65,7 +66,7 @@ __HOST__
  public static void main(String[] args){
   Rail r=new Rail();for(int i=0;i<20;i++)r.requestOpenedAppsRefresh();
   check(r.pending.size()==1&&r.pending.values().iterator().next()==100L,"task bursts coalesce before querying Binder");
-  r.run();check(r.reads==1&&r.updates==1&&r.pending.values().iterator().next()==30000L,"visible rail uses a low frequency fallback");
+  r.run();check(r.reads==1&&r.updates==1&&r.pending.isEmpty(),"visible rail refresh is event-driven");
   r.onVisibilityChanged(r,8);check(r.pending.isEmpty(),"hidden rail has no timer");
   r.onVisibilityChanged(r,0);check(r.pending.size()==1,"showing rail schedules a current snapshot");
   r.setWorkspaceActive(false);r.requestOpenedAppsRefresh();check(r.pending.isEmpty(),"locked workspace has no rail timer");
@@ -98,5 +99,6 @@ __HOST__
 body = body.replace('static Host sInstance;', 'Host thisHost(){return this;}static Host sInstance;')
 p = out/'PowerRefreshRegression.java'; p.write_text(body, encoding='utf-8')
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(p),str(src/'RoutineLog.java')],check=True)
+anim=out/'android/animation/ValueAnimator.java';anim.parent.mkdir(parents=True,exist_ok=True);anim.write_text('package android.animation;public class ValueAnimator{public void cancel(){}}',encoding='utf-8')
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(p),str(src/'RoutineLog.java'),str(anim)],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.PowerRefreshRegression'],check=True)

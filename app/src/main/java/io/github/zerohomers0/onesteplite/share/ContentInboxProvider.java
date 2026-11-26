@@ -26,8 +26,11 @@ public final class ContentInboxProvider extends ContentProvider {
     private static final long RETENTION=24L*60*60*1000;
 
     @Override public boolean onCreate(){
-        if(getContext()!=null)try{DragCacheStore.cleanup(getContext());}
-        catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"drag cache startup cleanup deferred",unavailable);}
+        if(getContext()!=null)try{
+            DragCacheStore.cleanup(getContext());
+            MediaStoreImageBridge.cleanupAsync(getContext());
+        }
+        catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"temporary content startup cleanup deferred",unavailable);}
         return true;
     }
 

@@ -9,15 +9,39 @@ root = Path(__file__).resolve().parents[2]
 source = (package_dir(root)/'WorkspaceDisplayController.java').read_text(encoding='utf-8-sig')
 out = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'build/tests/standalone'
 out.mkdir(parents=True, exist_ok=True)
-start = source.index('    void refreshDisplayGeometry() {')
-brace = source.index('{', start)
-depth, end = 1, brace + 1
-while depth:
-    if source[end] == '{':
-        depth += 1
-    elif source[end] == '}':
-        depth -= 1
-    end += 1
+def member(signature):
+    start = source.index(signature)
+    brace = source.index('{', start)
+    depth, end = 1, brace + 1
+    while depth:
+        if source[end] == '{':
+            depth += 1
+        elif source[end] == '}':
+            depth -= 1
+        end += 1
+    return source[start:end]
+methods='\n'.join(member(s) for s in (
+    '    void refreshDisplayGeometry() {',
+    '    private boolean handleLiveGeometryChange() {',
+    '    private boolean deferGeometryChange() {',
+    '    private void applyGeometryChange() {',
+    '    private boolean prepareGeometry(int[] old) {',
+    '    private void applyGeometryLayout(int[] old) {'))
+methods=(methods.replace('host.','').replace('WorkspaceHost.','')
+    .replace('log.accept(','log(').replace('coordinatorFailPromotion(','failPromotion(')
+    .replace('coordinatorSuspendSession(','suspendSession(').replace('coordinatorResumeSession()','resumeSession()')
+    .replace('coordinatorMakeAdaptiveLayout(','makeAdaptiveLayout(').replace('coordinatorSlotTop()','SLOT_TOP')
+    .replace('coordinatorSlotMain()','SLOT_MAIN').replace('coordinatorClearSlot(','clearSlot(')
+    .replace('coordinatorEnsureSideViewport()','ensureSideViewport()').replace('coordinatorSlotBounds(','slotBounds(')
+    .replace('coordinatorApplyRect(','applyRect(').replace('coordinatorUpdateTouchRegion(','updateTouchRegion(')
+    .replace('coordinatorUpdateHint(','updateHint(').replace('coordinatorSlotCount()','SLOT_COUNT')
+    .replace('coordinatorSideSegmentHeight(','sideSegmentHeight(').replace('coordinatorSideSegmentTop(','sideSegmentTop(')
+    .replace('coordinatorConfigureTabletTools()','configureTabletTools()')
+    .replace('coordinatorUpdateTopTaskGeometry()','updateTopTaskGeometry()')
+    .replace('coordinatorApplyWallpaperBackdrops()','applyWallpaperBackdrops()')
+    .replace('coordinatorReassertCarrier()','reassertCarrier()').replace('coordinatorWriteZoom(','writeZoom(')
+    .replace('coordinatorExecuteOnShell(','executeOnShell(').replace('coordinatorApplyFullscreenBounds(','applyFullscreenBounds(')
+    .replace('coordinatorReapplyScale(','reapplyScale('))
 
 body = r'''
 public class DisplayRefreshRegression {
@@ -66,7 +90,7 @@ public class DisplayRefreshRegression {
  void applyWallpaperBackdrops(){}void reassertCarrier(){}void writeZoom(boolean value){writes++;}
  boolean executeOnShell(Runnable r){return true;}void applyFullscreenBounds(Slot s){}void reapplyScale(Slot s){}
  int[] slotBounds(Slot slot){return layout.cellBounds(slot.index-1);}
- __METHOD__
+ '''+methods+'''
  static DisplayRefreshRegression live(){return new DisplayRefreshRegression();}
  public static void main(String[] args){
   DisplayRefreshRegression same=live();same.refreshDisplayGeometry();
@@ -102,7 +126,7 @@ public class DisplayRefreshRegression {
   System.out.println("actual Host display refresh checks="+checks+" passed");
  }
 }
-'''.replace('__METHOD__', source[start:end].replace('host.','').replace('WorkspaceHost.','').replace('log.accept(','log(').replace('coordinatorFailPromotion(','failPromotion(').replace('coordinatorSuspendSession(','suspendSession(').replace('coordinatorResumeSession()','resumeSession()').replace('coordinatorMakeAdaptiveLayout(','makeAdaptiveLayout(').replace('coordinatorSlotTop()','SLOT_TOP').replace('coordinatorSlotMain()','SLOT_MAIN').replace('coordinatorClearSlot(','clearSlot(').replace('coordinatorEnsureSideViewport()','ensureSideViewport()').replace('coordinatorSlotBounds(','slotBounds(').replace('coordinatorApplyRect(','applyRect(').replace('coordinatorUpdateTouchRegion(','updateTouchRegion(').replace('coordinatorUpdateHint(','updateHint(').replace('coordinatorSlotCount()','SLOT_COUNT').replace('coordinatorSideSegmentHeight(','sideSegmentHeight(').replace('coordinatorSideSegmentTop(','sideSegmentTop(').replace('coordinatorConfigureTabletTools()','configureTabletTools()').replace('coordinatorUpdateTopTaskGeometry()','updateTopTaskGeometry()').replace('coordinatorApplyWallpaperBackdrops()','applyWallpaperBackdrops()').replace('coordinatorReassertCarrier()','reassertCarrier()').replace('coordinatorWriteZoom(','writeZoom(').replace('coordinatorExecuteOnShell(','executeOnShell(').replace('coordinatorApplyFullscreenBounds(','applyFullscreenBounds(').replace('coordinatorReapplyScale(','reapplyScale('))
+'''.replace('__METHOD__', methods)
 java = out / 'DisplayRefreshRegression.java'
 java.write_text(body, encoding='utf8')
 jdk = Path(os.environ["ONESTEPLITE_JAVA_BIN"])

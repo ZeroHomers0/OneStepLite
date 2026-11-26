@@ -75,137 +75,108 @@ final class ShellCompat {
     }
 
     static Object call(Object receiver, String name, Object... args) {
-        Method nativeMethod = method(receiver, name, args);
-        if (nativeMethod != null) {
-            Object result = invoke(nativeMethod, receiver, args);
-            if (!name.equals("prepareOpenAnimation") || nativeMethod.getReturnType() != void.class) return result;
-            Object controller = args[0], task = args[4];
-            if (!XposedHelpers.getObjectField(task, "token").equals(XposedHelpers.getObjectField(controller, "mTaskToken"))
-                    || !Boolean.TRUE.equals(XposedHelpers.getObjectField(controller, "mSurfaceCreated"))
-                    || XposedHelpers.getObjectField(controller, "mTaskInfo") != task)
-                throw new IllegalStateException("Native void prepareOpenAnimation did not bind the live task");
-            return true;
-        }
-        switch (name) {
-            case "isIdle": {
-                // OS2's processReadyQueue uses these same gates before draining
-                // mRunWhenIdleQueue, after the native finish transaction is applied.
-                if (!((List<?>) XposedHelpers.getObjectField(receiver, "mPendingTransitions")).isEmpty()
-                        || !((List<?>) XposedHelpers.getObjectField(receiver, "mReadyDuringSync")).isEmpty()) return false;
-                for (Object track : (List<?>) XposedHelpers.getObjectField(receiver, "mTracks"))
-                    if (XposedHelpers.getObjectField(track, "mActiveTransition") != null
-                            || !((List<?>) XposedHelpers.getObjectField(track, "mReadyTransitions")).isEmpty()) return false;
-                return true;
-            }
-            case "runOnIdle": {
-                Runnable action = (Runnable) args[0];
-                if (Boolean.TRUE.equals(call(receiver, "isIdle"))) action.run();
-                else {
-                    @SuppressWarnings("unchecked")
-                    List<Runnable> queue = (List<Runnable>) XposedHelpers.getObjectField(receiver, "mRunWhenIdleQueue");
-                    queue.add(action);
-                }
-                return null;
-            }
-            case "getDisplayAreaInfo":
-                return XposedHelpers.callMethod(XposedHelpers.getObjectField(receiver, "mDisplayAreasInfo"), "get", args[0]);
-            case "unregisterTaskView": {
-                Object views = XposedHelpers.getObjectField(receiver, "mTaskViews");
-                Object state = XposedHelpers.callMethod(views, "get", args[0]);
-                if (state == null) throw new IllegalStateException("Native task view is not registered");
-                synchronized (suspendedTaskViews) {
-                    if (suspendedTaskViews.containsKey(args[0]))
-                        throw new IllegalStateException("Native task view is already suspended");
-                    suspendedTaskViews.put(args[0], new Object[]{receiver, state});
-                    XposedHelpers.callMethod(views, "remove", args[0]);
-                }
-                return null;
-            }
-            case "registerTaskView": {
-                Object views = XposedHelpers.getObjectField(receiver, "mTaskViews");
-                synchronized (suspendedTaskViews) {
-                    Object[] saved = suspendedTaskViews.get(args[0]);
-                    Object existing = XposedHelpers.callMethod(views, "get", args[0]);
-                    if (saved == null) {
-                        if (existing == null) throw new IllegalStateException("Native task view state is unavailable");
-                    } else {
-                        if (saved[0] != receiver || (existing != null && existing != saved[1]))
-                            throw new IllegalStateException("Native task view registration changed");
-                        XposedHelpers.callMethod(views, "put", args[0], saved[1]);
-                        suspendedTaskViews.remove(args[0]);
-                    }
-                }
-                return null;
-            }
-            case "prepareOpenAnimation":
-                return prepareLegacyTaskView(receiver, args);
-            case "getPendingInfo":
-                // OS2 exposes the pending task as a field, without the newer getter.
-                return XposedHelpers.getObjectField(receiver, "mPendingInfo");
-            case "startRootTask": {
-                // AOSP14/OS2 predates prepareOpenAnimation. It registers a
-                // pending task without binding it. A CHANGE only reparents an
-                // already bound task, so prepare its live binding first.
-                if (!hasMethod(receiver.getClass(), "prepareOpenAnimation", 7)) {
-                    Object tx;
-                    try { tx = construct(Class.forName("android.view.SurfaceControl$Transaction", false,
-                            receiver.getClass().getClassLoader())); }
-                    catch (ClassNotFoundException error) { throw new IllegalStateException(error); }
-                    try {
-                        if (!Boolean.TRUE.equals(call(receiver, "prepareOpenAnimation", args[0], true,
-                                tx, null, args[1], args[2], args[3])))
-                            throw new IllegalStateException("Native destination surface unavailable");
-                        XposedHelpers.callMethod(tx, "apply");
-                        enqueueTransition(receiver, args[3], args[0], 6);
-                    } finally { XposedHelpers.callMethod(tx, "close"); }
-                    return null;
-                }
-                // The OS4 helper is absent in OS3. Keep its native prepare/open
-                // and CHANGE transition sequence with a locally owned transaction.
-                Object tx;
-                try { tx = construct(Class.forName("android.view.SurfaceControl$Transaction", false,
-                        receiver.getClass().getClassLoader())); }
-                catch (ClassNotFoundException error) { throw new IllegalStateException(error); }
-                try {
-                    call(receiver, "prepareOpenAnimation", args[0], true, tx, null, args[1], args[2], args[3]);
-                    call(receiver, "updateVisibilityState", args[0], true);
-                    XposedHelpers.callMethod(tx, "apply");
-                    XposedHelpers.callMethod(XposedHelpers.getObjectField(receiver, "mTransitions"),
-                            "startTransition", 6, args[3], null);
-                    return null;
-                } finally { XposedHelpers.callMethod(tx, "close"); }
-            }
-            case "updateVisibilityState": {
-                Object states = XposedHelpers.getObjectField(receiver, "mTaskViews");
-                Object state = XposedHelpers.callMethod(states, "get", args[0]);
-                if (state != null) XposedHelpers.setBooleanField(state, "mVisible", (Boolean) args[1]);
-                return null;
-            }
-            case "reapplyMagnificationSpec": {
-                // OS3's no-argument replay writes exactly this spec to its pending
-                // transaction. Replay into the caller's finish transaction instead.
-                Object spec = XposedHelpers.getObjectField(receiver, "mMagnificationSpec");
-                if (spec != null) XposedHelpers.callMethod(receiver, "applyMagnificationSpec", args[0], spec);
-                return null;
-            }
-            case "getDisplayAreaLeash":
-                return XposedHelpers.callMethod(XposedHelpers.getObjectField(receiver, "mLeashes"), "get", args[0]);
-            case "addListenerForTaskId":
-                addListener(receiver, args[0], (Integer) args[1]); return null;
-            case "removeListener":
-                removeListener(receiver, args[0]); return null;
-            case "updateTaskListenerIfNeeded":
-                return transfer(args[0], args[1], args[2], args[3]);
-            case "lambda$moveTaskViewToFullscreen$5":
-                enqueueTransition(receiver, args[0], args[1], 6);
-                try {
-                    Object task = XposedHelpers.getObjectField(args[1], "mTaskInfo");
-                    if (task != null) XposedHelpers.callMethod(args[1], "notifyTaskRemovalStarted", task);
-                } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-                return null;
-            default: throw new IllegalStateException("Unsupported native Shell operation: " + name);
+        Method nativeMethod=method(receiver,name,args);
+        if(nativeMethod!=null)return callNative(receiver,name,args,nativeMethod);
+        switch(name){
+            case "isIdle":case "runOnIdle":return callIdle(receiver,name,args);
+            case "getDisplayAreaInfo":return XposedHelpers.callMethod(
+                    XposedHelpers.getObjectField(receiver,"mDisplayAreasInfo"),"get",args[0]);
+            case "unregisterTaskView":case "registerTaskView":return callTaskViewRegistry(receiver,name,args);
+            case "prepareOpenAnimation":return prepareLegacyTaskView(receiver,args);
+            case "getPendingInfo":return XposedHelpers.getObjectField(receiver,"mPendingInfo");
+            case "startRootTask":return startRootTask(receiver,args);
+            case "updateVisibilityState":return updateVisibility(receiver,args);
+            case "reapplyMagnificationSpec":return reapplyMagnification(receiver,args);
+            case "getDisplayAreaLeash":return XposedHelpers.callMethod(
+                    XposedHelpers.getObjectField(receiver,"mLeashes"),"get",args[0]);
+            case "addListenerForTaskId":addListener(receiver,args[0],(Integer)args[1]);return null;
+            case "removeListener":removeListener(receiver,args[0]);return null;
+            case "updateTaskListenerIfNeeded":return transfer(args[0],args[1],args[2],args[3]);
+            case "lambda$moveTaskViewToFullscreen$5":return moveTaskViewToFullscreen(receiver,args);
+            default:throw new IllegalStateException("Unsupported native Shell operation: "+name);
         }
     }
+    private static Object callNative(Object receiver,String name,Object[] args,Method nativeMethod){
+        Object result=invoke(nativeMethod,receiver,args);
+        if(!name.equals("prepareOpenAnimation")||nativeMethod.getReturnType()!=void.class)return result;
+        Object controller=args[0],task=args[4];
+        if(!XposedHelpers.getObjectField(task,"token").equals(XposedHelpers.getObjectField(controller,"mTaskToken"))
+                ||!Boolean.TRUE.equals(XposedHelpers.getObjectField(controller,"mSurfaceCreated"))
+                ||XposedHelpers.getObjectField(controller,"mTaskInfo")!=task)
+            throw new IllegalStateException("Native void prepareOpenAnimation did not bind the live task");
+        return true;
+    }
+    private static Object callIdle(Object receiver,String name,Object[] args){
+        if(name.equals("isIdle")){
+            if(!((List<?>)XposedHelpers.getObjectField(receiver,"mPendingTransitions")).isEmpty()
+                    ||!((List<?>)XposedHelpers.getObjectField(receiver,"mReadyDuringSync")).isEmpty())return false;
+            for(Object track:(List<?>)XposedHelpers.getObjectField(receiver,"mTracks"))
+                if(XposedHelpers.getObjectField(track,"mActiveTransition")!=null
+                        ||!((List<?>)XposedHelpers.getObjectField(track,"mReadyTransitions")).isEmpty())return false;
+            return true;
+        }
+        Runnable action=(Runnable)args[0];
+        if(Boolean.TRUE.equals(call(receiver,"isIdle")))action.run();
+        else{
+            @SuppressWarnings("unchecked")List<Runnable> queue=(List<Runnable>)XposedHelpers.getObjectField(receiver,"mRunWhenIdleQueue");
+            queue.add(action);
+        }
+        return null;
+    }
+    private static Object callTaskViewRegistry(Object receiver,String name,Object[] args){
+        Object views=XposedHelpers.getObjectField(receiver,"mTaskViews");
+        synchronized(suspendedTaskViews){
+            if(name.equals("unregisterTaskView")){
+                Object state=XposedHelpers.callMethod(views,"get",args[0]);
+                if(state==null)throw new IllegalStateException("Native task view is not registered");
+                if(suspendedTaskViews.containsKey(args[0]))throw new IllegalStateException("Native task view is already suspended");
+                suspendedTaskViews.put(args[0],new Object[]{receiver,state});XposedHelpers.callMethod(views,"remove",args[0]);
+            }else{
+                Object[] saved=suspendedTaskViews.get(args[0]);Object existing=XposedHelpers.callMethod(views,"get",args[0]);
+                if(saved==null){if(existing==null)throw new IllegalStateException("Native task view state is unavailable");}
+                else{
+                    if(saved[0]!=receiver||(existing!=null&&existing!=saved[1]))
+                        throw new IllegalStateException("Native task view registration changed");
+                    XposedHelpers.callMethod(views,"put",args[0],saved[1]);suspendedTaskViews.remove(args[0]);
+                }
+            }
+        }
+        return null;
+    }
+    private static Object startRootTask(Object receiver,Object[] args){
+        Object tx;
+        try{tx=construct(Class.forName("android.view.SurfaceControl$Transaction",false,receiver.getClass().getClassLoader()));}
+        catch(ClassNotFoundException error){throw new IllegalStateException(error);}
+        try{
+            if(!hasMethod(receiver.getClass(),"prepareOpenAnimation",7)){
+                if(!Boolean.TRUE.equals(call(receiver,"prepareOpenAnimation",args[0],true,tx,null,args[1],args[2],args[3])))
+                    throw new IllegalStateException("Native destination surface unavailable");
+                XposedHelpers.callMethod(tx,"apply");enqueueTransition(receiver,args[3],args[0],6);
+            }else{
+                call(receiver,"prepareOpenAnimation",args[0],true,tx,null,args[1],args[2],args[3]);
+                call(receiver,"updateVisibilityState",args[0],true);XposedHelpers.callMethod(tx,"apply");
+                XposedHelpers.callMethod(XposedHelpers.getObjectField(receiver,"mTransitions"),"startTransition",6,args[3],null);
+            }
+        }finally{XposedHelpers.callMethod(tx,"close");}
+        return null;
+    }
+    private static Object updateVisibility(Object receiver,Object[] args){
+        Object states=XposedHelpers.getObjectField(receiver,"mTaskViews");
+        Object state=XposedHelpers.callMethod(states,"get",args[0]);
+        if(state!=null)XposedHelpers.setBooleanField(state,"mVisible",(Boolean)args[1]);return null;
+    }
+    private static Object reapplyMagnification(Object receiver,Object[] args){
+        Object spec=XposedHelpers.getObjectField(receiver,"mMagnificationSpec");
+        if(spec!=null)XposedHelpers.callMethod(receiver,"applyMagnificationSpec",args[0],spec);return null;
+    }
+    private static Object moveTaskViewToFullscreen(Object receiver,Object[] args){
+        enqueueTransition(receiver,args[0],args[1],6);
+        try{Object task=XposedHelpers.getObjectField(args[1],"mTaskInfo");
+            if(task!=null)XposedHelpers.callMethod(args[1],"notifyTaskRemovalStarted",task);
+        }catch(Throwable ignored){/* best effort: the platform may already have released this */}
+        return null;
+    }
+
 
     static Object taskLeash(Object organizer, int taskId) {
         Method getter = method(organizer, "getTaskLeash", new Object[]{taskId});

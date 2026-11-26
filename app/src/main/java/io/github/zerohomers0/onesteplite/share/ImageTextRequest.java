@@ -55,7 +55,7 @@ final class ImageTextRequest implements AutoCloseable {
                     "com.xiaomi.aicr","com.xiaomi.aicr.access.AiCrCoreService")).putExtra("bind_type",address);
             bound=context.bindService(intent,connection,Context.BIND_AUTO_CREATE);
             if(!bound)throw new IllegalStateException("无法连接系统识字服务");
-            main.postDelayed(timeout,25_000L);new Thread(this::recognize,"ImageTextRecognition").start();
+            main.postDelayed(timeout,25_000L);BackgroundExecutor.execute(this::recognize);
         }catch(RuntimeException unavailable){BUSY.set(false);finish(null,"系统识字服务不可用");}
     }
     private void recognize() {

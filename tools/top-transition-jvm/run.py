@@ -88,7 +88,7 @@ public class ValueAnimator extends Animator {
   return surface;}}''',
 'io/github/zerohomers0/onesteplite/HostWindowPolicy.java':'''package io.github.zerohomers0.onesteplite;class HostWindowPolicy {static void configure(Object p){}}''',
 'io/github/zerohomers0/onesteplite/HyperOsStyle.java':'''package io.github.zerohomers0.onesteplite;class HyperOsStyle {static int page(Object c){return 0xff101010;}}''',
-'io/github/zerohomers0/onesteplite/SwapPreview.java':'''package io.github.zerohomers0.onesteplite;import android.graphics.*;class SwapPreview {
+'io/github/zerohomers0/onesteplite/ScreenCaptureCompat.java':'''package io.github.zerohomers0.onesteplite;import android.graphics.*;class ScreenCaptureCompat {
  static int captures;static Object exclusion;static boolean fail;
  static Bitmap captureRegion(ClassLoader c,int w,int h,Rect r)throws Throwable{return captureRegion(c,w,h,r,null);}
  static Bitmap captureRegion(ClassLoader c,int w,int h,Rect r,Object exclude)throws Throwable {
@@ -100,7 +100,7 @@ public class TopTransitionRegression {
  static int checks,handoffs,finishes,restores;static AtomicBoolean valid;static FrameLayout host;static android.content.Context ctx;
  static Rect upper=new Rect(0,0,1080,622),main=new Rect(273,622,1080,2460);
  static void check(boolean v,String s){checks++;if(!v)throw new AssertionError(s);}
- static void reset(){ValueAnimator.all.clear();View.frames.clear();View.timers.clear();SwapPreview.fail=false;SwapPreview.captures=0;
+ static void reset(){ValueAnimator.all.clear();View.frames.clear();View.timers.clear();ScreenCaptureCompat.fail=false;ScreenCaptureCompat.captures=0;
   handoffs=finishes=restores=0;Canvas.colorDraws=Canvas.bitmapDraws=0;android.view.SurfaceControl.Transaction.last=null;
   valid=new AtomicBoolean(true);ctx=new android.content.Context();host=new FrameLayout(ctx);}
  static TopTaskTransition make(Runnable transfer)throws Throwable {
@@ -120,7 +120,7 @@ public class TopTransitionRegression {
   check(finishes==1&&handoffs==0&&ctx.windows.removes==1,"Host detach retires live bridge");
   reset();run=new TopTaskTransition(host,1080,2460,valid::get,
    ()->handoffs++,v->finishes++,s->{});run.start();ctx.windows.view.draw(new Canvas());View.drain();
-  check(handoffs==1&&SwapPreview.captures==0&&Canvas.colorDraws==0&&Canvas.bitmapDraws==0,
+  check(handoffs==1&&ScreenCaptureCompat.captures==0&&Canvas.colorDraws==0&&Canvas.bitmapDraws==0,
    "live center handoff draws neither wallpaper nor a bitmap snapshot");
   Object liveSurface=new Object();run.setLiveSurface(liveSurface);run.reveal();run.reveal();
   check(ValueAnimator.all.size()==1&&android.view.SurfaceControl.Transaction.last.alpha==0f,"native return starts fully transparent");

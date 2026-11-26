@@ -19,6 +19,9 @@ public final class HotZoneGesture {
     private static int selectedEntryGesture = WorkspaceOptions.STATUS_BAR_INWARD;
     private final Context context;
     private final Runnable trigger;
+    private final WindowManager windows;
+    private final Point displaySize=new Point();
+    private int displayRotation;
     private final CornerSwipe swipe = new CornerSwipe();
     private final BottomCenterSwipe bottomSwipe = new BottomCenterSwipe();
     private Object monitor, receiver;
@@ -36,6 +39,7 @@ public final class HotZoneGesture {
     private HotZoneGesture(Context context, Runnable trigger) {
         this.context = context;
         this.trigger = trigger;
+        this.windows = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
     }
     public static void install(Context context, Runnable trigger) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
@@ -83,135 +87,106 @@ public final class HotZoneGesture {
     private void onMotion(MotionEvent e) {
         if (!enabled || !Integer.valueOf(0).equals(XposedHelpers.callMethod(e, "getDisplayId"))
                 || !e.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)) return;
-        int action = e.getActionMasked();
-        if (action == MotionEvent.ACTION_DOWN) bottomDownTime = e.getEventTime();
-        if (WorkspaceHost.hostSceneActive()) {
-            generation++;
-            swipe.reset();
-            bottomSwipe.reset();
-            bottomPilfered = false;
-            restoreBatching();
-            return;
+        int action=e.getActionMasked();
+        if(action==MotionEvent.ACTION_DOWN)bottomDownTime=e.getEventTime();
+        if(WorkspaceHost.hostSceneActive()){
+            generation++;swipe.reset();bottomSwipe.reset();bottomPilfered=false;restoreBatching();return;
         }
-        // DOWN already admitted this stream. Retain horizontal intent before binder-backed
-        // geometry/settings/unlock queries let the native navigation monitor win the race.
-        if (e.getActionMasked() == MotionEvent.ACTION_MOVE && !bottomPilfered
-                && admittedEntryGesture == WorkspaceOptions.BOTTOM_CENTER_OUTWARD
-                && selectedEntryGesture == admittedEntryGesture && !WorkspaceHost.hostSceneActive()
-                && bottomSwipe.canRetain(e.getPointerId(0), e.getPointerCount(), e.getRawX(), e.getRawY(),
-                        e.getEventTime(), bottomIntentPx, bottomVerticalPx)) {
-            if (!pilferPointers()) { reset(); return; }
-            bottomPilfered = true;
-            log("bottom entry retained before state queries; " + bottomSwipe.progress(e.getRawX(), e.getRawY(), e.getEventTime()));
+        if(action==MotionEvent.ACTION_UP)refreshDisplay();
+        retainEarlyBottomIntent(e);
+        if(action==MotionEvent.ACTION_DOWN)beginGesture(e);
+        else if(action==MotionEvent.ACTION_MOVE || action==MotionEvent.ACTION_UP)advanceGesture(e,action);
+        else if(action==MotionEvent.ACTION_CANCEL || action==MotionEvent.ACTION_POINTER_DOWN
+                || action==MotionEvent.ACTION_POINTER_UP)cancelGesture(action,e);
+    }
+    private void refreshDisplay(){
+        windows.getDefaultDisplay().getRealSize(displaySize);
+        displayRotation=windows.getDefaultDisplay().getRotation();
+    }
+    private void retainEarlyBottomIntent(MotionEvent e){
+        if(e.getActionMasked()!=MotionEvent.ACTION_MOVE || bottomPilfered
+                || admittedEntryGesture!=WorkspaceOptions.BOTTOM_CENTER_OUTWARD
+                || selectedEntryGesture!=admittedEntryGesture || WorkspaceHost.hostSceneActive()
+                || !bottomSwipe.canRetain(e.getPointerId(0),e.getPointerCount(),e.getRawX(),e.getRawY(),
+                        e.getEventTime(),bottomIntentPx,bottomVerticalPx))return;
+        if(!pilferPointers()){reset();return;}
+        bottomPilfered=true;
+        log("bottom entry retained before state queries; "+bottomSwipe.progress(e.getRawX(),e.getRawY(),e.getEventTime()));
+    }
+    private void beginGesture(MotionEvent e){
+        refreshDisplay();reset();
+        if(!EntryGuard.canOpen(context))return;
+        admittedEntryGesture=effectiveEntryGesture();
+        if(!allowsEntry(displaySize,admittedEntryGesture)){
+            log("corner gesture ignored in landscape or native fullscreen");return;
         }
-        WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
-        Point size = new Point();
-        wm.getDefaultDisplay().getRealSize(size);
-        int rotation = wm.getDefaultDisplay().getRotation();
-        if (action == MotionEvent.ACTION_DOWN) {
-            reset();
-            if (!EntryGuard.canOpen(context)) return;
-            admittedEntryGesture = effectiveEntryGesture();
-            if (!allowsEntry(size, admittedEntryGesture)) {
-                log("corner gesture ignored in landscape or native fullscreen");
-                return;
+        entryContext=StatusBar.cornerGestureContext();
+        float density=context.getResources().getDisplayMetrics().density;
+        if(admittedEntryGesture==WorkspaceOptions.BOTTOM_CENTER_OUTWARD){
+            bottomIntentPx=Math.round(2f*density);bottomVerticalPx=Math.round(24f*density);
+            bottomSwipe.down(e.getPointerId(0),e.getPointerCount(),e.getRawX(),e.getRawY(),e.getEventTime(),
+                    displaySize.x,displaySize.y,displayRotation,Math.round(8f*density));
+            if(bottomSwipe.active()){
+                try{setInputBatching(false);bottomUnbatched=true;}
+                catch(Throwable error){log("bottom immediate input unavailable: "+error);reset();return;}
+                log("bottom entry candidate; immediate input; edge="+Math.round(8f*density));
             }
+        }else swipe.down(e.getPointerId(0),e.getPointerCount(),e.getRawX(),e.getRawY(),e.getEventTime(),
+                displaySize.x,displaySize.y,displayRotation,Math.round(72f*density),Math.round(58f*density),
+                Math.round(24f*density));
+    }
+    private void advanceGesture(MotionEvent e,int action){
+        if(!keepsEntry(displaySize)){reset();return;}
+        float density=context.getResources().getDisplayMetrics().density;
+        boolean bottomCandidate=bottomSwipe.active();
+        boolean acceptedSwipe=admittedEntryGesture==WorkspaceOptions.BOTTOM_CENTER_OUTWARD
+                ?bottomSwipe.move(e.getPointerId(0),e.getPointerCount(),e.getRawX(),e.getRawY(),e.getEventTime(),
+                        displaySize.x,displaySize.y,displayRotation,Math.round(58f*density),Math.round(24f*density))
+                :swipe.move(e.getPointerId(0),e.getPointerCount(),e.getRawX(),e.getRawY(),e.getEventTime(),
+                        displaySize.x,displaySize.y,displayRotation);
+        if(admittedEntryGesture==WorkspaceOptions.BOTTOM_CENTER_OUTWARD && !bottomPilfered
+                &&(acceptedSwipe || action==MotionEvent.ACTION_MOVE
+                && bottomSwipe.horizontalIntent(e.getRawX(),e.getRawY(),Math.round(2f*density)))){
+            if(!EntryGuard.canOpen(context) || !pilferPointers()){reset();return;}
+            bottomPilfered=true;
+            log("bottom entry retained; "+bottomSwipe.progress(e.getRawX(),e.getRawY(),e.getEventTime()));
         }
-        if (action == MotionEvent.ACTION_DOWN) {
-            entryContext = StatusBar.cornerGestureContext();
-            float density = context.getResources().getDisplayMetrics().density;
-            if (admittedEntryGesture == WorkspaceOptions.BOTTOM_CENTER_OUTWARD) {
-                bottomIntentPx = Math.round(2f * density);
-                bottomVerticalPx = Math.round(24f * density);
-                bottomSwipe.down(e.getPointerId(0), e.getPointerCount(), e.getRawX(), e.getRawY(),
-                        e.getEventTime(), size.x, size.y, rotation,
-                        Math.round(8f * density));
-                if (bottomSwipe.active()) {
-                    try {
-                        setInputBatching(false);
-                        bottomUnbatched = true;
-                    } catch (Throwable error) {
-                        log("bottom immediate input unavailable: " + error);
-                        reset(); return;
-                    }
-                    log("bottom entry candidate; immediate input; edge=" + Math.round(8f * density));
-                }
-            } else {
-                swipe.down(e.getPointerId(0), e.getPointerCount(), e.getRawX(), e.getRawY(),
-                        e.getEventTime(), size.x, size.y, rotation,
-                        Math.round(72f * density), Math.round(58f * density),
-                        Math.round(24f * density));
-            }
-        } else if (action == MotionEvent.ACTION_MOVE || action == MotionEvent.ACTION_UP) {
-            if (!keepsEntry(size)) { reset(); return; }
-            float density = context.getResources().getDisplayMetrics().density;
-            boolean bottomCandidate = bottomSwipe.active();
-            boolean acceptedSwipe = admittedEntryGesture == WorkspaceOptions.BOTTOM_CENTER_OUTWARD
-                    ? bottomSwipe.move(e.getPointerId(0), e.getPointerCount(), e.getRawX(), e.getRawY(),
-                            e.getEventTime(), size.x, size.y, rotation,
-                            Math.round(58f * density), Math.round(24f * density))
-                    : swipe.move(e.getPointerId(0), e.getPointerCount(), e.getRawX(), e.getRawY(),
-                            e.getEventTime(), size.x, size.y, rotation);
-            // The native bottom monitor can cancel us after about 5dp. Claim clear
-            // horizontal intent first; retain the full 58dp threshold for opening.
-            if (admittedEntryGesture == WorkspaceOptions.BOTTOM_CENTER_OUTWARD && !bottomPilfered
-                    && (acceptedSwipe || (action == MotionEvent.ACTION_MOVE
-                    && bottomSwipe.horizontalIntent(e.getRawX(), e.getRawY(), Math.round(2f * density))))) {
-                if (!EntryGuard.canOpen(context) || !pilferPointers()) { reset(); return; }
-                bottomPilfered = true;
-                log("bottom entry retained; " + bottomSwipe.progress(e.getRawX(), e.getRawY(), e.getEventTime()));
-            }
-            if (bottomCandidate && !acceptedSwipe && !bottomSwipe.active()) {
-                log("bottom entry rejected (pointer/geometry/time/vertical); claimed=" + bottomPilfered
-                        + " " + bottomSwipe.progress(e.getRawX(), e.getRawY(), e.getEventTime()));
-            }
-            if (acceptedSwipe) {
-                if (!EntryGuard.canOpen(context)) { reset(); return; }
-                if (!bottomPilfered && !pilferPointers()) { reset(); return; }
-                long accepted = generation;
-                long acceptedDown = bottomDownTime;
-                MAIN.postDelayed(() -> {
-                    if (enabled && generation == accepted) {
-                        if (admittedEntryGesture == WorkspaceOptions.BOTTOM_CENTER_OUTWARD
-                                && lastBottomOpened == acceptedDown) return;
-                        if (WorkspaceHost.hostSceneActive() || !EntryGuard.canOpen(context)) { reset(); return; }
-                        Point current = new Point();
-                        wm.getDefaultDisplay().getRealSize(current);
-                        if (current.x != size.x || current.y != size.y
-                                || wm.getDefaultDisplay().getRotation() != rotation
-                                || !keepsEntry(current)) { reset(); return; }
-                        generation++;
-                        // 主窗跟随水平滑动方向：向右在右，向左在左。
-                        boolean mainRight = admittedEntryGesture == WorkspaceOptions.BOTTOM_CENTER_OUTWARD
-                                ? bottomSwipe.sign() > 0 : swipe.sign() > 0;
-                        WorkspaceHost.setPendingMainSide(mainRight);
-                        if (admittedEntryGesture == WorkspaceOptions.BOTTOM_CENTER_OUTWARD)
-                            lastBottomOpened = acceptedDown;
-                        log("gesture mode=" + admittedEntryGesture
-                                + " -> main=" + (mainRight ? "right" : "left") + " -> open");
-                        trigger.run();
-                    }
-                }, 65L);
-                log("entry swipe mode=" + admittedEntryGesture + " accepted; pilfered once");
-            }
-            // A batched stream may deliver its final threshold-crossing position only on UP.
-            // Feed that endpoint through the same recognizer; a tap still cannot schedule entry.
-            if (action == MotionEvent.ACTION_UP) {
-                if (bottomSwipe.active()) log("bottom entry released below threshold; claimed=" + bottomPilfered
-                        + " " + bottomSwipe.progress(e.getRawX(), e.getRawY(), e.getEventTime()));
-                swipe.reset();
-                bottomSwipe.reset();
-                bottomPilfered = false;
-                restoreBatching();
-            }
-        } else if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_POINTER_DOWN
-                || action == MotionEvent.ACTION_POINTER_UP) {
-            if (bottomSwipe.active()) log("bottom entry cancelled; action=" + action + " claimed=" + bottomPilfered
-                    + " " + bottomSwipe.progress(e.getRawX(), e.getRawY(), e.getEventTime()));
-            reset();
+        if(bottomCandidate && !acceptedSwipe && !bottomSwipe.active())
+            log("bottom entry rejected (pointer/geometry/time/vertical); claimed="+bottomPilfered
+                    +" "+bottomSwipe.progress(e.getRawX(),e.getRawY(),e.getEventTime()));
+        if(acceptedSwipe)scheduleAcceptedEntry();
+        if(action==MotionEvent.ACTION_UP){
+            if(bottomSwipe.active())log("bottom entry released below threshold; claimed="+bottomPilfered
+                    +" "+bottomSwipe.progress(e.getRawX(),e.getRawY(),e.getEventTime()));
+            swipe.reset();bottomSwipe.reset();bottomPilfered=false;restoreBatching();
         }
     }
-
+    private void scheduleAcceptedEntry(){
+        if(!EntryGuard.canOpen(context)){reset();return;}
+        if(!bottomPilfered && !pilferPointers()){reset();return;}
+        long accepted=generation,acceptedDown=bottomDownTime;
+        MAIN.postDelayed(()->{
+            if(!enabled || generation!=accepted)return;
+            if(admittedEntryGesture==WorkspaceOptions.BOTTOM_CENTER_OUTWARD && lastBottomOpened==acceptedDown)return;
+            if(WorkspaceHost.hostSceneActive() || !EntryGuard.canOpen(context)){reset();return;}
+            Point current=new Point();windows.getDefaultDisplay().getRealSize(current);
+            if(current.x!=displaySize.x || current.y!=displaySize.y
+                    || windows.getDefaultDisplay().getRotation()!=displayRotation || !keepsEntry(current)){reset();return;}
+            generation++;
+            boolean mainRight=admittedEntryGesture==WorkspaceOptions.BOTTOM_CENTER_OUTWARD
+                    ?bottomSwipe.sign()>0:swipe.sign()>0;
+            WorkspaceHost.setPendingMainSide(mainRight);
+            if(admittedEntryGesture==WorkspaceOptions.BOTTOM_CENTER_OUTWARD)lastBottomOpened=acceptedDown;
+            log("gesture mode="+admittedEntryGesture+" -> main="+(mainRight?"right":"left")+" -> open");
+            trigger.run();
+        },65L);
+        log("entry swipe mode="+admittedEntryGesture+" accepted; pilfered once");
+    }
+    private void cancelGesture(int action,MotionEvent e){
+        if(bottomSwipe.active())log("bottom entry cancelled; action="+action+" claimed="+bottomPilfered
+                +" "+bottomSwipe.progress(e.getRawX(),e.getRawY(),e.getEventTime()));
+        reset();
+    }
     public static void setEntryGesture(int mode) {
         int valid = mode == WorkspaceOptions.BOTTOM_CENTER_OUTWARD
                 ? mode : WorkspaceOptions.STATUS_BAR_INWARD;
@@ -283,7 +258,7 @@ public final class HotZoneGesture {
     public static boolean isAttached() {
         return instance != null && instance.enabled && instance.receiver != null;
     }
-    public static void raiseAll(Context context) {
+    public static void raiseAll() {
         if (instance != null) { instance.reset(); instance.enabled = true; }
     }
     public static void suspend() {

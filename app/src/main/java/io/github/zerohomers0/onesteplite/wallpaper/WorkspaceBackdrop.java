@@ -115,7 +115,11 @@ final class WorkspaceBackdrop {
         if(!current.getAsBoolean())return;
         // A stuck native zoom keeps its safety wallpaper until the next entry or
         // Host destruction. Removing it on a timeout would recreate the black rim.
-        if(attempt>=120) {log.accept("workspace wallpaper retained: native exit unconfirmed");return;}
+        if(attempt>=120) {
+            log.accept("workspace wallpaper retirement delayed: native exit unconfirmed");
+            handler.postDelayed(()->{if(current.getAsBoolean())release.run();},30_000L);
+            return;
+        }
         Bundle state=new Bundle();state.putBinder("host",host);state.putBoolean("release",true);state.putLong("sequence",sequence);
         try {
             context.sendOrderedBroadcast(new Intent(ACTION).setPackage("android").putExtra("state",state),
@@ -124,7 +128,8 @@ final class WorkspaceBackdrop {
                             if(!current.getAsBoolean())return;
                             Bundle result=getResultExtras(false);
                             if(getResultCode()==-1 && result!=null && result.getBoolean("settled",false))release.run();
-                            else handler.postDelayed(()->pollExit(context,handler,host,current,release,log,sequence,attempt+1),16L);
+                            else handler.postDelayed(()->pollExit(context,handler,host,current,release,log,sequence,attempt+1),
+                                    Math.min(64L,16L<<Math.min(attempt,2)));
                         }
                     },handler,0,null,null);
         } catch(Throwable failure) {log.accept("workspace exit frame unavailable; wallpaper retained: "+failure);}

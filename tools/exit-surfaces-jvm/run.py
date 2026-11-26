@@ -13,7 +13,7 @@ def member(signature):
     while depth:
         depth+=(text[end]=='{')-(text[end]=='}');end+=1
     return text[start:end]
-methods='\n'.join(member(s)for s in ['    private static void rememberMagnifiedSurface(', '    private static int restoreExitedMagnificationLocked('])
+methods='\n'.join(member(s)for s in ['    static void rememberMagnifiedSurface(', '    static int restoreExitedMagnificationLocked('])
 hook_start=text.index('XposedBridge.hookAllMethods(transition, "finishTransition"')
 hook_signature='                @Override protected void afterHookedMethod(MethodHookParam p)'
 start=text.index(hook_signature,hook_start);brace=text.index('{',start);depth,end=1,brace+1

@@ -114,7 +114,7 @@ public final class SettingsActivity extends Activity {
         if (updatingBackground) return;
         updatingBackground = true;
         android.content.Context application = getApplicationContext();
-        new Thread(() -> {
+        BackgroundExecutor.execute(() -> {
             boolean saved;
             try {
                 if (uri == null) WorkspaceBackground.reset(application);
@@ -131,7 +131,7 @@ public final class SettingsActivity extends Activity {
                 else android.widget.Toast.makeText(this, uri == null ? "恢复背景失败" : "无法读取这张图片",
                         android.widget.Toast.LENGTH_SHORT).show();
             });
-        }, "WorkspaceBackgroundImport").start();
+        });
     }
 
     int settingsColor(String name, int fallback) {
