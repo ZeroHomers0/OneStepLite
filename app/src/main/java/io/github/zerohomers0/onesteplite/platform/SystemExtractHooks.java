@@ -53,10 +53,13 @@ final class SystemExtractHooks {
         if(candidates.isEmpty())return false;
         Bundle state=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_status",null,null);
         if(state==null){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_SESSION);return false;}
-        if(state.getBoolean("prefer_image"))candidates.sort(java.util.Comparator.comparing(
+        boolean preferImage=state.getBoolean("prefer_image");
+        if(preferImage)candidates.sort(java.util.Comparator.comparing(
                 entry->!((String)entry.getKey()).endsWith("#image_pick_mode")));
+        boolean unresolvedImage=false;
         for(Map.Entry<?,?> entry:candidates) {
             boolean image=((String)entry.getKey()).endsWith("#image_pick_mode");
+            if(preferImage && image)unresolvedImage=true;
             try{
                 Bundle candidate=new Bundle(state);
                 if(!SystemExtractPayload.append(injector,entry.getValue(),image,candidate)){
@@ -64,9 +67,14 @@ final class SystemExtractHooks {
                         context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_offer",null,candidate);
                     continue;
                 }
+                if(!image && unresolvedImage){
+                    if("图片".equals(candidate.getString("text").strip()))continue;
+                    candidate.putBoolean("await_image",true);
+                }
                 Bundle reply=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_offer",null,candidate);
                 if(reply!=null && reply.getBoolean("accepted")){
-                    ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.ACCEPTED);return true;
+                    ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.ACCEPTED);
+                    return image || !unresolvedImage;
                 }
                 ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.REJECTED);
             }catch(RuntimeException invalid){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.UNSUPPORTED);}

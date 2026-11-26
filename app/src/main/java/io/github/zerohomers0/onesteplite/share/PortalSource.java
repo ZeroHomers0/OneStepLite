@@ -342,7 +342,8 @@ final class PortalSource implements AutoCloseable {
         boolean image=uri!=null || request.getBoolean("region_only");
         long now=android.os.SystemClock.uptimeMillis();
         liftAt=pointer.getDownTime()+android.view.ViewConfiguration.getLongPressTimeout()+150L;
-        if(image && priority<PortalGesturePolicy.SYSTEM_IMAGE || priority==PortalGesturePolicy.VIEW_TEXT)
+        if(image && priority<PortalGesturePolicy.SYSTEM_IMAGE || priority==PortalGesturePolicy.VIEW_TEXT
+                || request.getBoolean("await_image"))
             liftAt=Math.max(liftAt,now+PortalGesturePolicy.PREFERRED_SOURCE_WAIT_MS);
         if(priority==PortalGesturePolicy.REGION)liftAt=Math.max(liftAt,now+350L);
         if(uri!=null)prepareLiftPreview(candidate,android.net.Uri.parse(uri));

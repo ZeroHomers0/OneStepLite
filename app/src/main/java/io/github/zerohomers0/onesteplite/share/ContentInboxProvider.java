@@ -167,7 +167,7 @@ public final class ContentInboxProvider extends ContentProvider {
         int normal=0,reserved=0;long bytes=0;
         for(int i=0;i<all.length();i++) {
             JSONObject row=all.optJSONObject(i);
-            if(row.optBoolean("capture_reserve") && row.optBoolean("captured") && !row.has("document_uri")){
+            if(isReservedCapture(row)){
                 reserved++;continue;
             }
             normal++;
@@ -176,13 +176,21 @@ public final class ContentInboxProvider extends ContentProvider {
         if(!ContentInboxPolicy.withinInbox(normal,bytes)){
             if(!ContentInboxPolicy.canReserveCapture(capture,reserved)){
                 if(capture)ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_STORE,ShareDiagnostics.Code.CAPACITY);
-                throw new IllegalStateException("Inbox capacity exceeded");
+                throw new CapacityExceeded();
             }
             try {added.getJSONObject(0).put("capture_reserve",true);}
             catch(org.json.JSONException invalid){throw new IllegalStateException("Invalid capture record",invalid);}
         }
         if(!context.getSharedPreferences("content_inbox",Context.MODE_PRIVATE).edit().putString("rows",all.toString()).commit())
             throw new IllegalStateException("Inbox metadata save failed");
+    }
+
+    static boolean isReservedCapture(JSONObject row) {
+        return row.optBoolean("capture_reserve") && row.optBoolean("captured") && !row.has("document_uri");
+    }
+
+    static final class CapacityExceeded extends IllegalStateException {
+        CapacityExceeded(){super("Inbox capacity exceeded");}
     }
 
     static Uri uri(String id){return ROOT.buildUpon().appendPath(id).build();}

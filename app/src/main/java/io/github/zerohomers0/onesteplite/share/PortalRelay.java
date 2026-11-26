@@ -60,6 +60,7 @@ final class PortalRelay {
             request.putFloatArray("source_touch",data.getFloatArray("source_touch"));
         }
         boolean system=names.contains(SystemExtractHooks.PACKAGE);
+        request.putBoolean("await_image",system && image==null && data.getBoolean("await_image"));
         int priority=view?(image!=null?PortalGesturePolicy.VIEW_IMAGE
                 :data.getBoolean("selected")?PortalGesturePolicy.VIEW_SELECTION:PortalGesturePolicy.VIEW_TEXT)
                 :region?PortalGesturePolicy.REGION:image==null?(system?PortalGesturePolicy.SYSTEM_TEXT:PortalGesturePolicy.PORTAL_TEXT)

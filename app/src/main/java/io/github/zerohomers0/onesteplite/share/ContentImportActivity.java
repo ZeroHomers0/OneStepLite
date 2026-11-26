@@ -155,7 +155,16 @@ public final class ContentImportActivity extends Activity {
                 SharePayload payload=new SharePayload(clip);
                 JSONArray existing=ContentInboxProvider.rows(this);
                 long budget=ContentInboxPolicy.MAX_TOTAL;
-                for(int i=0;i<existing.length();i++)budget-=ContentInboxProvider.file(this,existing.optJSONObject(i).optString("id")).length();
+                int records=0;
+                for(int i=0;i<existing.length();i++){
+                    JSONObject row=existing.getJSONObject(i);
+                    if(ContentInboxProvider.isReservedCapture(row))continue;
+                    records++;
+                    if(!row.has("document_uri"))budget-=ContentInboxProvider.file(this,row.getString("id")).length();
+                }
+                int added=payload.uris.size()+(payload.text.isEmpty()?0:1);
+                if(!ContentInboxPolicy.withinInbox(records+added,ContentInboxPolicy.MAX_TOTAL-budget))
+                    throw new ContentInboxProvider.CapacityExceeded();
                 JSONArray rows=new JSONArray();long total=0;
                 for(Uri uri:payload.uris) {
                     String id=UUID.randomUUID().toString();File target=ContentInboxProvider.file(this,id);created.add(target);
@@ -191,7 +200,8 @@ public final class ContentImportActivity extends Activity {
                 ShareDiagnostics.event(ShareDiagnostics.Stage.COPY,cancelled.get()?ShareDiagnostics.Code.CANCELLED:ShareDiagnostics.Code.FAILED);
                 outcome(false,null);
                 for(File file:created)if(file.exists() && !file.delete())android.util.Log.w(Tags.PROBE,"partial inbox cleanup failed");
-                runOnUiThread(()->{if(!cancelled.get())message("导入失败：内容不可读、过大或临时区已满");finish();});
+                String detail=importFailure(error);
+                runOnUiThread(()->{if(!cancelled.get())message(detail);finish();});
             } finally {releaseDelegatedRead();BUSY.set(false);}
         },"ContentInboxImport").start();
     }
@@ -206,12 +216,38 @@ public final class ContentImportActivity extends Activity {
             if(input==null)throw new java.io.IOException("Unreadable source");byte[] buffer=new byte[64*1024];int count;
             while((count=input.read(buffer))!=-1) {
                 copied+=count;
-                if(cancelled.get() || !ContentInboxPolicy.withinBudget(copied,budget)
-                        || android.os.SystemClock.uptimeMillis()-start>60_000)throw new java.io.IOException("Import limit");
+                if(cancelled.get())throw new java.io.IOException("Import cancelled");
+                if(copied>ContentInboxPolicy.MAX_FILE)throw new ImportLimit("图片或文件超过 100 MiB",ShareDiagnostics.Code.REJECTED);
+                if(copied>budget)throw new ContentInboxProvider.CapacityExceeded();
+                if(android.os.SystemClock.uptimeMillis()-start>60_000)
+                    throw new ImportLimit("读取内容超时",ShareDiagnostics.Code.TIMEOUT);
                 output.write(buffer,0,count);
             }
+            if(copied==0)throw new java.io.FileNotFoundException("Empty source");
         }
         return copied;
+    }
+
+    private String importFailure(Exception error) {
+        if(cancelled.get())return "";
+        if(error instanceof ContentInboxProvider.CapacityExceeded){
+            ShareDiagnostics.event(ShareDiagnostics.Stage.COPY,ShareDiagnostics.Code.CAPACITY);
+            return "导入失败，临时区已满，请先清理已导入的内容";
+        }
+        if(error instanceof ImportLimit limit){
+            ShareDiagnostics.event(ShareDiagnostics.Stage.COPY,limit.code);
+            return "导入失败，"+limit.getMessage();
+        }
+        if(error instanceof SecurityException || error instanceof java.io.FileNotFoundException){
+            ShareDiagnostics.event(ShareDiagnostics.Stage.READ,ShareDiagnostics.Code.REJECTED);
+            return "导入失败，无法读取原文件，请重新选择图片或文件";
+        }
+        return "导入失败，无法复制内容到临时区";
+    }
+
+    private static final class ImportLimit extends java.io.IOException {
+        final ShareDiagnostics.Code code;
+        ImportLimit(String message,ShareDiagnostics.Code code){super(message);this.code=code;}
     }
 
     private ClipData fromExtras(Intent intent) {
