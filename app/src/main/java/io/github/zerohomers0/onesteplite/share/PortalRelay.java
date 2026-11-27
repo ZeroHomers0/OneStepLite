@@ -14,15 +14,6 @@ final class PortalRelay {
         if(uid/100000!=android.os.Process.myUid()/100000)throw new SecurityException("Different source user");
         String[] packages=context.getPackageManager().getPackagesForUid(uid);
         java.util.List<String> names=packages==null?java.util.Collections.emptyList():java.util.Arrays.asList(packages);
-        if("portal_discard_media".equals(method)) {
-            if(!names.contains(Packages.SYSTEM_UI))throw new SecurityException("Not SystemUI");
-            String encoded=data==null?null:data.getString("uri");
-            android.net.Uri uri=encoded==null?null:android.net.Uri.parse(encoded);
-            if(uri==null || !android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI.getAuthority()
-                    .equals(uri.getAuthority()))throw new IllegalArgumentException("Invalid temporary media URI");
-            MediaStoreImageBridge.discardAsync(context,uri);
-            return new Bundle();
-        }
         if("portal_register".equals(method)) {
             if(!names.contains(Packages.SYSTEM_UI))throw new SecurityException("Not SystemUI");
             synchronized(PortalRelay.class){
@@ -76,49 +67,18 @@ final class PortalRelay {
                 :system?PortalGesturePolicy.SYSTEM_IMAGE:PortalGesturePolicy.PORTAL_IMAGE;
         request.putInt("source_priority",priority);
         try {
-            android.net.Uri published=null;
             if(image!=null) {
-                CaptureInboxStore.validateEncoded(image);
-                published=MediaStoreImageBridge.publishBytes(context,image,"image/jpeg");
-                android.util.Log.i("OneStepLiteShare",BuildIdentity.RUNTIME_MARKER);
-                if(published!=null){
-                    request.putString("cleanup_uri",published.toString());
-                    logPublishedGrant(context,published);
-                }
-                else {
-                    ShareDiagnostics.event(ShareDiagnostics.Stage.GRANT,ShareDiagnostics.Code.FAILED);
-                    Bundle stored=CaptureInboxStore.store(context,image);id=stored.getString("id");
-                    request.putString("uri",stored.getString("uri"));
-                    request.putString("capture_id",id);
-                }
+                Bundle stored=CaptureInboxStore.store(context,image);
+                id=stored.getString("id");
+                request.putString("uri",stored.getString("uri"));
+                request.putString("capture_id",id);
             }
-            if(published!=null)request.putString("uri",published.toString());
             Bundle result=PortalWire.call(target,PortalWire.OFFER,request);
-            if(result==null || !result.getBoolean("accepted")) {
-                if(id!=null)CaptureInboxStore.discard(context,id);
-                if(published!=null)MediaStoreImageBridge.discardAsync(context,published);
-            }
+            if(id!=null && (result==null || !result.getBoolean("accepted")))CaptureInboxStore.discard(context,id);
             return result;
         } catch(RuntimeException failure){
             if(id!=null)CaptureInboxStore.discard(context,id);
-            if(request.getString("cleanup_uri")!=null)MediaStoreImageBridge.discardAsync(context,
-                    android.net.Uri.parse(request.getString("cleanup_uri")));
             throw failure;
         }
-    }
-
-    private static void logPublishedGrant(Context context,android.net.Uri uri) {
-        ShareDiagnostics.Code result;
-        try {
-            int uid=context.getPackageManager().getApplicationInfo(Packages.SYSTEM_UI,0).uid;
-            boolean granted=context.checkUriPermission(uri,-1,uid,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    ==android.content.pm.PackageManager.PERMISSION_GRANTED;
-            boolean file=uri.getPathSegments().contains("file");
-            result=file?(granted?ShareDiagnostics.Code.SOURCE_FILE_GRANTED:ShareDiagnostics.Code.SOURCE_FILE_NOT_GRANTED)
-                    :(granted?ShareDiagnostics.Code.SOURCE_IMAGE_GRANTED:ShareDiagnostics.Code.SOURCE_IMAGE_NOT_GRANTED);
-        }catch(Exception unavailable){
-            result=ShareDiagnostics.Code.SOURCE_CHECK_UNAVAILABLE;
-        }
-        ShareDiagnostics.event(ShareDiagnostics.Stage.GRANT,result);
     }
 }

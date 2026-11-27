@@ -11,10 +11,7 @@ out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
 files = {
 'android/os/IBinder.java': 'package android.os; public interface IBinder {}',
-'android/os/Binder.java': 'package android.os; public class Binder {public static int getCallingUid(){return 10100;}}',
-'android/os/UserHandle.java': 'package android.os; public class UserHandle {public static UserHandle getUserHandleForUid(int uid){return new UserHandle();}}',
-'android/os/SystemClock.java': 'package android.os; public class SystemClock {public static long uptimeMillis(){return 1;}}',
-'android/content/Context.java': 'package android.content; public class Context {}',
+'android/os/SystemClock.java': 'package android.os; public class SystemClock {private static long now;public static long uptimeMillis(){return now+=30001;}}',
 'android/view/InputDevice.java':'package android.view; public class InputDevice {public static final int SOURCE_TOUCHSCREEN=4098;}',
 'android/view/MotionEvent.java':'''package android.view; public class MotionEvent {
 public static final int ACTION_DOWN=0,ACTION_UP=1,ACTION_CANCEL=3,ACTION_POINTER_DOWN=5;
@@ -27,15 +24,18 @@ public class WindowManager {public static class LayoutParams {
 public static final int FIRST_SUB_WINDOW=1000,LAST_SUB_WINDOW=1999,FLAG_SECURE=8192;public int type=2,flags;
 public String packageName;public CharSequence accessibilityTitle,title;
 public CharSequence getTitle(){return title;}}}''',
-'android/util/Log.java': 'package android.util; public class Log {public static int w(String t,String s,Throwable e){return 0;}public static int i(String t,String s){return 0;}}',
+'android/util/Log.java': 'package android.util; public class Log {public static int w(String t,String s,Throwable e){return 0;}public static String last;public static int i(String t,String s){last=s;return 0;}}',
 'de/robv/android/xposed/XC_MethodHook.java': '''package de.robv.android.xposed;
-public class XC_MethodHook {public static class MethodHookParam {public Object[] args;public Object result;private Object extra;
-public void setObjectExtra(String key,Object value){extra=value;}public Object getObjectExtra(String key){return extra;}
+public class XC_MethodHook {public static class MethodHookParam {public Object[] args;public Object result,thisObject;public java.lang.reflect.Member method;private final java.util.Map<String,Object> extras=new java.util.HashMap<>();
+public void setObjectExtra(String key,Object value){extras.put(key,value);}public Object getObjectExtra(String key){return extras.get(key);}
+public void setResult(Object value){result=value;}
 public Object getResult(){return result;}public boolean hasThrowable(){return false;}}
 protected void beforeHookedMethod(MethodHookParam call) throws Throwable {}
 protected void afterHookedMethod(MethodHookParam call) throws Throwable {}}''',
 'de/robv/android/xposed/XposedBridge.java': '''package de.robv.android.xposed;
 public class XposedBridge {static XC_MethodHook hook;
+public static Object retryToken;public static Object expectedRetry;
+public static Object invokeOriginalMethod(java.lang.reflect.Member method,Object receiver,Object[] args){retryToken=args[0];return retryToken==expectedRetry;}
 public static java.util.Set<Object> hookAllMethods(Class<?> c,String n,XC_MethodHook h){hook=h;return java.util.Set.of(h);}
 public static Object transfer(Object token) throws Throwable {return transfer(token,true);}
 public static Object transfer(Object token,boolean result) throws Throwable {
@@ -47,7 +47,6 @@ public static java.util.Map<Object,Object> originals=new java.util.IdentityHashM
 public static Object getAdditionalInstanceField(Object o,String key){return originals.get(o);}
 public static Object setAdditionalInstanceField(Object o,String key,Object value){return originals.put(o,value);}
 public static Class<?> findClass(String n,ClassLoader c){return Object.class;}
-public static Object callStaticMethod(Class<?> c,String name,Object...a){return null;}
 public static Object getObjectField(Object o,String n){try{return o.getClass().getField(n).get(o);}catch(Exception e){throw new RuntimeException(e);}}
 public static int getIntField(Object o,String n){return (Integer)getObjectField(o,n);}
 public static Object callMethod(Object o,String n,Object...a){try{
@@ -59,10 +58,6 @@ import java.util.*;import android.os.IBinder;import android.view.MotionEvent;imp
 import de.robv.android.xposed.XposedBridge;
 class Tags {static final String PROBE="test";}
 class WindowIdentity {static boolean ownsPicker(Object w,Object d){return ((PortalInputRegression.Win)w).authorized;}}
-class ShareDiagnosticReport {
-static ShareDiagnostics.Code last;
-static void forward(java.util.function.Supplier<android.content.Context> context,ShareDiagnostics.Stage stage,ShareDiagnostics.Code code){last=code;}
-}
 public class PortalInputRegression {
 public static class Token implements IBinder {}
 public static class Task {public int mode=1;public int getWindowingMode(){return mode;}}
@@ -70,7 +65,7 @@ public static class Win {
 public IBinder mInputChannelToken=new Token();public int mOwnerUid=10100;
 public WindowManager.LayoutParams mAttrs=new WindowManager.LayoutParams();
 public boolean visible=true,authorized=true;public Task task=new Task();public Win parent;
-public boolean isVisible(){return visible;}public Task getTask(){return task;}public Win getParentWindow(){return parent;}}
+public boolean isVisible(){return visible;}public Task getTask(){return task;}public Win getParentWindow(){return parent;}public String getOwningPackage(){return mAttrs.packageName;}}
 public static class Wm {public Object mGlobalLock=new Object();public Map<Object,Object> mWindowMap=new LinkedHashMap<>();}
 public static class Display {public Wm mWmService=new Wm();public Win mCurrentFocus,touched;
 public Win getTouchableWinAtPointLocked(float x,float y){return touched;}}
@@ -81,9 +76,9 @@ source.mAttrs.title=PortalDragInput.TITLE;source.mAttrs.accessibilityTitle="sour
 display.mWmService.mWindowMap.put("source",source);display.mWmService.mWindowMap.put("focus",focus);
 boolean[] active={true};PortalDragInput.install(PortalInputRegression.class.getClassLoader(),()->display,()->active[0]);
 check(XposedBridge.transfer(source.mInputChannelToken)==focus.mInputChannelToken
-        && ShareDiagnosticReport.last==ShareDiagnostics.Code.LIFT_INPUT_TRANSFERRED);
+        && android.util.Log.last.endsWith("IMAGE_LIFT/LIFT_INPUT_TRANSFERRED"));
 check(XposedBridge.transfer(source.mInputChannelToken,false)==focus.mInputChannelToken
-        && ShareDiagnosticReport.last==ShareDiagnostics.Code.LIFT_INPUT_TRANSFER_REJECTED);
+        && android.util.Log.last.endsWith("IMAGE_LIFT/LIFT_INPUT_TRANSFER_REJECTED"));
 MotionEvent down=new MotionEvent(MotionEvent.ACTION_DOWN);
 display.touched=focus;PortalDragInput.observeTouch(display,down);
 source.mAttrs.accessibilityTitle=PortalDragInput.identity("source.app",down);
@@ -109,6 +104,15 @@ check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToke
 parent.mAttrs.packageName="source.app";
 display.touched=focus;PortalDragInput.observeTouch(display,down);display.mCurrentFocus=popup;
 check(XposedBridge.transfer(source.mInputChannelToken)==focus.mInputChannelToken);
+XposedBridge.expectedRetry=parent.mInputChannelToken;
+check(XposedBridge.transfer(source.mInputChannelToken,false)==focus.mInputChannelToken
+        && XposedBridge.retryToken==parent.mInputChannelToken && PortalDragInput.originalWindow(source)==parent
+        && android.util.Log.last.endsWith("IMAGE_LIFT/LIFT_INPUT_TRANSFERRED"));
+XposedBridge.retryToken=null;
+parent.mOwnerUid++;
+XposedBridge.transfer(source.mInputChannelToken,false);
+check(XposedBridge.retryToken==null);
+parent.mOwnerUid--;
 parent.mAttrs.flags=WindowManager.LayoutParams.FLAG_SECURE;
 check(XposedBridge.transfer(source.mInputChannelToken)==source.mInputChannelToken);
 parent.mAttrs.flags=0;parent.mOwnerUid++;

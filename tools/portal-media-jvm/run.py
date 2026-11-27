@@ -1,4 +1,4 @@
-"""Replay the hidden MediaStore publication used before a native image drag."""
+"""Replay temporary MediaStore publication for the module share activity."""
 from pathlib import Path
 import os, subprocess, sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -6,13 +6,8 @@ from source_paths import package_dir
 src = package_dir(Path(__file__).resolve().parents[2])
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
 relay = (src / 'PortalRelay.java').read_text(encoding='utf-8-sig')
-if 'MediaStoreImageBridge.publishBytes(' not in relay:
-    raise AssertionError('Portal image offers must publish a MediaStore URI before native drag')
-if relay.index('MediaStoreImageBridge.publishBytes(') > relay.index('PortalWire.call(target,PortalWire.OFFER,request)'):
-    raise AssertionError('MediaStore publication must happen before the image offer')
-source = (src / 'PortalSource.java').read_text(encoding='utf-8-sig')
-if 'portal_discard_media' not in relay or 'portal_discard_media' not in source:
-    raise AssertionError('temporary MediaStore cleanup must cross the authenticated provider boundary')
+if 'CaptureInboxStore.store(context,image)' not in relay or 'MediaStoreImageBridge' in relay:
+    raise AssertionError('native extraction must use the module drag cache')
 delivery = (src / 'ContentImportActivity.java').read_text(encoding='utf-8-sig')
 if delivery.count('discardClipAsync(this,') < 2:
     raise AssertionError('failed or cancelled WeChat launches must release published media immediately')
@@ -49,10 +44,10 @@ public static final class Files{public static Uri getContentUri(String volume,lo
 import android.content.*;import android.net.Uri;import android.os.Handler;import java.nio.charset.StandardCharsets;
 public class PortalMediaRegression {static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
 public static void main(String[] args){Context context=new Context();ContentResolver resolver=context.getContentResolver();Uri module=Uri.parse("content://io.github.zerohomers0.onesteplite.content/drag/id1");ContentResolver.bytes.put(module,"jpeg-bytes".getBytes(StandardCharsets.UTF_8));
-Uri media=MediaStoreImageBridge.publishBytes(context,"jpeg-bytes".getBytes(StandardCharsets.UTF_8),"image/jpeg");check(media!=null&&"media".equals(media.getAuthority())&&media.toString().contains("/external_primary/file/"),"portal drag uses the primary-volume file URI");check(MediaStoreImageBridge.isInternalPath("Pictures/.OneStep/a.jpg"),"internal folder recognized");check(!MediaStoreImageBridge.isInternalPath("Pictures/DCIM/a.jpg"),"normal album image not filtered");check("jpeg-bytes".equals(new String(ContentResolver.bytes.get(ContentResolver.inserted.get(0)),StandardCharsets.UTF_8)),"published bytes match the bounded capture");check(ContentResolver.updated.containsKey(ContentResolver.inserted.get(0))&&Integer.valueOf(0).equals(ContentResolver.updated.get(ContentResolver.inserted.get(0)).get("IS_PENDING")),"published image is committed");check(media.equals(context.granted)&&media.toString().contains("/external_primary/")&&ContentResolver.inserted.size()==1,"only the temporary file URI is granted to the drag sender");check(Handler.pending.size()==1,"published image has one cleanup deadline");
+Uri media=MediaStoreImageBridge.publishUri(context,module);check(media!=null&&"media".equals(media.getAuthority())&&media.toString().contains("/external_primary/images/media/"),"share activity publishes a primary-volume image");check(MediaStoreImageBridge.isInternalPath("Pictures/.OneStep/a.jpg"),"internal folder recognized");check(!MediaStoreImageBridge.isInternalPath("Pictures/DCIM/a.jpg"),"normal album image not filtered");check("jpeg-bytes".equals(new String(ContentResolver.bytes.get(ContentResolver.inserted.get(0)),StandardCharsets.UTF_8)),"published bytes match the bounded capture");check(ContentResolver.updated.containsKey(ContentResolver.inserted.get(0))&&Integer.valueOf(0).equals(ContentResolver.updated.get(ContentResolver.inserted.get(0)).get("IS_PENDING")),"published image is committed");check(context.granted==null&&ContentResolver.inserted.size()==1,"proxy publication creates one copy and leaves recipient grants to the share intent");check(Handler.pending.size()==1,"published image has one cleanup deadline");
 int before=ContentResolver.inserted.size();check(MediaStoreImageBridge.publishUri(context,Uri.parse("content://foreign/image"))==null&&ContentResolver.inserted.size()==before,"foreign URI is never copied into MediaStore");
 ClipData input=new ClipData("image",new String[]{"image/jpeg"},new ClipData.Item(module));ClipData output=MediaStoreImageBridge.publish(context,input);check(output.getItemAt(0).getUri()!=module&&"media".equals(output.getItemAt(0).getUri().getAuthority()),"clip publication replaces only module-owned image URIs");check(output.getDescription().getMimeTypeCount()==1&&"image/jpeg".equals(output.getDescription().getMimeType(0)),"image MIME is retained");
-System.out.println("Production portal MediaStore checks="+checks+" passed");}}
+System.out.println("Production share MediaStore checks="+checks+" passed");}}
 '''}
 paths=[]
 for name,body in files.items():

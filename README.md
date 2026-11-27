@@ -62,8 +62,6 @@ OneStepLite 是面向小米 HyperOS 的 LSPosed 多任务模块。工作区包�
 - [界面与交互规范](docs/界面与交互规范.md)
 - [系统与平台规范](docs/系统与平台规范.md)
 
-拖曳异常复现后，可在「OneStepLite → 内容分享 → 导出拖曳诊断」保存近期状态，无需连接 ADB。
-
 提交问题时请提供设备型号、Android / HyperOS 版本、模块版本和复现步骤。有画面问题可附录屏，有框架问题可附相关模块日志。分享前请移除个人信息。 [提交 Issue](https://github.com/ZeroHomers0/OneStepLite/issues)
 
 ## 许可

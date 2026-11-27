@@ -152,7 +152,7 @@ final class PortalSource implements AutoCloseable {
         if(held<longPress+150L || android.os.SystemClock.uptimeMillis()<liftAt || !live())return;
         Bundle request=liftCandidate;liftCandidate=null;
         request.putBoolean("lift",true);offer(request,new Bundle[1],new CountDownLatch(1),new AtomicBoolean());
-        if(window==null){discardCapture(request.getString("capture_id"));discardPublication(request.getString("cleanup_uri"));}
+        if(window==null)discardCapture(request.getString("capture_id"));
     }
 
     private void clearLiftCandidate() {
@@ -165,17 +165,6 @@ final class PortalSource implements AutoCloseable {
         android.graphics.Bitmap bitmap=candidate.getParcelable("preview",android.graphics.Bitmap.class);
         if(bitmap!=null)bitmap.recycle();
         discardCapture(candidate.getString("capture_id"));
-        discardPublication(candidate.getString("cleanup_uri"));
-    }
-
-    private void discardPublication(String uri) {
-        if(uri==null)return;
-        android.content.ContentResolver resolver=anchor.getContext().getContentResolver();
-        java.util.concurrent.CompletableFuture.runAsync(()->{
-            Bundle request=new Bundle();request.putString("uri",uri);
-            try{resolver.call(ContentInboxProvider.ROOT,"portal_discard_media",null,request);}
-            catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"temporary media cleanup deferred",unavailable);}
-        });
     }
 
     private void discardCapture(String id) {
@@ -272,33 +261,19 @@ final class PortalSource implements AutoCloseable {
         }
         try{startNativeLift(request,uri,text,result,done,expired);}
         catch(RuntimeException unavailable){
-            if(uri!=null)reportLift(ShareDiagnostics.Code.LIFT_WINDOW_FAILED);
+            if(uri!=null)ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,ShareDiagnostics.Code.LIFT_WINDOW_FAILED);
             android.util.Log.w(Tags.PROBE,"native source window unavailable",unavailable);
             finishRejectedLift(!expired.get() && live());done.countDown();
         }
     }
 
     private android.graphics.Bitmap nativePreview;
-    private String nativeCaptureId,nativeCleanupUri;
-
-    private static ShareDiagnostics.Code imageSource(String source) {
-        if("com.tencent.mobileqq".equals(source))return ShareDiagnostics.Code.SOURCE_QQ;
-        if("com.xingin.xhs".equals(source))return ShareDiagnostics.Code.SOURCE_XIAOHONGSHU;
-        if("com.ss.android.ugc.aweme".equals(source))return ShareDiagnostics.Code.SOURCE_DOUYIN;
-        return ShareDiagnostics.Code.SOURCE_OTHER;
-    }
-
-    private void reportLift(ShareDiagnostics.Code code) {
-        Context context=anchor.getContext();
-        Context application=context.getApplicationContext();
-        ShareDiagnosticReport.forward(()->application==null?context:application,ShareDiagnostics.Stage.IMAGE_LIFT,code);
-    }
+    private String nativeCaptureId;
 
     @android.annotation.SuppressLint("RtlHardcoded") // Physical display coordinates, not layout direction.
     private void startNativeLift(Bundle request,String uri,String text,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
         nativePreview=request.getParcelable("preview",android.graphics.Bitmap.class);
         nativeCaptureId=request.getString("capture_id");
-        nativeCleanupUri=request.getString("cleanup_uri");
         if(uri!=null)ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,ShareDiagnostics.Code.STARTED);
         ClipData clip=uri==null?ClipData.newPlainText("提取文字",text):new ClipData("提取图片",new String[]{"image/jpeg"},
                 new ClipData.Item(android.net.Uri.parse(uri)));
@@ -324,8 +299,8 @@ final class PortalSource implements AutoCloseable {
                 boolean delivered=event.getResult();
                 main.post(()->{
                     if(window!=view)return;
-                    if(!delivered){discardCapture(nativeCaptureId);discardPublication(nativeCleanupUri);}
-                    nativeCaptureId=null;nativeCleanupUri=null;
+                    if(!delivered)discardCapture(nativeCaptureId);
+                    nativeCaptureId=null;
                     clearWindow();
                 });
             }
@@ -335,17 +310,17 @@ final class PortalSource implements AutoCloseable {
         windowRequest=expired;
         startingDrag=true;
         display.getSystemService(WindowManager.class).addView(sourceWindow,attrs);
-        startWhenReady(sourceWindow,source,clip,generation,8,result,done,expired);
+        startWhenReady(sourceWindow,source,clip,generation,8,false,result,done,expired);
     }
 
     private void startWhenReady(FrameLayout sourceWindow,View source,ClipData clip,
-            int token,int frames,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
+            int token,int frames,boolean retried,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
         source.postOnAnimation(()->{
             if(window!=sourceWindow){done.countDown();return;}
             boolean current=!expired.get() && token==generation && live();
             boolean readySurface=current && PortalInputCompat.surfaceReady(source);
             if(current && !readySurface && frames>1){
-                startWhenReady(sourceWindow,source,clip,token,frames-1,result,done,expired);
+                startWhenReady(sourceWindow,source,clip,token,frames-1,retried,result,done,expired);
                 return;
             }
             boolean accepted=false;
@@ -356,10 +331,15 @@ final class PortalSource implements AutoCloseable {
                 outcome=ShareDiagnostics.Code.LIFT_START_EXCEPTION;
                 android.util.Log.w(Tags.PROBE,"portal drag start rejected",failure);
             }
+            if(!accepted && !retried && readySurface && outcome==ShareDiagnostics.Code.LIFT_START_REJECTED
+                    && clip.getDescription().hasMimeType("image/*") && token==generation && live()){
+                startWhenReady(sourceWindow,source,clip,token,1,true,result,done,expired);
+                return;
+            }
             startingDrag=false;
             Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);result[0]=reply;
             if(clip.getDescription().hasMimeType("image/*"))
-                reportLift(accepted?ShareDiagnostics.Code.STARTED:current?outcome:ShareDiagnostics.Code.CANCELLED);
+                ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,accepted?ShareDiagnostics.Code.STARTED:current?outcome:ShareDiagnostics.Code.CANCELLED);
             if(!accepted)finishRejectedLift(current && token==generation && live());
             else {
                 ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,ShareDiagnostics.Code.STARTED);
@@ -380,8 +360,7 @@ final class PortalSource implements AutoCloseable {
             liftAt=Math.max(liftAt,now+PortalGesturePolicy.PREFERRED_SOURCE_WAIT_MS);
         if(priority==PortalGesturePolicy.REGION)liftAt=Math.max(liftAt,now+350L);
         if(uri!=null){
-            reportLift(imageSource(candidate.getString("source")));
-            reportLift(ShareDiagnostics.Code.LIFT_CANDIDATE_READY);
+            ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,ShareDiagnostics.Code.LIFT_CANDIDATE_READY);
             prepareLiftPreview(candidate,android.net.Uri.parse(uri));
         }
         main.postDelayed(()->{
@@ -399,10 +378,10 @@ final class PortalSource implements AutoCloseable {
     }
 
     private void finishRejectedLift(boolean current) {
-        if(nativeCaptureId!=null || nativeCleanupUri!=null){
+        if(nativeCaptureId!=null){
             ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,ShareDiagnostics.Code.FAILED);
-            discardCapture(nativeCaptureId);discardPublication(nativeCleanupUri);
-            nativeCaptureId=null;nativeCleanupUri=null;
+            discardCapture(nativeCaptureId);
+            nativeCaptureId=null;
         }
         ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,current?ShareDiagnostics.Code.FAILED:ShareDiagnostics.Code.CANCELLED);
         clearWindow();
@@ -437,8 +416,8 @@ final class PortalSource implements AutoCloseable {
     }
     private void clearWindow() {
         main.removeCallbacks(expire);
-        if(startingDrag){discardCapture(nativeCaptureId);discardPublication(nativeCleanupUri);}
-        nativeCaptureId=null;nativeCleanupUri=null;
+        if(startingDrag)discardCapture(nativeCaptureId);
+        nativeCaptureId=null;
         startingDrag=false;
         windowRequest=null;
         android.graphics.Bitmap preview=nativePreview;nativePreview=null;

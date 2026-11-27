@@ -15,7 +15,8 @@ import de.robv.android.xposed.XposedHelpers;
 final class PortalDragInput {
     static final String TITLE="OneStepLitePortalSource";
     private static final String ORIGINAL_WINDOW="portal_drag_original_window";
-    private static final String TRANSFER_USER="portal_drag_transfer_user";
+    private static final String TRACK_TRANSFER="portal_drag_track_transfer";
+    private static final String RETRY="portal_drag_transfer_retry";
     private static Object observedDisplay,listener;
 
     static Object originalWindow(Object portalWindow) {
@@ -42,33 +43,78 @@ final class PortalDragInput {
                         synchronized(lock){
                             IBinder original=source(wm,target,call.args[0]);
                             if(original!=null){
+                                Object portalToken=call.args[0];
                                 call.args[0]=original;
-                                call.setObjectExtra(TRANSFER_USER,android.os.Binder.getCallingUid()/100000);
+                                call.setObjectExtra(TRACK_TRANSFER,true);
+                                call.setObjectExtra(RETRY,alternate(wm,target,portalToken,original));
                             }
                         }
                     } catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"portal native input transfer rejected",unavailable);}
                 }
                 @Override protected void afterHookedMethod(MethodHookParam call) {
-                    if(!(call.getObjectExtra(TRANSFER_USER) instanceof Integer user))return;
+                    if(!Boolean.TRUE.equals(call.getObjectExtra(TRACK_TRANSFER)))return;
                     Object result=call.getResult();
+                    if(Boolean.FALSE.equals(result) && active.getAsBoolean()
+                            && call.getObjectExtra(RETRY) instanceof Retry retry)
+                        result=retryTransfer(call,retry);
                     ShareDiagnostics.Code code=call.hasThrowable() || !(result instanceof Boolean)
                             ?ShareDiagnostics.Code.LIFT_INPUT_TRANSFER_UNAVAILABLE
                             :Boolean.TRUE.equals(result)?ShareDiagnostics.Code.LIFT_INPUT_TRANSFERRED
                             :ShareDiagnostics.Code.LIFT_INPUT_TRANSFER_REJECTED;
-                    reportTransfer(loader,user,code);
+                    ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,code);
                 }
             }).isEmpty())throw new IllegalStateException("Native drag input method missing");
         } catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"portal native input unavailable",unavailable);}
     }
 
-    private static void reportTransfer(ClassLoader loader,int user,ShareDiagnostics.Code code) {
-        ShareDiagnosticReport.forward(()->{
-            Class<?> type=XposedHelpers.findClass("android.app.ActivityThread",loader);
-            Object thread=XposedHelpers.callStaticMethod(type,"currentActivityThread");
-            Object context=XposedHelpers.callMethod(thread,"getSystemContext");
-            return (android.content.Context)XposedHelpers.callMethod(context,"createContextAsUser",
-                    android.os.UserHandle.getUserHandleForUid(user*100000),0);
-        },ShareDiagnostics.Stage.IMAGE_LIFT,code);
+    private record Retry(Object lock,Object portal,Object first,Object next,Touch gesture){}
+
+    private static Retry alternate(Object wm,Object display,Object token,IBinder original) {
+        Touch gesture=touch;
+        if(gesture==null || gesture.display()!=display || !original.equals(gesture.input()))return null;
+        Object portal=null;
+        for(Object window:((Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap")).values()){
+            if(token.equals(XposedHelpers.getObjectField(window,"mInputChannelToken"))){portal=window;break;}
+        }
+        if(portal==null)return null;
+        WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(portal,"mAttrs");
+        Object identity=XposedHelpers.getObjectField(attrs,"accessibilityTitle");
+        if(!(identity instanceof CharSequence label)
+                || !label.toString().endsWith("\n"+gesture.down()+":"+gesture.device()+":"+gesture.pointer()))return null;
+        Object first=originalWindow(portal);
+        Object next=XposedHelpers.callMethod(first,"getParentWindow");
+        if(next==null)next=XposedHelpers.getObjectField(display,"mCurrentFocus");
+        return compatibleAlternate(portal,first,next)
+                ?new Retry(XposedHelpers.getObjectField(wm,"mGlobalLock"),portal,first,next,gesture):null;
+    }
+
+    private static boolean compatibleAlternate(Object portal,Object first,Object next) {
+        if(first==null || next==null || next==first)return false;
+        String expected=(String)XposedHelpers.callMethod(first,"getOwningPackage");
+        Object task=XposedHelpers.callMethod(first,"getTask");
+        if(task==null){
+            Object parent=XposedHelpers.callMethod(first,"getParentWindow");
+            if(parent!=null)task=XposedHelpers.callMethod(parent,"getTask");
+        }
+        return task!=null && task==XposedHelpers.callMethod(next,"getTask")
+                && XposedHelpers.getIntField(first,"mOwnerUid")==XposedHelpers.getIntField(next,"mOwnerUid")
+                && eligibleTouch(first,portal,expected) && eligibleTouch(next,portal,expected);
+    }
+
+    private static Object retryTransfer(XC_MethodHook.MethodHookParam call,Retry retry) {
+        try{
+            synchronized(retry.lock()){
+                if(touch!=retry.gesture() || !compatibleAlternate(retry.portal(),retry.first(),retry.next()))
+                    return false;
+                Object[] args=call.args.clone();
+                args[0]=XposedHelpers.getObjectField(retry.next(),"mInputChannelToken");
+                if(!(args[0] instanceof IBinder))return false;
+                if(!Boolean.TRUE.equals(XposedBridge.invokeOriginalMethod(call.method,call.thisObject,args)))return false;
+                XposedHelpers.setAdditionalInstanceField(retry.portal(),ORIGINAL_WINDOW,retry.next());
+                call.setResult(true);
+                return true;
+            }
+        }catch(Throwable unavailable){return false;}
     }
 
     static void observeDisplay(Object display,ClassLoader loader,BooleanSupplier active) {
@@ -136,29 +182,29 @@ final class PortalDragInput {
                 && (activeTouch.down()+":"+activeTouch.device()+":"+activeTouch.pointer()).equals(parts[1])){
             for(Object window:((Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap")).values()){
                 if(activeTouch.input().equals(XposedHelpers.getObjectField(window,"mInputChannelToken")))
-                    return bindInput(wm,source,window,eligibleTouch(window,source,expected));
+                    return bindInput(source,window,eligibleTouch(window,source,expected));
             }
-            reportInput(wm,source,ShareDiagnostics.Code.LIFT_INPUT_CHANNEL_MISSING);
+            ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,ShareDiagnostics.Code.LIFT_INPUT_CHANNEL_MISSING);
             return null;
         }
         Object focus=XposedHelpers.getObjectField(display,"mCurrentFocus");
         if(focus==null || focus==source || !Boolean.TRUE.equals(XposedHelpers.callMethod(focus,"isVisible"))){
-            reportInput(wm,source,ShareDiagnostics.Code.LIFT_INPUT_FOCUS_MISMATCH);
+            ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,ShareDiagnostics.Code.LIFT_INPUT_FOCUS_MISMATCH);
             return null;
         }
         WindowManager.LayoutParams focused=(WindowManager.LayoutParams)XposedHelpers.getObjectField(focus,"mAttrs");
         if(!expected.equals(focused.packageName)){
-            reportInput(wm,source,ShareDiagnostics.Code.LIFT_INPUT_FOCUS_MISMATCH);
+            ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,ShareDiagnostics.Code.LIFT_INPUT_FOCUS_MISMATCH);
             return null;
         }
         if(subWindow(focused)){
-            if(!eligibleTouch(focus,source,expected))return bindInput(wm,source,focus,false);
+            if(!eligibleTouch(focus,source,expected))return bindInput(source,focus,false);
             focus=XposedHelpers.callMethod(focus,"getParentWindow");
         }
-        return bindInput(wm,source,focus,eligible(focus,source,expected));
+        return bindInput(source,focus,eligible(focus,source,expected));
     }
 
-    private static IBinder bindInput(Object wm,Object source,Object window,boolean allowed) {
+    private static IBinder bindInput(Object source,Object window,boolean allowed) {
         IBinder channel=allowed?remember(source,window):null;
         ShareDiagnostics.Code result;
         if(channel!=null)result=ShareDiagnostics.Code.LIFT_INPUT_BOUND;
@@ -168,18 +214,8 @@ final class PortalDragInput {
             result=(attrs.flags&WindowManager.LayoutParams.FLAG_SECURE)!=0?ShareDiagnostics.Code.LIFT_INPUT_SECURE_WINDOW
                     :ShareDiagnostics.Code.LIFT_INPUT_WINDOW_REJECTED;
         }
-        reportInput(wm,source,result);
+        ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,result);
         return channel;
-    }
-
-    private static void reportInput(Object wm,Object source,ShareDiagnostics.Code code) {
-        // These events use the same user as the verified SystemUI source window.
-        int sourceUser=XposedHelpers.getIntField(source,"mOwnerUid")/100000;
-        ShareDiagnosticReport.forward(()->{
-            android.content.Context context=(android.content.Context)XposedHelpers.getObjectField(wm,"mContext");
-            return (android.content.Context)XposedHelpers.callMethod(context,"createContextAsUser",
-                    android.os.UserHandle.getUserHandleForUid(sourceUser*100000),0);
-        },ShareDiagnostics.Stage.IMAGE_LIFT,code);
     }
 
     private static IBinder remember(Object portalWindow,Object window) {

@@ -17,7 +17,7 @@ import java.io.OutputStream;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 
-/** Publishes module-owned images as short-lived hidden MediaStore items for direct chat drops. */
+/** Publishes module-owned images as short-lived MediaStore items for the share activity. */
 final class MediaStoreImageBridge {
     private static final long TTL_MS=10L*60L*1000L;
     private static final String FOLDER=Environment.DIRECTORY_PICTURES+"/.OneStep";
@@ -40,12 +40,7 @@ final class MediaStoreImageBridge {
                 if(input==null)throw new IOException("MediaStore source unavailable");
                 copy(input,output);
             }
-        },false);
-    }
-
-    static Uri publishBytes(Context context,byte[] bytes,String mime){
-        if(context==null || bytes==null || bytes.length==0 || mime==null || !mime.startsWith("image/"))return null;
-        return publish(context,mime,output->output.write(bytes),true);
+        });
     }
 
     static ClipData publish(Context context,ClipData source){
@@ -63,7 +58,7 @@ final class MediaStoreImageBridge {
         return changed?result:source;
     }
 
-    static void discardAsync(Context context,Uri uri){
+    private static void discardAsync(Context context,Uri uri){
         if(context==null || uri==null)return;
         Context app=context.getApplicationContext();
         IO.execute(()->discard(app==null?context:app,uri));
@@ -83,7 +78,7 @@ final class MediaStoreImageBridge {
         IO.execute(()->cleanupExpired(app==null?context:app));
     }
 
-    private static Uri publish(Context context,String mime,Writer writer,boolean nativeDrag){
+    private static Uri publish(Context context,String mime,Writer writer){
         String extension=extension(mime);
         ContentValues values=new ContentValues();
         values.put(MediaStore.MediaColumns.DISPLAY_NAME,"OneStep-"+UUID.randomUUID()+extension);
@@ -101,9 +96,8 @@ final class MediaStoreImageBridge {
             ContentValues complete=new ContentValues();complete.put(MediaStore.MediaColumns.IS_PENDING,0);
             if(context.getContentResolver().update(target,complete,null,null)<=0)
                 throw new IOException("MediaStore completion rejected");
-            Uri delivery=nativeDrag?grantNativeRead(context,target,mime):target;
             scheduleDelete(context.getApplicationContext()==null?context:context.getApplicationContext(),target);
-            return delivery;
+            return target;
         }catch(Exception failure){
             if(target!=null)try{context.getContentResolver().delete(target,null,null);}catch(RuntimeException ignored){}
             android.util.Log.w(Tags.PROBE,"MediaStore image publication failed",failure);
@@ -113,19 +107,6 @@ final class MediaStoreImageBridge {
 
     private static Uri fileUri(Uri image){
         return MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY,android.content.ContentUris.parseId(image));
-    }
-
-    private static Uri grantNativeRead(Context context,Uri image,String mime){
-        // MediaProvider first checks the Files URI when the receiver opens the JPEG by path.
-        Uri file=fileUri(image);
-        try{
-            if(mime.equalsIgnoreCase(context.getContentResolver().getType(file))){
-                context.grantUriPermission(Packages.SYSTEM_UI,file,Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                return file;
-            }
-        }catch(RuntimeException unavailable){/* Retain native image URI delivery on this provider. */}
-        context.grantUriPermission(Packages.SYSTEM_UI,image,Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        return image;
     }
 
     private static void copy(InputStream input,OutputStream output)throws IOException{
@@ -164,6 +145,7 @@ final class MediaStoreImageBridge {
     private static void deleteTemporary(Context context,Uri uri){
         try{
             context.revokeUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            // Earlier builds could also grant the Files URI for the same row.
             Uri alternate=uri.equals(fileUri(uri))
                     ?android.content.ContentUris.withAppendedId(PRIMARY_IMAGES,android.content.ContentUris.parseId(uri))
                     :fileUri(uri);
