@@ -15,6 +15,7 @@ import de.robv.android.xposed.XposedHelpers;
 final class PortalDragInput {
     static final String TITLE="OneStepLitePortalSource";
     private static final String ORIGINAL_WINDOW="portal_drag_original_window";
+    private static final String TRANSFER_USER="portal_drag_transfer_user";
     private static Object observedDisplay,listener;
 
     static Object originalWindow(Object portalWindow) {
@@ -40,12 +41,34 @@ final class PortalDragInput {
                         Object lock=XposedHelpers.getObjectField(wm,"mGlobalLock");
                         synchronized(lock){
                             IBinder original=source(wm,target,call.args[0]);
-                            if(original!=null)call.args[0]=original;
+                            if(original!=null){
+                                call.args[0]=original;
+                                call.setObjectExtra(TRANSFER_USER,android.os.Binder.getCallingUid()/100000);
+                            }
                         }
                     } catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"portal native input transfer rejected",unavailable);}
                 }
+                @Override protected void afterHookedMethod(MethodHookParam call) {
+                    if(!(call.getObjectExtra(TRANSFER_USER) instanceof Integer user))return;
+                    Object result=call.getResult();
+                    ShareDiagnostics.Code code=call.hasThrowable() || !(result instanceof Boolean)
+                            ?ShareDiagnostics.Code.LIFT_INPUT_TRANSFER_UNAVAILABLE
+                            :Boolean.TRUE.equals(result)?ShareDiagnostics.Code.LIFT_INPUT_TRANSFERRED
+                            :ShareDiagnostics.Code.LIFT_INPUT_TRANSFER_REJECTED;
+                    reportTransfer(loader,user,code);
+                }
             }).isEmpty())throw new IllegalStateException("Native drag input method missing");
         } catch(Throwable unavailable){android.util.Log.w(Tags.PROBE,"portal native input unavailable",unavailable);}
+    }
+
+    private static void reportTransfer(ClassLoader loader,int user,ShareDiagnostics.Code code) {
+        ShareDiagnosticReport.forward(()->{
+            Class<?> type=XposedHelpers.findClass("android.app.ActivityThread",loader);
+            Object thread=XposedHelpers.callStaticMethod(type,"currentActivityThread");
+            Object context=XposedHelpers.callMethod(thread,"getSystemContext");
+            return (android.content.Context)XposedHelpers.callMethod(context,"createContextAsUser",
+                    android.os.UserHandle.getUserHandleForUid(user*100000),0);
+        },ShareDiagnostics.Stage.IMAGE_LIFT,code);
     }
 
     static void observeDisplay(Object display,ClassLoader loader,BooleanSupplier active) {

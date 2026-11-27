@@ -11,6 +11,7 @@ out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
 files = {
 'android/os/IBinder.java': 'package android.os; public interface IBinder {}',
+'android/os/Binder.java': 'package android.os; public class Binder {public static int getCallingUid(){return 10100;}}',
 'android/os/UserHandle.java': 'package android.os; public class UserHandle {public static UserHandle getUserHandleForUid(int uid){return new UserHandle();}}',
 'android/os/SystemClock.java': 'package android.os; public class SystemClock {public static long uptimeMillis(){return 1;}}',
 'android/content/Context.java': 'package android.content; public class Context {}',
@@ -28,20 +29,25 @@ public String packageName;public CharSequence accessibilityTitle,title;
 public CharSequence getTitle(){return title;}}}''',
 'android/util/Log.java': 'package android.util; public class Log {public static int w(String t,String s,Throwable e){return 0;}public static int i(String t,String s){return 0;}}',
 'de/robv/android/xposed/XC_MethodHook.java': '''package de.robv.android.xposed;
-public class XC_MethodHook {public static class MethodHookParam {public Object[] args;}
-protected void beforeHookedMethod(MethodHookParam call) throws Throwable {}}''',
+public class XC_MethodHook {public static class MethodHookParam {public Object[] args;public Object result;private Object extra;
+public void setObjectExtra(String key,Object value){extra=value;}public Object getObjectExtra(String key){return extra;}
+public Object getResult(){return result;}public boolean hasThrowable(){return false;}}
+protected void beforeHookedMethod(MethodHookParam call) throws Throwable {}
+protected void afterHookedMethod(MethodHookParam call) throws Throwable {}}''',
 'de/robv/android/xposed/XposedBridge.java': '''package de.robv.android.xposed;
 public class XposedBridge {static XC_MethodHook hook;
 public static java.util.Set<Object> hookAllMethods(Class<?> c,String n,XC_MethodHook h){hook=h;return java.util.Set.of(h);}
-public static Object transfer(Object token) throws Throwable {
+public static Object transfer(Object token) throws Throwable {return transfer(token,true);}
+public static Object transfer(Object token,boolean result) throws Throwable {
 XC_MethodHook.MethodHookParam call=new XC_MethodHook.MethodHookParam();call.args=new Object[]{token,new Object()};
-hook.beforeHookedMethod(call);return call.args[0];}}''',
+hook.beforeHookedMethod(call);call.result=result;hook.afterHookedMethod(call);return call.args[0];}}''',
 'de/robv/android/xposed/XposedHelpers.java': '''package de.robv.android.xposed;
 public class XposedHelpers {
 public static java.util.Map<Object,Object> originals=new java.util.IdentityHashMap<>();
 public static Object getAdditionalInstanceField(Object o,String key){return originals.get(o);}
 public static Object setAdditionalInstanceField(Object o,String key,Object value){return originals.put(o,value);}
 public static Class<?> findClass(String n,ClassLoader c){return Object.class;}
+public static Object callStaticMethod(Class<?> c,String name,Object...a){return null;}
 public static Object getObjectField(Object o,String n){try{return o.getClass().getField(n).get(o);}catch(Exception e){throw new RuntimeException(e);}}
 public static int getIntField(Object o,String n){return (Integer)getObjectField(o,n);}
 public static Object callMethod(Object o,String n,Object...a){try{
@@ -75,7 +81,9 @@ source.mAttrs.title=PortalDragInput.TITLE;source.mAttrs.accessibilityTitle="sour
 display.mWmService.mWindowMap.put("source",source);display.mWmService.mWindowMap.put("focus",focus);
 boolean[] active={true};PortalDragInput.install(PortalInputRegression.class.getClassLoader(),()->display,()->active[0]);
 check(XposedBridge.transfer(source.mInputChannelToken)==focus.mInputChannelToken
-        && ShareDiagnosticReport.last==ShareDiagnostics.Code.LIFT_INPUT_BOUND);
+        && ShareDiagnosticReport.last==ShareDiagnostics.Code.LIFT_INPUT_TRANSFERRED);
+check(XposedBridge.transfer(source.mInputChannelToken,false)==focus.mInputChannelToken
+        && ShareDiagnosticReport.last==ShareDiagnostics.Code.LIFT_INPUT_TRANSFER_REJECTED);
 MotionEvent down=new MotionEvent(MotionEvent.ACTION_DOWN);
 display.touched=focus;PortalDragInput.observeTouch(display,down);
 source.mAttrs.accessibilityTitle=PortalDragInput.identity("source.app",down);

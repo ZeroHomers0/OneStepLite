@@ -13,13 +13,12 @@ def member(signature):
 files={
  'android/os/Bundle.java':'package android.os;public class Bundle{public boolean lift;public String uri,cleanup;public boolean region;public void putBoolean(String k,boolean v){lift=v;}public String getString(String key){if("uri".equals(key))return uri;if("cleanup_uri".equals(key))return cleanup;return null;}public boolean getBoolean(String key){return region;}}',
  'android/os/SystemClock.java':'package android.os;public class SystemClock{public static long now=1100;public static long uptimeMillis(){return now;}}',
- 'android/net/Uri.java':'package android.net;public class Uri{public static Uri parse(String value){return new Uri();}}',
  'android/widget/Toast.java':'package android.widget;public class Toast{public static int shown;public static final int LENGTH_SHORT=0;public static Toast makeText(Object c,String s,int d){return new Toast();}public void show(){shown++;}}',
  'android/view/InputDevice.java':'package android.view;public class InputDevice{public static final int SOURCE_TOUCHSCREEN=4098;}',
  'android/view/ViewConfiguration.java':'package android.view;public class ViewConfiguration{public static ViewConfiguration get(Object c){return new ViewConfiguration();}public static int getLongPressTimeout(){return 500;}public int getScaledTouchSlop(){return 8;}}',
  'io/github/zerohomers0/onesteplite/WordHoldRegression.java':'''package io.github.zerohomers0.onesteplite;
 import java.util.*;import java.util.function.*;import android.os.Bundle;import java.util.concurrent.CountDownLatch;import java.util.concurrent.atomic.AtomicBoolean;
-class ShareDiagnostics{enum Stage{DRAG,IMAGE_LIFT}enum Code{FAILED,CANCELLED,LIFT_PREVIEW_FALLBACK}static void event(Stage stage,Code code){}}
+class ShareDiagnostics{enum Stage{DRAG,IMAGE_LIFT}enum Code{FAILED,CANCELLED}static void event(Stage stage,Code code){}}
 class MotionEvent{
  static final int ACTION_DOWN=0,ACTION_UP=1,ACTION_MOVE=2,ACTION_CANCEL=3,ACTION_POINTER_UP=6;
  int action,count=1;long down=1000;float x=50,y=50;boolean recycled;
@@ -48,10 +47,6 @@ public class WordHoldRegression{
  }Capture fallbackCapture=new Capture();
  Handler main=new Handler();Anchor anchor=new Anchor();int generation,opens;boolean active=true;
  BooleanSupplier ready=()->active;boolean live(){return pointer!=null&&validGesture&&active;}
- int previews;
- Consumer<android.net.Uri> imagePreview=uri->previews++;
- void dragStarted(){generation++;validGesture=false;}
- void reportLift(ShareDiagnostics.Code code){}
  boolean openWords(String text){opens++;return true;}
  __METHODS__
  static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
@@ -107,14 +102,11 @@ public class WordHoldRegression{
  h=fresh();h.fallbackCapture.deferred=true;two=new MotionEvent(2);two.count=2;
  h.motion(two);h.main.drain();h.motion(new MotionEvent(0));h.fallbackCapture.result.accept("old OCR");
  check(h.opens==0,"OCR from a previous press cannot open word selection");
- h=fresh();h.window=new Object();h.finishRejectedLift(true,null);
+ h=fresh();h.window=new Object();h.finishRejectedLift(true);
  check(h.window==null&&h.opens==0&&android.widget.Toast.shown==1,"rejected single-finger lift reports failure without opening words or preview");
- h.finishRejectedLift(false,null);check(android.widget.Toast.shown==1,"cancelled input does not show a retry prompt");
- h.nativeCaptureId="capture";h.nativeCleanupUri="content://media/external/images/media/1";h.finishRejectedLift(false,h.nativeCleanupUri);
+ h.finishRejectedLift(false);check(android.widget.Toast.shown==1,"cancelled input does not show a retry prompt");
+ h.nativeCaptureId="capture";h.nativeCleanupUri="content://media/external/images/media/1";h.finishRejectedLift(false);
  check(h.nativeCaptureId==null&&h.nativeCleanupUri==null&&h.discardedCaptures==1&&h.discardedPublications==1,"a failed image lift releases private capture and published media");
- h=fresh();h.nativeCleanupUri="content://media/external_primary/file/1";h.window=new Object();
- check(h.finishRejectedLift(true,h.nativeCleanupUri)&&h.previews==1&&h.window==null&&h.pointer==null
-        &&h.discardedPublications==0&&h.nativeCleanupUri==null,"rejected native image lift transfers the live image to preview");
  h=fresh();h.window=new Object();h.startingDrag=true;h.windowRequest=new AtomicBoolean();
  h.clearPendingWindow(new AtomicBoolean(true));
  check(h.window!=null,"an unrelated IPC timeout cannot cancel a pending native drag");
@@ -126,7 +118,7 @@ public class WordHoldRegression{
  System.out.println("Production word hold cancellation checks="+checks+" passed");
  }
 }
-'''.replace('__METHODS__',member('    private void motion(')+'\n'+member('    private void moveLiftCandidate(')+'\n'+member('    private boolean deferWords(')+'\n'+member('    private boolean finishRejectedLift(')+'\n'+member('    private void clearPendingWindow('))}
+'''.replace('__METHODS__',member('    private void motion(')+'\n'+member('    private void moveLiftCandidate(')+'\n'+member('    private boolean deferWords(')+'\n'+member('    private void finishRejectedLift(')+'\n'+member('    private void clearPendingWindow('))}
 paths=[]
 for name,text in files.items():
     path=out/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(text,encoding='utf-8');paths.append(str(path))
