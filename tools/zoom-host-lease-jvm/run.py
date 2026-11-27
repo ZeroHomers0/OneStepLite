@@ -39,7 +39,7 @@ public class ZoomHostLeaseRegression {
 paths=[]
 for name,text in files.items():
     p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8');paths.append(str(p))
-paths.append(str(root/'app/src/main/java/io/github/zerohomers0/onesteplite/zoom/ZoomHostLease.java'))
+paths.append(str(root/'app/src/main/java/io/github/zerohomers0/onesteplite/systemserver/zoom/ZoomHostLease.java'))
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.ZoomHostLeaseRegression'],check=True)

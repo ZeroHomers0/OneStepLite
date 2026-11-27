@@ -9,6 +9,7 @@ root = Path(__file__).resolve().parents[2]
 src=package_dir(root)
 source = (src / 'WorkspaceWallpaperController.java').read_text(encoding='utf-8-sig')
 host_source = (src / 'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+cell_source = (src / 'WorkspaceCellSurfaceController.java').read_text(encoding='utf-8-sig')
 
 
 def method(signature, text=source):
@@ -139,9 +140,9 @@ public class WallpaperLayoutRegression {
 '''.replace('__METHOD__', '\n'.join([
     method('    void applyWallpaperBackdrops() {'),
     method('    void refreshEmptyHintBackdrop(Slot slot) {'),
-    method('    private void updateHint(Slot slot) {', host_source),
-    method('    private boolean presentsSlot(Slot slot) {', host_source),
-])).replace('host.','').replace('WorkspaceHost.','').replace('log.accept(','log(').replace('coordinatorTopGeometry()','topGeometry()').replace('coordinatorSideSegmentTop(','sideSegmentTop(').replace('coordinatorWorkspaceMainHole()','workspaceMainHole()').replace('coordinatorUpdateWorkspaceBacking(','updateWorkspaceBacking(').replace('coordinatorPresentsSlot(','presentsSlot(').replace('coordinatorSlotTop()','SLOT_TOP')
+    method('    void updateHint(Slot slot) {', host_source),
+    method('    boolean presentsSlot(Slot slot) {', cell_source),
+])).replace('host.','').replace('WorkspaceHost.','').replace('log.accept(','log(').replace('coordinatorTopGeometry()','topGeometry()').replace('coordinatorSideSegmentTop(','sideSegmentTop(').replace('coordinatorWorkspaceMainHole()','workspaceMainHole()').replace('coordinatorUpdateWorkspaceBacking(','updateWorkspaceBacking(').replace('coordinatorPresentsSlot(','presentsSlot(').replace('coordinatorSlotTop()','SLOT_TOP').replace('sideRows.isCompacting()','sideCompacting').replace('cellSurfaces.','')
 java = out / 'WallpaperLayoutRegression.java'
 java.write_text(body, encoding='utf-8')
 typed_value = out / 'android/util/TypedValue.java'

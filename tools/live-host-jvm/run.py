@@ -110,7 +110,7 @@ public class LiveHostRegression {
  void setLiveSwapInputBlocked(boolean b,boolean immediate){inputPass=b;}
  void scheduleDisplayGeometryRefresh(){}
  void finishPendingSuspend(){suspends++;}
- boolean compactPending,sideScrolling;
+ boolean compactPending,sideScrolling; final class Cells { boolean pending(){return compactPending;} void compactCellsAfterCollection(){LiveHostRegression.this.compactCellsAfterCollection();} void requestCompaction(){LiveHostRegression.this.requestCompaction();} } Cells cells=new Cells();
  void requestCompaction(){compactPending=true;}
  // Placement versus retirement policy is exercised by home-compact-jvm.
  int compactions;void compactCellsAfterCollection(){compactions++;}
@@ -233,7 +233,7 @@ public class LiveHostRegression {
   System.out.println("actual Host live completion/cancel/visual/external guard checks="+checks+" passed");
  }
 }
-'''.replace('__METHODS__', methods)
+'''.replace('__METHODS__', methods.replace('sideRows.isScrolling()','sideScrolling').replace('cellSurfaces.','').replace('chrome.','').replace('cellSurfaces.','').replace('resumes.','').replace('taskStates.','').replace('scales.',''))
 java = out / 'LiveHostRegression.java'
 java.write_text(body, encoding='utf8')
 sparse = out / 'android/util/SparseArray.java'

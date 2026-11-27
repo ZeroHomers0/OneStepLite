@@ -14,7 +14,7 @@ def method(signature):
         elif host[end]=='}':depth-=1
         end+=1
     return host[start:end]
-methods=method('    public static void onSystemNavigation(')+'\n'+method('    private boolean emptyMainHomeFocused(')
+methods=(method('    public static void onSystemNavigation(')+'\n'+method('    private boolean emptyMainHomeFocused(')).replace('resumes.','')
 files={
 'android/os/SystemClock.java':'package android.os;public class SystemClock{public static long now;public static long uptimeMillis(){return now;}}',
 'android/os/Handler.java':'package android.os;public class Handler{public void post(Runnable r){r.run();}}',

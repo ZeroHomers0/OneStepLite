@@ -4,7 +4,7 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 from pathlib import Path
 import subprocess
 root=Path(__file__).resolve().parents[2]
-source=(package_dir(root)/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+source=(package_dir(root)/'WorkspaceExitController.java').read_text(encoding='utf-8-sig')
 out=root/'build/tests/standalone';out.mkdir(parents=True,exist_ok=True)
 def method(signature):
  start=source.index(signature);brace=source.index('{',start);depth=1;end=brace+1
@@ -13,7 +13,7 @@ def method(signature):
   elif source[end]=='}':depth-=1
   end+=1
  return source[start:end]
-methods='\n'.join(method(s) for s in ['    private void returnUnboundOwnedCandidates(', '    private void returnUnboundOwnedCandidate('])
+methods='\n'.join(method(s) for s in ['    void returnUnboundOwnedCandidates(', '    private void returnUnboundOwnedCandidate(']).replace('host.','').replace('WorkspaceHost.log','log').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('WorkspaceHost.SUSPENDING','SUSPENDING')
 body=r'''
 package io.github.zerohomers0.onesteplite;
 import java.util.*;

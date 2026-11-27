@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 root = Path(__file__).resolve().parents[2]
-source = (package_dir(root)/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+source = (package_dir(root)/'WorkspaceCellMotionController.java').read_text(encoding='utf-8-sig')
 out = Path(sys.argv[1]) if len(sys.argv)>1 else root/'build-cell-binding-jvm'
 out.mkdir(parents=True, exist_ok=True)
 start = source.index('    private boolean cellMoveCurrent(')
@@ -63,7 +63,7 @@ public class CellBindingRegression {
   System.out.println("actual Host cell binding checks="+checks+" passed");
  }
 }
-'''.replace('__METHOD__',source[start:end])
+'''.replace('__METHOD__',source[start:end].replace('host.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log'))
 java=out/'CellBindingRegression.java';java.write_text(body,encoding='utf8')
 jdk=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(java)],check=True)

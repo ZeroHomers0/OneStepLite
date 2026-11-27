@@ -2,7 +2,7 @@
 from pathlib import Path
 import os, subprocess, sys
 root = Path(__file__).resolve().parents[2]
-source = (root / 'app/src/main/java/io/github/zerohomers0/onesteplite/chrome/HyperOsStyle.java').read_text('utf-8')
+source = (root / 'app/src/main/java/io/github/zerohomers0/onesteplite/systemui/chrome/HyperOsStyle.java').read_text('utf-8')
 start = source.index('    private static void boxBlur(')
 end = source.index('{', start) + 1
 depth = 1

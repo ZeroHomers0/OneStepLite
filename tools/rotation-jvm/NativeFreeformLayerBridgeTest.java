@@ -145,7 +145,7 @@ public final class NativeFreeformLayerBridgeTest {
         manager.foreground.add(pinTask.mTaskId);
         Object lock = new Object(), target = fakeTarget(pinDisplay, lock);
         setStatic("sZoomTarget", target);
-        Method release = HostEntry.class.getDeclaredMethod(
+        Method release = Class.forName("io.github.zerohomers0.onesteplite.NativeWindowRuntime").getDeclaredMethod(
                 "releaseNativeForegroundPinLayers", Object.class, int.class);
         release.setAccessible(true); release.invoke(null, manager, pinTask.mTaskId);
         check(pinTask.visible && pinTask.requested);
@@ -183,7 +183,7 @@ public final class NativeFreeformLayerBridgeTest {
         var field = HostEntry.class.getDeclaredField(name); field.setAccessible(true); field.set(null, value);
     }
     static void apply(Display display, Object tx) throws Exception {
-        Method method = HostEntry.class.getDeclaredMethod("layerWorkspaceWithNativeFreeforms", Object.class, Object.class);
+        Method method = Class.forName("io.github.zerohomers0.onesteplite.NativeWindowRuntime").getDeclaredMethod("layerWorkspaceWithNativeFreeforms", Object.class, Object.class);
         method.setAccessible(true); method.invoke(null, display, tx);
     }
     static void check(boolean value) { checks++; if (!value) throw new AssertionError(); }

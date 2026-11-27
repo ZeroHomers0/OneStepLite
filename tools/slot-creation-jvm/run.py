@@ -25,7 +25,7 @@ public class SlotCreationRegression {
  static final class TaskViewWarmup {static Object take(Object a,Object b){return null;}}
  static final class ShellCompat {static void createTaskView(Object f,Object c,Executor e,Consumer<Object> cb){cb.accept(new Object());}}
  static final class Main {void post(Runnable r){r.run();}}
- final List<Integer> created=new ArrayList<>();boolean configured,compacted;
+ final List<Integer> created=new ArrayList<>();boolean configured,compacted; final class Cells { void requestCompaction(){SlotCreationRegression.this.requestCompaction();} } Cells cells=new Cells();
  static final int SLOT_TOP=5,SLOT_COUNT=6;
  int CELL_SLOT_COUNT;Slot[] slots=new Slot[SLOT_COUNT];WorkspaceLayout layout=new WorkspaceLayout();Main main=new Main();
  Object ctx=new Object(),factory=new Object();Executor executor=Runnable::run;

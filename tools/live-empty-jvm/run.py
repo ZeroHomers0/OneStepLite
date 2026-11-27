@@ -11,7 +11,8 @@ out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
 source = (src / 'WorkspaceHost.java').read_text(encoding='utf-8-sig')
 def extract(name):
-    start = source.index('    private void ' + name + '(')
+    start = source.find('    private void ' + name + '(')
+    if start < 0: start = source.index('    void ' + name + '(')
     brace = source.index('{', start)
     depth, end = 1, brace + 1
     while depth:

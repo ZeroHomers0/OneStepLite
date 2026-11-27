@@ -1,18 +1,24 @@
 from pathlib import Path
-import os, subprocess, sys
+import os, subprocess, sys, re
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from source_paths import package_dir
 
 root = Path(__file__).resolve().parents[2]
 src = package_dir(root)
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
-text = (src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+text = (src/'WorkspaceSideRowController.java').read_text(encoding='utf-8-sig')
 
 def member(sig):
     start=text.index(sig); brace=text.index('{',start); depth=1; end=brace+1
     while depth:
         depth += (text[end]=='{')-(text[end]=='}'); end+=1
     return text[start:end]
+
+def adapt_side(text):
+ text=text.replace('workspace.','').replace('WorkspaceHost.log','log').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('cellSurfaces.removeCellBackground(slot)','removeCellBackground(slot)')
+ for old,new in [('order','sideOrder'),('compacting','sideCompacting'),('captured','sideCaptured'),('desktopRevealing','sideDesktopRevealing'),('creatingView','creatingSideView'),('attached','sideAttached'),('compactionShift','sideCompactionShift'),('savedOffset','savedSideOffset'),('offset','sideOffset')]:
+  text=re.sub(r'\b'+old+r'\b',new,text)
+ return text
 
 body='''package io.github.zerohomers0.onesteplite;
 import java.util.*;
@@ -51,11 +57,11 @@ public class SideRowTrimRegression {
   System.out.println("SideRowTrim checks="+checks+" passed");
  }
 }
-'''.replace('__METHODS__', member('    private void trimTrailingEmptySideRows() {')+'\n'+member('    private void releaseDetachedSideRow(Slot slot) {'))
+'''.replace('__METHODS__', adapt_side(member('    private void trimTrailingEmptySideRows() {'))+'\n'+adapt_side(member('    private void releaseDetachedSideRow(Slot slot) {')))
 (out/'android/view/View.java').parent.mkdir(parents=True,exist_ok=True)
 (out/'android/view/View.java').write_text('package android.view;public class View {public ViewGroup parent;public ViewGroup getParent(){return parent;}}',encoding='utf-8')
 (out/'android/view/ViewGroup.java').write_text('package android.view;public class ViewGroup extends View {public void removeView(View v){v.parent=null;}}',encoding='utf-8')
 p=out/'io/github/zerohomers0/onesteplite/SideRowTrimRegression.java';p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body,encoding='utf-8')
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(out/'android/view/View.java'),str(out/'android/view/ViewGroup.java'),str(src/'SideRowOrder.java'),str(p)],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(out/'android/view/View.java'),str(out/'android/view/ViewGroup.java'),str(src/'SideRowOrder.java'),str(src/'WorkspaceRuntimeCounters.java'),str(p)],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.SideRowTrimRegression'],check=True)

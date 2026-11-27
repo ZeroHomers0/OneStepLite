@@ -6,11 +6,12 @@ root=Path(__file__).resolve().parents[2]
 src=package_dir(root)
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 source=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-def member(signature):
- start=source.index(signature);end=source.index('{',start)+1;depth=1
+scale=(src/'WorkspaceScaleController.java').read_text(encoding='utf-8-sig')
+def member(signature,text=source):
+ start=text.index(signature);end=text.index('{',start)+1;depth=1
  while depth:
-  depth+=(source[end]=='{')-(source[end]=='}');end+=1
- return source[start:end]
+  depth+=(text[end]=='{')-(text[end]=='}');end+=1
+ return text[start:end]
 body='''package io.github.zerohomers0.onesteplite;
 import java.util.*;import android.graphics.Rect;
 import java.util.concurrent.Executor;
@@ -78,7 +79,7 @@ public class TopConfigRegression {
   boolean ordinaryRoot(Object i,int m){return i instanceof Info&&((Info)i).mode==m;}
   boolean returnTicketCurrent(Promotion p){return currentTicket;}
   void checkReturned(Slot s,Promotion p,int attempt,Runnable success,Consumer<String> failure){returned++;success.run();}
-'''+member('    private void applyTopConfiguration(')+member('    private void applyFullscreenBounds(')+member('    private Object fullscreenExitTransaction(')+member('    private void appendTaskViewExitOverrides(')+member('    private void finishNativeReturnWhenIdle(')+member('    private void applyRetainedDesktopReturn(')+member('    private void restoreRetainedMainOpacityAfterHandoff(')+member('    private void restoreTopMainOpacity(')+member('    private void restoreMainOpacity(')+member('    private void preferMainAfterTopChange(')+'''
+'''+member('    void applyTopConfiguration(')+member('    void applyFullscreenBounds(', scale).replace('host.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log')+member('    Object fullscreenExitTransaction(')+member('    private void appendTaskViewExitOverrides(')+member('    private void finishNativeReturnWhenIdle(')+member('    private void applyRetainedDesktopReturn(')+member('    private void restoreRetainedMainOpacityAfterHandoff(')+member('    private void restoreTopMainOpacity(')+member('    private void restoreMainOpacity(')+member('    private void preferMainAfterTopChange(').replace('taskStates.','')+'''
  static TopConfigRegression host(){
   var h=new TopConfigRegression();active=h;h.infos.add(new Info(1,1,"home",false));h.infos.add(new Info(42,6,"upper",true));return h;
  }

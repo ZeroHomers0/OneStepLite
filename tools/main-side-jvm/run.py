@@ -8,7 +8,7 @@ def member(n):
  a=s.index('    private void '+n+'(');i=s.index('{',a)+1;d=1
  while d:d+=(s[i]=='{')-(s[i]=='}');i+=1
  return s[a:i]
-methods='\n'.join(member(n) for n in ['updateMainSideFrame','translateSidePresentation','settleMainSidePresentation','cancelMainSideSwitch','switchMainSideAnimated'])
+methods='\n'.join(member(n) for n in ['updateMainSideFrame','translateSidePresentation','settleMainSidePresentation','cancelMainSideSwitch','switchMainSideAnimated']).replace('sideRows.motionRunning()','isSideMotionRunning()').replace('chrome.','').replace('resumes.','')
 files={
 'android/animation/Animator.java':'package android.animation;public class Animator {}',
 'android/animation/AnimatorListenerAdapter.java':'package android.animation;public class AnimatorListenerAdapter {public void onAnimationEnd(Animator a){}}',
@@ -24,7 +24,7 @@ public class SideSwitchRegression {
  static class View {float x,left,translation;int layouts,invalidates;void setX(float value){translation=value-left;x=value;}void setTranslationX(float value){translation=value;x=left+value;}void relayout(float value){left=value;x=left+translation;}void requestLayout(){layouts++;}void invalidate(){invalidates++;}boolean hit(float point){return point>=x&&point<x+270;}}
  static class Slot {int index;int[] rect={0,600,270,1200};boolean touchBlocked;View view=new View(),hint=new View();Slot(int i){index=i;}}
  static class Layout {boolean mainOnRight;int sideWidth=270,cellX,mainOffsetX;Layout(boolean r){mainOnRight=r;cellX=r?0:810;mainOffsetX=r?270:0;}}
- View root=new View();Object promotion,cellMotion;int scene=ACTIVE;boolean suspendRequested,mainOnRight=true,liveSwapInputBlocked,workspaceEntering,transferBusy,screenOn=true,keyguardLocked,motion,flip;
+ View root=new View();Object promotion,cellMotion;int scene=ACTIVE;boolean suspendRequested,mainOnRight=true,liveSwapInputBlocked,workspaceEntering,transferBusy,screenOn=true,keyguardLocked,motion,flip; final class Cells { Object motion(){return cellMotion;} } Cells cells=new Cells();
  Layout layout=new Layout(true);Slot[] slots={new Slot(0),new Slot(1),new Slot(2),new Slot(3),new Slot(4),null};View[] sideBackingViews={new View(),new View(),new View(),new View(),new View()};
  float mainSideFrameX=Float.NaN;Object ctx;int screenW=1080,screenH=2400;
  static class Bitmap {boolean isRecycled(){return false;}} Bitmap wallpaperBackdrop=new Bitmap();

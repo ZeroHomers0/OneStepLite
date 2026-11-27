@@ -2,32 +2,42 @@
 import os
 from pathlib import Path
 import subprocess
-import sys
+import sys, re
 import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1])); from source_paths import package_dir
 
 root = Path(__file__).resolve().parents[2]
 src=package_dir(root,sys.argv[2] if len(sys.argv)>2 else None)
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
 source = (src / 'WorkspaceHost.java').read_text(encoding='utf8')
+controller_source = (src / 'WorkspaceSideRowController.java').read_text(encoding='utf8')
+scale_source = (src / 'WorkspaceScaleController.java').read_text(encoding='utf8')
+
+def extract_from(text, signature):
+    start = text.index(signature); pos = text.index('{', start) + 1; depth = 1
+    while depth:
+        depth += (text[pos] == '{') - (text[pos] == '}'); pos += 1
+    return text[start:pos]
 
 def extract(signature):
-    start = source.index(signature); pos = source.index('{', start) + 1; depth = 1
-    while depth:
-        depth += (source[pos] == '{') - (source[pos] == '}'); pos += 1
-    return source[start:pos]
+    return extract_from(source, signature)
+
+def side_method(signature):
+    text=extract_from(controller_source, signature)
+    text=text.replace('workspace.','').replace('WorkspaceHost.log','log')
+    text=text.replace('viewportCrop','sideViewportCrop')
+    return re.sub(r'\bviewport\b','sideViewport',text)
 
 actual = '\n'.join(extract(s) for s in (
     '    private void appendRetainedSurfaces(',
-    '    private void appendSlotViewport(',
     '    private void trackRetainedSurfaces(',
-    '    private void appendWorkspaceSurfaces(',
+    '    void appendWorkspaceSurfaces(',
     '    private void appendHiddenKeyguardSurfaces(',
     '    private void restoreRetainedWorkspaceSurfaces(',
-    '    private void reassertSideTaskViews(',
-    '    private boolean ensureSideViewport('))
-if '    private void stageSideViewport(' in source:
-    actual += '\n' + extract('    private void stageSideViewport(')
-actual += '\n' + extract('    private void syncSideViewportFocus(')
+    '    void reassertSideTaskViews(')).replace('cellSurfaces.','')
+actual += '\n' + extract_from(scale_source, '    void appendSlotViewport(').replace('host.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField')
+actual += '\n' + side_method('    private void stageSideViewport(')
+actual += '\n' + side_method('    private boolean ensureSideViewport(')
+actual += '\n' + extract('    void syncSideViewportFocus(')
 render_source=(package_dir(root)/'RenderBinding.java').read_text(encoding='utf-8-sig')
 render_start=render_source.index('final class RenderBinding {')
 render_brace=render_source.index('{',render_start);render_depth=1;render_end=render_brace+1
@@ -35,6 +45,7 @@ while render_depth:
     if render_source[render_end]=='{':render_depth+=1
     elif render_source[render_end]=='}':render_depth-=1
     render_end+=1
+actual=actual.replace('cellSurfaces.','').replace('taskStates.','').replace('scales.','')
 actual += '\n' + render_source[render_start:render_end].replace('final class RenderBinding','static final class RenderBinding',1)
 focus_stub = r'''package android.window;
 public class WindowContainerTransaction {

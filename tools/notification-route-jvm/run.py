@@ -32,6 +32,7 @@ class WorkspaceHost{
  static class QueueMain{ArrayList<Runnable> q=new ArrayList<>();Looper getLooper(){return Looper.MAIN;}void post(Runnable r){q.add(r);}void drain(){for(Runnable r:new ArrayList<>(q))r.run();q.clear();}}
  static class Info{int taskId=42,userId=0;}static class Controller{Info mTaskInfo=new Info();}
  static class Slot{int index,windowMode=6,taskId=42;boolean occupied=true,parked,frozen,carrier;String pkg="settings";Object taskToken=new Object();Controller controller=new Controller();Slot(int i){index=i;if(i!=1)occupied=false;}}
+ static class Scales{boolean mayWriteSideSurface(Slot s){return true;}}Scales scales=new Scales();
  static class Promotion{Slot slot;boolean cancelled;int taskId=42;Runnable notificationLaunch;Promotion(Slot s){slot=s;}}
  int currentUserId(){return 0;}boolean mayWriteSideSurface(Slot s){return true;}boolean controllerOwns(Slot s,int id,Object t){return true;}void swapWithMain(int i){if(canStart)promotion=new Promotion(slots[i]);}static void log(String s){}
  boolean supportsTaskUser(int id){return id==0||id==999;}

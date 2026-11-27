@@ -8,10 +8,11 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / 'build/tests/side-launch-jvm'
 SOURCE_ROOT = Path(os.environ.get('ONESTEPLITE_LAUNCH_SOURCE_ROOT', ROOT))
-text = (package_dir(SOURCE_ROOT)/'WorkspaceHost.java').read_text(encoding='utf-8')
+text = (package_dir(SOURCE_ROOT)/'WorkspaceLaunchController.java').read_text(encoding='utf-8')
 start = text.index('    private void startSlot(final Slot slot, Intent launch, String label)')
 end = text.index('    private static void callHidden(', start)
-method = text[start:end]
+method = (text[start:end].replace('host.','').replace('cellSurfaces.','').replace('resumes.','')
+    .replace('WorkspaceHost.log','log').replace('WorkspaceHost.ACTIVE','ACTIVE'))
 OUT.mkdir(parents=True, exist_ok=True)
 source = OUT / 'SideLaunchReplay.java'
 source.write_text(r'''

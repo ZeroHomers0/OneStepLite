@@ -12,7 +12,8 @@ source = (src/'HostEntry.java').read_text(encoding='utf8')
 hooks=(src/'ZoomFileObserverHooks.java').read_text(encoding='utf-8-sig')
 if '/data/system' not in hooks or '/data/user_de/0/com.android.systemui/files' not in hooks:
     raise AssertionError('zoom events must observe both current and legacy storage')
-if 'sZoomObserversArmed?60_000L:10_000L' not in source or 'return system && systemUi;' not in hooks:
+runtime=(src/'ZoomRuntime.java').read_text(encoding='utf-8-sig')
+if 'sZoomObserversArmed?60_000L:10_000L' not in runtime or 'return system && systemUi;' not in hooks:
     raise AssertionError('both observers must be installed before extending the idle fallback')
 start = source.index('    private void applyDisplayZoomLocked(ZoomTarget target, float scale,\n            float offsetY, float offsetX, ZoomCommit commit)')
 native = source.index('    void applyDisplayZoomLocked(ZoomTarget target, float scale,\n            float offsetY, float offsetX, ZoomCommit commit, boolean nativeVisibility)')

@@ -41,7 +41,7 @@ methods=(methods.replace('host.','').replace('WorkspaceHost.','')
     .replace('coordinatorApplyWallpaperBackdrops()','applyWallpaperBackdrops()')
     .replace('coordinatorReassertCarrier()','reassertCarrier()').replace('coordinatorWriteZoom(','writeZoom(')
     .replace('coordinatorExecuteOnShell(','executeOnShell(').replace('coordinatorApplyFullscreenBounds(','applyFullscreenBounds(')
-    .replace('coordinatorReapplyScale(','reapplyScale('))
+    .replace('coordinatorReapplyScale(','reapplyScale(').replace('sideRows.isEmpty()','sideOrder.isEmpty()'))
 
 body = r'''
 public class DisplayRefreshRegression {
@@ -58,6 +58,7 @@ public class DisplayRefreshRegression {
  static class Promotion {boolean nativeSwap=true;}
  static class CellMotion {int finishes;void finish(){finishes++;}}
  CellMotion cellMotion;
+ final class Cells { CellMotion motion(){return cellMotion;} } Cells cells=new Cells();
  static class Slot {int index,taskId,sideRow=-1;int[] rect;boolean carrier,promoting,launching,occupied,parked;View carrierTapView;}
  static class Layout {
   int topStrip,sideWidth,mainWidth,mainDispWidth,mainDispHeight,mainOffsetX,mainOffsetY;

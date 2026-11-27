@@ -8,6 +8,9 @@ root=Path(__file__).resolve().parents[2]; src=package_dir(root)
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 host=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
 wallpaper=(src/'WorkspaceWallpaperController.java').read_text(encoding='utf-8-sig')
+side=(src/'WorkspaceSideRowController.java').read_text(encoding='utf-8-sig')
+cell=(src/'WorkspaceCellSurfaceController.java').read_text(encoding='utf-8-sig')
+chrome=(src/'WorkspaceChromeController.java').read_text(encoding='utf-8-sig')
 def member(signature, text=host):
  a=text.index(signature);b=text.index('{',a);d=1;i=b+1
  while d:
@@ -15,8 +18,20 @@ def member(signature, text=host):
   elif text[i]=='}':d-=1
   i+=1
  return text[a:i]
-base_signatures=['    private void prepareWorkspaceBackdrop(', '    private void releaseWorkspaceBackdrop(', '    private void retireWorkspaceBackdrop(', '    private void placeSideView(', '    private void beginWorkspaceEntry(', '    private void awaitWorkspaceFrame(', '    private void setWorkspaceAlpha(', '    private void stageCellPresentation(', '    private Rect workspaceCellCrop(Slot slot)', '    private Rect workspaceCellCrop(int[] rect,', '    private android.graphics.RectF workspaceMainHole(', '    private android.graphics.RectF workspaceMainHoleAt(', '    private android.graphics.RectF workspaceTopHole(', '    private android.graphics.RectF workspaceSideHole(', '    private void updateWorkspaceBacking(', '    private void updateChromeClip(', '    private void clipChromeBesideMain(', '    private int[] sideBackingBounds(', '    private int sideSegmentTop(', '    private int sideSegmentHeight(', '    private void playWorkspaceFade(', '    private void suspendSession(', '    private void finishPendingSuspend(', '    private boolean ownsCellPresentation(', '    private boolean cellPresentationVisible(', '    private void updateCellSurfaceVisibility(']
+base_signatures=['    private void prepareWorkspaceBackdrop(', '    private void releaseWorkspaceBackdrop(', '    void retireWorkspaceBackdrop(', '    void beginWorkspaceEntry(', '    private void awaitWorkspaceFrame(', '    void setWorkspaceAlpha(', '    Rect workspaceCellCrop(Slot slot)', '    Rect workspaceCellCrop(int[] rect,', '    android.graphics.RectF workspaceMainHole(', '    private android.graphics.RectF workspaceMainHoleAt(', '    android.graphics.RectF workspaceTopHole(', '    android.graphics.RectF workspaceSideHole(', '    private void playWorkspaceFade(', '    void suspendSession(']
 methods='\n'.join(member(s) for s in base_signatures)
+methods=(methods.replace('sideRows.isEmpty()','sideOrder.isEmpty()').replace('sideRows.layoutAll()','layoutSideViewport(true)')
+    .replace('sideRows.gestureActive()','sideArmed || sideCaptured || isSideMotionRunning()')
+    .replace('sideRows.finishGesture()','finishSideScroll()').replace('sideRows.isScrolling()','sideScrolling').replace('cellSurfaces.','').replace('chrome.','').replace('exits.','').replace('resumes.','').replace('scales.',''))
+cell_methods='\n'.join(member(s,cell).replace('host.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log').replace('workspaceAlpha()','workspaceAlpha').replace('sideRows.isScrolling()','sideScrolling').replace('scales.','') for s in ['    boolean ownsCellPresentation(', '    boolean cellPresentationVisible(', '    void stageCellPresentation(', '    void updateCellSurfaceVisibility('])
+methods+='\n'+cell_methods
+chrome_methods='\n'.join(member(s,chrome).replace('host.','').replace('WorkspaceHost.log','log').replace('workspaceAlpha()','workspaceAlpha').replace('mainSideAnimator()','mainSideAnimator') for s in ['    void updateChromeClip(', '    private void clipChromeBesideMain(', '    private int[] sideBackingBounds(', '    void updateWorkspaceBacking(', '    int sideSegmentTop(', '    int sideSegmentHeight('])
+methods+='\n'+chrome_methods
+side_place=member('    private void placeSideView(', side)
+side_place=(side_place.replace('workspace.layout','layout').replace('workspace.workspaceAlpha()','workspaceAlpha')
+    .replace('workspace.mainSideAnimator()','mainSideAnimator').replace('workspace.workspaceMainHole()','workspaceMainHole()')
+    .replace('workspace.workspaceCellCrop(','workspaceCellCrop('))
+methods+='\n'+side_place
 wallpaper_method=member('    void updateWorkspaceBackdropVisibility() {', wallpaper)
 wallpaper_method=wallpaper_method.replace('host.','').replace('WorkspaceHost.','').replace('coordinatorWorkspaceMainHole()','workspaceMainHole()').replace('coordinatorUpdateWorkspaceBacking(','updateWorkspaceBacking(').replace('coordinatorSlotCount()','SLOT_COUNT')
 methods+='\n'+wallpaper_method
@@ -85,7 +100,7 @@ public class WorkspaceRegression {
  boolean mayWriteSideSurface(Slot s){return true;}boolean presentsSlot(Slot s){return true;}
  Rect logicalBounds(Slot s){return new Rect(0,0,screenW,screenH);}
  static class CellMotion{void finish(){}}
- Queue main=new Queue();Object ctx=this;CellMotion cellMotion;StatusBar statusBar=new StatusBar();Promotion promotion;Bitmap mainBackdrop,wallpaperBackdrop=new Bitmap();
+ Queue main=new Queue();Object ctx=this;CellMotion cellMotion;StatusBar statusBar=new StatusBar();Promotion promotion; final class Cells { Object motion(){return cellMotion;} void finishMotion(){if(cellMotion!=null)cellMotion.finish();} } Cells cells=new Cells();Bitmap mainBackdrop,wallpaperBackdrop=new Bitmap();
   boolean screenOn=true,zoomed=true,suspendRequested,landscapeSuspended,transferBusy,workspaceEntering,workspaceExiting,keyguardLocked;int scene=ACTIVE,zoomWrites,parks,returns,ready;long sceneEpoch=1,workspaceGeneration,zoomAnimUntil;String pendingSuspendReason;
  static class Layout {boolean tabletLandscape,mainOnRight;float mainScale=.7017717f;int mainOffsetX,mainOffsetY=606;int mainWidth=2286,sideWidth=762,topStrip=508,mainDispWidth=2139,gap=8;
   int[] cellBounds(int i){return new int[]{0,topStrip+i*400,762,topStrip+(i+1)*400};}}
@@ -105,7 +120,7 @@ public class WorkspaceRegression {
  boolean canRetainBoundTasks(){return retentionAllowed;}
  void finishRetainedSuspend(long epoch){retainedHides++;}
  void closeSwapPreview(){}void closeCellMovePreview(){}void restoreCarrierToMain(){}void hideIme(){}static void log(String s){}void failPromotion(Promotion p,String s){}
- void returnUnboundOwnedCandidates(long epoch,Runnable r){returns++;r.run();}void parkNext(int i){parks++;}
+ void returnUnboundOwnedCandidates(long epoch,Runnable r){returns++;r.run();}void parkNext(int i){parks++;}void finishPendingSuspend(){if(suspendRequested&&scene==ACTIVE&&promotion==null&&!transferBusy){String reason=pendingSuspendReason;pendingSuspendReason=null;suspendRequested=false;suspendSession(reason==null?"deferred":reason);}}
  Object getSurfaceField(Object o,String n){return o==null?null:((Controller)o).surface;}
  boolean controllerOwns(Slot s,int id,Object token){return s.taskId==id&&s.controller.token==token;}
  void closeSurfaceObject(Object t,String n){if(t!=null)((SurfaceControl.Transaction)t).close();}

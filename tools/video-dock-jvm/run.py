@@ -113,5 +113,5 @@ for name,body in files.items():
  p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body,encoding='utf-8')
 assert 'setWindowingMode' not in (src/'VideoDock.java').read_text(encoding='utf-8')
 assert 'setScreenSizeDp' not in (src/'VideoDock.java').read_text(encoding='utf-8')
-jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN']);subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*[str(out/n) for n in files],str(src/'VideoDock.java'),str(src/'Actions.java'),str(src/'Packages.java'),str(src/'Tags.java')],check=True)
+jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN']);subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*[str(out/n) for n in files],str(src/'VideoDock.java'),str(src/'Actions.java'),str(src/'Packages.java'),str(src/'Tags.java'),str(src/'PlaybackStateRefreshPolicy.java'),str(src/'WorkspaceRuntimeCounters.java')],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.VideoDockRegression'],check=True)

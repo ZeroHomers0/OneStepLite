@@ -7,11 +7,10 @@
         errorLine1="            int id = context.getResources().getIdentifier(&quot;status_bar_height&quot;, &quot;dimen&quot;, &quot;android&quot;);"
         errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/platform/DeviceProfile.java"
+            file="src/main/java/io/github/zerohomers0/onesteplite/framework/DeviceProfile.java"
             line="81"
             column="22"/>
     </issue>
-
     <issue
         id="AndroidGradlePluginVersion"
         message="A newer version of Gradle than 9.9.1 is available: 9.9.2"
@@ -22,73 +21,66 @@
             line="4"
             column="17"/>
     </issue>
-
     <issue
         id="DiscouragedApi"
         message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
         errorLine1="            int id = context.getResources().getIdentifier(&quot;status_bar_height&quot;, &quot;dimen&quot;, &quot;android&quot;);"
         errorLine2="                                            ~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/platform/DeviceProfile.java"
+            file="src/main/java/io/github/zerohomers0/onesteplite/framework/DeviceProfile.java"
             line="81"
             column="45"/>
     </issue>
-
     <issue
         id="DiscouragedApi"
         message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
         errorLine1="        int identifier = context.getResources().getIdentifier(&quot;system_accent1_200&quot;, &quot;color&quot;, &quot;android&quot;);"
         errorLine2="                                                ~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/chrome/HyperOsStyle.java"
-            line="95"
+            file="src/main/java/io/github/zerohomers0/onesteplite/systemui/chrome/HyperOsStyle.java"
+            line="117"
             column="49"/>
     </issue>
-
     <issue
         id="DiscouragedApi"
         message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
         errorLine1="        int id = context.getResources().getIdentifier(name, &quot;anim&quot;, &quot;android&quot;);"
         errorLine2="                                        ~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/statusbar/RotationAnimation.java"
+            file="src/main/java/io/github/zerohomers0/onesteplite/systemui/statusbar/RotationAnimation.java"
             line="216"
             column="41"/>
     </issue>
-
     <issue
         id="DiscouragedApi"
         message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
         errorLine1="                int id = systemSettingsResources.getIdentifier(name, &quot;color&quot;, Packages.SETTINGS);"
         errorLine2="                                                 ~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/SettingsActivity.java"
-            line="104"
+            file="src/main/java/io/github/zerohomers0/onesteplite/config/SettingsActivity.java"
+            line="140"
             column="50"/>
     </issue>
-
     <issue
         id="DiscouragedApi"
         message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
         errorLine1="                int id = systemSettingsResources.getIdentifier(name, &quot;dimen&quot;, Packages.SETTINGS);"
         errorLine2="                                                 ~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/SettingsActivity.java"
-            line="114"
+            file="src/main/java/io/github/zerohomers0/onesteplite/config/SettingsActivity.java"
+            line="150"
             column="50"/>
     </issue>
-
     <issue
         id="DiscouragedApi"
         message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
         errorLine1="                int id = systemSettingsResources.getIdentifier(name, &quot;drawable&quot;, Packages.SETTINGS);"
         errorLine2="                                                 ~~~~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/SettingsActivity.java"
-            line="124"
+            file="src/main/java/io/github/zerohomers0/onesteplite/config/SettingsActivity.java"
+            line="160"
             column="50"/>
     </issue>
-
     <issue
         id="DiscouragedApi"
         message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
@@ -99,7 +91,6 @@
             line="42"
             column="60"/>
     </issue>
-
     <issue
         id="DiscouragedApi"
         message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
@@ -110,7 +101,6 @@
             line="47"
             column="62"/>
     </issue>
-
     <issue
         id="DiscouragedApi"
         message="Use of this function is discouraged because resource reflection makes it harder to perform build optimizations and compile-time verification of code. It is much more efficient to retrieve resources by identifier (e.g. `R.foo.bar`) than by name (e.g. `getIdentifier(&quot;bar&quot;, &quot;foo&quot;, null)`)."
@@ -121,7 +111,6 @@
             line="98"
             column="48"/>
     </issue>
-
     <issue
         id="ChromeOsAbiSupport"
         message="Missing x86_64 ABI support for ChromeOS"
@@ -129,10 +118,9 @@
         errorLine2="                          ~~~~~~~~~~~">
         <location
             file="build.gradle.kts"
-            line="32"
+            line="42"
             column="27"/>
     </issue>
-
     <issue
         id="ExportedContentProvider"
         message="Exported content providers can provide access to potentially sensitive data"
@@ -140,119 +128,107 @@
         errorLine2="     ~~~~~~~~">
         <location
             file="src/main/AndroidManifest.xml"
-            line="4"
+            line="26"
             column="6"/>
     </issue>
-
     <issue
         id="DrawAllocation"
         message="Avoid object allocations during draw/layout operations (preallocate and reuse instead)"
         errorLine1="        geometry=new TopBarGeometry(width,height,statusBarInset,getResources().getDisplayMetrics().density,"
         errorLine2="                 ^">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/top/TopBar.java"
-            line="155"
+            file="src/main/java/io/github/zerohomers0/onesteplite/systemui/top/TopBar.java"
+            line="264"
             column="18"/>
     </issue>
-
     <issue
         id="StaticFieldLeak"
         message="Do not place Android context classes in static fields (static reference to `BottomReplayInput` which has field `context` pointing to `Context`); this is a memory leak"
         errorLine1="    private static BottomReplayInput instance;"
         errorLine2="            ~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/input/BottomReplayInput.java"
+            file="src/main/java/io/github/zerohomers0/onesteplite/trigger/BottomReplayInput.java"
             line="22"
             column="13"/>
     </issue>
-
     <issue
         id="StaticFieldLeak"
         message="Do not place Android context classes in static fields; this is a memory leak"
-        errorLine1="    private static volatile Context sContext;"
-        errorLine2="            ~~~~~~">
+        errorLine1="    static volatile Context sContext;"
+        errorLine2="    ~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/HostEntry.java"
-            line="56"
-            column="13"/>
+            file="src/main/java/io/github/zerohomers0/onesteplite/xposed/HostEntry.java"
+            line="57"
+            column="5"/>
     </issue>
-
     <issue
         id="StaticFieldLeak"
         message="Do not place Android context classes in static fields (static reference to `ZoomCommit` which has field `context` pointing to `Context`); this is a memory leak"
-        errorLine1="    private static ZoomCommit sLiveZoomCommit;"
-        errorLine2="            ~~~~~~">
+        errorLine1="    static ZoomCommit sLiveZoomCommit;"
+        errorLine2="    ~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/HostEntry.java"
-            line="173"
-            column="13"/>
+            file="src/main/java/io/github/zerohomers0/onesteplite/xposed/HostEntry.java"
+            line="162"
+            column="5"/>
     </issue>
-
     <issue
         id="StaticFieldLeak"
         message="Do not place Android context classes in static fields; this is a memory leak"
-        errorLine1="    private static volatile android.content.Context sWmsContext;"
-        errorLine2="            ~~~~~~">
+        errorLine1="    static volatile android.content.Context sWmsContext;"
+        errorLine2="    ~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/HostEntry.java"
-            line="559"
-            column="13"/>
+            file="src/main/java/io/github/zerohomers0/onesteplite/xposed/HostEntry.java"
+            line="395"
+            column="5"/>
     </issue>
-
     <issue
         id="StaticFieldLeak"
         message="Do not place Android context classes in static fields (static reference to `HotZoneGesture` which has field `context` pointing to `Context`); this is a memory leak"
         errorLine1="    private static HotZoneGesture instance;"
         errorLine2="            ~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/input/HotZoneGesture.java"
+            file="src/main/java/io/github/zerohomers0/onesteplite/trigger/HotZoneGesture.java"
             line="18"
             column="13"/>
     </issue>
-
     <issue
         id="StaticFieldLeak"
         message="Do not place Android context classes in static fields; this is a memory leak"
         errorLine1="    private static Context context;"
         errorLine2="            ~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/input/InputTrace.java"
+            file="src/main/java/io/github/zerohomers0/onesteplite/logging/InputTrace.java"
             line="39"
             column="13"/>
     </issue>
-
     <issue
         id="StaticFieldLeak"
         message="Do not place Android context classes in static fields (static reference to `VideoDock` which has field `context` pointing to `Context`); this is a memory leak"
         errorLine1="    private static VideoDock instance;"
         errorLine2="            ~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/video/VideoDock.java"
+            file="src/main/java/io/github/zerohomers0/onesteplite/systemui/video/VideoDock.java"
             line="40"
             column="13"/>
     </issue>
-
     <issue
         id="StaticFieldLeak"
         message="Do not place Android context classes in static fields (static reference to `WorkspaceHost` which has field `tabletTools` pointing to `FrameLayout`); this is a memory leak"
         errorLine1="    private static volatile WorkspaceHost sInstance;"
         errorLine2="            ~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/WorkspaceHost.java"
+            file="src/main/java/io/github/zerohomers0/onesteplite/systemui/WorkspaceHost.java"
             line="69"
             column="13"/>
     </issue>
-
-
     <issue
         id="SetTextI18n"
         message="String literal in `setText` can not be translated. Use Android resources instead."
         errorLine1="            title=new TextView(context);title.setText(&quot;One Step&quot;);title.setGravity(android.view.Gravity.CENTER);"
         errorLine2="                                                      ~~~~~~~~~~">
         <location
-            file="src/main/java/io/github/zerohomers0/onesteplite/top/TopBar.java"
-            line="173"
+            file="src/main/java/io/github/zerohomers0/onesteplite/systemui/top/TopBar.java"
+            line="285"
             column="55"/>
     </issue>
-
 </issues>

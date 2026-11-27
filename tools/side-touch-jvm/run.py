@@ -11,7 +11,7 @@ def method(signature):
     while n:
         n+=(host[i]=='{')-(host[i]=='}');i+=1
     return host[a:i]
-methods='\n'.join(method(s) for s in ['    private boolean onSlotTouch(', '    private void recycleBuffered('])
+methods='\n'.join(method(s) for s in ['    private boolean onSlotTouch(', '    void recycleBuffered('])
 start=host.index('        installed.add(XposedHelpers.findAndHookMethod(view, "onComputeInternalInsets",')
 end=host.index('        }));',start)+len('        }));')
 hook=host[start:end].replace('WorkspaceHost h', 'SideTouchRegression h')
@@ -24,7 +24,7 @@ public class SideTouchRegression {
  static class XC_MethodHook {static class MethodHookParam {Object thisObject;boolean returned;void setResult(Object result){returned=true;}}protected void beforeHookedMethod(MethodHookParam p){}}
  static class XposedHelpers {static XC_MethodHook hook;static Class<?>findClass(String n,ClassLoader cl){return Object.class;}static Object findAndHookMethod(Class<?>c,String n,Object...args){hook=(XC_MethodHook)args[args.length-1];return hook;}}
  static SideTouchRegression sInstance;static final int SLOT_MAIN=0,SLOT_COUNT=4,CELL_SLOT_COUNT=4;Slot[]slots={new Slot(),new Slot(),new Slot(),new Slot()};static class Context{Context getResources(){return this;}Context getDisplayMetrics(){return this;}float density=1;}Context ctx=new Context();int taps,transfers,compactions;boolean compactPending;
- static class Dismiss{void follow(float dx){}void settle(boolean done){}}Dismiss sideDismiss;Object promotion,cellMotion;Slot sideDismissSlot;boolean transferBusy,taskCellsCovered,mainOnRight=true;long sceneEpoch=1;
+ static class Dismiss{void follow(float dx){}void settle(boolean done){}}Dismiss sideDismiss;Object promotion,cellMotion;Slot sideDismissSlot; final class Cells { Object motion(){return cellMotion;} boolean pending(){return compactPending;} void compactCells(){SideTouchRegression.this.compactCells();} } Cells cells=new Cells();boolean transferBusy,taskCellsCovered,mainOnRight=true;long sceneEpoch=1;
  boolean followSideDismiss(Slot s,MotionEvent e){return true;}
  boolean beginSideDismiss(Slot s,MotionEvent e){return false;}
  void scheduleSideReorder(Slot s){}

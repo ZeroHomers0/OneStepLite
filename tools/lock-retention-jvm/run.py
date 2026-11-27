@@ -8,21 +8,22 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 root = Path(__file__).resolve().parents[2]
 src=package_dir(root,sys.argv[2] if len(sys.argv)>2 else None)
 source = (src / 'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+resume_source = (src / 'WorkspaceResumeController.java').read_text(encoding='utf-8-sig')
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
 
 
-def member(signature):
-    start = source.index(signature)
-    end = source.index('{', start) + 1
+def member(signature, text=source):
+    start = text.index(signature)
+    end = text.index('{', start) + 1
     depth = 1
     while depth:
-        if source[end] == '{':
+        if text[end] == '{':
             depth += 1
-        elif source[end] == '}':
+        elif text[end] == '}':
             depth -= 1
         end += 1
-    return source[start:end]
+    return text[start:end]
 
 
 methods = '\n'.join(member(signature) for signature in [
@@ -31,9 +32,11 @@ methods = '\n'.join(member(signature) for signature in [
     '    public static void onSystemNavigation(', '    private boolean setKeyguardWindowHidden(',
     '    public static void onLandscapeMode(',
     '    private boolean retainWorkspaceForLock(', '    private void leaveKeyguardPrivacy(',
-    '    private void showResumingSession(', '    private void resumeNext(',
-    '    private void completeWorkspaceResume(',
-    '    private void writeZoomLine(String command, long issuedAt)'])
+    '    private void writeZoomLine(String command, long issuedAt)']).replace('resumes.','').replace('scales.','')
+resume_methods = '\n'.join(member(signature, resume_source) for signature in [
+    '    private void showResumingSession(', '    void resumeNext(',
+    '    private void completeWorkspaceResume(']).replace('host.','').replace('host::','this::').replace('exits.','').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('WorkspaceHost.SUSPENDING','SUSPENDING').replace('WorkspaceHost.SUSPENDED','SUSPENDED').replace('WorkspaceHost.RESUMING','RESUMING').replace('WorkspaceHost.log','log').replace('scales.','')
+methods += '\n' + resume_methods
 files = {
     'android/animation/ValueAnimator.java': '''package android.animation;public class ValueAnimator {
         public int cancels;public void cancel(){cancels++;}}''',
@@ -46,6 +49,7 @@ files = {
 import java.util.*;
 public class WorkspaceHost {
  static int checks;
+ final class Cells { void requestCompaction(){WorkspaceHost.this.requestCompaction();} } Cells cells=new Cells();
  static void check(boolean ok,String m){checks++;if(!ok)throw new AssertionError(m);}
  static class View {static final int VISIBLE=0,GONE=8;int layouts;void requestLayout(){layouts++;}
   Object getWindowToken(){return this;}void setVisibility(int v){}void closeContentUi(){}void applyOptions(WorkspaceOptions o){}}

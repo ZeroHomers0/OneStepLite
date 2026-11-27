@@ -7,15 +7,16 @@ root = Path(__file__).resolve().parents[2]
 src=package_dir(root)
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
 source = (src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-def member(signature):
-    start = source.index(signature); brace = source.index('{', start); end = brace+1; depth=1
+registry = (src/'WorkspaceSlotRegistry.java').read_text(encoding='utf-8-sig')
+def member(signature, text=source):
+    start = text.index(signature); brace = text.index('{', start); end = brace+1; depth=1
     while depth:
-        depth += (source[end]=='{')-(source[end]=='}'); end+=1
-    return source[start:end]
+        depth += (text[end]=='{')-(text[end]=='}'); end+=1
+    return text[start:end]
 methods = '\n'.join(member(s) for s in ('    private void finishLiveResult(',
-            '    private boolean mainTaskVisible(',
             '    private FocusResult requestLiveMainFocus(',
-            '    private void finishPromotionFocus('))
+            '    private void finishPromotionFocus(')).replace('WorkspaceHost.this.taskStates.','').replace('taskStates.','')
+methods += '\n' + member('    boolean mainTaskVisible(', registry).replace('    boolean mainTaskVisible(', '    private boolean mainTaskVisible(')
 files = {
 'android/os/SystemClock.java': 'package android.os;public class SystemClock {public static long uptimeMillis(){return 1000;}}',
 'android/app/ActivityTaskManager.java': 'package android.app;public class ActivityTaskManager {public static Object service;public static Object getService(){return service;}}',

@@ -142,7 +142,7 @@ public class LiveLayoutRegression {
   System.out.println("actual Host layout-only commit checks="+checks+" passed");
  }
 }
-'''.replace('__SWAP_TARGET__', target_declaration).replace('__METHOD__', member('    private void applyMainLayout(')).replace('__SET_MAIN_SIDE__', member('    private void setMainSide(')).replace(
+'''.replace('__SWAP_TARGET__', target_declaration).replace('__METHOD__', member('    private void applyMainLayout(').replace('sideRows.layoutAll()','layoutSideViewport(true)').replace('chrome.','')).replace('__SET_MAIN_SIDE__', member('    private void setMainSide(').replace('sideRows.layoutAll()','layoutSideViewport(true)').replace('chrome.','')).replace(
     '__LIVE_RECTS__', member('    private static LiveSwapGeometry.Rect liveMainRect(')
     + '\n' + member('    private static LiveSwapGeometry.Rect liveCellRect('))
 

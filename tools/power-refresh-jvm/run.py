@@ -14,7 +14,7 @@ if 'create(generation, 2)' not in taskview:
 host=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
 if 'DORMANT_TRIM_MS' not in host or 'desktopPublishQueued' not in host:
     raise AssertionError('dormant trim and publish coalescing must remain wired')
-hostentry=(src/'HostEntry.java').read_text(encoding='utf-8-sig')
+hostentry=(src/'ZoomRuntime.java').read_text(encoding='utf-8-sig')
 if 'sZoomWatchScreenOn' not in hostentry or 'onZoomScreenState(false)' not in (src/'ZoomBridgeReceiver.java').read_text(encoding='utf-8-sig'):
     raise AssertionError('zoom watchdog must stop while the screen is off')
 clock=(src/'WorkspaceClock.java').read_text(encoding='utf-8-sig')
@@ -35,8 +35,8 @@ for signature in ['    void requestOpenedAppsRefresh(', '    void setWorkspaceAc
                   '    @Override protected void onWindowVisibilityChanged(']:
     rail += member('TopBar.java', signature) + '\n'
 host = member('WorkspaceHost.java', '    private void startWorkspaceHeartbeat(')
-host += member('WorkspaceHost.java', '    private void setZoomState(')
-watch = '\n'.join(member('HostEntry.java', signature) for signature in [
+host += member('WorkspaceHost.java', '    void setZoomState(')
+watch = '\n'.join(member('ZoomRuntime.java', signature) for signature in [
     '    static void onZoomScreenState(', '    private static void armZoomWatch(',
     '    private static void accelerateZoomWatch('])
 body = '''package io.github.zerohomers0.onesteplite;
@@ -69,6 +69,7 @@ __RAIL__
  static class SystemClock {static long now=40000;static long uptimeMillis(){return now;}}
  static class HotZoneGesture {static boolean isAttached(){return true;}static void raiseAll(){}}
  static class HostEntry {static void setHostZoomed(boolean b){}}
+ static class ZoomRuntime {static void setHostZoomed(boolean b){}}
  static class ZoomWatch {
   static final Object sZoomWatchLock=new Object();
   static boolean sZoomWatchScreenOn=true;
@@ -84,8 +85,9 @@ __WATCH__
   static final int ACTIVE=1;static Host sInstance;int scene=ACTIVE;boolean screenOn=true,keyguardLocked,lockExitPending,zoomed=true,flip;
   View root=new View();Object layout=new Object(),ctx;Queue main=new Queue();Rail topBar=new Rail();
   class Replay {void clear(){}}Replay unlockGeometryReplay=new Replay();
-  long zoomAnimUntil,lastWorkspaceRepair;Runnable workspaceHeartbeat;int carrierSlotIndex=-1,leashPocSlot=-1,writes,repairs;class Carriers{int leashPocSlot(){return -1;}}Carriers carriers=new Carriers();ZoomTransport zoomTransport=new ZoomTransport();
+  long zoomAnimUntil,lastWorkspaceRepair;Runnable workspaceHeartbeat;WorkspaceSceneTracker sceneTracker=new WorkspaceSceneTracker();int carrierSlotIndex=-1,leashPocSlot=-1,writes,repairs;class Carriers{int leashPocSlot(){return -1;}}Carriers carriers=new Carriers();ZoomTransport zoomTransport=new ZoomTransport();
   class Slot {boolean carrier,occupied=true,promoting,taskVisible=true;int index=1;}
+  static void log(String s){}
   Slot[] slots={new Slot()};Host(){sInstance=this;}
   boolean holdsLiveFlipZoom(){return flip;}void writeZoom(boolean b){writes++;}void writeZoomLease(){if(!ZoomTransport.acks)writes++;}void reassertCarrier(){}
   void ensureCellBackground(Slot s){}void reapplyScale(Slot s){repairs++;}void scheduleSideVisibilityRepair(Slot s){}
@@ -160,11 +162,11 @@ __HOST__
         "background pool diagnostics expose queue, result and duration state");
   System.out.println("Production power refresh lifecycle checks="+checks+" passed");
  }
-}'''.replace('__RAIL__', rail).replace('__HOST__', host.replace('WorkspaceHost.this', 'thisHost()')).replace('__WATCH__',watch)
+}'''.replace('__RAIL__', rail).replace('__HOST__', host.replace('WorkspaceHost.this', 'thisHost()').replace('cellSurfaces.','').replace('scales.','').replace('cellSurfaces.','')).replace('__WATCH__',watch)
 # The production inner Runnable captures its enclosing Host, just as the Android host does.
 body = body.replace('static Host sInstance;', 'Host thisHost(){return this;}static Host sInstance;')
 p = out/'PowerRefreshRegression.java'; p.write_text(body, encoding='utf-8')
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 anim=out/'android/animation/ValueAnimator.java';anim.parent.mkdir(parents=True,exist_ok=True);anim.write_text('package android.animation;public class ValueAnimator{public void cancel(){}}',encoding='utf-8')
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(p),str(src/'RoutineLog.java'),str(src/'BackgroundExecutor.java'),str(src/'ZoomCommand.java'),str(src/'OpenedAppsRefreshPolicy.java'),str(anim)],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(p),str(src/'RoutineLog.java'),str(src/'BackgroundExecutor.java'),str(src/'ZoomCommand.java'),str(src/'OpenedAppsRefreshPolicy.java'),str(src/'WorkspaceHeartbeatPolicy.java'),str(src/'WorkspaceSceneTracker.java'),str(src/'WorkspaceRuntimeCounters.java'),str(anim)],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.PowerRefreshRegression'],check=True)

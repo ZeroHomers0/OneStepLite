@@ -5,6 +5,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from source_paths import package_dir
 root=Path(__file__).resolve().parents[2]
 pkg=Path(root)/"app/src/main/java/io/github/zerohomers0/onesteplite"
+sources=package_dir(root)
 here=Path(__file__).resolve().parent
 checks=0
 def check(value,why):
@@ -14,7 +15,7 @@ def check(value,why):
 def rel(path): return path.relative_to(root).as_posix()
 # Host entry/shell files may not grow new nested types.
 for name in ('WorkspaceHost.java','HostEntry.java'):
- text=(pkg/name).read_text(encoding='utf-8')
+ text=(sources/name).read_text(encoding='utf-8')
  nested=re.search(r'(?m)^\s+(?:public |private |protected |static |final |abstract |sealed |non-sealed )*(?:class|record|enum|interface)\s+',text)
  check(nested is None,name+' must keep only its outer type')
 # Policy remains pure JVM logic.
@@ -24,7 +25,7 @@ for path in sorted((pkg/'policy').glob('*.java')):
 # Legacy oversized methods are explicit and may only disappear.
 allowed_methods=set(line.strip() for line in (here/'long-methods.baseline').read_text().splitlines() if line.strip())
 for name in ('WorkspaceHost.java','HostEntry.java'):
- text=(pkg/name).read_text(encoding='utf-8')
+ text=(sources/name).read_text(encoding='utf-8')
  pattern=r'(?m)^\s{4}(?:public |private |protected )?(?:static )?(?:final )?(?:synchronized )?[\w<>\[\], ?.]+\s+(\w+)\s*\([^;]*?\)\s*(?:throws [^{]+)?\{'
  for m in re.finditer(pattern,text):
   start=m.start();brace=text.index('{',start);depth=1;i=brace+1

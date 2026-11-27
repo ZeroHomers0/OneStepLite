@@ -5,12 +5,18 @@ from pathlib import Path
 import subprocess,sys
 root=Path(__file__).resolve().parents[2]
 host=(package_dir(root)/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+cell=(package_dir(root)/'WorkspaceCellSurfaceController.java').read_text(encoding='utf-8-sig')
+launch=(package_dir(root)/'WorkspaceLaunchController.java').read_text(encoding='utf-8-sig')
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
-def method(signature):
-    a=host.index(signature);b=host.index('{',a)+1;depth=1
+def method(signature,text=host):
+    a=text.index(signature);b=text.index('{',a)+1;depth=1
     while depth:
-        depth+=(host[b]=='{')-(host[b]=='}');b+=1
-    return host[a:b]
+        depth+=(text[b]=='{')-(text[b]=='}');b+=1
+    return text[a:b]
+
+def cell_method(signature):
+    text=method(signature,cell).replace('host.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log')
+    return (text.replace('workspaceAlpha()','workspaceAlpha').replace('sideRows.isScrolling()','sideScrolling').replace('scales.',''))
 body=r'''
 package io.github.zerohomers0.onesteplite;
 import android.view.SurfaceControl;import android.graphics.Rect;
@@ -21,6 +27,7 @@ public class CellVisibilityRegression {
  static int checks;static final int SLOT_TOP=4,CELL_SLOT_COUNT=4;boolean topFace,taskCellsCovered;
  static void check(boolean b,String why){checks++;if(!b)throw new AssertionError(why);}
  float workspaceAlpha=1f;Object cellMotion;Promotion promotion;boolean owns=true,sideScrolling,writable=true;
+ final class Cells { Object motion(){return cellMotion;} } Cells cells=new Cells();
  static class TopTaskTransition {boolean collecting;boolean ownsTopOpacity(){return !collecting;}boolean ownsTaskOpacity(){return collecting;}}TopTaskTransition topTransition;
  static class Promotion{boolean nativeSwap=true,cancelled;}
  static class View{float alpha;void setAlpha(float a){alpha=a;}void setClipBounds(Rect r){}}
@@ -91,7 +98,7 @@ public class CellVisibilityRegression {
   System.out.println("Actual Host cell visibility checks="+checks+" passed");
  }
 }
-'''.replace('__METHODS__','\n'.join(method(s) for s in ['    private boolean presentsSlot(', '    private boolean ownsCellPresentation(', '    private boolean cellPresentationVisible(', '    private void updateCellSurfaceVisibility(', '    private void prepareCellSurface(', '    private void stageCellPresentation(']))
+'''.replace('__METHODS__','\n'.join(cell_method(s) for s in ['    boolean presentsSlot(', '    boolean ownsCellPresentation(', '    boolean cellPresentationVisible(', '    void updateCellSurfaceVisibility(', '    void prepareCellSurface(', '    void stageCellPresentation(']))
 files={
 'android/graphics/Rect.java':'package android.graphics;public class Rect {public int left,top,right,bottom;public Rect(){}public Rect(int l,int t,int r,int b){left=l;top=t;right=r;bottom=b;}public boolean isEmpty(){return right<=left||bottom<=top;}}',
 'io/github/zerohomers0/onesteplite/CellVisibilityRegression.java':body,
@@ -110,11 +117,11 @@ public class SurfaceControl {public SurfaceControl child;public boolean valid=tr
 for p,s in files.items():
     path=out/p;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(s,encoding='utf-8')
 for sig,anchor in [('    private void startLiveCollect(','statusBar.runAfterHiddenFrame('),('    private void adoptExisting(Slot slot, LiveTask task, boolean collectFromMain,','if (!executeOnShell('),('    private void startSlot(','PendingIntent pi')]:
-    source=method(sig)
+    source=method(sig, launch if sig.startswith('    private void startSlot(') else host)
     assert 'prepareCellSurface(slot);' in source
     assert source.index('prepareCellSurface(slot);')<source.index(anchor)
 assert 'for (Slot cell : slots)' in method('    private void restoreLiveSwapVisual(')
-created=method('    private void onTaskViewCreated(')
+created=method('    void onTaskViewCreated(')
 assert 'slot.hint.setOnClickListener(v -> { if (!taskCellsCovered)' in created
 assert 'view.setOnClickListener(v -> { if (!taskCellsCovered)' in created
 # Explicit shortcut/settings commands must still reuse the existing task dispatcher.

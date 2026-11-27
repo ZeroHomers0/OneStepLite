@@ -14,7 +14,7 @@ def method(signature):
         depth += (host[end] == '{') - (host[end] == '}'); end += 1
     return host[start:end]
 methods = '\n'.join(method(s) for s in ['    private boolean onSlotTouch(',
-    '    private void recycleBuffered(', '    private boolean followSideDismiss(', '    private void dismissSideToBackground(']).replace('WorkspaceHost::log','SideDismissRegression::log')
+    '    void recycleBuffered(', '    private boolean followSideDismiss(', '    private void dismissSideToBackground(']).replace('WorkspaceHost::log','SideDismissRegression::log')
 body = r'''
 package io.github.zerohomers0.onesteplite;
 import java.util.function.Consumer;
@@ -23,7 +23,7 @@ public class SideDismissRegression {
  static final int SLOT_MAIN=0,SLOT_COUNT=4,CELL_SLOT_COUNT=4,ACTIVE=1;
  int scene=ACTIVE,taps,compactions,returns,clears;long sceneEpoch=1;
  boolean screenOn=true,keyguardLocked,transferBusy,taskCellsCovered,mainOnRight,compactPending,front;
- Object promotion,cellMotion; Context ctx=new Context(); Slot[] slots={new Slot(),new Slot(),new Slot(),new Slot()};
+ Object promotion,cellMotion; Context ctx=new Context(); Slot[] slots={new Slot(),new Slot(),new Slot(),new Slot()}; final class Cells { Object motion(){return cellMotion;} boolean pending(){return compactPending;} void compactCells(){SideDismissRegression.this.compactCells();} } Cells cells=new Cells();
  View root=new View();SideDismiss sideDismiss; Slot sideDismissSlot;WorkspaceLayout layout=new WorkspaceLayout();Object wallpaperBackdrop=new Object();int screenW=1080,screenH=2460;
  Object[] sideBackingViews=new Object[4];static class LiveSwapVisualLease{LiveSwapVisualLease(Object b,Object h){}void restore(){}}
  static class View{void invalidate(){}}static class Rect{}static class WorkspaceLayout{}
@@ -103,7 +103,7 @@ public class SideDismissRegression {
   System.out.println("actual side-dismiss checks="+checks+" passed");
  }
 }
-'''.replace('__METHODS__',methods)
+'''.replace('__METHODS__',methods.replace('cellSurfaces.','').replace('resumes.','').replace('taskStates.',''))
 files = {'io/github/zerohomers0/onesteplite/SideDismissRegression.java':body,
  'android/widget/Toast.java':'package android.widget; public class Toast { public static final int LENGTH_SHORT=0; public static Toast makeText(Object c,String s,int n){return new Toast();}public void show(){} }'}
 for name,text in files.items():

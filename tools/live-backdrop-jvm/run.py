@@ -13,15 +13,17 @@ src=package_dir(root)
 run = (src / 'LiveSwap64.java').read_text(encoding='utf8')
 background = run[run.index('        void background('):run.index('        @Override public void prepare(')]
 host = (src / 'WorkspaceHost.java').read_text(encoding='utf8')
+cell = (src / 'WorkspaceCellSurfaceController.java').read_text(encoding='utf8')
 swap = host[host.index('    private Object prepareLiveFlip('):host.index('    private void commitPromotedHandoff(')]
 call = swap[swap.index('ticket.liveBackdrop = LiveBackdrop.create('):]
 call = call[:call.index('canvas ->')]
 side_crops = re.findall(r'liveSideStrip\((?:geometry|target)\)', call)
 if len(side_crops) != 2:
     raise RuntimeError('Expected actual original/target wallpaper crop arguments')
-a = host.index('    private void ensureCellBackground(')
-b = host.index('    private void registerDefaultDisplayListener(', a)
-ensure = host[a:b]
+a = cell.index('    void ensureCellBackground(')
+b = cell.index('    boolean presentsSlot(', a)
+ensure = (cell[a:b].replace('host.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log')
+    .replace('sideRows.isScrolling()','sideScrolling').replace('coordinatorApplyWallpaperBackdrops()','applyWallpaperBackdrops()'))
 files = {
 'android/graphics/Color.java': '''package android.graphics;public class Color {public static int red(int c){return 245;}public static int green(int c){return 245;}public static int blue(int c){return 245;}}''',
 'android/graphics/Bitmap.java': '''package android.graphics; public class Bitmap {public boolean recycled;public int getWidth(){return 360;}public int getHeight(){return 820;}public boolean isRecycled(){return recycled;}}''',
@@ -134,7 +136,7 @@ public static void main(String[]args)throws Exception {
  themed.close();
  System.out.println("actual wallpaper lease and same-transaction visibility checks="+checks+" passed");
 }}
-'''.replace('BACKGROUND', background).replace('ENSURE', ensure).replace('CALL_CROPS', ','.join(side_crops)).replace('STRIP',host[host.index('    private static Rect liveSideStrip('):host.index('    private boolean livePeerBindingsCurrent(')])
+'''.replace('BACKGROUND', background).replace('ENSURE', ensure).replace('CALL_CROPS', ','.join(side_crops)).replace('STRIP',host[host.index('    static Rect liveSideStrip('):host.index('    private boolean livePeerBindingsCurrent(')])
 }
 paths = []
 for name, text in files.items():

@@ -15,7 +15,11 @@ def method(text,signature):
   end+=1
  return text[start:end]
 host=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-methods='\n'.join(method(host,s) for s in ['    private boolean ordinaryRoot(', '    private boolean isSideToken(', '    private LiveTask findMainTask(', '    private boolean isHomeRoot(', '    private boolean mayWriteSideSurface('])
+registry=(src/'WorkspaceSlotRegistry.java').read_text(encoding='utf-8-sig')
+scale=(src/'WorkspaceScaleController.java').read_text(encoding='utf-8-sig')
+methods='\n'.join(method(host,s) for s in ['    boolean ordinaryRoot(', '    private LiveTask findMainTask(', '    private boolean isHomeRoot(']).replace('taskStates.','')
+methods+='\n'+method(registry,'    boolean isSideToken(').replace('    boolean isSideToken(', '    private boolean isSideToken(').replace('host.slots','slots')
+methods+='\n'+method(scale,'    boolean mayWriteSideSurface(').replace('host.','')
 body=r"""
 package io.github.zerohomers0.onesteplite;
 import java.util.*;

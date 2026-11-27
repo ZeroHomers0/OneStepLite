@@ -1,0 +1,243 @@
+package io.github.zerohomers0.onesteplite;
+
+import android.graphics.Rect;
+import de.robv.android.xposed.XposedHelpers;
+
+/** Owns task-surface scale, viewport, bounds and frame-rate hints. */
+final class WorkspaceScaleController {
+    private static final int SLOT_MAIN = WorkspaceHost.coordinatorSlotMain();
+    private static final int SLOT_TOP = WorkspaceHost.coordinatorSlotTop();
+
+    private final WorkspaceHost host;
+    private boolean frameRateHintUnavailableLogged;
+
+    WorkspaceScaleController(WorkspaceHost host) { this.host = host; }
+
+    float mainScale() {
+        return host.layout.mainScale;
+    }
+
+    float cellScale() {
+        return host.layout.cellScale(0);
+    }
+
+    float scaleFor(Slot slot) {
+        if (slot.index != SLOT_TOP && slot.sideRow >= 0 && slot.rect != null) return 1f;
+        if (slot.sideRow >= 0 && slot.rect != null)
+            return Math.min((slot.rect[2] - slot.rect[0]) / (float) host.screenW,
+                    (slot.rect[3] - slot.rect[1]) / (float) host.screenH);
+        return slot.index == SLOT_TOP ? host.topGeometry().scale : host.layout.cellScale(slot.index - 1);
+    }
+
+    void applySlotScale(Slot slot) {
+        if (host.holdsLiveFlipZoom() || !host.canRender(slot) || slot.promoting || !slot.occupied || slot.view == null
+                || !mayWriteSideSurface(slot)) {
+            return;
+        }
+        float k = scaleFor(slot);
+        Object liveLeash = WorkspaceHost.getSurfaceField(slot.controller, "mTaskLeash");
+        if (!host.controllerOwns(slot, slot.taskId, slot.taskToken)) return;
+        if (liveLeash != null && slot.scaleSurface == liveLeash
+                && slot.scaleTaskId == slot.taskId && Math.abs(slot.scaleApplied - k) < 0.0005f) {
+            return;
+        }
+        // 顺序很重要（真机实测）：先读 leash 做缩放，再改整屏边界 —— 反过来会让
+        // TaskViewTransitions 把 mTaskLeash 清空重建，900ms 内都读不到。
+        if (liveLeash == null) {
+            if (slot.scaleAttempts >= 8) return;
+            slot.scaleAttempts++;
+            WorkspaceHost.log("applySlotScale slot=" + slot.index + " leash not ready, retry #" + slot.scaleAttempts);
+            host.main.postDelayed(() -> applySlotScale(slot), 200L);
+            return;
+        }
+        slot.scaleAttempts = 0;
+        Object sc = liveLeash;
+        slot.scaleOnLeash = true;
+        if (applyScaleTransform(slot, sc)) {
+            slot.scaleSurface = sc;
+            slot.scaleTaskId = slot.taskId;
+            slot.scaleApplied = k;
+            OwnedTask accepted = host.ownedTasks.get(slot.taskToken);
+            if (accepted != null) accepted.surface = sc;
+            WorkspaceHost.log("applySlotScale slot=" + slot.index + " task=" + slot.taskId
+                    + " k=" + k + " onLeash=" + slot.scaleOnLeash + " surface=" + sc);
+        }
+        // TaskView may rewrite bounds while the surface changes. The opening/bounds
+        // guards reapply this slot's compact bounds and density.
+        // 转场/可见性变化可能覆盖矩阵：在几个延迟点重发。
+        host.main.postDelayed(() -> reapplyScale(slot), 300L);
+        host.main.postDelayed(() -> reapplyScale(slot), 1200L);
+    }
+
+    void reapplyScale(Slot slot) {
+        if (host.holdsLiveFlipZoom() || !host.canRender(slot) || slot.promoting || !slot.occupied || !mayWriteSideSurface(slot)) {
+            return;
+        }
+        // The cross-fade owns the host.main surface alpha until it hands off; a delayed
+        // reapply would snap the window back to its resting frame mid-animation.
+        if (host.topTransition != null && slot.index == SLOT_MAIN) return;
+        if (!host.controllerOwns(slot, slot.taskId, slot.taskToken)) return;
+        Object current = WorkspaceHost.getSurfaceField(slot.controller, "mTaskLeash");
+        if (current == null || current != slot.scaleSurface) {
+            applySlotScale(slot);
+            return;
+        }
+        if (!applyScaleTransform(slot, slot.scaleSurface)) {
+            // 表面可能已失效（任务重启/改边界后转场重建）：清缓存 + 放开去重门槛，
+            // 下次 TaskInfo 变化时重新解析并整套重来。
+            slot.scaleSurface = null;
+            slot.scaleTaskId = Integer.MIN_VALUE;
+            slot.scaleApplied = -1f;
+        }
+    }
+
+    void applyFullscreenBounds(Slot slot) {
+        if (host.holdsLiveFlipZoom() || !host.canRender(slot) || slot.promoting || slot.taskToken == null
+                || !mayWriteSideSurface(slot)) {
+            return;
+        }
+        if (!host.controllerOwns(slot, slot.taskId, slot.taskToken)
+                || WorkspaceHost.getSurfaceField(slot.controller, "mTaskLeash") == null) return;
+        try {
+            Object wct = Class.forName("android.window.WindowContainerTransaction")
+                    .getDeclaredConstructor().newInstance();
+            XposedHelpers.callMethod(wct, "setForceTranslucent", slot.taskToken, true);
+            XposedHelpers.callMethod(wct, "setBounds", slot.taskToken,
+                    host.logicalBounds(slot));
+            host.applyTopConfiguration(wct, slot.taskToken, slot);
+            boolean ok = host.applyWct("fullscreenBounds(slot=" + slot.index + ")", wct);
+            WorkspaceHost.log("fullscreenBounds slot=" + slot.index + " task=" + slot.taskId + " ok=" + ok);
+        } catch (Throwable t) {
+            WorkspaceHost.log("fullscreenBounds slot=" + slot.index + " failed: " + t);
+        }
+    }
+
+    void appendSlotViewport(Object tx, Slot slot) {
+        if (host.holdsLiveFlipZoom() || slot == null || slot.index <= SLOT_MAIN
+                || slot.view == null || !host.canRender(slot) || slot.promoting || slot.launching
+                || slot.frozen || !mayWriteSideSurface(slot)
+                || !host.controllerOwns(slot, slot.taskId, slot.taskToken)) return;
+        Object parent = WorkspaceHost.getSurfaceField(slot.controller, "mSurfaceControl");
+        if (parent == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(parent, "isValid"))) return;
+        Rect crop = new Rect(0, 0, slot.view.getWidth(), slot.view.getHeight());
+        Rect viewClip = slot.view.getClipBounds();
+        if (crop.isEmpty() || viewClip != null && !crop.intersect(viewClip)) return;
+        // Never rotate, move or scale this parent. TaskView's own render thread
+        // continues to place it, including the top task's collection clipping.
+        XposedHelpers.callMethod(tx, "setWindowCrop", parent, crop);
+        // TaskView parent pixels are physical and stay outside task rotation.
+        XposedHelpers.callMethod(tx, "setCornerRadius", parent, 0f);
+    }
+
+    private boolean applyScaleTransform(Slot slot, Object sc) {
+        if (host.holdsLiveFlipZoom() || !host.canRender(slot) || slot.promoting || !mayWriteSideSurface(slot)) return false;
+        float k = scaleFor(slot);
+        Object tx = null;
+        try {
+            tx = Class.forName("android.view.SurfaceControl$Transaction")
+                    .getDeclaredConstructor().newInstance();
+            if (slot.scaleOnLeash) {
+                // A letterboxed portrait app sits centred in the strip instead of at its left edge.
+                float offsetX = 0f;
+                if (slot.index == SLOT_TOP && host.topPortrait) {
+                    TopTaskGeometry upper = host.topGeometry();
+                    Rect box = host.logicalBounds(slot);
+                    offsetX = Math.max(0f, (upper.right - box.width() * k) * .5f);
+                }
+                XposedHelpers.callMethod(tx, "setPosition", sc, offsetX, 0f);
+                // v1.1.3：视口也要对齐 —— 只缩不放位置会"比例对但只显示一部分"（真机反馈）。
+                try {
+                    XposedHelpers.callMethod(tx, "setWindowCrop", sc,
+                            host.logicalBounds(slot));
+                } catch (Throwable ignored) {
+                    // 裁剪失败也继续，位置+矩阵仍是主体
+                }
+            }
+            XposedHelpers.callMethod(tx, "setMatrix", sc, k, 0f, 0f, k);
+            appendSlotViewport(tx, slot);
+            applyFrameRateHint(tx, slot, sc);
+            XposedHelpers.callMethod(tx, "apply");
+            WorkspaceRuntimeCounters.SURFACE_TRANSFORMS.incrementAndGet();
+            return true;
+        } catch (Throwable t) {
+            WorkspaceHost.log("applyScaleTransform slot=" + slot.index + " failed: " + t);
+            return false;
+        } finally {
+            host.closeSurfaceObject(tx, "close");
+        }
+    }
+
+    private void applyFrameRateHint(Object tx, Slot slot, Object surface) {
+        if (tx == null || slot == null || surface == null) return;
+        boolean focused = false;
+        if (slot.index != SLOT_TOP && slot.controller != null && slot.taskId >= 0) {
+            try {
+                Object info = ShellCompat.currentTaskInfo(slot.controller, slot.taskId);
+                focused = info != null && XposedHelpers.getBooleanField(info, "isFocused");
+            } catch (Throwable ignored) { /* Focus is optional; idle policy remains safe. */ }
+        }
+        float fps = SideRefreshPolicy.target(slot.index == SLOT_TOP, focused,
+                slot.promoting || slot.launching);
+        try {
+            if (!ShellCompat.hasMethod(tx.getClass(), "setFrameRate", 3))
+                throw new NoSuchMethodException("SurfaceControl.Transaction.setFrameRate");
+            XposedHelpers.callMethod(tx, "setFrameRate", surface, fps, 1);
+            Object parent = WorkspaceHost.getSurfaceField(slot.controller, "mSurfaceControl");
+            if (parent != null && parent != surface)
+                XposedHelpers.callMethod(tx, "setFrameRate", parent, fps, 1);
+        } catch (Throwable unavailable) {
+            if (!frameRateHintUnavailableLogged) {
+                frameRateHintUnavailableLogged = true;
+                WorkspaceHost.log("side frame-rate hint unavailable: " + unavailable);
+            }
+        }
+    }
+
+    void clearFrameRateHint(Slot slot) {
+        if (slot == null || slot.controller == null) return;
+        Object leash = WorkspaceHost.getSurfaceField(slot.controller, "mTaskLeash");
+        Object parent = WorkspaceHost.getSurfaceField(slot.controller, "mSurfaceControl");
+        if (leash == null && parent == null) return;
+        Object tx = null;
+        try {
+            tx = Class.forName("android.view.SurfaceControl$Transaction")
+                    .getDeclaredConstructor().newInstance();
+            boolean clear = ShellCompat.hasMethod(tx.getClass(), "clearFrameRate", 1);
+            for (Object surface : new Object[] {leash, parent}) {
+                if (surface == null) continue;
+                try {
+                    if (clear) XposedHelpers.callMethod(tx, "clearFrameRate", surface);
+                    else if (ShellCompat.hasMethod(tx.getClass(), "setFrameRate", 3))
+                        XposedHelpers.callMethod(tx, "setFrameRate", surface, 0f, 0);
+                } catch (Throwable ignored) { /* Another layer may still retain a hint. */ }
+            }
+            XposedHelpers.callMethod(tx, "apply");
+        } catch (Throwable ignored) {
+            /* A departed task may already have released both layers. */
+        } finally {
+            host.closeSurfaceObject(tx, "close");
+        }
+    }
+
+    boolean mayWriteSideSurface(Slot slot) {
+        if(slot!=null && slot.index==SLOT_TOP && !host.topFace)return false;
+        if (slot == null || slot.windowMode != 6 || slot.controller == null) return false;
+        PendingSidePromotion pending = slot.pendingSidePromotion;
+        if (pending != null && pending.desktopLaunch) return false;
+        try {
+            // Controller.onTaskInfoChanged forwards info without replacing its
+            // mTaskInfo on this ROM. Read the organizer's current canonical info.
+            Object organizer = XposedHelpers.getObjectField(slot.controller, "mTaskOrganizer");
+            Object lock = XposedHelpers.getObjectField(organizer, "mLock");
+            synchronized (lock) {
+                Object tasks = XposedHelpers.getObjectField(organizer, "mTasks");
+                Object appeared = XposedHelpers.callMethod(tasks, "get", slot.taskId);
+                Object info = appeared == null ? null : XposedHelpers.callMethod(appeared, "getTaskInfo");
+                return info != null && XposedHelpers.getIntField(info, "taskId") == slot.taskId
+                        && slot.taskToken != null && slot.taskToken.equals(
+                                XposedHelpers.getObjectField(info, "token"))
+                        && Integer.valueOf(6).equals(XposedHelpers.callMethod(info, "getWindowingMode"));
+            }
+        } catch (Throwable unavailable) { return false; }
+    }
+}

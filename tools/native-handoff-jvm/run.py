@@ -15,7 +15,7 @@ def extract(signature):
         elif source[end]=='}':depth-=1
         end+=1
     return source[start:end]
-method=extract('    private void handoffPromotedTask(')+'\n'+extract('    private void commitPromotedHandoff(')
+method=extract('    void handoffPromotedTask(')+'\n'+extract('    private void commitPromotedHandoff(')
 
 files={
 'android/graphics/Rect.java': 'package android.graphics;public class Rect {public Rect(int a,int b,int c,int d){}}',

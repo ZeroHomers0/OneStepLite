@@ -28,6 +28,7 @@ public class LaunchUsersRegression {
  static final int ACTIVE=1,SLOT_MAIN=0,SLOT_COUNT=3,SLOT_TOP=4;int scene=ACTIVE,tapped=-1,queued=-1,current;
  boolean transferBusy,taskCellsCovered,screenOn=true,keyguardLocked;Object promotion;Context ctx=new Context();Slot[]slots={new Slot(0,0),new Slot(1,999),new Slot(2,0)};
  WorkspaceOptions workspaceOptions=WorkspaceOptions.DEFAULT;Object topTransition,swapPreview,cellMotion;
+ final class Cells { Object motion(){return cellMotion;} } Cells cells=new Cells();
  boolean workspaceEntering,suspendRequested;int carrierSlotIndex=-1,CELL_SLOT_COUNT=3;long sceneEpoch=1;Runnable afterCollect;
  void captureMainIntoEmptySlot(Slot slot,ComponentName target,Runnable after){queued=slot.index;afterCollect=after;}
  int currentUserId(){return current;}boolean supportsTaskUser(int u){return u==0||u==999;}
@@ -41,7 +42,7 @@ public class LaunchUsersRegression {
  void swapWithMain(int i){tapped=i;}void captureMainIntoEmptySlot(Slot s){tapped=s.index;}
  void adoptExisting(Slot s,LiveTask task,Runnable done,java.util.function.Consumer<String> failed){tapped=s.index;done.run();}
  void queueSidePromotion(Slot s,boolean desktop){queued=s.index;}void releaseTopTask(boolean front,boolean dismissed,Runnable after){if(!front||!dismissed)throw new AssertionError();tapped=SLOT_TOP;}void scheduleMainCropClear(long t){}static void log(String s){}
-'''+member('private void onSlotTapped(')+member('private boolean sideTaskMatchesUser(')+member('private boolean sideTaskMatchesEntry(')+member('private void launchQuick(')+member('private boolean parkMainForQuickLaunch(')+member('private void launchQuickInMain(')+member('private void openSettingsInMain(')+member('private void promoteSideTaskForDesktopLaunch(')+member('private LiveTask findPackageTask(String pkg, ComponentName entry)')+'''
+'''+member('private void onSlotTapped(').replace('resumes.','').replace('resumes::finishPendingSuspend','this::finishPendingSuspend')+member('private boolean sideTaskMatchesUser(')+member('boolean sideTaskMatchesEntry(')+member('private void launchQuick(')+member('private boolean parkMainForQuickLaunch(')+member('private void launchQuickInMain(')+member('private void openSettingsInMain(')+member('private void promoteSideTaskForDesktopLaunch(')+member('LiveTask findPackageTask(String pkg, ComponentName entry)')+'''
  public static void main(String[]args)throws Exception{
   var h=new LaunchUsersRegression();h.launchQuick(new QuickApp());check(h.tapped==2&&h.ctx.launches==0,"owner shortcut selected clone or relaunched owner");
   h=new LaunchUsersRegression();h.slots[2].occupied=false;h.launchQuick(new QuickApp());check(h.tapped==-1&&h.ctx.launches==1,"clone captured owner shortcut");

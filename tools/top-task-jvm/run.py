@@ -12,7 +12,7 @@ def member(signature,occurrence=0):
     end=host.index('{',start)+1;depth=1
     while depth:
         depth+=(host[end]=='{')-(host[end]=='}');end+=1
-    return host[start:end]
+    return host[start:end].replace('cellSurfaces.','').replace('cellSurfaces.','').replace('resumes.','').replace('taskStates.','').replace('scales.','')
 body='''package io.github.zerohomers0.onesteplite;
 import java.util.function.Consumer;import android.content.*;import android.os.*;import android.graphics.Rect;import de.robv.android.xposed.XposedHelpers;
 public final class TopAdmissionRegression {
@@ -24,7 +24,7 @@ public final class TopAdmissionRegression {
  static class View {static final int VISIBLE=0,INVISIBLE=4;}
  static class Pane {boolean occupied;void occupied(boolean v){occupied=v;}void message(String s){}void setVisibility(int v){}}
  static class Root {void requestLayout(){}}
- Root root=new Root();Pane topTaskPane=new Pane();Object promotion,cellMotion;
+ Root root=new Root();Pane topTaskPane=new Pane();Object promotion,cellMotion; final class Cells { Object motion(){return cellMotion;} } Cells cells=new Cells();
  boolean screenOn=true,keyguardLocked,transferBusy,workspaceEntering,suspendRequested,topFromMain,topPortrait;
  boolean fail=true,defer;int adopted,restored,finished,released;Runnable pending;
  int reportedOrientation=2,pageOrientation=-1;
@@ -177,7 +177,7 @@ public class TopDirectionRegression {
  static class TopCandidate {TopTaskState.Key key;boolean landscape,tryLandscape,navigation;}TopCandidate current;int opened,claimed;
  static final int ACTIVE=1,SLOT_TOP=4;int scene=ACTIVE;boolean screenOn=true,keyguardLocked,transferBusy;
  static class Promotion {boolean keepTopBarAppearance;}Promotion promotion;
- Object workspaceAnimator,mainSideAnimator,cellMotion;float workspaceAlpha=1f;
+ Object workspaceAnimator,mainSideAnimator,cellMotion;float workspaceAlpha=1f; final class Cells { Object motion(){return cellMotion;} } Cells cells=new Cells();
  static class VideoPane {boolean embedded(){return false;}void refresh(){}}VideoPane videoPane;
  static class TopPresentationController {void refreshVideo(){}}TopPresentationController topPresentation;
  static class Layout {boolean tabletLandscape;}Layout layout=new Layout();
@@ -188,7 +188,7 @@ public class TopDirectionRegression {
  TopCandidate currentTopCandidate(){if(current!=null)current.landscape=topDirections.getOrDefault(current.key,new TopDirection(false)).landscape();return current;}
  void claimTopTask(TopCandidate c,boolean manual){claimed++;}
  void topTaskDirection(TopTaskState.Key key,boolean landscape){topTaskDirection(key,new TopDirection(landscape));}
-'''+member('    private void topTaskDirection(')+member('    private void updateTopBarState(')+member('    private boolean mainCanFillTop(')+'''
+'''+member('    private void topTaskDirection(')+member('    void updateTopBarState(')+member('    private boolean mainCanFillTop(')+'''
  public static void main(String[]args){
   var h=new TopDirectionRegression();var a=new TopTaskState.Key(7,0,"a");h.current=new TopCandidate();h.current.key=a;
   for(int i=0;i<4;i++){h.topFace=i%2==0;h.topTaskDirection(a,true);h.topTaskDirection(a,false);}
@@ -303,5 +303,5 @@ public class OpenedAppRegression {
  }
 }'''
 p=out/'io/github/zerohomers0/onesteplite/OpenedAppRegression.java';p.write_text(opened,encoding='utf-8')
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-cp',str(out),'-d',str(out),str(p)],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-cp',str(out),'-d',str(out),str(p),str(src/'WorkspaceRuntimeCounters.java')],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.OpenedAppRegression'],check=True)

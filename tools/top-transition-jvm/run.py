@@ -321,7 +321,7 @@ host_body+='''public static void main(String[]args){
  static void ValueAnimatorReset(){android.animation.ValueAnimator.all.clear();View.frames.clear();View.timers.clear();SyncPreparation.wct=null;}
 }'''
 extra={
- 'io/github/zerohomers0/onesteplite/WorkspaceHost.java':host_body,
+ 'io/github/zerohomers0/onesteplite/WorkspaceHost.java':host_body.replace('resumes.','').replace('scales.',''),
  'io/github/zerohomers0/onesteplite/SyncPreparation.java':'''package io.github.zerohomers0.onesteplite;
  class SyncPreparation {static Object wct;static Runnable ready;static java.util.function.Consumer<Throwable> failed;
  static void submit(Object c,Object w,java.util.concurrent.Executor ui,Runnable r,java.util.function.Consumer<Throwable> f){

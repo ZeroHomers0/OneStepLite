@@ -14,16 +14,37 @@ def method(t,s):
   i+=1
  return t[a:i]
 host=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-parts=['    private void completeHomePromotion(', '    private void clearSlot(', '    private void compactCells()', '    private void compactCellsAfterCollection()', '    private void syncSlotWindowState(', '    private void onTaskIdKnown(', '    private void queueSidePromotion(', '    private void retrySidePromotion(', '    private void beginExternalPromotion(', '    private boolean externalPromotionCurrent(', '    private void afterExternalTransitionIdle(']
+cell_source=(src/'WorkspaceCellMotionController.java').read_text(encoding='utf-8-sig')
+side_source=(src/'WorkspaceSideRowController.java').read_text(encoding='utf-8-sig')
+task_source=(src/'WorkspaceTaskStateController.java').read_text(encoding='utf-8-sig')
+import re
+
+def adapt_side(text):
+    text=text.replace('workspace.','').replace('taskStates.','').replace('WorkspaceHost.log','log').replace('WorkspaceHost.ACTIVE','ACTIVE')
+    text=text.replace('options().scrollSideTasks','workspaceOptions.scrollSideTasks')
+    text=text.replace('private boolean compactSideRows()','private boolean compactScrollingSideRows()')
+    text=text.replace('boolean reorderRows(Slot source, Slot target)','private boolean reorderScrollingRows(Slot source, Slot target)')
+    for old,new in [('order','sideOrder'),('scrolling','sideScrolling'),('armed','sideArmed'),('captured','sideCaptured'),('creatingView','creatingSideView'),('compacting','sideCompacting'),('desktopRevealing','sideDesktopRevealing'),('attached','sideAttached'),('compactionShift','sideCompactionShift'),('compactionProgress','sideCompactionProgress'),('savedOffset','savedSideOffset'),('offset','sideOffset'),('revealGeneration','sideRevealGeneration'),('motion','sideMotion'),('velocity','sideVelocity')]:
+        text=re.sub(r'\b'+old+r'\b',new,text)
+    return text
+parts=['    private void completeHomePromotion(', '    void clearSlot(', '    private void queueSidePromotion(', '    private void retrySidePromotion(', '    private void beginExternalPromotion(', '    private boolean externalPromotionCurrent(', '    private void afterExternalTransitionIdle(']
 methods='\n'.join(method(host,s) for s in parts)
-cell_source=(package_dir(root)/'CellMovePlan.java').read_text(encoding='utf-8-sig')
-methods+='\n'+method(cell_source,'final class CellMovePlan {')
+methods+='\n'+'\n'.join(method(cell_source,s).replace('host.','').replace('WorkspaceHost.log','log').replace('WorkspaceHost.getSurfaceField','getSurfaceField') for s in ['    void compactCells()', '    void compactCellsAfterCollection()'])
+methods=(methods.replace('sideRows.compactRows()','compactScrollingSideRows()')
+    .replace('sideRows.isArmed()','sideArmed').replace('sideRows.isCaptured()','sideCaptured')
+    .replace('sideRows.motionRunning()','isSideMotionRunning()').replace('chrome.','').replace('resumes.','').replace('taskStates.','').replace('scales.','').replace('WorkspaceHost.ACTIVE','ACTIVE'))
+cell_plan=(package_dir(root)/'CellMovePlan.java').read_text(encoding='utf-8-sig')
+methods+='\n'+method(cell_plan,'final class CellMovePlan {')
 source=(package_dir(root)/'PendingSidePromotion.java').read_text(encoding='utf-8-sig')
 methods+='\n'+method(source,'final class PendingSidePromotion')
-parts=['    private boolean compactScrollingSideRows()', '    private void reorderSideSlots(', '    private void mapSideSlots(',
+parts=['    private boolean compactSideRows()', '    boolean reorderRows(', '    private void mapSideSlots(',
        '    private int maxSideOffset()', '    private void finishSideScroll()',
        '    private void commitSideScrollPosition()', '    private boolean nearSideViewport(']
-methods+='\n'+'\n'.join(method(host,s) for s in parts)
+methods+='\n'+'\n'.join(adapt_side(method(side_source,s)) for s in parts)
+methods+='\n'+method(task_source,'    private void onTaskIdKnown(').replace('host.','').replace('host::','this::').replace('WorkspaceHost.log','log').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('chrome.','').replace('resumes.','').replace('launches.onTaskCreated(slot)','onTaskCreated(slot)')
+methods+='\n'+method(task_source,'    void syncSlotWindowState(').replace('host.','')
+methods+='\n'+method(host,'    private void reorderNativeSideSlots(').replace('taskStates.','')
+methods+='\nprivate boolean reorderSideSlots(Slot source, Slot target) { if (source.sideRow >= 0 && target.sideRow >= 0) return reorderScrollingRows(source, target); reorderNativeSideSlots(source, target); return false; }'
 body=r"""
 package io.github.zerohomers0.onesteplite;
 import java.util.*;
@@ -65,7 +86,7 @@ public class HomeCompactRegression {
  int SLOT_COUNT=4,CELL_SLOT_COUNT=4,SLOT_TOP=4;final int SLOT_MAIN=0;Slot[]slots=new Slot[4];Root root=new Root();Layout layout=new Layout();
  static class TopState {Object owner(){return null;}void release(Object key){}}
  TopState topTaskState=new TopState();Slot topOriginalSlot;boolean topPortrait;
- Promotion promotion;HomeTaskReturn coveredHome;CellMovePreview cellMovePreview;boolean compactPending;Slot launchCurrentSlot;Object cellMotion;
+ Promotion promotion;HomeTaskReturn coveredHome;CellMovePreview cellMovePreview;boolean compactPending;Slot launchCurrentSlot;Object cellMotion; final class Cells { void compactCells(){HomeCompactRegression.this.compactCells();} void requestCompaction(){HomeCompactRegression.this.requestCompaction();} boolean pending(){return compactPending;} void compactCellsAfterCollection(){HomeCompactRegression.this.compactCellsAfterCollection();} void finishCellLayout(){HomeCompactRegression.this.finishCellLayout();} void animateCellMoves(List<CellMovePlan> m,int e,boolean p){HomeCompactRegression.this.animateCellMoves(m,e,p);} } Cells cells=new Cells();
  final SideRowOrder<Slot> sideOrder=new SideRowOrder<>();final List<Slot> sideAttached=new ArrayList<>();
  final Map<Slot,Float> sideCompactionShift=new IdentityHashMap<>();
  boolean sideArmed,sideCaptured,sideCompacting,sideScrolling,creatingSideView;Object sideScrollAnimator;
@@ -98,6 +119,7 @@ public class HomeCompactRegression {
  void recycleBuffered(Slot s){s.bufferedDown=null;}
  void clearFrameRateHint(Slot s){}void trimTrailingEmptySideRows(){}
  void updateHint(Slot s){s.view.hintUpdates++;}void updateTouchRegion(Slot s){s.view.touchUpdates++;}
+ void clearWindowState(Slot s){s.windowState=null;}void onTaskCreated(Slot s){}
  void applyRect(Slot s){s.view.rectUpdates++;}void reapplyScale(Slot s){}
  // This suite checks the real owner/geometry algorithm; surface frames have their own actual-class suite.
  void animateCellMoves(List<CellMovePlan> moves,int emptySlots,boolean paired){finishCellLayout();}
@@ -262,5 +284,5 @@ public class HomeCompactRegression {
 """.replace('__METHODS__',methods)
 f=out/'HomeCompactRegression.java';f.write_text(body,encoding='utf8')
 jdk=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(src/'SlotPositions.java'),str(src/'SidePromotionPolicy.java'),str(src/'TaskHandoffPolicy.java'),str(src/'HandoffOwner.java'),str(src/'SideRowOrder.java'),str(f)],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(src/'SlotPositions.java'),str(src/'SidePromotionPolicy.java'),str(src/'TaskHandoffPolicy.java'),str(src/'HandoffOwner.java'),str(src/'SideRowOrder.java'),str(src/'SideRowCapacityPolicy.java'),str(f)],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.HomeCompactRegression'],check=True)

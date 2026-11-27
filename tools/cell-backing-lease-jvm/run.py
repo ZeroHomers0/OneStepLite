@@ -22,6 +22,8 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 
 root = Path(__file__).resolve().parents[2]
 text = (package_dir(root)/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+cell_text = (package_dir(root)/'WorkspaceCellSurfaceController.java').read_text(encoding='utf-8-sig')
+chrome_text = (package_dir(root)/'WorkspaceChromeController.java').read_text(encoding='utf-8-sig')
 checks = 0
 
 
@@ -32,21 +34,21 @@ def check(value, reason):
         raise AssertionError(reason)
 
 
-def member(signature):
-    start = text.index(signature)
-    brace = text.index('{', start)
+def member(signature, source=text):
+    start = source.index(signature)
+    brace = source.index('{', start)
     depth, end = 1, brace + 1
     while depth:
-        if text[end] == '{':
+        if source[end] == '{':
             depth += 1
-        elif text[end] == '}':
+        elif source[end] == '}':
             depth -= 1
         end += 1
-    return text[start:end]
+    return source[start:end]
 
 
 # The workspace backing is shared chrome: it must obey the lease, never write the View.
-backing = member('    private void updateWorkspaceBacking(View view')
+backing = member('    void updateWorkspaceBacking(View view', chrome_text)
 check('LiveSwapVisualLease.writeAlpha(view,' in backing,
       'updateWorkspaceBacking must fade through LiveSwapVisualLease.writeAlpha')
 check('view.setAlpha(' not in backing,
@@ -84,8 +86,8 @@ check('new Object[]{ticket.slot.cellBackground}, ticket.liveBackdrop);' not in h
       'live Home still reveals the promoted cell placeholder inside the settle transaction')
 
 # The placeholder itself is intentionally still allocated under a live task.
-ensure = member('    private void ensureCellBackground(')
-check('HyperOsStyle.page(ctx)' in ensure,
+ensure = member('    void ensureCellBackground(', cell_text)
+check('HyperOsStyle.page(host.ctx)' in ensure,
       'occupied cells still own a page-colour backing so translucent apps cannot reveal wallpaper')
 
 print('actual cell backing lease/handoff source checks=%d passed' % checks)

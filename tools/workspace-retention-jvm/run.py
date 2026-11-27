@@ -8,34 +8,38 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 root = Path(__file__).resolve().parents[2]
 src = package_dir(root)/"WorkspaceHost.java"
 source = src.read_text(encoding="utf-8-sig")
+exit_source = (package_dir(root)/"WorkspaceExitController.java").read_text(encoding="utf-8-sig")
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
 jdk = Path(os.environ["ONESTEPLITE_JAVA_BIN"])
 
 
-def method(signature):
-    start = source.index(signature)
-    brace = source.index("{", start) + 1
+def method(signature, text=source):
+    start = text.index(signature)
+    brace = text.index("{", start) + 1
     depth = 1
     end = brace
     while depth:
-        if source[end] == "{":
+        if text[end] == "{":
             depth += 1
-        elif source[end] == "}":
+        elif text[end] == "}":
             depth -= 1
         end += 1
-    return source[start:end]
+    return text[start:end]
 
 
 members = "\n".join(method(signature) for signature in (
-    "    private boolean canRetainBoundTasks() {",
-    "    private void finishRetainedSuspend(long epoch) {",
-    "    private void releaseForegroundRetainedTasks(long epoch,",
-    "    private boolean hasBoundTasks() {",
     "    private void releaseRetainedTaskToMain(Slot slot) {",
-    "    private void releaseRetainedTaskToMain(Slot slot, boolean nativeAlreadyFullscreen) {",
-    "    private void preannounceDesktopLaunch(android.os.Bundle binding) {",
-))
+    "    void releaseRetainedTaskToMain(Slot slot, boolean nativeAlreadyFullscreen) {",
+    "    void preannounceDesktopLaunch(android.os.Bundle binding) {",
+)).replace("sideRows.isCompacting()","sideCompacting").replace("sideRows.isDesktopRevealing()","sideDesktopRevealing").replace("sideRows.isScrolling()","sideScrolling").replace("sideRows.isRowInPlace(slot)","sideRowInPlace(slot)").replace("sideRows.revealForDesktop(","revealSideTaskForDesktop(").replace("exits.","").replace("WorkspaceHost.log","log").replace("scales.","")
+exit_members = "\n".join(method(signature, exit_source) for signature in (
+    "    boolean canRetainBoundTasks() {",
+    "    void finishRetainedSuspend(long epoch) {",
+    "    void releaseForegroundRetainedTasks(long epoch,",
+    "    boolean hasBoundTasks() {",
+)).replace("host.","").replace("WorkspaceHost.ACTIVE","ACTIVE").replace("WorkspaceHost.SUSPENDING","SUSPENDING").replace("WorkspaceHost.SUSPENDED","SUSPENDED").replace("WorkspaceHost.RESUMING","RESUMING").replace("exits.","").replace("WorkspaceHost.log","log")
+members += "\n" + exit_members
 harness = r'''
 import java.util.*;
 import java.util.function.Consumer;
@@ -74,7 +78,7 @@ public final class WorkspaceRetentionTest {
     final Map<Object,OwnedTask> ownedTasks=new HashMap<>();
     View root=new View();
     SideDismiss sideDismiss;
-    Object topTransition, cellMotion;
+    Object topTransition, cellMotion; final class Cells { Object motion(){return cellMotion;} } Cells cells=new Cells();
     Object promotion;
     Object workspaceAnimator;
     boolean screenOn=true, retainedForLock, workspaceEntering, topSelectionPending, transferBusy, keyguardLocked;

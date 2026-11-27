@@ -9,7 +9,7 @@ root = Path(__file__).resolve().parents[2]
 src=package_dir(root)
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
-source = (src / 'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+source = (src / 'WorkspaceResumeController.java').read_text(encoding='utf-8-sig')
 
 
 def member(signature):
@@ -27,7 +27,7 @@ methods = '\n'.join(member(s) for s in [
     '    private void confirmRetainedResume(long epoch, int attempt) {',
     '    private void confirmRetainedResume(long epoch, int attempt, boolean visibilityRestored)',
     '    private void finishRetainedResumeCheck(',
-    '    private void prepareRetainedWorkspaceEntry('])
+    '    private void prepareRetainedWorkspaceEntry(']).replace('host.','').replace('host::','this::').replace('exits.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('WorkspaceHost.SUSPENDING','SUSPENDING').replace('WorkspaceHost.SUSPENDED','SUSPENDED').replace('WorkspaceHost.RESUMING','RESUMING').replace('WorkspaceHost.log','log')
 
 files = {
     'android/window/WindowContainerTransaction.java': '''package android.window;

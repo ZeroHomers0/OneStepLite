@@ -7,21 +7,22 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 
 root = Path(__file__).resolve().parents[2]
 host = (package_dir(root)/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+cell = (package_dir(root)/'WorkspaceCellMotionController.java').read_text(encoding='utf-8-sig')
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
 
 
-def member(signature):
-    start = host.index(signature)
-    brace = host.index('{', start)
+def member(signature, source=host):
+    start = source.index(signature)
+    brace = source.index('{', start)
     depth, end = 1, brace + 1
     while depth:
-        if host[end] == '{':
+        if source[end] == '{':
             depth += 1
-        elif host[end] == '}':
+        elif source[end] == '}':
             depth -= 1
         end += 1
-    return host[start:end]
+    return source[start:end]
 
 
 cell_source = (package_dir(root)/'CellMovePlan.java').read_text(encoding='utf-8-sig')
@@ -34,10 +35,10 @@ while cell_depth:
     elif cell_source[cell_end] == '}': cell_depth -= 1
     cell_end += 1
 cell_class = cell_source[cell_start:cell_end].replace('final class CellMovePlan','static final class CellMovePlan',1)
-methods = cell_class + '\n' + '\n'.join(member(s) for s in [
+methods = cell_class + '\n' + '\n'.join(member(s, cell) for s in [
     '    private static int compactionHintMask(',
-    '    private void animateCellMoves(',
-]).replace('WorkspaceHost::log', 'CompactionChromeRegression::log')
+    '    void animateCellMoves(',
+]).replace('host.', '').replace('WorkspaceHost::log', 'CompactionChromeRegression::log').replace('WorkspaceHost.log', 'log').replace('WorkspaceHost.getSurfaceField', 'getSurfaceField')
 body = r'''
 package io.github.zerohomers0.onesteplite;
 import java.util.*;
@@ -125,7 +126,7 @@ public class CompactionChromeRegression {
   System.out.println("actual compaction chrome checks="+checks+" passed");
  }
 }
-'''.replace('__METHODS__', methods)
+'''.replace('__METHODS__', methods.replace('cellSurfaces.','').replace('resumes.',''))
 source = out / 'CompactionChromeRegression.java'
 source.write_text(body, encoding='utf-8')
 view_stub = out / 'android/view/View.java'
