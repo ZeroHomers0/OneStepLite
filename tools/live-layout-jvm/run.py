@@ -7,11 +7,13 @@ import sys
 
 root = Path(__file__).resolve().parents[2]
 source = (package_dir(root)/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+controller = (package_dir(root)/'WorkspaceMainSideController.java').read_text(encoding='utf-8')
+geometry = (package_dir(root)/'WorkspaceLiveGeometry.java').read_text(encoding='utf-8')
 out = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'build/tests/standalone'
 out.mkdir(parents=True, exist_ok=True)
 
 
-def member(signature):
+def member(signature, source=source):
     start = source.index(signature)
     brace = source.index('{', start)
     depth, end = 1, brace + 1
@@ -23,9 +25,10 @@ def member(signature):
         end += 1
     return source[start:end]
 
-swap = member('    private void startLiveSwap(')
+handoff = (package_dir(root)/'WorkspaceLiveHandoffController.java').read_text(encoding='utf-8').replace('host.', '').replace('WorkspaceHost.', '')
+swap = member('    void startLiveSwap(', handoff)
 target_start = swap.index('        final WorkspaceLayout target = ')
-target_declaration = swap[target_start:swap.index(';', target_start) + 1]
+target_declaration = swap[target_start:swap.index(';', target_start) + 1].replace('windowLayout.','')
 
 body = r'''
 package io.github.zerohomers0.onesteplite;
@@ -142,9 +145,9 @@ public class LiveLayoutRegression {
   System.out.println("actual Host layout-only commit checks="+checks+" passed");
  }
 }
-'''.replace('__SWAP_TARGET__', target_declaration).replace('__METHOD__', member('    private void applyMainLayout(').replace('sideRows.layoutAll()','layoutSideViewport(true)').replace('chrome.','')).replace('__SET_MAIN_SIDE__', member('    private void setMainSide(').replace('sideRows.layoutAll()','layoutSideViewport(true)').replace('chrome.','')).replace(
-    '__LIVE_RECTS__', member('    private static LiveSwapGeometry.Rect liveMainRect(')
-    + '\n' + member('    private static LiveSwapGeometry.Rect liveCellRect('))
+'''.replace('__SWAP_TARGET__', target_declaration).replace('__METHOD__', member('    void applyMainLayout(', controller).replace('host.','').replace('slotRegistry.','').replace('slotBounds(', 'slotBounds(').replace('WorkspaceHost.log', 'log').replace('sideRows.layoutAll()','layoutSideViewport(true)').replace('chrome.','').replace('windowLayout.','').replace('wallpapers.','').replace('topPresentationHost.','').replace('sideRows.','').replace('zoomSession.','')).replace('__SET_MAIN_SIDE__', member('    void setMainSide(', controller).replace('host.','').replace('slotRegistry.','').replace('WorkspaceHost.ACTIVE', 'ACTIVE').replace('WorkspaceHost.log', 'log').replace('sideRows.layoutAll()','layoutSideViewport(true)').replace('chrome.','').replace('windowLayout.','').replace('wallpapers.','').replace('topPresentationHost.','').replace('sideRows.','').replace('zoomSession.','')).replace(
+    '__LIVE_RECTS__', member('    static LiveSwapGeometry.Rect liveMainRect(',geometry)
+    + '\n' + member('    static LiveSwapGeometry.Rect liveCellRect(',geometry))
 
 java = out / 'LiveLayoutRegression.java'
 java.write_text(body, encoding='utf8')

@@ -15,7 +15,7 @@ def method(signature,text=host):
     return text[a:b]
 
 def cell_method(signature):
-    text=method(signature,cell).replace('host.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log')
+    text=method(signature,cell).replace('host.','').replace('slotRegistry.','').replace('sideRows.isScrolling()','sideScrolling').replace('sideRows.','').replace('windowPresentation.','').replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log')
     return (text.replace('workspaceAlpha()','workspaceAlpha').replace('sideRows.isScrolling()','sideScrolling').replace('scales.',''))
 body=r'''
 package io.github.zerohomers0.onesteplite;
@@ -116,16 +116,20 @@ public class SurfaceControl {public SurfaceControl child;public boolean valid=tr
 }'''}
 for p,s in files.items():
     path=out/p;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(s,encoding='utf-8')
-for sig,anchor in [('    private void startLiveCollect(','statusBar.runAfterHiddenFrame('),('    private void adoptExisting(Slot slot, LiveTask task, boolean collectFromMain,','if (!executeOnShell('),('    private void startSlot(','PendingIntent pi')]:
-    source=method(sig, launch if sig.startswith('    private void startSlot(') else host)
+handoff = (package_dir(root)/'WorkspaceLiveHandoffController.java').read_text(encoding='utf-8').replace('host.', '').replace('WorkspaceHost.', '')
+transfer=(package_dir(root)/'WorkspaceTaskTransferController.java').read_text(encoding='utf-8').replace('host.', '')
+for sig,anchor in [('    void startLiveCollect(','statusBar.runAfterHiddenFrame('),('    void adoptExisting(Slot slot, LiveTask task, boolean collectFromMain,','if (!executeOnShell('),('    private void startSlot(','PendingIntent pi')]:
+    source=method(sig, launch if sig.startswith('    private void startSlot(') else handoff if sig.startswith('    void startLiveCollect(') else transfer)
     assert 'prepareCellSurface(slot);' in source
     assert source.index('prepareCellSurface(slot);')<source.index(anchor)
-assert 'for (Slot cell : slots)' in method('    private void restoreLiveSwapVisual(')
-created=method('    void onTaskViewCreated(')
+assert 'for (Slot cell : slots)' in method('    void restoreLiveSwapVisual(', handoff)
+lifecycle=(package_dir(root)/'WorkspaceSlotLifecycle.java').read_text(encoding='utf-8').replace('host.', '')
+created=method('    void onTaskViewCreated(', lifecycle)
 assert 'slot.hint.setOnClickListener(v -> { if (!taskCellsCovered)' in created
 assert 'view.setOnClickListener(v -> { if (!taskCellsCovered)' in created
 # Explicit shortcut/settings commands must still reuse the existing task dispatcher.
-assert 'taskCellsCovered' not in method('    private void onSlotTapped(')
+actions = (package_dir(root)/'WorkspaceMainTaskActions.java').read_text(encoding='utf-8')
+assert 'taskCellsCovered' not in method('    void onSlotTapped(', actions)
 jdk=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','-d',str(out),*[str(out/p) for p in files]],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.CellVisibilityRegression'],check=True)

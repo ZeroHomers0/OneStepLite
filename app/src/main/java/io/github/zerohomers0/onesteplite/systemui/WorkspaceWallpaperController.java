@@ -127,11 +127,11 @@ final class WorkspaceWallpaperController {
                 gap.topMargin = bounds[1];
                 host.mainGapBacking.setLayoutParams(gap);
                 host.mainGapBacking.setAlpha(1f);
-                View backing = host.sideBackingViews[WorkspaceHost.coordinatorSlotTop()];
+                View backing = host.sideBackingViews[WorkspaceHost.SLOT_TOP];
                 if (backing == null) {
                     backing = new View(host.ctx);
                     backing.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-                    host.sideBackingViews[WorkspaceHost.coordinatorSlotTop()] = backing;
+                    host.sideBackingViews[WorkspaceHost.SLOT_TOP] = backing;
                     host.root.addView(backing, 0);
                 }
                 int[] side = host.layout.interactiveBounds();
@@ -142,9 +142,9 @@ final class WorkspaceWallpaperController {
                 host.root.removeView(host.mainGapBacking);
                 host.mainGapBacking = null;
             }
-            if (!host.layout.tabletLandscape && host.sideBackingViews[WorkspaceHost.coordinatorSlotTop()] != null) {
-                host.root.removeView(host.sideBackingViews[WorkspaceHost.coordinatorSlotTop()]);
-                host.sideBackingViews[WorkspaceHost.coordinatorSlotTop()] = null;
+            if (!host.layout.tabletLandscape && host.sideBackingViews[WorkspaceHost.SLOT_TOP] != null) {
+                host.root.removeView(host.sideBackingViews[WorkspaceHost.SLOT_TOP]);
+                host.sideBackingViews[WorkspaceHost.SLOT_TOP] = null;
             }
         }
         updateWorkspaceBackdropVisibility();
@@ -156,9 +156,9 @@ final class WorkspaceWallpaperController {
             host.mainGapBacking.setBackground(new WallpaperCropDrawable(host.wallpaperBackdrop, host.screenW, host.screenH,
                     bounds[0], bounds[1], HyperOsStyle.topWallpaperTint(host.ctx)));
         }
-        if (host.sideBackingViews[WorkspaceHost.coordinatorSlotTop()] != null) {
+        if (host.sideBackingViews[WorkspaceHost.SLOT_TOP] != null) {
             int[] bounds = host.layout.interactiveBounds();
-            host.sideBackingViews[WorkspaceHost.coordinatorSlotTop()].setBackground(new WallpaperCropDrawable(host.wallpaperBackdrop, host.screenW, host.screenH,
+            host.sideBackingViews[WorkspaceHost.SLOT_TOP].setBackground(new WallpaperCropDrawable(host.wallpaperBackdrop, host.screenW, host.screenH,
                     bounds[0], bounds[1], HyperOsStyle.topWallpaperTint(host.ctx)));
         }
         if (host.topBar != null) host.topBar.setWallpaperBackdrop(host.wallpaperBackdrop, host.screenW, host.screenH);
@@ -166,21 +166,21 @@ final class WorkspaceWallpaperController {
             host.topStripBacking.setBackground(new WallpaperCropDrawable(host.wallpaperBackdrop, host.screenW, host.screenH,
                     0, 0, HyperOsStyle.topWallpaperTint(host.ctx)));
         }
-        Slot upper=host.slots[WorkspaceHost.coordinatorSlotTop()];
+        Slot upper=host.slots[WorkspaceHost.SLOT_TOP];
         if(upper!=null && upper.hint!=null && !upper.occupied)
             upper.hint.setBackground(new WallpaperCropDrawable(host.wallpaperBackdrop,host.screenW,host.screenH,
-                    host.coordinatorTopGeometry().left,host.coordinatorTopGeometry().top,HyperOsStyle.topWallpaperTint(host.ctx)));
+                    host.windowLayout.topGeometry().left,host.windowLayout.topGeometry().top,HyperOsStyle.topWallpaperTint(host.ctx)));
         int x = host.layout.mainOnRight ? 0 : host.layout.mainWidth;
         for (int i = 1; i < host.CELL_SLOT_COUNT; i++) {
             View backing = host.sideBackingViews[i];
             if (backing != null) backing.setBackground(new WallpaperCropDrawable(host.wallpaperBackdrop, host.screenW, host.screenH,
                     host.layout.tabletLandscape?host.layout.cellBounds(i-1)[0]:x,
-                    host.coordinatorSideSegmentTop(i), HyperOsStyle.topWallpaperTint(host.ctx)));
+                    host.chrome.sideSegmentTop(i), HyperOsStyle.topWallpaperTint(host.ctx)));
         }
         for (int i = 1; i < host.slots.length; i++) {
-            if (i == WorkspaceHost.coordinatorSlotTop()) continue;
+            if (i == WorkspaceHost.SLOT_TOP) continue;
             Slot slot = host.slots[i];
-            if (slot != null && host.coordinatorPresentsSlot(slot)) refreshEmptyHintBackdrop(slot);
+            if (slot != null && host.cellSurfaces.presentsSlot(slot)) refreshEmptyHintBackdrop(slot);
         }
         updateWorkspaceBackdropVisibility();
     }
@@ -201,19 +201,19 @@ final class WorkspaceWallpaperController {
         WallpaperCropDrawable backdrop = new WallpaperCropDrawable(
                 host.wallpaperBackdrop, host.screenW, host.screenH, x, y, tint);
         backdrop.setWellWallpaper(host.wellWallpaperBackdrop);
-        if (host.layout != null) backdrop.setMainHole(host.coordinatorWorkspaceMainHole());
+        if (host.layout != null) backdrop.setMainHole(host.windowPresentation.workspaceMainHole());
         slot.hint.setBackground(backdrop);
     }
 
     void updateWorkspaceBackdropVisibility() {
         if (host.layout == null) return;
         // Wallpaper can arrive during a task handoff; do not rewrite its Surface alpha.
-        android.graphics.RectF hole = host.coordinatorWorkspaceMainHole();
-        host.coordinatorUpdateWorkspaceBacking(host.topStripBacking, hole);
-        host.coordinatorUpdateWorkspaceBacking(host.mainGapBacking, hole);
-        for (int i=1;i<WorkspaceHost.coordinatorSlotCount();i++) {
+        android.graphics.RectF hole = host.windowPresentation.workspaceMainHole();
+        host.chrome.updateWorkspaceBacking(host.topStripBacking, hole);
+        host.chrome.updateWorkspaceBacking(host.mainGapBacking, hole);
+        for (int i=1;i<WorkspaceHost.SLOT_COUNT;i++) {
             View backing=host.sideBackingViews[i];
-            host.coordinatorUpdateWorkspaceBacking(backing, hole);
+            host.chrome.updateWorkspaceBacking(backing, hole);
             Slot slot=host.slots[i];
             if (slot!=null && slot.hint!=null && slot.hint.getBackground() instanceof WallpaperCropDrawable)
                 ((WallpaperCropDrawable) slot.hint.getBackground()).setMainHole(hole);

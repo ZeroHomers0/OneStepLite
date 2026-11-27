@@ -47,6 +47,7 @@ public class RegionSamplingHelper{public Object mCallback;public Object mSamplin
 public class StatusBarRegionSamplingInteractor$regionSamplingHelper$1{public Owner this$0=new Owner();public static class Owner{public Rect samplingBounds=new Rect(0,0,1080,100);}}
 ''',
 'io/github/zerohomers0/onesteplite/WorkspaceHost.java': '''package io.github.zerohomers0.onesteplite;public class WorkspaceHost{public static float[]geometry;static float[]activeStatusBarTransform(){return geometry;}}''',
+'io/github/zerohomers0/onesteplite/WorkspaceWindowLayout.java': '''package io.github.zerohomers0.onesteplite;final class WorkspaceWindowLayout{static float[]activeStatusBarTransform(){return WorkspaceHost.activeStatusBarTransform();}}''',
 'io/github/zerohomers0/onesteplite/HandoffRegression.java': r'''package io.github.zerohomers0.onesteplite;
 import android.graphics.*;import de.robv.android.xposed.*;import com.android.server.wm.*;
 import com.android.wm.shell.shared.handles.RegionSamplingHelper;

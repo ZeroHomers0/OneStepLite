@@ -6,9 +6,9 @@ import de.robv.android.xposed.XposedHelpers;
 
 /** Owns side-task close admission and delayed task-removal verification. */
 final class WorkspaceSideCloseController {
-    private static final int SLOT_MAIN = WorkspaceHost.coordinatorSlotMain();
-    private static final int SLOT_TOP = WorkspaceHost.coordinatorSlotTop();
-    private static final int SLOT_COUNT = WorkspaceHost.coordinatorSlotCount();
+    private static final int SLOT_MAIN = WorkspaceHost.SLOT_MAIN;
+    private static final int SLOT_TOP = WorkspaceHost.SLOT_TOP;
+    private static final int SLOT_COUNT = WorkspaceHost.SLOT_COUNT;
 
     private final WorkspaceHost host;
 
@@ -33,34 +33,34 @@ final class WorkspaceSideCloseController {
                     if (slot.index == 0 || !host.cellSurfaces.presentsSlot(slot) || slot.index >= SLOT_COUNT
                             || slot.taskId != id || !java.util.Objects.equals(slot.taskToken, token)
                             || !slot.occupied || slot.promoting || slot.parked || slot.closing || slot.frozen
-                            || !host.controllerOwns(slot, id, token)) continue;
-                    Object parent = WorkspaceHost.getSurfaceField(slot.controller, "mSurfaceControl");
+                            || !host.slotRegistry.controllerOwns(slot, id, token)) continue;
+                    Object parent = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl");
                     Object leash = XposedHelpers.callMethod(change, "getLeash");
                     if (parent == null || leash == null || slot.rect == null) continue;
                     long epoch = slot.taskEpoch;
                     FrameLayout closeRoot = host.root;
                     final WorkspaceLayout closeGeometry = host.layout;
-                    Rect strip = host.liveSideStrip(closeGeometry);
-                    LiveBackdrop wallpaper = LiveBackdrop.create(host.liveHostRootSurface(), host.wallpaperBackdrop,
+                    Rect strip = WorkspaceLiveGeometry.liveSideStrip(closeGeometry);
+                    LiveBackdrop wallpaper = LiveBackdrop.create(host.liveGeometry.liveHostRootSurface(), host.wallpaperBackdrop,
                             host.screenW, host.screenH, strip, strip,
                             canvas -> host.drawLiveEmptyHints(canvas, closeGeometry, closeGeometry,
                                     1 << slot.index), WorkspaceHost::log);
                     slot.closing = true;
                     result.add(new SideClose(backend, slot.controller, leash, parent, slot.cellBackground, host.scales.scaleFor(slot),
                             slot.rect[2] - slot.rect[0], slot.rect[3] - slot.rect[1],
-                            () -> host.isActive(slot) && host.scene == WorkspaceHost.ACTIVE && slot.taskId == id && slot.taskEpoch == epoch,
+                            () -> host.slotRegistry.isActive(slot) && host.scene == WorkspaceHost.ACTIVE && slot.taskId == id && slot.taskEpoch == epoch,
                             () -> { slot.closing = false; host.main.post(() -> {
-                                if (!host.isActive(slot) || slot.taskId != id || slot.taskEpoch != epoch) {
+                                if (!host.slotRegistry.isActive(slot) || slot.taskId != id || slot.taskEpoch != epoch) {
                                     wallpaper.closeAfterFrame(closeRoot);
                                     return;
                                 }
                                 if (!host.executeOnShell(() -> {
-                                    boolean stillOwned = host.controllerOwns(slot, id, token);
-                                    if (!stillOwned) host.resetIdleTaskView(slot);
+                                    boolean stillOwned = host.slotRegistry.controllerOwns(slot, id, token);
+                                    if (!stillOwned) host.taskStates.resetIdleTaskView(slot);
                                     host.main.post(() -> {
-                                        if (host.isActive(slot) && slot.taskId == id && slot.taskEpoch == epoch) {
+                                        if (host.slotRegistry.isActive(slot) && slot.taskId == id && slot.taskEpoch == epoch) {
                                             if (stillOwned) onTaskRemovalStarted(slot.index, id);
-                                            else { host.clearSlot(slot); host.cells.compactCells(); }
+                                            else { host.slotLifecycle.clearSlot(slot); host.cells.compactCells(); }
                                         }
                                         wallpaper.closeAfterFrame(closeRoot);
                                     });
@@ -93,11 +93,11 @@ final class WorkspaceSideCloseController {
         slot.removalCheckTask = taskId;
         final long expectedEpoch = slot.taskEpoch;
         host.main.postDelayed(() -> {
-            if (!host.isActive(slot) || slot.promoting || slot.taskId != taskId
+            if (!host.slotRegistry.isActive(slot) || slot.promoting || slot.taskId != taskId
                     || slot.taskEpoch != expectedEpoch) return;
             host.executeOnShell(() -> {
-                boolean stillOwned = host.controllerOwns(slot, taskId, slot.taskToken);
-                if (!stillOwned) host.resetIdleTaskView(slot);
+                boolean stillOwned = host.slotRegistry.controllerOwns(slot, taskId, slot.taskToken);
+                if (!stillOwned) host.taskStates.resetIdleTaskView(slot);
                 host.postForSlot(slot, owner -> {
                     if (owner.taskId != taskId || owner.taskEpoch != expectedEpoch || owner.promoting) return;
                     owner.removalCheckTask = -1;
@@ -105,7 +105,7 @@ final class WorkspaceSideCloseController {
                         WorkspaceHost.log("removal not detached; retain task=" + taskId);
                         return;
                     }
-                    host.clearSlot(owner);
+                    host.slotLifecycle.clearSlot(owner);
                     host.cells.compactCells();
                 });
             });

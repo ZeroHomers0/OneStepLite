@@ -16,7 +16,7 @@ final class RetainedWorkspaceHooks {
                         @Override protected void afterHookedMethod(MethodHookParam param) {
                             int event = ((android.os.Message) param.args[0]).what;
                             // Native turning-on/waking packets precede SCREEN_ON and the first frame.
-                            if (event == 0 || event == 4) WorkspaceHost.onNativeWake();
+                            if (event == 0 || event == 4) WorkspaceSystemEvents.onNativeWake();
                         }
                     });
             log.accept("retained workspace native wake hook armed");
@@ -28,7 +28,7 @@ final class RetainedWorkspaceHooks {
                     "com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager",
                     loader, "hide", long.class, long.class, new XC_MethodHook() {
                         @Override protected void afterHookedMethod(MethodHookParam param) {
-                            WorkspaceHost.onNativeWake();
+                            WorkspaceSystemEvents.onNativeWake();
                         }
                     });
             log.accept("retained workspace native unlock hook armed");

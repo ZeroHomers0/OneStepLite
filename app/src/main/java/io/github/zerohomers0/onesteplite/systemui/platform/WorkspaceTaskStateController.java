@@ -11,9 +11,9 @@ import de.robv.android.xposed.XposedHelpers;
 
 /** Owns TaskView listener dispatch, task binding and TaskWindowState synchronization. */
 final class WorkspaceTaskStateController {
-    private static final int SLOT_MAIN = WorkspaceHost.coordinatorSlotMain();
-    private static final int SLOT_TOP = WorkspaceHost.coordinatorSlotTop();
-    private static final int SLOT_COUNT = WorkspaceHost.coordinatorSlotCount();
+    private static final int SLOT_MAIN = WorkspaceHost.SLOT_MAIN;
+    private static final int SLOT_TOP = WorkspaceHost.SLOT_TOP;
+    private static final int SLOT_COUNT = WorkspaceHost.SLOT_COUNT;
 
     private final WorkspaceHost host;
     private final Object taskWindowStatesLock = new Object();
@@ -65,7 +65,7 @@ final class WorkspaceTaskStateController {
                                     host.postForSlot(owner, s -> host.sideCloses.onTaskRemovalStarted(s.index, taskId));
                                 } else if ("onInitialized".equals(name)) {
                                     WorkspaceHost.log("listener#onInitialized slot=" + owner.index);
-                                    host.postForSlot(owner, s -> { host.updateHint(s); host.setWorkspaceAlpha(host.workspaceAlpha()); });
+                                    host.postForSlot(owner, s -> { host.slotLifecycle.updateHint(s); host.windowPresentation.setWorkspaceAlpha(host.workspaceAlpha()); });
                                 } else {
                                     WorkspaceHost.log("listener#" + name + " slot=" + slotIndex);
                                 }
@@ -83,9 +83,9 @@ final class WorkspaceTaskStateController {
 
     private void onTaskIdKnown(int slotIndex, int taskId) {
         Slot slot = host.slots[slotIndex];
-        if (slot.promoting || slot.parked || slot.retiredTaskId == taskId || !host.controllerOwns(slot, taskId, null)) return;
+        if (slot.promoting || slot.parked || slot.retiredTaskId == taskId || !host.slotRegistry.controllerOwns(slot, taskId, null)) return;
         Object token = XposedHelpers.getObjectField(slot.controller, "mTaskToken");
-        if (token == null || !host.controllerOwns(slot, taskId, token)) return;
+        if (token == null || !host.slotRegistry.controllerOwns(slot, taskId, token)) return;
         bindTask(slot, taskId, token);
         slot.occupied = true;
         slot.launching = false;
@@ -96,11 +96,11 @@ final class WorkspaceTaskStateController {
             if (info != null) onTaskInfo(slotIndex, info);
         }
         if(slotIndex==SLOT_TOP)TopNativeCaption.refresh();
-        host.updateHint(slot);
+        host.slotLifecycle.updateHint(slot);
         host.chrome.updateTouchRegion(slot);
         host.resumes.finishPendingSuspend();
         host.main.postDelayed(host.cells::compactCellsAfterCollection, 120L);
-        if (slotIndex > SLOT_MAIN) host.scheduleSideModeResolution(slot, taskId);
+        if (slotIndex > SLOT_MAIN) scheduleSideModeResolution(slot, taskId);
     }
 
     void onTaskInfo(int slotIndex, Object info) {
@@ -122,12 +122,12 @@ final class WorkspaceTaskStateController {
             if (host.retainedOnExit && (host.scene == WorkspaceHost.SUSPENDING || host.scene == WorkspaceHost.SUSPENDED) && running && mode == 1
                     && slot.occupied && taskId == slot.taskId && token != null
                     && token.equals(slot.taskToken)) {
-                if (host.scene == WorkspaceHost.SUSPENDED) host.releaseRetainedTaskToMain(slot, true);
+                if (host.scene == WorkspaceHost.SUSPENDED) host.exits.releaseRetainedTaskToMain(slot, true);
                 return;
             }
             if(slotIndex==SLOT_TOP && mode==1 && slot.occupied && taskId==slot.taskId
                     && token!=null && token.equals(slot.taskToken)) {
-                if (running && visible) host.finishExternalTopLaunch(slot);
+                if (running && visible) host.exits.finishExternalTopLaunch(slot);
                 return;
             }
             if (slotIndex > SLOT_MAIN && mode == 5 && slot.occupied
@@ -135,7 +135,7 @@ final class WorkspaceTaskStateController {
                 releaseNativeFreeformSide(slot, taskId, token);
                 return;
             }
-            if (token == null || !host.controllerOwns(slot, taskId, token)) return;
+            if (token == null || !host.slotRegistry.controllerOwns(slot, taskId, token)) return;
             boolean surfaceGeometryChanged = slot.taskId != taskId || slot.windowMode != mode;
             boolean changed = slot.taskId != taskId || slot.occupied != running
                     || slot.taskVisible != visible || slot.windowMode != mode;
@@ -157,7 +157,7 @@ final class WorkspaceTaskStateController {
                         + " running=" + running + " visible=" + visible
                         + " mode=" + mode
                         + " appBounds=" + host.cells.appBoundsOf(info));
-                host.updateHint(slot);
+                host.slotLifecycle.updateHint(slot);
                 host.chrome.updateTouchRegion(slot);
             }
             if (running) {
@@ -167,14 +167,14 @@ final class WorkspaceTaskStateController {
             if (running && slotIndex > SLOT_MAIN && mode == 6 && surfaceGeometryChanged) {
                 host.scheduleSideSurfaceRestore(slot, taskId, token, slot.taskEpoch, host.sceneEpoch);
             }
-            if (running && !visible) host.scheduleSideVisibilityRepair(slot);
+            if (running && !visible) host.retainedSurfaces.scheduleSideVisibilityRepair(slot);
             if (running && mode == 1 && slotIndex > SLOT_MAIN
                     && !slot.promoting && !slot.launching && !slot.parked) {
                 if (slot.modeAdmissionPending) {
                     if (SystemClock.uptimeMillis() >= slot.modeGuardUntil)
-                        host.repairSideWindowMode(slot, taskId);
-                    else host.scheduleSideModeResolution(slot, taskId);
-                } else host.promoteExternalLaunch(slot);
+                        repairSideWindowMode(slot, taskId);
+                    else scheduleSideModeResolution(slot, taskId);
+                } else promoteExternalLaunch(slot);
             } else if (slot.pendingSidePromotion != null
                     && !slot.pendingSidePromotion.desktopLaunch && mode != 1) {
                 slot.pendingSidePromotion = null;
@@ -222,7 +222,7 @@ final class WorkspaceTaskStateController {
                 owner.frozen = false;
                 if (done) {
                     host.ownedTasks.remove(token);
-                    host.clearSlot(owner);
+                    host.slotLifecycle.clearSlot(owner);
                     host.cells.compactCells();
                     WorkspaceHost.log("native freeform released side task=" + taskId + "; slot cleared, task retained");
                 }
@@ -238,7 +238,7 @@ final class WorkspaceTaskStateController {
         if (slot.taskId != taskId || slot.promoting || slot.parked) return;
         slot.taskVisible = visible;
         WorkspaceHost.log("taskVisibility slot=" + slotIndex + " task=" + taskId + " visible=" + visible);
-        if (!visible) host.scheduleSideVisibilityRepair(slot);
+        if (!visible) host.retainedSurfaces.scheduleSideVisibilityRepair(slot);
     }
 
     void bindTask(Slot slot, int taskId, Object token) {
@@ -327,5 +327,85 @@ final class WorkspaceTaskStateController {
         if (slot != null && slot.windowState != null) {
             slot.windowState.slotIndex = slot.index;
         }
+    }
+
+    void resetIdleTaskView(Slot slot) {
+        if (slot == null || slot.controller == null) return;
+        try {
+            IdleTaskView.reset(slot.controller, text -> WorkspaceHost.log(text + " slot=" + slot.index));
+        } catch (Throwable error) {
+            WorkspaceHost.log("reset idle TaskView slot=" + (slot == null ? -1 : slot.index) + " failed: " + error);
+        }
+    }
+
+    void promoteExternalLaunch(Slot slot) {
+        if (slot != null && host.retainedOnExit && host.scene == WorkspaceHost.SUSPENDED) {
+            host.exits.releaseRetainedTaskToMain(slot, true);
+            return;
+        }
+        if (slot == null || slot.index <= WorkspaceHost.SLOT_MAIN || !host.slotRegistry.isActive(slot)) return;
+        WorkspaceHost.log("external launcher launch detected slot=" + slot.index
+                + " task=" + slot.taskId + " mode=" + slot.windowMode + "; promote");
+        host.promotionController.queueSidePromotion(slot, false);
+    }
+
+    private void promoteUnsupportedSide(Slot slot) {
+        if (slot == null || slot.index <= WorkspaceHost.SLOT_MAIN || !host.slotRegistry.isActive(slot)
+                || slot.promoting || host.promotion != null || host.transferBusy) return;
+        String pkg = slot.pkg == null ? "" : slot.pkg;
+        slot.modeAdmissionPending = false;
+        WorkspaceHost.log("side mode unsupported slot=" + slot.index + " task=" + slot.taskId
+                + " mode=" + slot.windowMode + " pkg=" + pkg + "; open in main");
+        android.widget.Toast.makeText(host.ctx, "该应用不支持副格，已在主区打开",
+                android.widget.Toast.LENGTH_SHORT).show();
+        slot.modeGuardUntil = 0L;
+        host.mainTaskActions.onSlotTapped(slot.index);
+    }
+
+    void scheduleSideModeResolution(Slot slot, int taskId) {
+        long delay = Math.max(220L,
+                slot.modeGuardUntil - SystemClock.uptimeMillis() + 150L);
+        host.main.postDelayed(() -> {
+            if (!host.slotRegistry.isActive(slot) || slot.taskId != taskId || slot.promoting
+                    || slot.launching || slot.parked || !slot.occupied) return;
+            if (slot.windowMode == 6) {
+                slot.modeAdmissionPending = false;
+                slot.modeRepairAttempts = 0;
+                host.scales.reapplyScale(slot);
+            } else if (slot.windowMode == 1 && slot.modeAdmissionPending) {
+                repairSideWindowMode(slot, taskId);
+            }
+        }, delay);
+    }
+
+    void repairSideWindowMode(Slot slot, int taskId) {
+        if (!host.slotRegistry.isActive(slot) || slot.taskId != taskId || slot.promoting
+                || slot.launching || slot.parked || !slot.modeAdmissionPending) return;
+        long now = SystemClock.uptimeMillis();
+        if (now < slot.modeGuardUntil) return;
+        if (slot.modeRepairAttempts >= 2) {
+            promoteUnsupportedSide(slot);
+            return;
+        }
+        slot.modeRepairAttempts++;
+        slot.modeGuardUntil = now + 850L;
+        try {
+            Object wct = Class.forName("android.window.WindowContainerTransaction")
+                    .getDeclaredConstructor().newInstance();
+            XposedHelpers.callMethod(wct, "setWindowingMode", slot.taskToken, 6);
+            XposedHelpers.callMethod(wct, "setBounds", slot.taskToken, host.slotRegistry.logicalBounds(slot));
+            WorkspaceNativeHooks.applyTopConfiguration(host, wct, slot.taskToken, slot);
+            XposedHelpers.callMethod(wct, "setForceTranslucent", slot.taskToken, true);
+            XposedHelpers.callMethod(wct, "setAlwaysOnTop", slot.taskToken, true);
+            XposedHelpers.callMethod(wct, "setFocusable", slot.taskToken, true);
+            XposedHelpers.callMethod(wct, "setHidden", slot.taskToken, false);
+            XposedHelpers.callMethod(wct, "reorder", slot.taskToken, true);
+            boolean applied = WorkspaceNativeHooks.applyWct("initial-side-mode-repair-" + slot.modeRepairAttempts, wct);
+            WorkspaceHost.log("initial side mode repair slot=" + slot.index + " task=" + taskId
+                    + " attempt=" + slot.modeRepairAttempts + " applied=" + applied);
+        } catch (Throwable error) {
+            WorkspaceHost.log("initial side mode repair failed slot=" + slot.index + ": " + error);
+        }
+        host.main.postDelayed(() -> scheduleSideModeResolution(slot, taskId), 900L);
     }
 }

@@ -9,7 +9,7 @@ root = Path(__file__).resolve().parents[2]
 src=package_dir(root)
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
-source = (src / 'HostEntry.java').read_text(encoding='utf-8-sig')
+source = (src / 'ZoomTransactions.java').read_text(encoding='utf-8-sig')
 
 
 def member(signature):

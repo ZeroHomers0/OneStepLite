@@ -204,7 +204,8 @@ subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',s
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.TopTransitionRegression'],check=True)
 
 host=Path(os.environ.get('ONESTEPLITE_COLLECT_HOST_SOURCE',str(src/'WorkspaceHost.java'))).read_text(encoding='utf-8-sig')
-def member(signature):
+presentation = (src/'WorkspaceTopPresentationController.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceNativeHooks.applyWct','applyWct').replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField').replace('WorkspaceHost.', '')
+def member(signature, host=host):
     start=host.index(signature)
     end=host.index('{',start)+1;depth=1
     while depth:
@@ -252,17 +253,17 @@ public class WorkspaceHost {
  void claimTopTask(TopCandidate c,boolean manual){claimed++;}void finishPendingSuspend(){finished++;}
  void cancelTopTaskTransition(){if(topTransition!=null)topTransition.close();}static void log(String s){}
  static void check(boolean b,String m){checks++;if(!b)throw new AssertionError(m);}
-'''+member('    private void captureMainIntoTop(')
-for signature in ('    private boolean startTopCollectionTransition(',
-                  '    private boolean topCollectionSourceCurrent(',
-                  '    private boolean setTopCollectionTranslucent(',
-                  '    private Object topCollectionTransaction(',
-                  '    private void revealTopTaskTransition('):
-    if signature in host:host_body+=member(signature)
-for signature in ('    private boolean startTopTaskTransition(boolean intoTop, boolean liveMainReveal, Runnable transfer)',):
-    host_body+=member(signature)
-signature='    private boolean startTopTaskTransition(boolean intoTop, boolean liveMainReveal, Runnable transfer,'
-if signature in host:host_body+=member(signature)
+'''+member('    void captureMainIntoTop(', presentation)
+for signature in ('    boolean startTopCollectionTransition(',
+                  '    boolean topCollectionSourceCurrent(',
+                  '    boolean setTopCollectionTranslucent(',
+                  '    Object topCollectionTransaction(',
+                  '    void revealTopTaskTransition('):
+    host_body+=member(signature, presentation)
+for signature in ('    boolean startTopTaskTransition(boolean intoTop, boolean liveMainReveal, Runnable transfer)',):
+    host_body+=member(signature, presentation)
+signature='    boolean startTopTaskTransition(boolean intoTop, boolean liveMainReveal, Runnable transfer,'
+host_body+=member(signature, presentation)
 host_body+='''public static void main(String[]args){
  ValueAnimatorReset();WorkspaceHost h=new WorkspaceHost();h.captureMainIntoTop();
  check(h.topTransition!=null&&h.claimed==0,"actual main capture starts the live bridge before claiming");

@@ -8,7 +8,7 @@ import sys
 root = Path(__file__).resolve().parents[2]
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
-source = (package_dir(root)/'HostEntry.java').read_text(encoding='utf-8-sig')
+source = (package_dir(root)/'TaskRotationController.java').read_text(encoding='utf-8-sig')
 start = source.index('    static boolean cropFixedMainTouchableRegion(')
 brace = source.index('{', start)
 depth, end = 1, brace+1

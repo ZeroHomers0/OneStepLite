@@ -63,7 +63,7 @@ public class CellBindingRegression {
   System.out.println("actual Host cell binding checks="+checks+" passed");
  }
 }
-'''.replace('__METHOD__',source[start:end].replace('host.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log'))
+'''.replace('__METHOD__',source[start:end].replace('host.','').replace('slotRegistry.','').replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log'))
 java=out/'CellBindingRegression.java';java.write_text(body,encoding='utf8')
 jdk=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(java)],check=True)

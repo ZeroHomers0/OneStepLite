@@ -13,8 +13,8 @@ import de.robv.android.xposed.XposedHelpers;
 
 /** Owns side-row ordering, scrolling viewport and empty-row lifecycle for the workspace host. */
 final class WorkspaceSideRowController {
-    private static final int SLOT_TOP = WorkspaceHost.coordinatorSlotTop();
-    private static final int SLOT_COUNT = WorkspaceHost.coordinatorSlotCount();
+    private static final int SLOT_TOP = WorkspaceHost.SLOT_TOP;
+    private static final int SLOT_COUNT = WorkspaceHost.SLOT_COUNT;
 
     private final WorkspaceHost workspace;
     private final SideRowOrder<Slot> order = new SideRowOrder<>();
@@ -101,7 +101,7 @@ final class WorkspaceSideRowController {
             captured = false;
             downX = event.getX();
             downY = lastY = event.getY();
-            armed = scrolling && workspace.canMoveSideRows()
+            armed = scrolling && canMoveSideRows()
                     && (maxSideOffset() > 0 || isSideMotionRunning())
                     && downX >= workspace.layout.cellX && downX < workspace.layout.cellX + workspace.layout.cellWidth
                     && downY >= workspace.layout.topStrip && downY < workspace.screenH;
@@ -117,7 +117,7 @@ final class WorkspaceSideRowController {
         }
         if (!armed && !captured) return false;
         if (velocity != null) velocity.addMovement(event);
-        if (!workspace.canMoveSideRows() || action == MotionEvent.ACTION_POINTER_DOWN
+        if (!canMoveSideRows() || action == MotionEvent.ACTION_POINTER_DOWN
                 || action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
             boolean consumed = captured;
             int flingVelocity = 0;
@@ -132,7 +132,7 @@ final class WorkspaceSideRowController {
             recycleSideVelocity();
             if (!consumed && workspace.cells.pending()) workspace.cells.requestCompaction();
             if (consumed && !compacting && !desktopRevealing) {
-                if (workspace.canMoveSideRows()) {
+                if (canMoveSideRows()) {
                     if (!flingSideRows(flingVelocity)) settleSideScroll();
                 }
                 else finishSideScroll();
@@ -207,7 +207,7 @@ final class WorkspaceSideRowController {
         final FrameLayout host=workspace.root;
         final long epoch=workspace.sceneEpoch;
         int projected=motion.fling(host,start,end,pixelsPerSecond,
-                ()->workspace.root==host && workspace.sceneEpoch==epoch && workspace.canMoveSideRows(),
+                ()->workspace.root==host && workspace.sceneEpoch==epoch && canMoveSideRows(),
                 pixels->setSideOffset(pixels/sidePitch()),this::finishSideScroll,this::settleSideScroll);
         WorkspaceHost.log("side fling start offset="+offset+" velocity="+pixelsPerSecond+" projected="+(projected/sidePitch()));
         return true;
@@ -229,7 +229,7 @@ final class WorkspaceSideRowController {
             return;
         }
         motion.animate(offset,target,duration,new android.view.animation.DecelerateInterpolator(),
-                workspace::canMoveSideRows,this::setSideOffset,done);
+                this::canMoveSideRows,this::setSideOffset,done);
     }
 
     private void finishSideScroll() {
@@ -239,7 +239,7 @@ final class WorkspaceSideRowController {
         armed = captured = false;
         if (!scrolling && !wasCompacting) return;
         commitSideScrollPosition();
-        if (wasCompacting) for (Slot slot : attached) workspace.updateHint(slot);
+        if (wasCompacting) for (Slot slot : attached) workspace.slotLifecycle.updateHint(slot);
         if (workspace.cells.pending()) workspace.cells.requestCompaction();
     }
 
@@ -248,12 +248,12 @@ final class WorkspaceSideRowController {
             offset = Math.min(maxSideOffset(), Math.round(offset));
             mapSideSlots((int) offset);
             layoutSideViewport(false);
-            workspace.syncSideViewportFocus();
+            syncSideViewportFocus();
         } else {
             layoutSideViewport(true);
         }
         workspace.publishDesktopSideTasks();
-        WorkspaceHost.log("side scroll settled row=" + (int) offset + workspace.describeTasks());
+        WorkspaceHost.log("side scroll settled row=" + (int) offset + workspace.debug.describeTasks());
     }
 
     private boolean sideRowInPlace(Slot slot) {
@@ -282,7 +282,7 @@ final class WorkspaceSideRowController {
                 desktopRevealing = false;
                 if (workspace.sceneEpoch == epoch && workspace.scene == WorkspaceHost.ACTIVE && sideRowInPlace(slot)) {
                     WorkspaceHost.log("desktop side reveal committed row=" + (int) offset + " task=" + slot.taskId);
-                    workspace.preannounceDesktopLaunch(binding);
+                    workspace.mainLaunch.preannounceDesktopLaunch(binding);
                 }
                 if (workspace.cells.pending()) workspace.cells.requestCompaction();
             };
@@ -313,7 +313,7 @@ final class WorkspaceSideRowController {
         if (all) {
             ensureSideViewport();
             for (Slot slot : order) applySideRow(slot, offset, scrolling);
-            workspace.syncSideViewportFocus();
+            syncSideViewportFocus();
         } else {
             for (int i = attached.size() - 1; i >= 0; i--) {
                 Slot slot = attached.get(i);
@@ -344,7 +344,7 @@ final class WorkspaceSideRowController {
                             try {
                                 if (XposedHelpers.callMethod(observedRoot, "getViewRootImpl") != viewRoot)
                                     return null;
-                                stageSideViewport(args[0], workspace.liveHostRootSurface(), viewportCrop);
+                                stageSideViewport(args[0], workspace.liveGeometry.liveHostRootSurface(), viewportCrop);
                             } catch (Throwable error) {
                                 WorkspaceHost.log("side viewport host refresh failed: " + error);
                             }
@@ -368,10 +368,10 @@ final class WorkspaceSideRowController {
     private boolean ensureSideViewport() {
         Object tx = null;
         try {
-            Object host = workspace.liveHostRootSurface();
+            Object host = workspace.liveGeometry.liveHostRootSurface();
             if (viewport == null
                     || !Boolean.TRUE.equals(XposedHelpers.callMethod(viewport, "isValid"))) {
-                workspace.closeSurfaceObject(viewport, "release");
+                closeSurfaceObject(viewport, "release");
                 Object builder = Class.forName("android.view.SurfaceControl$Builder")
                         .getDeclaredConstructor().newInstance();
                 XposedHelpers.callMethod(builder, "setName", "OneStepLiteSideViewport");
@@ -389,7 +389,7 @@ final class WorkspaceSideRowController {
         } catch (Throwable error) {
             WorkspaceHost.log("side viewport unavailable: " + error);
             return false;
-        } finally { workspace.closeSurfaceObject(tx, "close"); }
+        } finally { closeSurfaceObject(tx, "close"); }
     }
 
     private void attachSideViewport(Slot slot, Object surface) {
@@ -405,7 +405,7 @@ final class WorkspaceSideRowController {
             slot.sideViewportSurface = surface;
             slot.sideViewportParent = targetViewport;
         } catch (Throwable error) { WorkspaceHost.log("side viewport slot=" + slot.index + ": " + error); }
-        finally { workspace.closeSurfaceObject(tx, "close"); }
+        finally { closeSurfaceObject(tx, "close"); }
     }
 
     private boolean nearSideViewport(int row, float offset) {
@@ -441,19 +441,19 @@ final class WorkspaceSideRowController {
         Rect crop = new Rect(0, Math.max(0, workspace.layout.topStrip - rect[1]),
                 rect[2] - rect[0], Math.min(rect[3], workspace.screenH) - rect[1]);
         if (!shown) crop.setEmpty();
-        if (near) attachSideViewport(slot, WorkspaceHost.getSurfaceField(slot.controller, "mSurfaceControl"));
+        if (near) attachSideViewport(slot, WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl"));
         placeSideView(slot.view, rect, crop);
         placeSideView(slot.hint, rect, crop);
         if (slot.view != null) {
             int visibility = near ? View.VISIBLE : View.INVISIBLE;
             if (slot.view.getVisibility() != visibility) slot.view.setVisibility(visibility);
         }
-        if (changed || preparationChanged) workspace.updateHint(slot);
-        else if (shown) workspace.refreshEmptyHintBackdrop(slot);
+        if (changed || preparationChanged) workspace.slotLifecycle.updateHint(slot);
+        else if (shown) workspace.wallpapers.refreshEmptyHintBackdrop(slot);
         if (preparing && slot.occupied) workspace.scales.reapplyScale(slot);
         if (preparing && slot.occupied && !slot.taskVisible) {
             slot.visibilityRepair.reset();
-            workspace.scheduleSideVisibilityRepair(slot, true);
+            workspace.retainedSurfaces.scheduleSideVisibilityRepair(slot, true);
         }
         workspace.chrome.updateTouchRegion(slot);
     }
@@ -462,7 +462,7 @@ final class WorkspaceSideRowController {
         if (view == null) return;
         float offset=0f;
         if(workspace.layout!=null && !workspace.layout.tabletLandscape && workspace.workspaceAlpha()<1f && workspace.mainSideAnimator()==null) {
-            android.graphics.RectF edge=workspace.workspaceMainHole();
+            android.graphics.RectF edge=workspace.windowPresentation.workspaceMainHole();
             offset=WorkspaceTransition.sideOffset(workspace.layout.mainOnRight,workspace.layout.mainOffsetX,
                     workspace.layout.mainDispWidth,edge.left,edge.right,workspace.layout.gap,workspace.workspaceAlpha());
         }
@@ -475,7 +475,7 @@ final class WorkspaceSideRowController {
             view.setLayoutParams(params);
         }
         if (workspace.workspaceAlpha() < 1f && workspace.layout != null && !workspace.layout.tabletLandscape)
-            crop = workspace.workspaceCellCrop(rect, false);
+            crop = workspace.windowPresentation.workspaceCellCrop(rect, false);
         view.setClipBounds(crop);
     }
 
@@ -506,7 +506,7 @@ final class WorkspaceSideRowController {
                 savedOffset = anchor.occupied ? order.indexOf(anchor) : requestedRow;
             offset = 0;
         }
-        if (wasScrolling == enabled && workspace.canMoveSideRows()
+        if (wasScrolling == enabled && canMoveSideRows()
                 && android.animation.ValueAnimator.areAnimatorsEnabled()) {
             for (int i = 0; i < rowCount; i++) {
                 Slot slot = order.get(i);
@@ -531,7 +531,7 @@ final class WorkspaceSideRowController {
         compactionProgress = 0f;
         for (Slot row : order) {
             applySideRow(row, offset, scrolling);
-            if (!row.occupied) workspace.updateHint(row);
+            if (!row.occupied) workspace.slotLifecycle.updateHint(row);
         }
         WorkspaceHost.log("side compaction start moving="+compactionShift.size());
         motion.animate(0f,1f,240L,new android.view.animation.PathInterpolator(.4f,0f,.2f,1f),
@@ -552,7 +552,7 @@ final class WorkspaceSideRowController {
         workspace.slots = expanded;
         try {
             ShellCompat.createTaskView(workspace.factory, workspace.ctx, workspace.executor, taskView ->
-                    workspace.main.post(() -> workspace.onTaskViewCreated(owner, taskView, false)));
+                    workspace.main.post(() -> workspace.slotLifecycle.onTaskViewCreated(owner, taskView, false)));
         } catch (Throwable error) {
             creatingView = false;
             WorkspaceHost.log("add side row TaskView: " + error);
@@ -603,5 +603,92 @@ final class WorkspaceSideRowController {
             try { ShellCompat.call(view, "release"); }
             catch (Throwable ignored) { /* The native controller may already be released. */ }
         }
+    }
+
+    boolean canMoveSideRows() {
+        return workspace.scene == WorkspaceHost.ACTIVE && workspace.screenOn && !workspace.keyguardLocked && !workspace.workspaceEntering
+                && !workspace.taskCellsCovered && !workspace.transferBusy && workspace.promotion == null && workspace.cells.motion() == null
+                && workspace.sideDismiss == null && workspace.carrierSlotIndex < 0;
+    }
+
+    void syncSideViewportFocus() {
+        final long epoch = workspace.sceneEpoch;
+        workspace.executeOnShell(() -> {
+            if (workspace.sceneEpoch != epoch || (workspace.scene != WorkspaceHost.ACTIVE && workspace.scene != WorkspaceHost.RESUMING)
+                    || !workspace.screenOn || workspace.keyguardLocked) return;
+            try {
+                Object wct = null;
+                int clipped = 0;
+                for (Slot slot : workspace.slots) {
+                    if (slot.sideRow < 0 || !slot.occupied || slot.parked || slot.promoting
+                            || slot.launching || slot.closing || slot.frozen) continue;
+                    final int id = slot.taskId;
+                    final Object token = slot.taskToken;
+                    if (token == null || !workspace.slotRegistry.controllerOwns(slot, id, token)
+                            || workspace.taskStates.windowModeOf(workspace.taskStates.currentOrganizedTaskInfo(slot, id, token)) != 6) continue;
+                    if (wct == null) wct = Class.forName("android.window.WindowContainerTransaction")
+                            .getDeclaredConstructor().newInstance();
+                    boolean focusable = slot.sideShown;
+                    XposedHelpers.callMethod(wct, "setFocusable", token, focusable);
+                    if (!focusable) clipped++;
+                }
+                if (workspace.sceneEpoch == epoch && wct != null)
+                    WorkspaceNativeHooks.applyWct("side-viewport-focus-outside-" + clipped, wct);
+            } catch (Throwable error) {
+                WorkspaceHost.log("side viewport focus update: " + error);
+            }
+        });
+    }
+
+    void closeSurfaceObject(Object object, String method) {
+        if (object == null) return;
+        try {
+            XposedHelpers.callMethod(object, method);
+        } catch (Throwable failure) {
+            WorkspaceHost.log("cell backing " + method + " failed: " + failure);
+        }
+    }
+
+    int slotIndexOfView(View view) {
+        for (Slot s : workspace.slots) {
+            if (s.view == view) {
+                return s.index;
+            }
+        }
+        return -1;
+    }
+
+    void applyRect(Slot slot) {
+        if (slot.sideRow >= 0) {
+            applySlotRect(slot);
+            return;
+        }
+        if (slot.rect == null) {
+            return;
+        }
+        if (slot.view != null) {
+            slot.view.setX(slot.rect[0]);
+            slot.view.setY(slot.rect[1]);
+            if (slot.view.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+                FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) slot.view.getLayoutParams();
+                lp.width = slot.rect[2] - slot.rect[0];
+                lp.height = slot.rect[3] - slot.rect[1];
+                slot.view.setLayoutParams(lp);
+            }
+            if (slot.index != WorkspaceHost.SLOT_TOP)
+                slot.view.setClipBounds(workspace.windowPresentation.workspaceCellCrop(slot));
+        }
+        if (slot.hint != null) {
+            boolean paneLocal=slot.index==WorkspaceHost.SLOT_TOP;
+            slot.hint.setX(paneLocal?0:slot.rect[0]);
+            slot.hint.setY(paneLocal?0:slot.rect[1]);
+            if (slot.hint.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+                FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) slot.hint.getLayoutParams();
+                lp.width = paneLocal?-1:slot.rect[2] - slot.rect[0];
+                lp.height = paneLocal?-1:slot.rect[3] - slot.rect[1];
+                slot.hint.setLayoutParams(lp);
+            }
+        }
+        workspace.cellSurfaces.ensureCellBackground(slot);
     }
 }

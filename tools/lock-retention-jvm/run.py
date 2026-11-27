@@ -26,17 +26,25 @@ def member(signature, text=source):
     return text[start:end]
 
 
-methods = '\n'.join(member(signature) for signature in [
-    '    public static void onScreenState(', '    public static void onUserPresent(',
-    '    public static void onNativeWake(', '    static void onRetainedNativeReady(',
-    '    public static void onSystemNavigation(', '    private boolean setKeyguardWindowHidden(',
-    '    public static void onLandscapeMode(',
-    '    private boolean retainWorkspaceForLock(', '    private void leaveKeyguardPrivacy(',
-    '    private void writeZoomLine(String command, long issuedAt)']).replace('resumes.','').replace('scales.','')
+keyguard_source = (src / 'WorkspaceKeyguardController.java').read_text(encoding='utf-8-sig')
+keyguard_source = keyguard_source.replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '').replace('!isCurrentInstance(host)', 'sInstance != this')
+events_source = (src/'WorkspaceSystemEvents.java').read_text(encoding='utf-8').replace('WorkspaceHost.currentInstance()', 'sInstance').replace('WorkspaceHost.', '')
+keyguard_methods = {'    boolean setKeyguardWindowHidden(', '    boolean retainWorkspaceForLock(',
+                    '    void leaveKeyguardPrivacy('}
+methods = '\n'.join(member(signature, keyguard_source if signature in keyguard_methods else events_source) for signature in [
+    '    static void onScreenState(', '    static void onUserPresent(',
+    '    static void onNativeWake(', '    static void onRetainedNativeReady(',
+    '    static void onSystemNavigation(', '    boolean setKeyguardWindowHidden(',
+    '    static void onLandscapeMode(',
+    '    boolean retainWorkspaceForLock(', '    void leaveKeyguardPrivacy(',
+    ]).replace('resumes.','').replace('scales.','')
+zoom_source=(src / 'WorkspaceZoomSession.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','')
+methods += '\n' + member('    void writeZoomLine(String command, long issuedAt)', zoom_source)
 resume_methods = '\n'.join(member(signature, resume_source) for signature in [
     '    private void showResumingSession(', '    void resumeNext(',
     '    private void completeWorkspaceResume(']).replace('host.','').replace('host::','this::').replace('exits.','').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('WorkspaceHost.SUSPENDING','SUSPENDING').replace('WorkspaceHost.SUSPENDED','SUSPENDED').replace('WorkspaceHost.RESUMING','RESUMING').replace('WorkspaceHost.log','log').replace('scales.','')
 methods += '\n' + resume_methods
+methods=(methods.replace('liveHandoff.','').replace('keyguard.','').replace('chrome.','').replace('mainSide.','').replace('zoomSession.','').replace('windowLayout.','').replace('displays.','').replace('windowPresentation.','').replace('carriers.','').replace('WorkspaceSystemEvents.','').replace('resumes.','').replace('h.keyguard::','h::').replace('mainSide::','::').replace('chrome::','this::').replace('slotLifecycle.','').replace('topPresentationHost.','').replace('retainedSurfaces.','').replace('debug.describeTasks()','describeTasks()'))
 files = {
     'android/animation/ValueAnimator.java': '''package android.animation;public class ValueAnimator {
         public int cancels;public void cancel(){cancels++;}}''',

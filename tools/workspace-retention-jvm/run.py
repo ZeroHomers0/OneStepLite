@@ -28,11 +28,13 @@ def method(signature, text=source):
     return text[start:end]
 
 
-members = "\n".join(method(signature) for signature in (
-    "    private void releaseRetainedTaskToMain(Slot slot) {",
+launch_source = (package_dir(root)/"WorkspaceMainLaunchController.java").read_text(encoding="utf-8-sig")
+members = "\n".join(method(signature, exit_source) for signature in (
+    "    void releaseRetainedTaskToMain(Slot slot) {",
     "    void releaseRetainedTaskToMain(Slot slot, boolean nativeAlreadyFullscreen) {",
-    "    void preannounceDesktopLaunch(android.os.Bundle binding) {",
-)).replace("sideRows.isCompacting()","sideCompacting").replace("sideRows.isDesktopRevealing()","sideDesktopRevealing").replace("sideRows.isScrolling()","sideScrolling").replace("sideRows.isRowInPlace(slot)","sideRowInPlace(slot)").replace("sideRows.revealForDesktop(","revealSideTaskForDesktop(").replace("exits.","").replace("WorkspaceHost.log","log").replace("scales.","")
+))
+members += "\n" + method("    void preannounceDesktopLaunch(android.os.Bundle binding) {", launch_source)
+members = members.replace("host.", "").replace("WorkspaceHost.", "").replace("sideRows.isCompacting()","sideCompacting").replace("sideRows.isDesktopRevealing()","sideDesktopRevealing").replace("sideRows.isScrolling()","sideScrolling").replace("sideRows.isRowInPlace(slot)","sideRowInPlace(slot)").replace("sideRows.revealForDesktop(","revealSideTaskForDesktop(").replace("exits.","").replace("WorkspaceHost.log","log").replace("scales.","")
 exit_members = "\n".join(method(signature, exit_source) for signature in (
     "    boolean canRetainBoundTasks() {",
     "    void finishRetainedSuspend(long epoch) {",
@@ -40,6 +42,7 @@ exit_members = "\n".join(method(signature, exit_source) for signature in (
     "    boolean hasBoundTasks() {",
 )).replace("host.","").replace("WorkspaceHost.ACTIVE","ACTIVE").replace("WorkspaceHost.SUSPENDING","SUSPENDING").replace("WorkspaceHost.SUSPENDED","SUSPENDED").replace("WorkspaceHost.RESUMING","RESUMING").replace("exits.","").replace("WorkspaceHost.log","log")
 members += "\n" + exit_members
+members=(members.replace("slotLifecycle.","").replace("slotRegistry.","").replace("mainTaskActions.","").replace("promotionController.","").replace("windowPresentation.","").replace("carriers.","").replace("debug.",""))
 harness = r'''
 import java.util.*;
 import java.util.function.Consumer;

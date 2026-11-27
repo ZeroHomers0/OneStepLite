@@ -7,9 +7,9 @@ import de.robv.android.xposed.XposedHelpers;
 
 /** Owns logical cell compaction and moving-cell visual transitions. */
 final class WorkspaceCellMotionController {
-    private static final int SLOT_MAIN = WorkspaceHost.coordinatorSlotMain();
-    private static final int SLOT_TOP = WorkspaceHost.coordinatorSlotTop();
-    private static final int SLOT_COUNT = WorkspaceHost.coordinatorSlotCount();
+    private static final int SLOT_MAIN = WorkspaceHost.SLOT_MAIN;
+    private static final int SLOT_TOP = WorkspaceHost.SLOT_TOP;
+    private static final int SLOT_COUNT = WorkspaceHost.SLOT_COUNT;
 
     private final WorkspaceHost host;
     private boolean compactPending;
@@ -88,15 +88,15 @@ final class WorkspaceCellMotionController {
     }
 
     void finishCellLayout() {
-        host.updateTopTaskGeometry();
+        host.topPresentationHost.updateTopTaskGeometry();
         for (int i = 1; i < SLOT_COUNT; i++) {
             Slot slot = host.slots[i];
-            host.applyRect(slot);
-            host.updateHint(slot);
+            host.sideRows.applyRect(slot);
+            host.slotLifecycle.updateHint(slot);
             host.chrome.updateTouchRegion(slot);
             host.scales.reapplyScale(slot);
         }
-        host.coordinatorApplyWallpaperBackdrops();
+        host.wallpapers.applyWallpaperBackdrops();
         host.publishDesktopSideTasks();
         if (host.root != null) { host.root.requestLayout(); host.root.invalidate(); }
     }
@@ -104,10 +104,10 @@ final class WorkspaceCellMotionController {
     private boolean cellMoveCurrent(Slot slot, FrameLayout movingRoot, long epoch, long binding,
             int id, Object token, Object controller, View movingView, Object surface) {
         String changed = host.root != movingRoot ? "host.root" : host.sceneEpoch != epoch ? "host.scene"
-                : !host.isActive(slot) ? "slot" : slot.taskEpoch != binding ? "binding"
+                : !host.slotRegistry.isActive(slot) ? "slot" : slot.taskEpoch != binding ? "binding"
                 : slot.taskId != id ? "task" : !java.util.Objects.equals(slot.taskToken, token) ? "token"
                 : slot.controller != controller ? "controller" : slot.view != movingView ? "view"
-                : WorkspaceHost.getSurfaceField(controller, "mSurfaceControl") != surface ? "surface"
+                : WorkspaceNativeHooks.getSurfaceField(controller, "mSurfaceControl") != surface ? "surface"
                 : !Boolean.TRUE.equals(XposedHelpers.callMethod(surface, "isValid")) ? "invalid surface" : null;
         if (changed != null) WorkspaceHost.log("real cell motion binding changed: " + changed + " slot=" + slot.index
                 + " task=" + id + " current=" + slot.taskId);
@@ -133,8 +133,8 @@ final class WorkspaceCellMotionController {
                 final long binding = slot.taskEpoch;
                 final int id = slot.taskId;
                 final Object token = slot.taskToken, controller = slot.controller;
-                final Object surface = WorkspaceHost.getSurfaceField(controller, "mSurfaceControl");
-                if (!host.canRender(slot) || surface == null) continue;
+                final Object surface = WorkspaceNativeHooks.getSurfaceField(controller, "mSurfaceControl");
+                if (!host.slotRegistry.canRender(slot) || surface == null) continue;
                 final View movingView = slot.view;
                 moves.add(new CellMotion.Move(movingView, plan.from.left, plan.from.top,
                         slot.rect[0], slot.rect[1], () -> cellMoveCurrent(slot, movingRoot, epoch, binding,
@@ -145,8 +145,8 @@ final class WorkspaceCellMotionController {
             // intermediate destination never acquires a one-frame '+' during travel.
             final int revealEmptySlots = compactionHintMask(initialEmptySlots, occupiedSlots);
             final WorkspaceLayout motionGeometry = host.layout;
-            Rect strip = host.liveSideStrip(motionGeometry);
-            wallpaper = LiveBackdrop.create(host.liveHostRootSurface(), host.wallpaperBackdrop, host.screenW, host.screenH,
+            Rect strip = WorkspaceLiveGeometry.liveSideStrip(motionGeometry);
+            wallpaper = LiveBackdrop.create(host.liveGeometry.liveHostRootSurface(), host.wallpaperBackdrop, host.screenW, host.screenH,
                     strip, strip, canvas -> host.drawLiveEmptyHints(canvas, motionGeometry, motionGeometry,
                             revealEmptySlots), WorkspaceHost::log);
             // One wallpaper/plus owner covers the complete strip during compaction.
@@ -171,7 +171,7 @@ final class WorkspaceCellMotionController {
                         if (cellMotion != run[0]) return;
                         cellMotion = null;
                         host.transferBusy = false;
-                        host.updateTopBarState();
+                        host.chrome.updateTopBarState();
                         // finishCellLayout ran while cellMotion still owned visibility.
                         // Reconcile now, including the empty old source's resize background.
                         for (Slot cell : host.slots) host.cellSurfaces.updateCellSurfaceVisibility(cell);

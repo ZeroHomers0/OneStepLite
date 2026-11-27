@@ -7,14 +7,14 @@ root = Path(__file__).resolve().parents[2]
 src=package_dir(root)
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
-host = (src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+host = (src/'WorkspaceSideInteraction.java').read_text(encoding='utf-8-sig')
 def method(signature):
     start = host.index(signature); end = host.index('{', start)+1; depth = 1
     while depth:
         depth += (host[end] == '{') - (host[end] == '}'); end += 1
     return host[start:end]
-methods = '\n'.join(method(s) for s in ['    private boolean onSlotTouch(',
-    '    void recycleBuffered(', '    private boolean followSideDismiss(', '    private void dismissSideToBackground(']).replace('WorkspaceHost::log','SideDismissRegression::log')
+methods = '\n'.join(method(s) for s in ['    boolean onSlotTouch(',
+    '    static void recycleBuffered(', '    private boolean followSideDismiss(', '    private void dismissSideToBackground(']).replace('WorkspaceHost::log','SideDismissRegression::log').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('WorkspaceLiveGeometry.','').replace('cells.','').replace('motion()','cells.motion()').replace('pending()','cells.pending()').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.SLOT_MAIN', 'SLOT_MAIN').replace('WorkspaceHost.ACTIVE', 'ACTIVE').replace('WorkspaceHost.log', 'log').replace('WorkspaceHost.liveSideStrip', 'liveSideStrip')
 body = r'''
 package io.github.zerohomers0.onesteplite;
 import java.util.function.Consumer;

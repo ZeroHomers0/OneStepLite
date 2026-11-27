@@ -3,12 +3,12 @@ from pathlib import Path
 import os,subprocess,sys
 import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1])); from source_paths import package_dir
 root=Path(__file__).resolve().parents[2];src=package_dir(root);out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
-s=(src/'WorkspaceHost.java').read_text(encoding='utf-8')
+s=(src/'WorkspaceMainSideController.java').read_text(encoding='utf-8')
 def member(n):
- a=s.index('    private void '+n+'(');i=s.index('{',a)+1;d=1
+ a=s.index('void '+n+'(');a=s.rindex('\n',0,a)+1;i=s.index('{',a)+1;d=1
  while d:d+=(s[i]=='{')-(s[i]=='}');i+=1
  return s[a:i]
-methods='\n'.join(member(n) for n in ['updateMainSideFrame','translateSidePresentation','settleMainSidePresentation','cancelMainSideSwitch','switchMainSideAnimated']).replace('sideRows.motionRunning()','isSideMotionRunning()').replace('chrome.','').replace('resumes.','')
+methods='\n'.join(member(n) for n in ['updateMainSideFrame','translateSidePresentation','settleMainSidePresentation','cancelMainSideSwitch','switchMainSideAnimated']).replace('host.','').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('motion()','cells.motion()').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('motionRunning()','motion').replace('windowLayout.','').replace('zoomSession.','').replace('chrome.','').replace('resumes.','').replace('WorkspaceHost.SLOT_MAIN','SLOT_MAIN').replace('WorkspaceHost.SLOT_TOP','SLOT_TOP').replace('WorkspaceHost.ZOOM_ANIM_MS','ZOOM_ANIM_MS').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('WorkspaceHost.log','log')
 files={
 'android/animation/Animator.java':'package android.animation;public class Animator {}',
 'android/animation/AnimatorListenerAdapter.java':'package android.animation;public class AnimatorListenerAdapter {public void onAnimationEnd(Animator a){}}',
@@ -17,7 +17,7 @@ files={
 'android/view/animation/PathInterpolator.java':'package android.view.animation;public class PathInterpolator {public PathInterpolator(float a,float b,float c,float d){}public float getInterpolation(float p){return p;}}',
 'android/os/SystemClock.java':'package android.os;public class SystemClock {public static long now=1000;public static long uptimeMillis(){return now;}}',
 'io/github/zerohomers0/onesteplite/SideSwitchRegression.java':'''package io.github.zerohomers0.onesteplite;
-import android.animation.ValueAnimator;import android.os.SystemClock;
+import android.animation.Animator;import android.animation.AnimatorListenerAdapter;import android.animation.ValueAnimator;import android.os.SystemClock;
 public class SideSwitchRegression {
  static int checks;static void check(boolean b,String s){checks++;if(!b)throw new AssertionError(s);}
  static final int SLOT_MAIN=0,SLOT_TOP=4,ACTIVE=1,ZOOM_ANIM_MS=300;

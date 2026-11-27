@@ -6,8 +6,8 @@ from source_paths import package_dir
 root = Path(__file__).resolve().parents[2]
 src = package_dir(root)
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
-host = (src / 'WorkspaceHost.java').read_text(encoding='utf-8')
-start = host.index('    private void appendUnlockGeometry(')
+host = (src / 'WorkspaceKeyguardController.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
+start = host.index('    void appendUnlockGeometry(')
 end = host.index('{', start) + 1
 depth = 1
 while depth:

@@ -21,7 +21,7 @@ final class NativeFreeformPreview {
                     if (p.hasThrowable() || p.args == null || p.args.length < 1
                             || !(p.args[0] instanceof List<?>)) return;
                     try {
-                        prune(p.thisObject, (List<?>) p.args[0], WorkspaceHost.activeMainTransform());
+                        prune(p.thisObject, (List<?>) p.args[0], WorkspaceWindowLayout.activeMainTransform());
                     } catch (Throwable error) {
                         report("validation unavailable: " + error);
                     }

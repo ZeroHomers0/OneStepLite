@@ -61,7 +61,7 @@ final class NotificationLaunch {
                                     log("notification original dispatch failed: " + error);
                                 }
                             };
-                            if (WorkspaceHost.promoteForNotification(target, user, original)) param.setResult(null);
+                            if (WorkspaceMainLaunchController.promoteForNotification(target, user, original)) param.setResult(null);
                         } catch (Throwable error) {
                             // Unsupported/ambiguous notifications retain the native dispatch.
                             log("notification promotion bypassed: " + error);

@@ -6,7 +6,7 @@ from source_paths import package_dir
 root = Path(__file__).resolve().parents[2]
 src = package_dir(root)
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
-text = (src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+text = (src/'WorkspaceSlotLifecycle.java').read_text(encoding='utf-8-sig').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
 
 def member(sig):
     start=text.index(sig); brace=text.index('{',start); depth=1; end=brace+1
@@ -42,7 +42,7 @@ __CREATE_NEXT__
   System.out.println("SlotCreation checks="+checks+" passed");
  }
 }
-'''.replace('__CREATE_NEXT__', member('    private void createNext(final int index) {'))
+'''.replace('__CREATE_NEXT__', member('    void createNext(final int index) {'))
 p=out/'io/github/zerohomers0/onesteplite/SlotCreationRegression.java';p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body,encoding='utf-8')
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(p)],check=True)

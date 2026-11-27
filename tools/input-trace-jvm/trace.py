@@ -68,6 +68,7 @@ def run(root, out, jdk, trace_source=None):
  static class Slot{int taskId=81;}static float[] activeMainTransform(){return null;}boolean startTopTaskTransition(boolean b){return true;}
  void revealTopTaskTransition(){}void cancelTopTaskTransition(){}void releaseTopTaskNow(){}void returnToSystem(){}
  void handoffPromotedTask(){}void checkPromotion(){}void finishPromotionFocus(){}}
+ class WorkspaceWindowLayout {static float[] activeMainTransform(){return WorkspaceHost.activeMainTransform();}}
  class HotZoneGesture {void onMotion(android.view.MotionEvent e){}}
  class StatusBar {static String cornerStateForTrace(){return "";}}
  class TopTaskTransition {boolean closed,collapsed,revealing;void start(){}void collect(){}boolean collectionReady(){return true;}

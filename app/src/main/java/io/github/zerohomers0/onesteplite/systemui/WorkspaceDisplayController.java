@@ -88,7 +88,7 @@ final class WorkspaceDisplayController {
                     return true;
                 }
                 host.geometryRefreshAfterLive = true;
-                host.coordinatorFailPromotion(host.promotion, "display geometry changed during live swap "
+                host.promotionController.failPromotion(host.promotion, "display geometry changed during live swap "
                         + oldWidth + "x" + oldHeight + " r" + oldRotation
                         + " -> " + newWidth + "x" + newHeight + " r" + newRotation);
                 return true;
@@ -108,7 +108,7 @@ final class WorkspaceDisplayController {
     private void applyGeometryChange() {
         int[] old={host.screenW,host.screenH,host.displayRotation};
         if(!prepareGeometry(old))return;
-        host.layout=host.coordinatorMakeAdaptiveLayout(host.mainOnRight);
+        host.layout=host.windowLayout.makeAdaptiveLayout(host.mainOnRight);
         applyGeometryLayout(old);
     }
     private boolean prepareGeometry(int[] old) {
@@ -117,12 +117,12 @@ final class WorkspaceDisplayController {
                 && (old[0]!=host.screenW || old[1]!=host.screenH)) {
             host.screenW=old[0];host.screenH=old[1];host.displayRotation=old[2];
             log.accept("display capacity change: return all real tasks before changing layout");
-            host.coordinatorSuspendSession("display-layout-change");return false;
+            host.resumes.suspendSession("display-layout-change");return false;
         }
         if(NativeLandscapePolicy.shouldRestoreFromDisplay(host.landscapeSuspended,
                 host.scene==WorkspaceHost.SUSPENDED,host.displayRotation)) {
             log.accept("restore workspace after native landscape rotation="+host.displayRotation);
-            host.coordinatorResumeSession();return false;
+            host.resumes.resumeSession();return false;
         }
         if(!DeviceProfile.isTablet(host.ctx) && host.displayRotation!=FullscreenRotationPolicy.portraitDisplayRotation()) {
             if(old[2]!=host.displayRotation)log.accept("workspace retains portrait geometry during display rotation "
@@ -135,10 +135,10 @@ final class WorkspaceDisplayController {
     private void applyGeometryLayout(int[] old) {
                 host.CELL_SLOT_COUNT=1+host.layout.cellCount;
         host.mainOnRight=host.layout.mainOnRight;
-        for(Slot saved:host.slots) if(saved.sideRow < 0 && saved.index>=host.CELL_SLOT_COUNT && saved.index!=WorkspaceHost.coordinatorSlotTop()
+        for(Slot saved:host.slots) if(saved.sideRow < 0 && saved.index>=host.CELL_SLOT_COUNT && saved.index!=WorkspaceHost.SLOT_TOP
                 && saved.parked) {
             log.accept("layout capacity released system task="+saved.taskId);
-            host.coordinatorClearSlot(saved);
+            host.slotLifecycle.clearSlot(saved);
         }
         FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(-1, host.layout.topStrip);
         if (host.topStripBacking != null) host.topStripBacking.setLayoutParams(topParams);
@@ -150,20 +150,20 @@ final class WorkspaceDisplayController {
             host.topBar.setLayoutParams(new FrameLayout.LayoutParams(-1, host.layout.topStrip));
             host.topBar.setStatusBarInset(DeviceProfile.statusBarHeightPx(host.ctx));
         }
-        if (!host.sideRows.isEmpty()) host.coordinatorEnsureSideViewport();
+        if (!host.sideRows.isEmpty()) host.sideRows.ensureViewport();
         for (int i = 1; i < host.slots.length; i++) {
             Slot slot = host.slots[i];
-            slot.rect = host.coordinatorSlotBounds(slot);
-            host.coordinatorApplyRect(slot);
-            host.coordinatorUpdateTouchRegion(slot);
-            host.coordinatorUpdateHint(slot);
-            View backing = i < WorkspaceHost.coordinatorSlotCount() ? host.sideBackingViews[i] : null;
+            slot.rect = host.slotRegistry.slotBounds(slot);
+            host.sideRows.applyRect(slot);
+            host.chrome.updateTouchRegion(slot);
+            host.slotLifecycle.updateHint(slot);
+            View backing = i < WorkspaceHost.SLOT_COUNT ? host.sideBackingViews[i] : null;
             if (backing != null && i<host.CELL_SLOT_COUNT) {
                 int[] cell=host.layout.cellBounds(i-1);
                 FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                        host.layout.tabletLandscape?cell[2]-cell[0]:host.layout.sideWidth, host.coordinatorSideSegmentHeight(i));
+                        host.layout.tabletLandscape?cell[2]-cell[0]:host.layout.sideWidth, host.chrome.sideSegmentHeight(i));
                 params.leftMargin = host.layout.tabletLandscape?cell[0]:host.layout.mainOnRight ? 0 : host.layout.mainWidth;
-                params.topMargin = host.coordinatorSideSegmentTop(i);
+                params.topMargin = host.chrome.sideSegmentTop(i);
                 backing.setLayoutParams(params);
                 backing.setVisibility(View.VISIBLE);
             } else if(backing!=null) {
@@ -184,10 +184,10 @@ final class WorkspaceDisplayController {
             params.topMargin = host.layout.mainOffsetY;
             host.carrierBackdrop.setLayoutParams(params);
         }
-        host.coordinatorConfigureTabletTools();
-        host.coordinatorUpdateTopTaskGeometry();
-        host.coordinatorApplyWallpaperBackdrops();
-        if (host.carrierSlotIndex >= 0) host.coordinatorReassertCarrier();
+        host.topPresentationHost.configureTabletTools();
+        host.topPresentationHost.updateTopTaskGeometry();
+        host.wallpapers.applyWallpaperBackdrops();
+        if (host.carrierSlotIndex >= 0) host.carriers.reassertCarrier();
         if (host.wm != null && host.lp != null) {
             try { host.wm.updateViewLayout(host.root, host.lp); }
             catch (Throwable error) { log.accept("host window resize refresh failed: " + error); }
@@ -196,20 +196,20 @@ final class WorkspaceDisplayController {
         host.root.invalidate();
         boolean activeRoot = ZoomLifecyclePolicy.shouldReassertGeometry(
                 host.scene == WorkspaceHost.ACTIVE && !host.keyguardLocked, host.root.getVisibility() == View.VISIBLE, host.screenOn);
-        if (activeRoot) host.coordinatorWriteZoom(true);
+        if (activeRoot) host.zoomSession.writeZoom(true);
         else log.accept("display geometry changed while host inactive; skip zoom/task reassert");
-        boolean queued = activeRoot && host.coordinatorExecuteOnShell(() -> {
+        boolean queued = activeRoot && host.executeOnShell(() -> {
             if (host.scene != WorkspaceHost.ACTIVE) return;
             for (Slot slot : host.slots) {
-                if (slot.index > WorkspaceHost.coordinatorSlotMain() && slot.occupied && !slot.carrier
-                        && !slot.promoting && !slot.launching) host.coordinatorApplyFullscreenBounds(slot);
+                if (slot.index > WorkspaceHost.SLOT_MAIN && slot.occupied && !slot.carrier
+                        && !slot.promoting && !slot.launching) host.scales.applyFullscreenBounds(slot);
             }
         });
         host.main.postDelayed(() -> {
             if (!ZoomLifecyclePolicy.shouldReassertGeometry(host.scene == WorkspaceHost.ACTIVE && !host.keyguardLocked,
                     host.root != null && host.root.getVisibility() == View.VISIBLE, host.screenOn)) return;
             for (Slot slot : host.slots) {
-                if (slot.index > WorkspaceHost.coordinatorSlotMain() && slot.occupied && !slot.carrier) host.coordinatorReapplyScale(slot);
+                if (slot.index > WorkspaceHost.SLOT_MAIN && slot.occupied && !slot.carrier) host.scales.reapplyScale(slot);
             }
         }, queued ? 180L : 0L);
         log.accept("display geometry changed " + old[0] + "x" + old[1] + " r" + old[2]

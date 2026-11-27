@@ -1,5 +1,6 @@
 """Exercise extracted Host native completion/cancellation, visual lease and external guard."""
 import os
+import re
 import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1])); from source_paths import package_dir
 from pathlib import Path
 import subprocess
@@ -12,7 +13,10 @@ out = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'build/tests/standalone
 out.mkdir(parents=True, exist_ok=True)
 text = source.read_text(encoding='utf-8-sig')
 
-def member(signature):
+native_hooks=(src/'WorkspaceNativeHooks.java').read_text(encoding='utf-8')
+handoff = (src/'WorkspaceLiveHandoffController.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.isScrolling()','sideScrolling').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
+
+def member(signature, text=text):
     start = text.index(signature)
     brace = text.index('{', start)
     depth, end = 1, brace + 1
@@ -22,15 +26,14 @@ def member(signature):
         end += 1
     return text[start:end]
 
-methods = '\n'.join(member(s) for s in [
-    '    private void finishLiveSwap(',
-    '    private void finishLiveCollect(',
-    '    private void completeLiveCollect(',
-    '    private boolean livePromotionBound(',
-    '    private void restoreLiveSwapVisual(',
-    '    private void requestLiveSwapCancellation(',
-    '    private boolean leaveExternalChangeToNative(',
-])
+methods = '\n'.join(member(s, handoff) for s in [
+    '    void finishLiveSwap(',
+    '    void finishLiveCollect(',
+    '    void completeLiveCollect(',
+    '    boolean livePromotionBound(',
+    '    void restoreLiveSwapVisual(',
+    '    void requestLiveSwapCancellation(',
+]) + '\n' + re.sub(r'\bh\.','',member('    static boolean leaveExternalChangeToNative(',native_hooks).replace('static boolean leaveExternalChangeToNative(WorkspaceHost h, Object change)','boolean leaveExternalChangeToNative(Object change)').replace('WorkspaceHost.','').replace('slotRegistry.',''))
 
 body = r'''
 package io.github.zerohomers0.onesteplite;
@@ -95,7 +98,7 @@ public class LiveHostRegression {
  int scene=ACTIVE;long sceneEpoch=7;boolean screenOn=true,keyguardLocked,transferBusy,inputPass=true,unavailable,geometryRefreshAfterLive,retainedOnExit;
  static class HomeTaskReturn {boolean covers(int id,Object token){return true;}}
  Slot[] slots=new Slot[4];Promotion promotion;HomeTaskReturn coveredHome=new HomeTaskReturn();View root=new View();
- long zoomAnimUntil; Object pendingLiveZoom;
+ long zoomAnimUntil; Object pendingLiveZoom; boolean hasPendingLiveZoom(){return pendingLiveZoom!=null;}
  Queue main=new Queue(),shell=new Queue();Bar statusBar=new Bar();Transitions transitions=new Transitions();
  static class OwnedTask {Object token;boolean recoveryCandidate=true;OwnedTask(Object t){token=t;}}
  Map<Object,OwnedTask> ownedTasks=new HashMap<>();int clears,binds,suspends,publishes,focuses;Runnable focus;
@@ -233,7 +236,7 @@ public class LiveHostRegression {
   System.out.println("actual Host live completion/cancel/visual/external guard checks="+checks+" passed");
  }
 }
-'''.replace('__METHODS__', methods.replace('sideRows.isScrolling()','sideScrolling').replace('cellSurfaces.','').replace('chrome.','').replace('cellSurfaces.','').replace('resumes.','').replace('taskStates.','').replace('scales.',''))
+'''.replace('__METHODS__', methods.replace('hasPendingZoom()','hasPendingLiveZoom()').replace('sideRows.isScrolling()','sideScrolling').replace('zoomSession.','').replace('cellSurfaces.','').replace('chrome.','').replace('cellSurfaces.','').replace('resumes.','').replace('taskStates.','').replace('scales.',''))
 java = out / 'LiveHostRegression.java'
 java.write_text(body, encoding='utf8')
 sparse = out / 'android/util/SparseArray.java'

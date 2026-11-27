@@ -27,17 +27,20 @@ def side_method(signature):
     text=text.replace('viewportCrop','sideViewportCrop')
     return re.sub(r'\bviewport\b','sideViewport',text)
 
-actual = '\n'.join(extract(s) for s in (
-    '    private void appendRetainedSurfaces(',
+retained_source = (src / 'WorkspaceRetainedSurfaceHooks.java').read_text(encoding='utf8')
+actual = '\n'.join(extract_from(retained_source, s) for s in (
+    '    void appendRetainedSurfaces(',
     '    private void trackRetainedSurfaces(',
-    '    void appendWorkspaceSurfaces(',
-    '    private void appendHiddenKeyguardSurfaces(',
-    '    private void restoreRetainedWorkspaceSurfaces(',
-    '    void reassertSideTaskViews(')).replace('cellSurfaces.','')
+    '    void appendWorkspaceSurfaces(')).replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
+keyguard_source = (src / 'WorkspaceKeyguardController.java').read_text(encoding='utf8')
+actual += '\n' + '\n'.join(extract_from(keyguard_source, s) for s in (
+    '    void appendHiddenKeyguardSurfaces(',
+    '    private void restoreRetainedWorkspaceSurfaces(')).replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
+actual += '\n' + extract_from(retained_source, '    void reassertSideTaskViews(').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
 actual += '\n' + extract_from(scale_source, '    void appendSlotViewport(').replace('host.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField')
 actual += '\n' + side_method('    private void stageSideViewport(')
 actual += '\n' + side_method('    private boolean ensureSideViewport(')
-actual += '\n' + extract('    void syncSideViewportFocus(')
+actual += '\n' + side_method('    void syncSideViewportFocus(')
 render_source=(package_dir(root)/'RenderBinding.java').read_text(encoding='utf-8-sig')
 render_start=render_source.index('final class RenderBinding {')
 render_brace=render_source.index('{',render_start);render_depth=1;render_end=render_brace+1
@@ -45,7 +48,7 @@ while render_depth:
     if render_source[render_end]=='{':render_depth+=1
     elif render_source[render_end]=='}':render_depth-=1
     render_end+=1
-actual=actual.replace('cellSurfaces.','').replace('taskStates.','').replace('scales.','')
+actual=actual.replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField').replace('WorkspaceNativeHooks.applyWct','applyWct').replace('liveGeometry.','').replace('slotRegistry.','').replace('WorkspaceHost.','').replace('cellSurfaces.','').replace('taskStates.','').replace('scales.','')
 actual += '\n' + render_source[render_start:render_end].replace('final class RenderBinding','static final class RenderBinding',1)
 focus_stub = r'''package android.window;
 public class WindowContainerTransaction {

@@ -13,7 +13,7 @@ def method(signature):
   elif source[end]=='}':depth-=1
   end+=1
  return source[start:end]
-methods='\n'.join(method(s) for s in ['    void returnUnboundOwnedCandidates(', '    private void returnUnboundOwnedCandidate(']).replace('host.','').replace('WorkspaceHost.log','log').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('WorkspaceHost.SUSPENDING','SUSPENDING')
+methods='\n'.join(method(s) for s in ['    void returnUnboundOwnedCandidates(', '    private void returnUnboundOwnedCandidate(']).replace('host.','').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceNativeHooks.applyWct','applyWct').replace('zoomSession.','').replace('WorkspaceHost.log','log').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('WorkspaceHost.SUSPENDING','SUSPENDING')
 body=r'''
 package io.github.zerohomers0.onesteplite;
 import java.util.*;

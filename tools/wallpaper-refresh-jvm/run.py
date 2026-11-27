@@ -13,7 +13,7 @@ method+='\n'+s[a:b]
 a=s.index('    void scheduleWallpaperRetry(');b=s.index('{',a)+1;depth=1
 while depth:depth+=(s[b]=='{')-(s[b]=='}');b+=1
 method+='\n'+s[a:b]
-method=method.replace('host.','')
+method=method.replace('host.','').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('motion()','cells.motion()').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','')
 method=method.replace('WorkspaceHost.','').replace('log.accept(','log(')
 method+='\n int wallpaperRetryAttempt;'
 method+='\n final Runnable wallpaperRetry=this::loadWallpaperBackdrop;'

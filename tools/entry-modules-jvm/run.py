@@ -60,6 +60,9 @@ files={
  static void onSystemNavigation(String s){nav.add(s);}static void onUserPresent(){present++;}static void onScreenState(boolean on){screen=on;}
  static android.graphics.Rect activeMainBounds(){return main;}static float[] activeMainTransform(){return new float[]{.75f,600,100};}
  static boolean shouldClampAnimationBounds(Object a,Object b){return clamp;}}''',
+'io/github/zerohomers0/onesteplite/WorkspaceSystemEvents.java':'package io.github.zerohomers0.onesteplite;final class WorkspaceSystemEvents{static void onSystemNavigation(String s){WorkspaceHost.onSystemNavigation(s);}static void onUserPresent(){WorkspaceHost.onUserPresent();}static void onScreenState(boolean on){WorkspaceHost.onScreenState(on);}}',
+'io/github/zerohomers0/onesteplite/WorkspaceWindowLayout.java':'package io.github.zerohomers0.onesteplite;final class WorkspaceWindowLayout{static android.graphics.Rect activeMainBounds(){return WorkspaceHost.activeMainBounds();}static float[] activeMainTransform(){return WorkspaceHost.activeMainTransform();}}',
+'io/github/zerohomers0/onesteplite/WorkspaceNativeHooks.java':'package io.github.zerohomers0.onesteplite;final class WorkspaceNativeHooks{static boolean shouldClampAnimationBounds(Object a,Object b){return WorkspaceHost.shouldClampAnimationBounds(a,b);}}',
 'io/github/zerohomers0/onesteplite/EntryGuard.java':'package io.github.zerohomers0.onesteplite;class EntryGuard {static boolean unlocked=true;static boolean canOpen(Object c){return unlocked;}}',
 'io/github/zerohomers0/onesteplite/InputTrace.java':'package io.github.zerohomers0.onesteplite;class InputTrace {static int stops;static void stop(){stops++;}}',
 'io/github/zerohomers0/onesteplite/RecentsWallpaper.java':'''package io.github.zerohomers0.onesteplite;class RecentsWallpaper {

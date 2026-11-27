@@ -345,7 +345,7 @@ final class InputTrace {
         line(label + " eventTime=" + event.getEventTime() + " action=" + event.getActionMasked()
                 + " display=" + XposedHelpers.callMethod(event, "getDisplayId") + " local=" + event.getX() + "," + event.getY()
                 + " raw=" + event.getRawX() + "," + event.getRawY() + " pointers=" + event.getPointerCount());
-        float[] transform = WorkspaceHost.activeMainTransform();
+        float[] transform = WorkspaceWindowLayout.activeMainTransform();
         if (transform != null && event.getActionMasked() == MotionEvent.ACTION_DOWN)
             line("hostExpectedZoom=" + transform[0] + "," + transform[1] + "," + transform[2]);
         } catch (Throwable error) { unavailable(error); }
@@ -507,7 +507,7 @@ try {
                     line("nativeTarget args=" + p.args.length + " type="
                             + XposedHelpers.callMethod(info, "getType") + " roots="
                             + XposedHelpers.callMethod(info, "getRootCount")
-                            + " main=" + (WorkspaceHost.activeMainTransform() != null));
+                            + " main=" + (WorkspaceWindowLayout.activeMainTransform() != null));
                     int count = 0;
                     for (Object change : (List<?>) XposedHelpers.callMethod(info, "getChanges")) {
                         if (++count > 6) break;

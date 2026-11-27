@@ -6,7 +6,9 @@ import subprocess,sys
 root=Path(__file__).resolve().parents[2];out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 source=package_dir(root)
 host=(source/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-def method(sig):
+promotion_source=(source/'WorkspacePromotionController.java').read_text(encoding='utf-8')
+launch_source=(source/'WorkspaceMainLaunchController.java').read_text(encoding='utf-8')
+def method(sig, host=host):
     a=host.index(sig);b=host.index('{',a)+1;d=1
     while d:d+=(host[b]=='{')-(host[b]=='}');b+=1
     return host[a:b]
@@ -25,10 +27,11 @@ files={
 'de/robv/android/xposed/XposedHelpers.java':'''package de.robv.android.xposed;import java.lang.reflect.*;public class XposedHelpers{public static Class<?> findClass(String s,ClassLoader l)throws Exception{return Class.forName(s);}public static Object getObjectField(Object o,String s){try{Field f=o.getClass().getDeclaredField(s);f.setAccessible(true);return f.get(o);}catch(Exception e){throw new RuntimeException(e);}}public static int getIntField(Object o,String s){return(Integer)getObjectField(o,s);}public static Object callMethod(Object o,String s,Object...a){try{for(Method m:o.getClass().getMethods())if(m.getName().equals(s)&&m.getParameterCount()==a.length){m.setAccessible(true);return m.invoke(o,a);}throw new Exception(s);}catch(Exception e){throw new RuntimeException(e);}}}''',
 'com/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter.java':'''package com.android.systemui.statusbar.phone;public class StatusBarNotificationActivityStarter{public int count;public Object[] received;public void startNotificationIntentPublic(android.app.PendingIntent p,android.content.Intent f,Object entry,Object row,boolean a,boolean b,boolean c){count++;received=new Object[]{p,f,entry,row,a,b,c};}}''',
 }
+files['io/github/zerohomers0/onesteplite/WorkspaceMainLaunchController.java']='''package io.github.zerohomers0.onesteplite;final class WorkspaceMainLaunchController{static boolean promoteForNotification(String pkg,int user,Runnable dispatch){return WorkspaceHost.promoteForNotification(pkg,user,dispatch);}}'''
 files['io/github/zerohomers0/onesteplite/NotificationLaunch.java']=(source/'NotificationLaunch.java').read_text(encoding='utf-8')
 files['io/github/zerohomers0/onesteplite/WorkspaceHost.java']='''package io.github.zerohomers0.onesteplite;import android.os.Looper;import de.robv.android.xposed.XposedHelpers;import java.util.*;
 class WorkspaceHost{
- static WorkspaceHost sInstance;static final int ACTIVE=1,SLOT_MAIN=0,CELL_SLOT_COUNT=4;int scene=ACTIVE;boolean screenOn=true,keyguardLocked,transferBusy,canStart=true;Promotion promotion;Slot[] slots={new Slot(0),new Slot(1),new Slot(2)};QueueMain main=new QueueMain();
+ static WorkspaceHost sInstance;static WorkspaceHost currentInstance(){return sInstance;}static final int ACTIVE=1,SLOT_MAIN=0,CELL_SLOT_COUNT=4;int scene=ACTIVE;boolean screenOn=true,keyguardLocked,transferBusy,canStart=true;Promotion promotion;Slot[] slots={new Slot(0),new Slot(1),new Slot(2)};QueueMain main=new QueueMain();
  static class QueueMain{ArrayList<Runnable> q=new ArrayList<>();Looper getLooper(){return Looper.MAIN;}void post(Runnable r){q.add(r);}void drain(){for(Runnable r:new ArrayList<>(q))r.run();q.clear();}}
  static class Info{int taskId=42,userId=0;}static class Controller{Info mTaskInfo=new Info();}
  static class Slot{int index,windowMode=6,taskId=42;boolean occupied=true,parked,frozen,carrier;String pkg="settings";Object taskToken=new Object();Controller controller=new Controller();Slot(int i){index=i;if(i!=1)occupied=false;}}
@@ -36,7 +39,7 @@ class WorkspaceHost{
  static class Promotion{Slot slot;boolean cancelled;int taskId=42;Runnable notificationLaunch;Promotion(Slot s){slot=s;}}
  int currentUserId(){return 0;}boolean mayWriteSideSurface(Slot s){return true;}boolean controllerOwns(Slot s,int id,Object t){return true;}void swapWithMain(int i){if(canStart)promotion=new Promotion(slots[i]);}static void log(String s){}
  boolean supportsTaskUser(int id){return id==0||id==999;}
-'''+method('static boolean promoteForNotification(')+'\n'+method('private void resumeNotificationLaunch(')+'''
+'''+method('static boolean promoteForNotification(',launch_source).replace('h.mainTaskActions.','h.').replace('h.slotRegistry.','h.').replace('h.scales.','h.').replace('WorkspaceHost.ACTIVE','ACTIVE')+'\n'+method('void resumeNotificationLaunch(', promotion_source).replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','')+'''
  void finish(){resumeNotificationLaunch(promotion);resumeNotificationLaunch(promotion);main.drain();}
 }'''
 files['io/github/zerohomers0/onesteplite/NotificationRouteTest.java']='''package io.github.zerohomers0.onesteplite;
@@ -73,7 +76,9 @@ for name,text in files.items():
 jdk=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','-d',str(out),*[str(out/x) for x in files]],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.NotificationRouteTest'],check=True)
-restore=method('private void restoreLiveSwapVisual(');fail=method('private void failPromotion(')
+fail=method('void failPromotion(', promotion_source)
+s=(package_dir(root)/'WorkspaceLiveHandoffController.java').read_text(encoding='utf-8')
+restore=method('void restoreLiveSwapVisual(', s)
 assert restore.index('setLiveSwapInputBlocked(false,ticket.dragHover)')<restore.index('resumeNotificationLaunch(ticket)')
 assert fail.index('requestLiveSwapCancellation')<fail.index('resumeNotificationLaunch(ticket)')
 assert fail.index('closeSwapPreview(ticket)')<fail.index('resumeNotificationLaunch(ticket)')

@@ -347,8 +347,8 @@ public class TaskRotationBridgeTest {
                 display, activity, "jvm-test");
     }
     static Object call(String name, Class<?>[] types, Object... args) throws Exception {
-        Method method = HostEntry.class.getDeclaredMethod(name, types); method.setAccessible(true);
-        return method.invoke(host, args);
+        Method method = TaskRotationController.class.getDeclaredMethod(name, types); method.setAccessible(true);
+        return method.invoke(field("rotations").get(host), args);
     }
     static Field field(String name) throws Exception {
         Field field = HostEntry.class.getDeclaredField(name); field.setAccessible(true); return field;

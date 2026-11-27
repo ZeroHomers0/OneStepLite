@@ -20,10 +20,10 @@ final class WorkspaceWindowHooks {
             XposedBridge.hookAllMethods(util, "getAnimBounds", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
                     Object result = param.getResult();
-                    Rect main = WorkspaceHost.activeMainBounds();
+                    Rect main = WorkspaceWindowLayout.activeMainBounds();
                     if (!(result instanceof Rect) || main == null || param.args == null
                             || param.args.length < 2
-                            || !WorkspaceHost.shouldClampAnimationBounds(
+                            || !WorkspaceNativeHooks.shouldClampAnimationBounds(
                                     param.args[0], param.args[1])) return;
                     Rect original = (Rect) result;
                     Rect clipped = TransitionBounds.clamp(original, main);
@@ -51,7 +51,7 @@ final class WorkspaceWindowHooks {
                     try {
                         if (RecentsWallpaper.stage(p.args[2 + offset], p.args[0],
                                 XposedHelpers.getObjectField(p.getResult(), "leash"), p.args[3 + offset],
-                                WorkspaceHost.activeMainTransform(), WorkspaceHost.activeMainBounds(),
+                                WorkspaceWindowLayout.activeMainTransform(), WorkspaceWindowLayout.activeMainBounds(),
                                 (java.util.Map) p.args[4 + offset]))
                             log("Recents wallpaper capture fill staged behind workspace wallpaper");
                     } catch (Throwable error) {

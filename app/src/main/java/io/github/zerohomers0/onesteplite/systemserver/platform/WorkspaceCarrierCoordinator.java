@@ -45,7 +45,7 @@ final class WorkspaceCarrierCoordinator {
     /** The task to mirror: the requested one, or whatever currently owns the main cell. */
     int resolveMirrorTask(int requestedTask) throws Throwable {
         if (requestedTask >= 0) return requestedTask;
-        LiveTask main = host.coordinatorFindMainTask();
+        LiveTask main = host.slotRegistry.findMainTask();
         if (main == null) {
             log.accept("mirror POC: no main task");
             android.widget.Toast.makeText(host.ctx, "mirror: 主区无应用",
@@ -244,9 +244,9 @@ final class WorkspaceCarrierCoordinator {
     void scheduleMainCropClear(long delayMs) {
         host.main.postDelayed(() -> {
             if (host.root == null || host.scene == WorkspaceHost.SUSPENDED) return;
-            if (!host.coordinatorExecuteOnShell(() -> {
+            if (!host.executeOnShell(() -> {
                 try {
-                    LiveTask mainTask = host.coordinatorFindMainTask();
+                    LiveTask mainTask = host.slotRegistry.findMainTask();
                     if (mainTask != null) clearMainTaskLeashCrop(mainTask.id);
                 } catch (Throwable error) {
                     log.accept("main task crop clear failed: " + error);
@@ -264,7 +264,7 @@ final class WorkspaceCarrierCoordinator {
         boolean right = pending == 1;
         if (right != host.mainOnRight) {
             log.accept("pending main side applied: " + (right ? "right" : "left"));
-            host.coordinatorSetMainSide(right);
+            host.mainSide.setMainSide(right);
         }
     }
 
@@ -275,23 +275,23 @@ final class WorkspaceCarrierCoordinator {
     /** POC 期间该格的 SF 底板必须停止心跳重建，否则会盖住动画中的真实任务画面。 */
 
     void runLeashAnimPoc(int slotIndex, long durationMs, String pkg) {
-        if (host.scene != WorkspaceHost.ACTIVE || host.layout == null || slotIndex <= WorkspaceHost.coordinatorSlotMain()
-                || slotIndex >= WorkspaceHost.coordinatorSlotCount() || host.slots[slotIndex].rect == null) {
+        if (host.scene != WorkspaceHost.ACTIVE || host.layout == null || slotIndex <= WorkspaceHost.SLOT_MAIN
+                || slotIndex >= WorkspaceHost.SLOT_COUNT || host.slots[slotIndex].rect == null) {
             log.accept("leash anim POC skipped slot=" + slotIndex + " scene=" + host.scene);
             return;
         }
         final int index = slotIndex;
-        if (!host.coordinatorExecuteOnShell(() -> {
+        if (!host.executeOnShell(() -> {
             try {
                 LiveTask task = null;
                 try {
-                    task = host.coordinatorFindMainTask();
+                    task = host.slotRegistry.findMainTask();
                 } catch (Throwable error) {
                     log.accept("leash anim: findMainTask failed: " + error);
                 }
                 if (task == null && pkg != null) {
                     try {
-                        task = host.coordinatorFindPackageTask(pkg);
+                        task = host.slotRegistry.findPackageTask(pkg);
                         log.accept("leash anim: package fallback task="
                                 + (task == null ? -1 : task.id) + " pkg=" + pkg);
                     } catch (Throwable error) {
@@ -342,7 +342,7 @@ final class WorkspaceCarrierCoordinator {
             if (slot != null) {
                 if (hide) {
                     if (slot.hint != null) slot.hint.setVisibility(View.GONE);
-                    host.coordinatorRemoveCellBackground(slot);
+                    host.cellSurfaces.removeCellBackground(slot);
                 } else if (slot.hint != null) {
                     slot.hint.setVisibility(View.VISIBLE);
                 }
@@ -381,4 +381,39 @@ final class WorkspaceCarrierCoordinator {
         }
     }
 
+
+    void resetMainTaskLeash(int taskId) {
+        if (taskId < 0) return;
+        try {
+            Object organizer = shellOrganizer();
+            if (organizer == null) return;
+            Object leash = ShellCompat.taskLeash(organizer, taskId);
+            if (leash == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
+                return;
+            }
+            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
+                    .getDeclaredConstructor().newInstance();
+            try {
+                XposedHelpers.callMethod(tx, "setPosition",
+                        new Class<?>[]{Class.forName("android.view.SurfaceControl"),
+                                float.class, float.class}, leash, 0f, 0f);
+                XposedHelpers.callMethod(tx, "setMatrix",
+                        new Class<?>[]{Class.forName("android.view.SurfaceControl"),
+                                float.class, float.class, float.class, float.class},
+                        leash, 1f, 0f, 0f, 1f);
+                XposedHelpers.callMethod(tx, "setAlpha",
+                        new Class<?>[]{Class.forName("android.view.SurfaceControl"),
+                                float.class}, leash, 1f);
+                XposedHelpers.callMethod(tx, "setCrop",
+                        new Class<?>[]{Class.forName("android.view.SurfaceControl"),
+                                android.graphics.Rect.class}, leash, null);
+                XposedHelpers.callMethod(tx, "apply");
+            } finally {
+                try { XposedHelpers.callMethod(tx, "close"); } catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
+            }
+            log.accept("main task leash reset task=" + taskId);
+        } catch (Throwable error) {
+            log.accept("reset main task leash failed task=" + taskId + ": " + error);
+        }
+    }
 }

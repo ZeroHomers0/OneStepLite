@@ -37,6 +37,31 @@ for name in ('WorkspaceHost.java','HostEntry.java'):
   if lines>100:
    key=name+':'+m.group(1)
    check(key in allowed_methods,'method exceeds 100 lines without baseline: '+key)
+# Moved methods must fit the existing per-method limit without adding legacy exceptions.
+oversized = []
+for name in ('SystemServerHooks.java', 'TaskRotationController.java', 'ZoomTransactions.java',
+             'SystemServerZoomBridge.java',
+             'SystemUiEntry.java', 'WorkspaceNativeHooks.java', 'WorkspaceMainSideController.java',
+             'WorkspaceMemoryController.java', 'WorkspaceLiveHandoffController.java',
+             'WorkspacePromotionController.java', 'WorkspaceTopPresentationController.java',
+             'WorkspaceTopAdmissionController.java', 'WorkspaceTaskTransferController.java',
+             'WorkspaceRetainedSurfaceHooks.java', 'WorkspaceWindowPresentation.java',
+             'WorkspaceWindowLayout.java', 'WorkspaceKeyguardController.java',
+             'WorkspaceMainLaunchController.java', 'WorkspaceMainTaskActions.java',
+             'WorkspaceTransitionWindow.java', 'WorkspaceLiveGeometry.java',
+             'WorkspaceContentDragController.java', 'WorkspaceSlotLifecycle.java',
+             'WorkspaceZoomSession.java', 'WorkspaceSystemEvents.java',
+             'WorkspaceSideInteraction.java'):
+ text=(sources/name).read_text(encoding='utf-8')
+ for match in re.finditer(pattern.replace(r'^\s{4}', r'^ {4}'), text):
+  end=match.end()
+  depth=1
+  while depth and end<len(text):
+   depth+=(text[end]=='{')-(text[end]=='}')
+   end+=1
+  if len(text[match.start():end].splitlines())>100:
+   oversized.append(name+':'+match.group(1))
+check(not oversized,'moved method exceeds 100 lines: '+', '.join(oversized))
 # Legacy reflection outside platform may only be removed from this list.
 allowed_reflection=set(line.strip() for line in (here/'xposed-outside-platform.baseline').read_text().splitlines() if line.strip())
 for path in sorted(pkg.rglob('*.java')):

@@ -17,18 +17,18 @@ final class WorkspaceScreenObserver {
                         if (NavigationPolicy.shouldSuspend(reason)
                                 || "fs_gesture".equals(reason) || "gestureNav".equals(reason)
                                 || "recentapps".equals(reason))
-                            WorkspaceHost.onSystemNavigation(reason);
+                            WorkspaceSystemEvents.onSystemNavigation(reason);
                         return;
                     }
                     if (android.content.Intent.ACTION_USER_PRESENT.equals(intent.getAction())) {
                         logger.accept("user present -> clear keyguard privacy");
-                        WorkspaceHost.onUserPresent();
+                        WorkspaceSystemEvents.onUserPresent();
                         return;
                     }
                     boolean on = android.content.Intent.ACTION_SCREEN_ON.equals(intent.getAction());
                     if (!on || !EntryGuard.canOpen(context)) InputTrace.stop();
                     logger.accept("screen " + (on ? "ON" : "OFF"));
-                    WorkspaceHost.onScreenState(on);
+                    WorkspaceSystemEvents.onScreenState(on);
                 }
             };
             android.content.IntentFilter screenFilter = new android.content.IntentFilter();

@@ -60,7 +60,8 @@ public class XposedHelpers {public static String selected;
 ''',
 'io/github/zerohomers0/onesteplite/WorkspaceHost.java': '''package io.github.zerohomers0.onesteplite;
 class WorkspaceHost {static float[] zoom={.74654907f,661f,0f};
- static float[] activeIslandMonitorTransform(){return zoom;}}
+ static float[] activeIslandMonitorTransform(){return zoom;}}''',
+'io/github/zerohomers0/onesteplite/WorkspaceWindowLayout.java': '''package io.github.zerohomers0.onesteplite;final class WorkspaceWindowLayout {static float[] activeIslandMonitorTransform(){return WorkspaceHost.activeIslandMonitorTransform();}}
 ''',
 'io/github/zerohomers0/onesteplite/IslandMonitorHookTest.java': '''package io.github.zerohomers0.onesteplite;
 import android.view.MotionEvent;import android.content.Context;import android.provider.Settings;

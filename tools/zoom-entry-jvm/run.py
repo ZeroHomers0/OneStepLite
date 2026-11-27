@@ -8,7 +8,7 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 root = Path(__file__).resolve().parents[2]
 src=package_dir(root,sys.argv[2] if len(sys.argv)>2 else None)
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
-source = (src/'HostEntry.java').read_text(encoding='utf8')
+source = (src/'ZoomTransactions.java').read_text(encoding='utf8').replace('owner.beginFixedMainRotationLocked', 'beginFixedMainRotationLocked').replace('owner.endFixedMainRotationLocked', 'endFixedMainRotationLocked')
 hooks=(src/'ZoomFileObserverHooks.java').read_text(encoding='utf-8-sig')
 if '/data/system' not in hooks or '/data/user_de/0/com.android.systemui/files' not in hooks:
     raise AssertionError('zoom events must observe both current and legacy storage')

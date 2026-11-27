@@ -38,7 +38,7 @@ cell_class = cell_source[cell_start:cell_end].replace('final class CellMovePlan'
 methods = cell_class + '\n' + '\n'.join(member(s, cell) for s in [
     '    private static int compactionHintMask(',
     '    void animateCellMoves(',
-]).replace('host.', '').replace('WorkspaceHost::log', 'CompactionChromeRegression::log').replace('WorkspaceHost.log', 'log').replace('WorkspaceHost.getSurfaceField', 'getSurfaceField')
+]).replace('host.', '').replace('slotRegistry.','').replace('WorkspaceLiveGeometry.','').replace('liveGeometry.','').replace('chrome.','').replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField').replace('WorkspaceHost::log', 'CompactionChromeRegression::log').replace('WorkspaceHost.log', 'log')
 body = r'''
 package io.github.zerohomers0.onesteplite;
 import java.util.*;

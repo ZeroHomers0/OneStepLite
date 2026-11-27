@@ -27,8 +27,10 @@ def adapt_side(text):
     for old,new in [('order','sideOrder'),('scrolling','sideScrolling'),('armed','sideArmed'),('captured','sideCaptured'),('creatingView','creatingSideView'),('compacting','sideCompacting'),('desktopRevealing','sideDesktopRevealing'),('attached','sideAttached'),('compactionShift','sideCompactionShift'),('compactionProgress','sideCompactionProgress'),('savedOffset','savedSideOffset'),('offset','sideOffset'),('revealGeneration','sideRevealGeneration'),('motion','sideMotion'),('velocity','sideVelocity')]:
         text=re.sub(r'\b'+old+r'\b',new,text)
     return text
-parts=['    private void completeHomePromotion(', '    void clearSlot(', '    private void queueSidePromotion(', '    private void retrySidePromotion(', '    private void beginExternalPromotion(', '    private boolean externalPromotionCurrent(', '    private void afterExternalTransitionIdle(']
-methods='\n'.join(method(host,s) for s in parts)
+promotion_source=(src/'WorkspacePromotionController.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
+parts=['    void completeHomePromotion(', '    void queueSidePromotion(', '    void retrySidePromotion(', '    void beginExternalPromotion(', '    boolean externalPromotionCurrent(', '    void afterExternalTransitionIdle(']
+lifecycle=(src/'WorkspaceSlotLifecycle.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
+methods=method(lifecycle, '    void clearSlot(')+'\n'+'\n'.join(method(promotion_source,s) for s in parts)
 methods+='\n'+'\n'.join(method(cell_source,s).replace('host.','').replace('WorkspaceHost.log','log').replace('WorkspaceHost.getSurfaceField','getSurfaceField') for s in ['    void compactCells()', '    void compactCellsAfterCollection()'])
 methods=(methods.replace('sideRows.compactRows()','compactScrollingSideRows()')
     .replace('sideRows.isArmed()','sideArmed').replace('sideRows.isCaptured()','sideCaptured')
@@ -43,8 +45,10 @@ parts=['    private boolean compactSideRows()', '    boolean reorderRows(', '   
 methods+='\n'+'\n'.join(adapt_side(method(side_source,s)) for s in parts)
 methods+='\n'+method(task_source,'    private void onTaskIdKnown(').replace('host.','').replace('host::','this::').replace('WorkspaceHost.log','log').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('chrome.','').replace('resumes.','').replace('launches.onTaskCreated(slot)','onTaskCreated(slot)')
 methods+='\n'+method(task_source,'    void syncSlotWindowState(').replace('host.','')
-methods+='\n'+method(host,'    private void reorderNativeSideSlots(').replace('taskStates.','')
+task_actions=(src/'WorkspaceMainTaskActions.java').read_text(encoding='utf-8')
+methods+='\n'+method(task_actions,'    void reorderNativeSideSlots(').replace('host.','').replace('WorkspaceHost.','').replace('taskStates.','')
 methods+='\nprivate boolean reorderSideSlots(Slot source, Slot target) { if (source.sideRow >= 0 && target.sideRow >= 0) return reorderScrollingRows(source, target); reorderNativeSideSlots(source, target); return false; }'
+methods=methods.replace('WorkspaceLiveHandoffController.releaseCompactSnapshot','releaseCompactSnapshot').replace('slotLifecycle.','').replace('debug.','').replace('slotRegistry.','')
 body=r"""
 package io.github.zerohomers0.onesteplite;
 import java.util.*;

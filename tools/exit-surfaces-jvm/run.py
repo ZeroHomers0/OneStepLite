@@ -8,18 +8,19 @@ import sys
 root=Path(__file__).resolve().parents[2]
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 text=(package_dir(root)/'HostEntry.java').read_text(encoding='utf-8-sig')
+hook_text=(package_dir(root)/'SystemServerHooks.java').read_text(encoding='utf-8-sig')
 def member(signature):
     start=text.index(signature);brace=text.index('{',start);depth,end=1,brace+1
     while depth:
         depth+=(text[end]=='{')-(text[end]=='}');end+=1
     return text[start:end]
 methods='\n'.join(member(s)for s in ['    static void rememberMagnifiedSurface(', '    static int restoreExitedMagnificationLocked('])
-hook_start=text.index('XposedBridge.hookAllMethods(transition, "finishTransition"')
+hook_start=hook_text.index('XposedBridge.hookAllMethods(transition, "finishTransition"')
 hook_signature='                @Override protected void afterHookedMethod(MethodHookParam p)'
-start=text.index(hook_signature,hook_start);brace=text.index('{',start);depth,end=1,brace+1
+start=hook_text.index(hook_signature,hook_start);brace=hook_text.index('{',start);depth,end=1,brace+1
 while depth:
-    depth+=(text[end]=='{')-(text[end]=='}');end+=1
-hook=text[start:end].replace('@Override protected void afterHookedMethod','static void onFinish')
+    depth+=(hook_text[end]=='{')-(hook_text[end]=='}');end+=1
+hook=hook_text[start:end].replace('@Override protected void afterHookedMethod','static void onFinish')
 body=r'''package io.github.zerohomers0.onesteplite;
 import java.util.*;
 public class ExitSurfaceRegression {

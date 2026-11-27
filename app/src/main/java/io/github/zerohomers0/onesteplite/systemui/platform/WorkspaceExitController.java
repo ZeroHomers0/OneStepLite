@@ -5,8 +5,8 @@ import de.robv.android.xposed.XposedHelpers;
 
 /** Owns retained-exit cleanup, hidden TaskView release and unbound task recovery. */
 final class WorkspaceExitController {
-    private static final int SLOT_MAIN = WorkspaceHost.coordinatorSlotMain();
-    private static final int SLOT_TOP = WorkspaceHost.coordinatorSlotTop();
+    private static final int SLOT_MAIN = WorkspaceHost.SLOT_MAIN;
+    private static final int SLOT_TOP = WorkspaceHost.SLOT_TOP;
 
     private final WorkspaceHost host;
     private Runnable dormantTaskRelease;
@@ -24,9 +24,9 @@ final class WorkspaceExitController {
         int bound = 0;
         for (Slot slot : host.slots) {
             if (slot == null || !slot.occupied) continue;
-            if (!host.isActive(slot) || slot.parked || slot.frozen || slot.promoting || slot.launching
+            if (!host.slotRegistry.isActive(slot) || slot.parked || slot.frozen || slot.promoting || slot.launching
                     || slot.closing || slot.nativeReleasePending || slot.windowMode != 6
-                    || slot.taskToken == null || !host.controllerOwns(slot, slot.taskId, slot.taskToken)) return false;
+                    || slot.taskToken == null || !host.slotRegistry.controllerOwns(slot, slot.taskId, slot.taskToken)) return false;
             bound++;
         }
         if (bound == 0) return false;
@@ -37,9 +37,9 @@ final class WorkspaceExitController {
     void finishRetainedSuspend(long epoch) {
         if (host.scene != WorkspaceHost.SUSPENDING || host.sceneEpoch != epoch) return;
         host.retainedOnExit = true;
-        host.retireWorkspaceBackdrop();
+        host.windowPresentation.retireWorkspaceBackdrop();
         host.root.setVisibility(View.GONE);
-        host.setMirrorLayerVisible(false);
+        host.carriers.setMirrorLayerVisible(false);
         host.scene = WorkspaceHost.SUSPENDED;
         if (dormantTaskRelease == null)
             dormantTaskRelease = () -> releaseHiddenRetainedTasks(1);
@@ -47,7 +47,7 @@ final class WorkspaceExitController {
         host.main.postDelayed(dormantTaskRelease, 60_000L);
         host.publishDesktopSideTasks();
         host.lockExitPending=false;
-        WorkspaceHost.log("host hidden; live TaskView bindings retained: " + host.describeTasks());
+        WorkspaceHost.log("host hidden; live TaskView bindings retained: " + host.debug.describeTasks());
         releaseVisibleNativeRetainedTask();
     }
 
@@ -64,7 +64,7 @@ final class WorkspaceExitController {
             final int next = index + 1;
             WorkspaceHost.log("hidden retention timeout; release task=" + taskId + " slot=" + index);
             host.returnToSystem(slot, false, () -> {
-                if (slot.taskId == taskId && token.equals(slot.taskToken)) host.clearSlot(slot);
+                if (slot.taskId == taskId && token.equals(slot.taskToken)) host.slotLifecycle.clearSlot(slot);
                 host.retainedOnExit = hasBoundTasks();
                 host.publishDesktopSideTasks();
                 host.main.postDelayed(() -> releaseHiddenRetainedTasks(next), 50L);
@@ -81,8 +81,8 @@ final class WorkspaceExitController {
             if (slot.index <= SLOT_MAIN || !slot.occupied || slot.parked || slot.controller == null) continue;
             try {
                 Object info = ShellCompat.currentTaskInfo(slot.controller, slot.taskId);
-                if (host.ordinaryRoot(info, 1) && XposedHelpers.getBooleanField(info, "isRunning")) {
-                    host.releaseRetainedTaskToMain(slot, true);
+                if (host.slotRegistry.ordinaryRoot(info, 1) && XposedHelpers.getBooleanField(info, "isRunning")) {
+                    releaseRetainedTaskToMain(slot, true);
                     return;
                 }
             } catch (Throwable unavailable) {
@@ -115,7 +115,7 @@ final class WorkspaceExitController {
                 if (controller == null || candidate.userId < 0) throw new IllegalStateException("candidate owner/user absent");
                 LiveTask identity = new LiveTask(candidate.id, candidate.token, null);
                 Object organizer = XposedHelpers.getObjectField(controller, "mTaskOrganizer");
-                Object core = host.rootInfo(identity);
+                Object core = host.slotRegistry.rootInfo(identity);
                 Object appeared;
                 synchronized (XposedHelpers.getObjectField(organizer, "mLock")) {
                     appeared = ((android.util.SparseArray<?>) XposedHelpers.getObjectField(
@@ -132,18 +132,18 @@ final class WorkspaceExitController {
                     ready = true; // Exact task is gone from both sources, never infer death from roots alone.
                 } else {
                     if (!identity.matches(core) || XposedHelpers.getIntField(core, "userId") != candidate.userId
-                            || (!host.ordinaryRoot(core, 1) && !host.ordinaryRoot(core, 6)))
+                            || (!host.slotRegistry.ordinaryRoot(core, 1) && !host.slotRegistry.ordinaryRoot(core, 6)))
                         throw new IllegalStateException("candidate identity/user/display/role changed");
                     Slot recovery = new Slot(-1);
                     recovery.controller = controller; recovery.taskId = candidate.id;
                     recovery.taskToken = candidate.token;
                     Promotion handback = new Promotion(recovery, new Slot[0]);
                     handback.background = true; handback.candidateRecovery = true;
-                    if (attempt == 0 || host.ordinaryRoot(core, 6)) {
-                        if (!host.applyWct("return-unbound-owned-candidate", host.fullscreenExitTransaction(handback)))
+                    if (attempt == 0 || host.slotRegistry.ordinaryRoot(core, 6)) {
+                        if (!WorkspaceNativeHooks.applyWct("return-unbound-owned-candidate", host.taskTransfer.fullscreenExitTransaction(handback)))
                             throw new IllegalStateException("candidate fullscreen transaction refused");
                     } else {
-                        host.handoffPromotedTask(handback);
+                        host.promotionController.handoffPromotedTask(handback);
                         ready = handback.handoffComplete;
                     }
                 }
@@ -161,27 +161,27 @@ final class WorkspaceExitController {
                 } else {
                     // Preserve the exact A/B ledger and attached surfaces for a later explicit exit.
                     host.scene = WorkspaceHost.ACTIVE;
-                    if (host.screenOn && !host.keyguardLocked) { host.setWorkspaceAlpha(1f); host.writeZoom(true); host.setZoomState(true); }
+                    if (host.screenOn && !host.keyguardLocked) { host.windowPresentation.setWorkspaceAlpha(1f); host.zoomSession.writeZoom(true); host.zoomSession.setZoomState(true); }
                     WorkspaceHost.log("suspend stopped; unresolved owned candidate retained task=" + candidate.id + ": " + detail);
                 }
             });
         })) {
             host.scene = WorkspaceHost.ACTIVE;
-            if (host.screenOn && !host.keyguardLocked) { host.setWorkspaceAlpha(1f); host.writeZoom(true); host.setZoomState(true); }
+            if (host.screenOn && !host.keyguardLocked) { host.windowPresentation.setWorkspaceAlpha(1f); host.zoomSession.writeZoom(true); host.zoomSession.setZoomState(true); }
             WorkspaceHost.log("suspend stopped; owned candidate Shell executor unavailable task=" + candidate.id);
         }
     }
 
     void parkNext(int index) {
         if (index >= host.slots.length) {
-            host.retireWorkspaceBackdrop();
+            host.windowPresentation.retireWorkspaceBackdrop();
             host.root.setVisibility(View.GONE);
-            host.setMirrorLayerVisible(false);
+            host.carriers.setMirrorLayerVisible(false);
             host.scene = WorkspaceHost.SUSPENDED;
             host.publishDesktopSideTasks();
             host.lockExitPending=false;
-            WorkspaceHost.log("host suspended; all side tasks returned alive: " + host.describeTasks());
-            if(DeviceProfile.isTablet(host.ctx))host.scheduleDisplayGeometryRefresh();
+            WorkspaceHost.log("host suspended; all side tasks returned alive: " + host.debug.describeTasks());
+            if(DeviceProfile.isTablet(host.ctx))host.displays.scheduleDisplayGeometryRefresh();
             return;
         }
         Slot slot = host.slots[index];
@@ -191,16 +191,16 @@ final class WorkspaceExitController {
         }
         host.returnToSystem(slot, false, () -> {
             if(index==SLOT_TOP) {
-                host.topTaskState.sceneChanged();host.clearSlot(slot);host.topFace=false;
+                host.topTaskState.sceneChanged();host.slotLifecycle.clearSlot(slot);host.topFace=false;
                 if(host.topBar!=null && !host.layout.tabletLandscape) {host.topBar.setVisibility(View.VISIBLE);host.topBar.bringToFront();}
             }
             parkNext(index + 1);
         }, error -> {
             // Some peers may already be parked. Restore them before exposing ACTIVE again.
             host.scene = WorkspaceHost.RESUMING;
-            host.setWorkspaceAlpha(1f);
-            host.writeZoom(true);
-            host.setZoomState(true);
+            host.windowPresentation.setWorkspaceAlpha(1f);
+            host.zoomSession.writeZoom(true);
+            host.zoomSession.setZoomState(true);
             WorkspaceHost.log("suspend incomplete; restore parked peers before resuming: " + error);
             host.resumes.resumeNext(1, host.sceneEpoch);
         });
@@ -218,10 +218,10 @@ final class WorkspaceExitController {
         }
         int taskId = slot.taskId;
         Object token = slot.taskToken;
-        if (!host.controllerOwns(slot, taskId, token)) {
+        if (!host.slotRegistry.controllerOwns(slot, taskId, token)) {
             TaskWindowState state = slot.windowState;
             slot.windowState = null;
-            host.clearSlot(slot);
+            host.slotLifecycle.clearSlot(slot);
             if (state != null) { state.slotIndex = SLOT_MAIN; state.active = true; }
             WorkspaceHost.log("resume kept externally opened task=" + taskId + " in main");
             host.retainedOnExit = hasBoundTasks();
@@ -229,7 +229,7 @@ final class WorkspaceExitController {
             return;
         }
         host.returnToSystem(slot, true, () -> {
-            host.clearSlot(slot);
+            host.slotLifecycle.clearSlot(slot);
             host.retainedOnExit = hasBoundTasks();
             WorkspaceHost.log("resume released externally opened task=" + taskId + " to main");
             releaseForegroundRetainedTasks(epoch, foreground, index + 1, complete);
@@ -245,5 +245,35 @@ final class WorkspaceExitController {
         for (Slot slot : host.slots) if (slot != null && slot.occupied && !slot.parked
                 && slot.taskToken != null) return true;
         return false;
+    }
+
+    void releaseRetainedTaskToMain(Slot slot) {
+        releaseRetainedTaskToMain(slot, false);
+    }
+
+    void releaseRetainedTaskToMain(Slot slot, boolean nativeAlreadyFullscreen) {
+        if (!host.retainedOnExit || host.scene != WorkspaceHost.SUSPENDED || slot == null || !slot.occupied
+                || slot.parked || slot.promoting || host.transferBusy || slot.taskId < 0 || slot.taskToken == null) return;
+        int taskId = slot.taskId;
+        Object token = slot.taskToken;
+        WorkspaceHost.log("desktop opened retained task=" + taskId + "; keep it in the main area");
+        host.returnToSystem(slot, true, false, nativeAlreadyFullscreen, () -> {
+            if (slot.taskId == taskId && token.equals(slot.taskToken)) host.slotLifecycle.clearSlot(slot);
+            host.retainedOnExit = host.exits.hasBoundTasks();
+            WorkspaceHost.log("desktop task released from hidden workspace id=" + taskId);
+            host.publishDesktopSideTasks();
+        }, error -> WorkspaceHost.log("desktop task remains bound after handoff failure id=" + taskId + ": " + error));
+    }
+
+    void finishExternalTopLaunch(Slot upper) {
+        if (host.scene != WorkspaceHost.ACTIVE || host.promotion != null || host.transferBusy || upper.promoting) return;
+        host.returnToSystem(upper, true, false, true, () -> {
+            host.slotLifecycle.clearSlot(upper);
+            if (host.topFace) host.topPresentationHost.settleTopFace(false);
+            host.resumes.finishPendingSuspend();
+        }, error -> {
+            WorkspaceHost.log("native TOP launch handback failed: " + error);
+            host.resumes.finishPendingSuspend();
+        });
     }
 }

@@ -142,7 +142,7 @@ final class TopNativeCaption {
 
     private static boolean owned(Object dot) {
         try {
-            return WorkspaceHost.ownsTopNativeCaption(XposedHelpers.getObjectField(dot,"mRunningTaskInfo"));
+            return WorkspaceTopPresentationController.ownsTopNativeCaption(XposedHelpers.getObjectField(dot,"mRunningTaskInfo"));
         } catch(Throwable ignored) {return false;}
     }
 

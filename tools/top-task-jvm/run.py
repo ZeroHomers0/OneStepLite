@@ -6,7 +6,41 @@ root=Path(__file__).resolve().parents[2]
 src=package_dir(root)
 host=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
-def member(signature,occurrence=0):
+def sanitize(text):
+    text=text.replace('host.','')
+    text=text.replace('slotRegistry.','')
+    text=text.replace('sideRows.','')
+    text=text.replace('windowPresentation.','')
+    text=text.replace('liveGeometry.','')
+    text=text.replace('liveHandoff.','')
+    text=text.replace('promotionController.','')
+    text=text.replace('topPresentationHost.','')
+    text=text.replace('topAdmission.','')
+    text=text.replace('taskTransfer.','')
+    text=text.replace('keyguard.','')
+    text=text.replace('resumes.','')
+    text=text.replace('carriers.','')
+    text=text.replace('retainedSurfaces.','')
+    text=text.replace('chrome.','')
+    text=text.replace('mainTaskActions.','')
+    text=text.replace('taskStates.','')
+    text=text.replace('slotLifecycle.','')
+    text=text.replace('sideInteraction.','')
+    text=text.replace('displays.','')
+    text=text.replace('wallpapers.','')
+    text=text.replace('memory.','')
+    text=text.replace('debug.','')
+    text=text.replace('scales.','')
+    text=text.replace('exits.','')
+    text=text.replace('mainLaunch.','')
+    text=text.replace('transitionWindow.','')
+    text=text.replace('contentDrag.','')
+    text=text.replace('sideCloses.','')
+    return text.replace('WorkspaceHost.','')
+presentation=sanitize((src/'WorkspaceTopPresentationController.java').read_text(encoding='utf-8'))
+chrome=sanitize((src/'WorkspaceChromeController.java').read_text(encoding='utf-8'))
+admission=sanitize((src/'WorkspaceTopAdmissionController.java').read_text(encoding='utf-8'))
+def member(signature,occurrence=0,host=host):
     start=-1
     for _ in range(occurrence+1):start=host.index(signature,start+1)
     end=host.index('{',start)+1;depth=1
@@ -46,7 +80,7 @@ public final class TopAdmissionRegression {
  void publishDesktopSideTasks(){}void preferMainAfterTopChange(){}void revealTopTaskTransition(){}void cancelTopTaskTransition(){}
  void restoreTabletCoveredMain(TopTaskState.Key key){}
  void finishPendingSuspend(){finished++;}static void log(String text){}
-'''+member('    private boolean topReady(')+member('    private void adoptTopTask(')+member('    private void prepareTopViewport(')+member('    private void adoptTopTaskPrepared(')+member('    private void verifyTopLandscape(')+member('    private void topAdoptionFailed(')+'''
+'''+member('    boolean topReady(',host=presentation)+member('    private void adoptTopTask(',host=admission)+member('    private void prepareTopViewport(',host=admission)+member('    private void adoptTopTaskPrepared(',host=admission)+member('    private void verifyTopLandscape(',host=admission)+member('    private void topAdoptionFailed(',host=admission)+'''
  static TopCandidate candidate(TopAdmissionRegression h){TopCandidate c=new TopCandidate();c.source=h.slots[1];return c;}
  static TopTaskState.Ticket ticket(TopAdmissionRegression h,TopCandidate c){return h.topTaskState.request(c.key,1,true,true);}
  public static void main(String[]args){
@@ -136,7 +170,7 @@ public final class TopLayerRegression {
  TopCandidate currentTopCandidate(){return current;}
  void showTopCandidates(){selected++;}void updateHint(Slot slot){hints++;}
  void updateTopExitWindow(){}void releaseTopExitWindow(){}
-'''+member('    private void settleTopFace(')+member('    private void resetTopForSuspend(')+'''
+'''+member('    void settleTopFace(',host=presentation)+member('    void resetTopForSuspend(',host=presentation)+'''
  public static void main(String[]args){
   order="";
   var h=new TopLayerRegression();h.slots[4].occupied=true;h.settleTopFace(false);
@@ -188,7 +222,7 @@ public class TopDirectionRegression {
  TopCandidate currentTopCandidate(){if(current!=null)current.landscape=topDirections.getOrDefault(current.key,new TopDirection(false)).landscape();return current;}
  void claimTopTask(TopCandidate c,boolean manual){claimed++;}
  void topTaskDirection(TopTaskState.Key key,boolean landscape){topTaskDirection(key,new TopDirection(landscape));}
-'''+member('    private void topTaskDirection(')+member('    void updateTopBarState(')+member('    private boolean mainCanFillTop(')+'''
+'''+member('    void topTaskDirection(',host=presentation)+member('    void updateTopBarState(',host=chrome).replace('host.topPresentationHost.topReady()','topReady()').replace('host.topPresentationHost.updateTopExitWindow()','updateTopExitWindow()').replace('host.topAdmission.currentTopCandidate()','currentTopCandidate()').replace('WorkspaceHost.log','log').replace('host.','').replace('WorkspaceHost.ACTIVE','ACTIVE')+member('    boolean mainCanFillTop(',host=chrome).replace('host.topPresentationHost.topReady()','topReady()').replace('host.topAdmission.currentTopCandidate()','currentTopCandidate()').replace('WorkspaceHost.log','log').replace('host.','').replace('WorkspaceHost.SLOT_TOP','SLOT_TOP')+'''
  public static void main(String[]args){
   var h=new TopDirectionRegression();var a=new TopTaskState.Key(7,0,"a");h.current=new TopCandidate();h.current.key=a;
   for(int i=0;i<4;i++){h.topFace=i%2==0;h.topTaskDirection(a,true);h.topTaskDirection(a,false);}
@@ -241,7 +275,7 @@ public class TopReturnBridgeRegression {
  void releaseTopTaskNow(boolean front,boolean dismissed,Runnable after,boolean live){nativeCalls++;nativeFront=front;nativeLive=live;}
  void fadeTopTaskOut(Runnable after){fades++;settled=after;}
  void cancelTopTaskTransition(){cancels++;topTransition=null;}
-'''+member('    private void releaseTopTask(',0)+member('    private void releaseTopTask(',1)+'''
+'''+member('    void releaseTopTask(',0,presentation)+member('    void releaseTopTask(',1,presentation)+'''
  public static void main(String[]args){
   var h=new TopReturnBridgeRegression();h.releaseTopTask(false,true,null,true);
   check(h.animations==0&&h.nativeCalls==1&&h.nativeLive,"roll live reveal bypasses a second upper collapse");
@@ -282,7 +316,7 @@ public class OpenedAppRegression {
  Slot[] slots={new Slot(0),new Slot(1),new Slot(2),new Slot(3),new Slot(4)};
  LiveTask findMainTask(){if(fail)throw new IllegalStateException();return current;}
  static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
-''' + member('    private java.util.Set<String> openedQuickAppPackages(') + '''
+''' + member('    java.util.Set<String> openedQuickAppPackages(',host=chrome) + '''
  public static void main(String[]args){
   var h=new OpenedAppRegression();check(h.openedQuickAppPackages().isEmpty(),"desktop and empty cells have no markers");
   h.current=new LiveTask("main");h.slots[1].occupied=true;h.slots[1].pkg="side";

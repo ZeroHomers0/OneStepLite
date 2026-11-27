@@ -60,6 +60,7 @@ files = {
  public static class LegacyReceiver {public Receiver mReceiver;public LegacyReceiver(Receiver r){mReceiver=r;}}
  public InputMonitorCompat(String name,int display){latest=this;}public Object getInputReceiver(Object l,Object c,InputChannelCompat.InputEventListener p){listener=p;return Boolean.getBoolean("onesteplite.legacyReceiver")?new LegacyReceiver(receiver):receiver;}
  public static class Platform {public int claims;public void pilferPointers(){claims++;}}}''',
+'io/github/zerohomers0/onesteplite/WorkspaceWindowLayout.java': 'package io.github.zerohomers0.onesteplite;final class WorkspaceWindowLayout {static boolean hostSceneActive(){return WorkspaceHost.active;}}',
 'io/github/zerohomers0/onesteplite/EntryGuard.java': 'package io.github.zerohomers0.onesteplite;final class EntryGuard {static boolean open=true;static boolean canOpen(Object c){return open;}}',
 'io/github/zerohomers0/onesteplite/DeviceProfile.java': 'package io.github.zerohomers0.onesteplite;final class DeviceProfile {static boolean tablet;static boolean isTablet(Object c){return tablet;}}',
 'io/github/zerohomers0/onesteplite/WorkspaceSettingsClient.java': '''package io.github.zerohomers0.onesteplite;import java.util.function.Consumer;

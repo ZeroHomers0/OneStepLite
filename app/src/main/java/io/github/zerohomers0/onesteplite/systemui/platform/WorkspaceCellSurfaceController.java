@@ -5,8 +5,8 @@ import de.robv.android.xposed.XposedHelpers;
 
 /** Owns empty-cell backing surfaces and task-surface presentation state for the workspace. */
 final class WorkspaceCellSurfaceController {
-    private static final int SLOT_MAIN = WorkspaceHost.coordinatorSlotMain();
-    private static final int SLOT_TOP = WorkspaceHost.coordinatorSlotTop();
+    private static final int SLOT_MAIN = WorkspaceHost.SLOT_MAIN;
+    private static final int SLOT_TOP = WorkspaceHost.SLOT_TOP;
 
     private final WorkspaceHost host;
 
@@ -26,12 +26,12 @@ final class WorkspaceCellSurfaceController {
         boolean inViewport = host.sideRows.isScrolling() && slot.sideRow >= 0 ? slot.sidePrepared : presentsSlot(slot);
         return inViewport && !(host.taskCellsCovered && slot.index != SLOT_TOP)
                 && slot.occupied && !slot.parked && slot.taskToken != null
-                && host.controllerOwns(slot, slot.taskId, slot.taskToken)
+                && host.slotRegistry.controllerOwns(slot, slot.taskId, slot.taskToken)
                 && (slot.index!=SLOT_TOP || host.topFace);
     }
 
     void stageCellPresentation(Object tx, Slot slot, boolean visible) {
-        Rect crop = host.workspaceCellCrop(slot);
+        Rect crop = host.windowPresentation.workspaceCellCrop(slot);
         boolean showing = visible && host.workspaceAlpha() > 0f && (crop == null || !crop.isEmpty());
         float alpha = showing ? 1f : 0f;
         boolean fading = showing && slot.index == SLOT_TOP && host.topTransition != null && host.topTransition.ownsTopOpacity();
@@ -39,7 +39,7 @@ final class WorkspaceCellSurfaceController {
             if (crop != null) slot.view.setClipBounds(crop);
             if (!fading) slot.view.setAlpha(alpha);
         }
-        Object surface = WorkspaceHost.getSurfaceField(slot.controller, "mSurfaceControl");
+        Object surface = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl");
         if (surface == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(surface, "isValid"))) return;
         if (crop != null && !crop.isEmpty()) XposedHelpers.callMethod(tx, "setWindowCrop", surface, crop);
         if (!fading) XposedHelpers.callMethod(tx, "setAlpha", surface, alpha);
@@ -47,13 +47,13 @@ final class WorkspaceCellSurfaceController {
         // parent's alpha. Also gate our settled task leash, which it cannot reset.
         if (ownsCellPresentation(slot) && slot.occupied && !slot.parked && !slot.frozen
                 && host.scales.mayWriteSideSurface(slot)
-                && host.controllerOwns(slot, slot.taskId, slot.taskToken)) {
-            Object leash = WorkspaceHost.getSurfaceField(slot.controller, "mTaskLeash");
+                && host.slotRegistry.controllerOwns(slot, slot.taskId, slot.taskToken)) {
+            Object leash = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mTaskLeash");
             if (leash != null && leash != surface
                     && Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
                 // The leash carries the task's logical buffer. Side cells now use their
                 // compact pixel bounds while TOP keeps its logical viewport.
-                XposedHelpers.callMethod(tx, "setWindowCrop", leash, host.logicalBounds(slot));
+                XposedHelpers.callMethod(tx, "setWindowCrop", leash, host.slotRegistry.logicalBounds(slot));
                 boolean collecting = showing && slot.index == SLOT_TOP && host.topTransition != null
                         && host.topTransition.ownsTaskOpacity();
                 if (!fading && !collecting) XposedHelpers.callMethod(tx, "setAlpha", leash, alpha);
@@ -67,12 +67,12 @@ final class WorkspaceCellSurfaceController {
         try {
             tx = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
             stageCellPresentation(tx, slot, cellPresentationVisible(slot));
-            Object surface = WorkspaceHost.getSurfaceField(slot.controller, "mSurfaceControl");
+            Object surface = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl");
             if (surface != null && Boolean.TRUE.equals(XposedHelpers.callMethod(surface, "isValid")))
                 XposedHelpers.callMethod(tx, cellPresentationVisible(slot) && host.workspaceAlpha() > 0f ? "show" : "hide", surface);
             XposedHelpers.callMethod(tx, "apply");
         } catch (Throwable error) { WorkspaceHost.log("cell container visibility: " + error); }
-        finally { host.closeSurfaceObject(tx, "close"); }
+        finally { host.sideRows.closeSurfaceObject(tx, "close"); }
     }
 
     void prepareCellSurface(Slot slot) {
@@ -82,7 +82,7 @@ final class WorkspaceCellSurfaceController {
             stageCellPresentation(tx, slot, true);
             XposedHelpers.callMethod(tx, "apply");
         } catch (Throwable error) { WorkspaceHost.log("cell destination preparation: " + error); }
-        finally { host.closeSurfaceObject(tx, "close"); }
+        finally { host.sideRows.closeSurfaceObject(tx, "close"); }
     }
 
     void ensureCellBackground(Slot slot) {
@@ -90,11 +90,11 @@ final class WorkspaceCellSurfaceController {
             removeCellBackground(slot);
             return;
         }
-        if (host.wallpaperBackdrop != null) host.coordinatorApplyWallpaperBackdrops();
+        if (host.wallpaperBackdrop != null) host.wallpapers.applyWallpaperBackdrops();
         if (host.root == null || slot.index <= SLOT_MAIN || slot.controller == null || slot.rect == null) {
             return;
         }
-        Object parent = WorkspaceHost.getSurfaceField(slot.controller, "mSurfaceControl");
+        Object parent = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl");
         if (parent == null) return;
         int width = slot.rect[2] - slot.rect[0];
         int height = slot.rect[3] - slot.rect[1];
@@ -132,7 +132,7 @@ final class WorkspaceCellSurfaceController {
         } catch (Throwable failure) {
             WorkspaceHost.log("cell backing failed slot=" + slot.index + ": " + failure);
         } finally {
-            host.closeSurfaceObject(transaction, "close");
+            host.sideRows.closeSurfaceObject(transaction, "close");
             if (background != null) destroyCellSurface(background);
         }
     }
@@ -160,8 +160,8 @@ final class WorkspaceCellSurfaceController {
         } catch (Throwable failure) {
             WorkspaceHost.log("cell backing cleanup failed: " + failure);
         } finally {
-            host.closeSurfaceObject(transaction, "close");
-            host.closeSurfaceObject(background, "release");
+            host.sideRows.closeSurfaceObject(transaction, "close");
+            host.sideRows.closeSurfaceObject(background, "release");
         }
     }
 }

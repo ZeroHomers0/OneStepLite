@@ -103,7 +103,7 @@ final class NativeWindowRuntime {
             if (target != null && target.display == display) target.handler.post(() -> {
                 synchronized (target.globalLock) {
                     if (target == sZoomTarget)
-                        applyGestureSurfacesLocked(target, sZoomScale, sZoomOffset, sZoomOffsetX);
+                        ZoomTransactions.applyGestureSurfacesLocked(target, sZoomScale, sZoomOffset, sZoomOffsetX);
                 }
             });
         }

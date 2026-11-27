@@ -13,9 +13,11 @@ def member(signature, text=source):
     while depth:
         depth += (text[end]=='{')-(text[end]=='}'); end+=1
     return text[start:end]
-methods = '\n'.join(member(s) for s in ('    private void finishLiveResult(',
-            '    private FocusResult requestLiveMainFocus(',
-            '    private void finishPromotionFocus(')).replace('WorkspaceHost.this.taskStates.','').replace('taskStates.','')
+promotion_source = (src/'WorkspacePromotionController.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
+geometry_source = (src/'WorkspaceLiveGeometry.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
+methods = '\n'.join([member('    void finishLiveResult(', geometry_source),
+    member('    FocusResult requestLiveMainFocus(', promotion_source),
+    member('    void finishPromotionFocus(', promotion_source)]).replace('taskStates.', '')
 methods += '\n' + member('    boolean mainTaskVisible(', registry).replace('    boolean mainTaskVisible(', '    private boolean mainTaskVisible(')
 files = {
 'android/os/SystemClock.java': 'package android.os;public class SystemClock {public static long uptimeMillis(){return 1000;}}',

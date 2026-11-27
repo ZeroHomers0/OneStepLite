@@ -89,7 +89,7 @@ public final class HotZoneGesture {
                 || !e.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)) return;
         int action=e.getActionMasked();
         if(action==MotionEvent.ACTION_DOWN)bottomDownTime=e.getEventTime();
-        if(WorkspaceHost.hostSceneActive()){
+        if(WorkspaceWindowLayout.hostSceneActive()){
             generation++;swipe.reset();bottomSwipe.reset();bottomPilfered=false;restoreBatching();return;
         }
         if(action==MotionEvent.ACTION_UP)refreshDisplay();
@@ -106,7 +106,7 @@ public final class HotZoneGesture {
     private void retainEarlyBottomIntent(MotionEvent e){
         if(e.getActionMasked()!=MotionEvent.ACTION_MOVE || bottomPilfered
                 || admittedEntryGesture!=WorkspaceOptions.BOTTOM_CENTER_OUTWARD
-                || selectedEntryGesture!=admittedEntryGesture || WorkspaceHost.hostSceneActive()
+                || selectedEntryGesture!=admittedEntryGesture || WorkspaceWindowLayout.hostSceneActive()
                 || !bottomSwipe.canRetain(e.getPointerId(0),e.getPointerCount(),e.getRawX(),e.getRawY(),
                         e.getEventTime(),bottomIntentPx,bottomVerticalPx))return;
         if(!pilferPointers()){reset();return;}
@@ -168,7 +168,7 @@ public final class HotZoneGesture {
         MAIN.postDelayed(()->{
             if(!enabled || generation!=accepted)return;
             if(admittedEntryGesture==WorkspaceOptions.BOTTOM_CENTER_OUTWARD && lastBottomOpened==acceptedDown)return;
-            if(WorkspaceHost.hostSceneActive() || !EntryGuard.canOpen(context)){reset();return;}
+            if(WorkspaceWindowLayout.hostSceneActive() || !EntryGuard.canOpen(context)){reset();return;}
             Point current=new Point();windows.getDefaultDisplay().getRealSize(current);
             if(current.x!=displaySize.x || current.y!=displaySize.y
                     || windows.getDefaultDisplay().getRotation()!=displayRotation || !keepsEntry(current)){reset();return;}
@@ -205,7 +205,7 @@ public final class HotZoneGesture {
         MAIN.post(() -> {
             long now = SystemClock.uptimeMillis();
             if (!g.enabled || now < eventTime || now - eventTime > 600
-                    || g.lastBottomOpened == downTime || WorkspaceHost.hostSceneActive()
+                    || g.lastBottomOpened == downTime || WorkspaceWindowLayout.hostSceneActive()
                     || g.effectiveEntryGesture() != WorkspaceOptions.BOTTOM_CENTER_OUTWARD
                     || !EntryGuard.canOpen(g.context)) return;
             WindowManager wm = (WindowManager) g.context.getSystemService(Context.WINDOW_SERVICE);

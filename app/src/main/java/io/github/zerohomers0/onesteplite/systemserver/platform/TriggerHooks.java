@@ -38,14 +38,14 @@ final class TriggerHooks {
                         return;
                     }
                     if (WorkspaceHost.LANDSCAPE_MODE_ACTION.equals(action)) {
-                        WorkspaceHost.onLandscapeMode(intent.getBooleanExtra("fullscreen", false));
+                        WorkspaceSystemEvents.onLandscapeMode(intent.getBooleanExtra("fullscreen", false));
                         return;
                     }
                     if(RetainedWindow.READY.equals(action)) {
-                        WorkspaceHost.onRetainedNativeReady(intent.getLongExtra("generation",0));return;
+                        WorkspaceSystemEvents.onRetainedNativeReady(intent.getLongExtra("generation",0));return;
                     }
                     if(WorkspaceHost.TOP_TASK_STATE_ACTION.equals(action)) {
-                        WorkspaceHost.onTopTaskState(intent);return;
+                        WorkspaceTopPresentationController.onTopTaskState(intent);return;
                     }
                     log.accept("broadcast " + action + " -> toggle");
                     toggle.run();

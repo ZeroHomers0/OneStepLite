@@ -22,6 +22,7 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 
 root = Path(__file__).resolve().parents[2]
 text = (package_dir(root)/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+handoff = (package_dir(root)/'WorkspaceLiveHandoffController.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','')
 cell_text = (package_dir(root)/'WorkspaceCellSurfaceController.java').read_text(encoding='utf-8-sig')
 chrome_text = (package_dir(root)/'WorkspaceChromeController.java').read_text(encoding='utf-8-sig')
 checks = 0
@@ -61,7 +62,7 @@ check('hold.alpha = alpha' in lease, 'writeAlpha still defers while held')
 check('view.setAlpha(hold.alpha)' in lease, 'release still restores the last requested alpha')
 
 # Live collect: the empty destination cell must not reveal a stale backing in the settle transaction.
-collect = member('    private void startLiveCollect(')
+collect = member('    void startLiveCollect(', handoff)
 check('hostSurface, null,' in collect,
       'live collect must not hand slot.cellBackground to the settle transaction')
 check('hostSurface, slot.cellBackground,' not in collect,
@@ -72,14 +73,15 @@ check('new LiveSwapVisualLease(sideBackingViews[slot.index], null)' not in colle
       'live collect leases only the backing, so the empty-cell hint can flash during the handoff')
 
 # Live flip: only the moving cell is withheld; peers keep their opaque backing.
-swap = member('    private Object prepareLiveFlip(')
+geometry = (package_dir(root)/'WorkspaceLiveGeometry.java').read_text(encoding='utf-8')
+swap = member('    Object prepareLiveFlip(', geometry)
 check('cellBackgrounds[i - 1] = peer == ticket.slot ? null : peer.cellBackground;' in swap,
       'live flip must withhold only the moving cell backing and keep peer backings')
 check('cellBackgrounds[i - 1] = peer.cellBackground;' not in swap,
       'live flip still reveals the moving cell placeholder inside the settle transaction')
 
 # Live Home promotion: the promoted cell is the moving one.
-home = member('    private void startLiveHome(')
+home = member('    void startLiveHome(', handoff)
 check('new Object[]{null}, ticket.liveBackdrop);' in home,
       'live Home must not reveal the promoted cell placeholder inside the settle transaction')
 check('new Object[]{ticket.slot.cellBackground}, ticket.liveBackdrop);' not in home,

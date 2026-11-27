@@ -27,7 +27,7 @@ final class IslandMonitorInput {
                         if (p.args.length != 1 || !(p.args[0] instanceof MotionEvent)) return;
                         MotionEvent original = (MotionEvent) p.args[0];
                         if (original.getActionMasked() != MotionEvent.ACTION_DOWN) return;
-                        float[] zoom = WorkspaceHost.activeIslandMonitorTransform();
+                        float[] zoom = WorkspaceWindowLayout.activeIslandMonitorTransform();
                         if (zoom == null) return;
                         Context ctx = context.get();
                         if (ctx == null || Settings.Secure.getInt(ctx.getContentResolver(),

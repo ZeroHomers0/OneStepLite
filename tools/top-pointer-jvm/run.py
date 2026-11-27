@@ -21,6 +21,7 @@ FILES={
 'android/view/View.java':'package android.view;public class View {}',
 'com/miui/systemui/statusbar/core/StatusBarRegionSamplingInteractor$regionSamplingHelper$1.java':'package com.miui.systemui.statusbar.core;public class StatusBarRegionSamplingInteractor$regionSamplingHelper$1 {}',
 'io/github/zerohomers0/onesteplite/WorkspaceHost.java':'package io.github.zerohomers0.onesteplite;class WorkspaceHost {static float[] activeStatusBarTransform(){return null;}}',
+'io/github/zerohomers0/onesteplite/WorkspaceWindowLayout.java':'package io.github.zerohomers0.onesteplite;final class WorkspaceWindowLayout {static float[] activeStatusBarTransform(){return WorkspaceHost.activeStatusBarTransform();}}',
 'io/github/zerohomers0/onesteplite/ShellCompat.java':'package io.github.zerohomers0.onesteplite;class ShellCompat {static boolean hasMethod(Class<?> c,String n,int a){return false;}}',
 'io/github/zerohomers0/onesteplite/PointerRegression.java':r'''package io.github.zerohomers0.onesteplite;
 import android.os.Bundle;import android.graphics.Rect;

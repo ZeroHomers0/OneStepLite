@@ -50,8 +50,8 @@ import android.os.*;import android.content.Intent;import android.content.res.Con
 public class PhoneWorkspaceTest {
  static HostEntry host=new HostEntry();static int checks;static Binder owner;static long sequence;
  static void check(boolean b,String s){checks++;if(!b)throw new AssertionError(s);}
- static Field f(String n)throws Exception{Field f=HostEntry.class.getDeclaredField(n);f.setAccessible(true);return f;}
- static Object call(String n,Class<?>[]t,Object...a)throws Exception{Method m=HostEntry.class.getDeclaredMethod(n,t);m.setAccessible(true);return m.invoke(host,a);}
+ static Field f(String n)throws Exception{Field f=(n.equals(@sTopRotationBounds@) ? TaskRotationController.class : HostEntry.class).getDeclaredField(n);f.setAccessible(true);return f;}
+ static Object call(String n,Class<?>[]t,Object...a)throws Exception{Method m=TaskRotationController.class.getDeclaredMethod(n,t);m.setAccessible(true);return m.invoke(f(@rotations@).get(host),a);}
  static class Token{IBinder binder=new Binder();IBinder asBinder(){return binder;}}
  static class Info{int taskId,userId,displayId;Token token=new Token();Info(int id){taskId=id;}}
  static class Controller{boolean useShellTransitionsRotation(){return true;}}

@@ -4,13 +4,13 @@ import os, subprocess, sys
 import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1])); from source_paths import package_dir
 root=Path(__file__).resolve().parents[2];src=package_dir(root)
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
-s=(src/'WorkspaceHost.java').read_text(encoding='utf-8')
+s=(src/'WorkspaceTopPresentationController.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
 def member(signature):
  start=s.index(signature);end=s.index('{',start)+1;depth=1
  while depth:
   depth+=(s[end]=='{')-(s[end]=='}');end+=1
  return s[start:end]
-methods='\n'.join(member('    private void '+n+'(') for n in ['observeWideVideo','attemptWideVideo'])
+methods=member('    void observeWideVideo(')+'\n'+member('    private void attemptWideVideo(')
 files={
 'android/os/SystemClock.java': 'package android.os;public class SystemClock {public static long now=1000;public static long uptimeMillis(){return now;}}',
 'android/widget/Toast.java': 'package android.widget;public class Toast {public static final int LENGTH_SHORT=0;public static int shown;public static Toast makeText(Object c,String s,int d){shown++;return new Toast();}public void show(){}}',
@@ -92,7 +92,7 @@ public class WideVideoRegression {
  }
 }'''}
 saved=s
-s=(src/'HostEntry.java').read_text(encoding='utf-8')
+s=(src/'TaskRotationController.java').read_text(encoding='utf-8')
 files['io/github/zerohomers0/onesteplite/FullscreenSceneRegression.java']='''package io.github.zerohomers0.onesteplite;
 import java.util.*;import android.view.WindowManager;import de.robv.android.xposed.XposedHelpers;
 public class FullscreenSceneRegression {
@@ -108,7 +108,7 @@ public class FullscreenSceneRegression {
  int sends,lastId,lastRotation,lastRequest,lastMode;
  boolean isUpperLandscapeTask(Object t){return ((Task)t).upper;}
  void sendTopTaskDirection(Object t,int id,int request,int resolved,int rotation,int mode){sends++;lastId=id;lastRotation=rotation;lastRequest=request;lastMode=mode;}
-'''+member('    private boolean wideVideoFullscreen(')+member('    private void refreshWideVideoSignal(')+'''
+'''+member('    private boolean wideVideoFullscreen(')+member('    void refreshWideVideoSignal(')+'''
  public static void main(String[]args){
   var h=new FullscreenSceneRegression();var a=new Activity();var w=new Window();var t=new Task();a.task=t;a.window=w;w.mActivityRecord=a;t.top=a;
   check(!h.wideVideoFullscreen(t),"ordinary app not fullscreen");w.mAttrs.flags=1024;check(h.wideVideoFullscreen(t),"legacy fullscreen flag");

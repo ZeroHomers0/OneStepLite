@@ -4,7 +4,7 @@ from pathlib import Path
 import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1])); from source_paths import package_dir
 ROOT=Path(__file__).resolve().parents[2]
 OUT=Path(sys.argv[1]) if len(sys.argv)>1 else ROOT/'build/tests/top-direction-jvm'
-product=Path(sys.argv[2]) if len(sys.argv)>2 else package_dir(ROOT)/'HostEntry.java'
+product=Path(sys.argv[2]) if len(sys.argv)>2 else package_dir(ROOT)/'TaskRotationController.java'
 s=product.read_text(encoding='utf8');start=s.index('    private void sendTopTaskDirection(');end=s.index('\n    /**',start)
 method=s[start:end]
 tree=ast.parse((ROOT/'tools/live-swap-jvm/run.py').read_text(encoding='utf-8-sig'))

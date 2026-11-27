@@ -9,8 +9,8 @@ root = Path(__file__).resolve().parents[2]
 src=package_dir(root)
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
-source = (src / 'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-def extract(name):
+source = (src / 'WorkspaceLiveGeometry.java').read_text(encoding='utf-8-sig').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
+def extract(name, source=source):
     start = source.find('    private void ' + name + '(')
     if start < 0: start = source.index('    void ' + name + '(')
     brace = source.index('{', start)
@@ -82,7 +82,7 @@ public class EmptyHostRegression {
   }
  }
  public static void main(String[]args){for(int tint:new int[]{0x1fffffff,0x26000000}){HyperOsStyle.tint=tint;for(boolean right:new boolean[]{false,true})for(int[] wh:new int[][]{{1200,2608},{360,782}}){new EmptyHostRegression(wh[0],wh[1]).run(right);new EmptyHostRegression(wh[0],wh[1]).reveal(right);}}System.out.println("actual Host empty controls checks="+checks+" passed");}
-}'''.replace('__METHOD__', method).replace('__PLUS__', extract('drawEmptyCellPlus'))
+}'''.replace('__METHOD__', method).replace('__PLUS__', extract('drawEmptyCellPlus', (src/'WorkspaceSlotLifecycle.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','')))
 cpath = out / 'android/graphics/Canvas.java'
 cpath.parent.mkdir(parents=True, exist_ok=True)
 cpath.write_text(canvas, encoding='utf8')

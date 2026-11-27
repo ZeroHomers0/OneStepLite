@@ -5,8 +5,8 @@ import de.robv.android.xposed.XposedHelpers;
 
 /** Owns task-surface scale, viewport, bounds and frame-rate hints. */
 final class WorkspaceScaleController {
-    private static final int SLOT_MAIN = WorkspaceHost.coordinatorSlotMain();
-    private static final int SLOT_TOP = WorkspaceHost.coordinatorSlotTop();
+    private static final int SLOT_MAIN = WorkspaceHost.SLOT_MAIN;
+    private static final int SLOT_TOP = WorkspaceHost.SLOT_TOP;
 
     private final WorkspaceHost host;
     private boolean frameRateHintUnavailableLogged;
@@ -26,17 +26,17 @@ final class WorkspaceScaleController {
         if (slot.sideRow >= 0 && slot.rect != null)
             return Math.min((slot.rect[2] - slot.rect[0]) / (float) host.screenW,
                     (slot.rect[3] - slot.rect[1]) / (float) host.screenH);
-        return slot.index == SLOT_TOP ? host.topGeometry().scale : host.layout.cellScale(slot.index - 1);
+        return slot.index == SLOT_TOP ? host.windowLayout.topGeometry().scale : host.layout.cellScale(slot.index - 1);
     }
 
     void applySlotScale(Slot slot) {
-        if (host.holdsLiveFlipZoom() || !host.canRender(slot) || slot.promoting || !slot.occupied || slot.view == null
+        if (host.liveGeometry.holdsLiveFlipZoom() || !host.slotRegistry.canRender(slot) || slot.promoting || !slot.occupied || slot.view == null
                 || !mayWriteSideSurface(slot)) {
             return;
         }
         float k = scaleFor(slot);
-        Object liveLeash = WorkspaceHost.getSurfaceField(slot.controller, "mTaskLeash");
-        if (!host.controllerOwns(slot, slot.taskId, slot.taskToken)) return;
+        Object liveLeash = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mTaskLeash");
+        if (!host.slotRegistry.controllerOwns(slot, slot.taskId, slot.taskToken)) return;
         if (liveLeash != null && slot.scaleSurface == liveLeash
                 && slot.scaleTaskId == slot.taskId && Math.abs(slot.scaleApplied - k) < 0.0005f) {
             return;
@@ -70,14 +70,14 @@ final class WorkspaceScaleController {
     }
 
     void reapplyScale(Slot slot) {
-        if (host.holdsLiveFlipZoom() || !host.canRender(slot) || slot.promoting || !slot.occupied || !mayWriteSideSurface(slot)) {
+        if (host.liveGeometry.holdsLiveFlipZoom() || !host.slotRegistry.canRender(slot) || slot.promoting || !slot.occupied || !mayWriteSideSurface(slot)) {
             return;
         }
         // The cross-fade owns the host.main surface alpha until it hands off; a delayed
         // reapply would snap the window back to its resting frame mid-animation.
         if (host.topTransition != null && slot.index == SLOT_MAIN) return;
-        if (!host.controllerOwns(slot, slot.taskId, slot.taskToken)) return;
-        Object current = WorkspaceHost.getSurfaceField(slot.controller, "mTaskLeash");
+        if (!host.slotRegistry.controllerOwns(slot, slot.taskId, slot.taskToken)) return;
+        Object current = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mTaskLeash");
         if (current == null || current != slot.scaleSurface) {
             applySlotScale(slot);
             return;
@@ -92,20 +92,20 @@ final class WorkspaceScaleController {
     }
 
     void applyFullscreenBounds(Slot slot) {
-        if (host.holdsLiveFlipZoom() || !host.canRender(slot) || slot.promoting || slot.taskToken == null
+        if (host.liveGeometry.holdsLiveFlipZoom() || !host.slotRegistry.canRender(slot) || slot.promoting || slot.taskToken == null
                 || !mayWriteSideSurface(slot)) {
             return;
         }
-        if (!host.controllerOwns(slot, slot.taskId, slot.taskToken)
-                || WorkspaceHost.getSurfaceField(slot.controller, "mTaskLeash") == null) return;
+        if (!host.slotRegistry.controllerOwns(slot, slot.taskId, slot.taskToken)
+                || WorkspaceNativeHooks.getSurfaceField(slot.controller, "mTaskLeash") == null) return;
         try {
             Object wct = Class.forName("android.window.WindowContainerTransaction")
                     .getDeclaredConstructor().newInstance();
             XposedHelpers.callMethod(wct, "setForceTranslucent", slot.taskToken, true);
             XposedHelpers.callMethod(wct, "setBounds", slot.taskToken,
-                    host.logicalBounds(slot));
-            host.applyTopConfiguration(wct, slot.taskToken, slot);
-            boolean ok = host.applyWct("fullscreenBounds(slot=" + slot.index + ")", wct);
+                    host.slotRegistry.logicalBounds(slot));
+            WorkspaceNativeHooks.applyTopConfiguration(host, wct, slot.taskToken, slot);
+            boolean ok = WorkspaceNativeHooks.applyWct("fullscreenBounds(slot=" + slot.index + ")", wct);
             WorkspaceHost.log("fullscreenBounds slot=" + slot.index + " task=" + slot.taskId + " ok=" + ok);
         } catch (Throwable t) {
             WorkspaceHost.log("fullscreenBounds slot=" + slot.index + " failed: " + t);
@@ -113,11 +113,11 @@ final class WorkspaceScaleController {
     }
 
     void appendSlotViewport(Object tx, Slot slot) {
-        if (host.holdsLiveFlipZoom() || slot == null || slot.index <= SLOT_MAIN
-                || slot.view == null || !host.canRender(slot) || slot.promoting || slot.launching
+        if (host.liveGeometry.holdsLiveFlipZoom() || slot == null || slot.index <= SLOT_MAIN
+                || slot.view == null || !host.slotRegistry.canRender(slot) || slot.promoting || slot.launching
                 || slot.frozen || !mayWriteSideSurface(slot)
-                || !host.controllerOwns(slot, slot.taskId, slot.taskToken)) return;
-        Object parent = WorkspaceHost.getSurfaceField(slot.controller, "mSurfaceControl");
+                || !host.slotRegistry.controllerOwns(slot, slot.taskId, slot.taskToken)) return;
+        Object parent = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl");
         if (parent == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(parent, "isValid"))) return;
         Rect crop = new Rect(0, 0, slot.view.getWidth(), slot.view.getHeight());
         Rect viewClip = slot.view.getClipBounds();
@@ -130,7 +130,7 @@ final class WorkspaceScaleController {
     }
 
     private boolean applyScaleTransform(Slot slot, Object sc) {
-        if (host.holdsLiveFlipZoom() || !host.canRender(slot) || slot.promoting || !mayWriteSideSurface(slot)) return false;
+        if (host.liveGeometry.holdsLiveFlipZoom() || !host.slotRegistry.canRender(slot) || slot.promoting || !mayWriteSideSurface(slot)) return false;
         float k = scaleFor(slot);
         Object tx = null;
         try {
@@ -140,15 +140,15 @@ final class WorkspaceScaleController {
                 // A letterboxed portrait app sits centred in the strip instead of at its left edge.
                 float offsetX = 0f;
                 if (slot.index == SLOT_TOP && host.topPortrait) {
-                    TopTaskGeometry upper = host.topGeometry();
-                    Rect box = host.logicalBounds(slot);
+                    TopTaskGeometry upper = host.windowLayout.topGeometry();
+                    Rect box = host.slotRegistry.logicalBounds(slot);
                     offsetX = Math.max(0f, (upper.right - box.width() * k) * .5f);
                 }
                 XposedHelpers.callMethod(tx, "setPosition", sc, offsetX, 0f);
                 // v1.1.3：视口也要对齐 —— 只缩不放位置会"比例对但只显示一部分"（真机反馈）。
                 try {
                     XposedHelpers.callMethod(tx, "setWindowCrop", sc,
-                            host.logicalBounds(slot));
+                            host.slotRegistry.logicalBounds(slot));
                 } catch (Throwable ignored) {
                     // 裁剪失败也继续，位置+矩阵仍是主体
                 }
@@ -163,7 +163,7 @@ final class WorkspaceScaleController {
             WorkspaceHost.log("applyScaleTransform slot=" + slot.index + " failed: " + t);
             return false;
         } finally {
-            host.closeSurfaceObject(tx, "close");
+            host.sideRows.closeSurfaceObject(tx, "close");
         }
     }
 
@@ -182,7 +182,7 @@ final class WorkspaceScaleController {
             if (!ShellCompat.hasMethod(tx.getClass(), "setFrameRate", 3))
                 throw new NoSuchMethodException("SurfaceControl.Transaction.setFrameRate");
             XposedHelpers.callMethod(tx, "setFrameRate", surface, fps, 1);
-            Object parent = WorkspaceHost.getSurfaceField(slot.controller, "mSurfaceControl");
+            Object parent = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl");
             if (parent != null && parent != surface)
                 XposedHelpers.callMethod(tx, "setFrameRate", parent, fps, 1);
         } catch (Throwable unavailable) {
@@ -195,8 +195,8 @@ final class WorkspaceScaleController {
 
     void clearFrameRateHint(Slot slot) {
         if (slot == null || slot.controller == null) return;
-        Object leash = WorkspaceHost.getSurfaceField(slot.controller, "mTaskLeash");
-        Object parent = WorkspaceHost.getSurfaceField(slot.controller, "mSurfaceControl");
+        Object leash = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mTaskLeash");
+        Object parent = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl");
         if (leash == null && parent == null) return;
         Object tx = null;
         try {
@@ -215,7 +215,7 @@ final class WorkspaceScaleController {
         } catch (Throwable ignored) {
             /* A departed task may already have released both layers. */
         } finally {
-            host.closeSurfaceObject(tx, "close");
+            host.sideRows.closeSurfaceObject(tx, "close");
         }
     }
 

@@ -5,16 +5,17 @@ from pathlib import Path
 import subprocess,sys
 root=Path(__file__).resolve().parents[2];src=package_dir(root)
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
-host=(src/'WorkspaceHost.java').read_text(encoding='utf8')
+host = (src/'WorkspaceSideInteraction.java').read_text(encoding='utf8')
 def method(signature):
     a=host.index(signature);b=host.index('{',a);n=1;i=b+1
     while n:
         n+=(host[i]=='{')-(host[i]=='}');i+=1
     return host[a:i]
-methods='\n'.join(method(s) for s in ['    private boolean onSlotTouch(', '    void recycleBuffered('])
-start=host.index('        installed.add(XposedHelpers.findAndHookMethod(view, "onComputeInternalInsets",')
-end=host.index('        }));',start)+len('        }));')
-hook=host[start:end].replace('WorkspaceHost h', 'SideTouchRegression h')
+methods='\n'.join(method(s) for s in ['    boolean onSlotTouch(', '    static void recycleBuffered(']).replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.SLOT_MAIN', 'SLOT_MAIN').replace('WorkspaceHost.ACTIVE', 'ACTIVE').replace('WorkspaceHost.log', 'log').replace('slotRegistry.','').replace('cells.','').replace('motion()','cells.motion()').replace('pending()','cells.pending()')
+native_hooks=(src/'WorkspaceNativeHooks.java').read_text(encoding='utf8')
+start=native_hooks.index('        installed.add(XposedHelpers.findAndHookMethod(view, "onComputeInternalInsets",')
+end=native_hooks.index('        }));',start)+len('        }));')
+hook=native_hooks[start:end].replace('WorkspaceHost h', 'SideTouchRegression h').replace('WorkspaceHost.currentInstance()', 'sInstance').replace('h.slotRegistry.','h.')
 text='''package io.github.zerohomers0.onesteplite;import java.util.*;
 public class SideTouchRegression {
  static int checks;static void check(boolean v,String m){checks++;if(!v)throw new AssertionError(m);}

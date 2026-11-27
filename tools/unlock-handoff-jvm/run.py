@@ -74,21 +74,22 @@ public class UnlockHandoffRegression {
  }
 }'''
 }
-host_source=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+host_source=(src/'WorkspaceSystemEvents.java').read_text(encoding='utf-8-sig').replace('WorkspaceHost.currentInstance()', 'sInstance').replace('WorkspaceHost.', '')
 start=host_source.index('    static boolean handoffNativeUnlock(')
 end=host_source.index('{',start)+1;depth=1
 while depth:
  depth+=(host_source[end]=='{')-(host_source[end]=='}');end+=1
-helper_start=host_source.index('    private boolean handoffLockExit(')
-helper_end=host_source.index('{',helper_start)+1;helper_depth=1
+keyguard_source=(src/'WorkspaceKeyguardController.java').read_text(encoding='utf-8-sig')
+helper_start=keyguard_source.index('    boolean handoffLockExit(')
+helper_end=keyguard_source.index('{',helper_start)+1;helper_depth=1
 while helper_depth:
- helper_depth+=(host_source[helper_end]=='{')-(host_source[helper_end]=='}');helper_end+=1
+ helper_depth+=(keyguard_source[helper_end]=='{')-(keyguard_source[helper_end]=='}');helper_end+=1
 finish_methods=[]
-for signature in ['    private void trackUnlockFinish(', '    private void appendUnlockFinishCommit(']:
- method_start=host_source.index(signature);method_end=host_source.index('{',method_start)+1;method_depth=1
+for signature in ['    void trackUnlockFinish(', '    void appendUnlockFinishCommit(']:
+ method_start=keyguard_source.index(signature);method_end=keyguard_source.index('{',method_start)+1;method_depth=1
  while method_depth:
-  method_depth+=(host_source[method_end]=='{')-(host_source[method_end]=='}');method_end+=1
- finish_methods.append(host_source[method_start:method_end])
+  method_depth+=(keyguard_source[method_end]=='{')-(keyguard_source[method_end]=='}');method_end+=1
+ finish_methods.append(keyguard_source[method_start:method_end].replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', ''))
 files['io/github/zerohomers0/onesteplite/WorkspaceHost.java']=r'''package io.github.zerohomers0.onesteplite;
 import android.content.Context;import android.os.*;import android.view.SurfaceControl.Transaction;import java.util.*;
 public class WorkspaceHost {
@@ -169,7 +170,7 @@ public class WorkspaceHost {
   h=fresh();h.trackUnlockFinish(null);handoffNativeUnlock(()->hides++);h.ctx.deliver(ack(h));Transaction.commitLatest();h.root.commit();check(hides==1,"absent finish transaction must not create an unfinishable ticket");
   System.out.println("Production Host authenticated handoff: "+checks+" checks passed");
  }
-}'''.replace('FINISH_ACTUAL','\n'.join(finish_methods)).replace('EXIT_ACTUAL',host_source[helper_start:helper_end]).replace('ACTUAL',host_source[start:end])
+}'''.replace('FINISH_ACTUAL','\n'.join(finish_methods)).replace('EXIT_ACTUAL',keyguard_source[helper_start:helper_end].replace('this.host', 'this').replace('host.windowPresentation.','').replace('host.sideRows.','').replace('host.zoomSession.','').replace('host.keyguard.','').replace('host.resumes.','').replace('host.','').replace('!WorkspaceHost.isCurrentInstance(host)', 'host!=sInstance').replace('WorkspaceHost.isCurrentInstance(host)', 'host==sInstance').replace('WorkspaceHost.log', 'log')).replace('ACTUAL',host_source[start:end].replace('h.keyguard.','h.').replace('h.resumes.','h.').replace('h.windowPresentation.','h.').replace('h.retainedSurfaces.','h.').replace('h.zoomSession.','h.').replace('h.sideRows.','h.'))
 paths=[]
 for rel,body in files.items():
  p=out/rel;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body,encoding='utf8');paths.append(str(p))

@@ -11,11 +11,11 @@ def method(text,signature):
     while depth:
         depth+=(text[end]=='{')-(text[end]=='}');end+=1
     return text[start:end]
-host=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-methods='\n'.join(method(host,s) for s in (
-    '    private void closeSwapPreview() {',
-    '    private void closeSwapPreview(Object fallbackStatusOwner) {',
-    '    private void finishSwapPreview(Object statusOwner, long settleMs) {'))
+host=(src/'WorkspaceLiveHandoffController.java').read_text(encoding='utf-8-sig')
+methods='\n'.join(method(host,s).replace('host.','') for s in (
+    '    void closeSwapPreview() {',
+    '    void closeSwapPreview(Object fallbackStatusOwner) {',
+    '    void finishSwapPreview(Object statusOwner, long settleMs) {'))
 java=r'''import java.util.*;
 public class HostRevealOrderTest {
  static int checks;static void check(boolean v){checks++;if(!v)throw new AssertionError("check="+checks);}

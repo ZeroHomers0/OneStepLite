@@ -8,7 +8,7 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 root = Path(__file__).resolve().parents[2]
 src=package_dir(root)
 source = (src / 'WorkspaceWallpaperController.java').read_text(encoding='utf-8-sig')
-host_source = (src / 'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+host_source = (src / 'WorkspaceSlotLifecycle.java').read_text(encoding='utf-8-sig')
 cell_source = (src / 'WorkspaceCellSurfaceController.java').read_text(encoding='utf-8-sig')
 
 
@@ -142,7 +142,7 @@ public class WallpaperLayoutRegression {
     method('    void refreshEmptyHintBackdrop(Slot slot) {'),
     method('    void updateHint(Slot slot) {', host_source),
     method('    boolean presentsSlot(Slot slot) {', cell_source),
-])).replace('host.','').replace('WorkspaceHost.','').replace('log.accept(','log(').replace('coordinatorTopGeometry()','topGeometry()').replace('coordinatorSideSegmentTop(','sideSegmentTop(').replace('coordinatorWorkspaceMainHole()','workspaceMainHole()').replace('coordinatorUpdateWorkspaceBacking(','updateWorkspaceBacking(').replace('coordinatorPresentsSlot(','presentsSlot(').replace('coordinatorSlotTop()','SLOT_TOP').replace('sideRows.isCompacting()','sideCompacting').replace('cellSurfaces.','')
+])).replace('host.','').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.','').replace('windowLayout.','').replace('windowPresentation.','').replace('log.accept(','log(').replace('topGeometry()','topGeometry()').replace('chrome.sideSegmentTop(','sideSegmentTop(').replace('workspaceMainHole()','workspaceMainHole()').replace('chrome.updateWorkspaceBacking(','updateWorkspaceBacking(').replace('cellSurfaces.presentsSlot(','presentsSlot(').replace('SLOT_TOP','SLOT_TOP').replace('sideRows.isCompacting()','sideCompacting').replace('sideRows.isCompacting()','sideCompacting').replace('isCompacting()','sideCompacting').replace('cellSurfaces.','')
 java = out / 'WallpaperLayoutRegression.java'
 java.write_text(body, encoding='utf-8')
 typed_value = out / 'android/util/TypedValue.java'

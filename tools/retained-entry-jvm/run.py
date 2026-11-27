@@ -27,8 +27,9 @@ methods = '\n'.join(member(s) for s in [
     '    private void confirmRetainedResume(long epoch, int attempt) {',
     '    private void confirmRetainedResume(long epoch, int attempt, boolean visibilityRestored)',
     '    private void finishRetainedResumeCheck(',
-    '    private void prepareRetainedWorkspaceEntry(']).replace('host.','').replace('host::','this::').replace('exits.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('WorkspaceHost.SUSPENDING','SUSPENDING').replace('WorkspaceHost.SUSPENDED','SUSPENDED').replace('WorkspaceHost.RESUMING','RESUMING').replace('WorkspaceHost.log','log')
+    '    private void prepareRetainedWorkspaceEntry(']).replace('host.','').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('host::','this::').replace('exits.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('WorkspaceHost.SUSPENDING','SUSPENDING').replace('WorkspaceHost.SUSPENDED','SUSPENDED').replace('WorkspaceHost.RESUMING','RESUMING').replace('WorkspaceHost.log','log')
 
+methods=methods.replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField').replace('WorkspaceNativeHooks.applyWct','applyWct').replace('chrome::','this::')
 files = {
     'android/window/WindowContainerTransaction.java': '''package android.window;
 import java.util.*;public class WindowContainerTransaction {

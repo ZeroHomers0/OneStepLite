@@ -1,17 +1,24 @@
 """Replay real top bounds/return/focus methods; no claim of Android rendering."""
 from pathlib import Path
-import os,subprocess,sys
+import os,subprocess,sys,re
 import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parents[1])); from source_paths import package_dir
 root=Path(__file__).resolve().parents[2]
 src=package_dir(root)
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 source=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
 scale=(src/'WorkspaceScaleController.java').read_text(encoding='utf-8-sig')
+transfer=(src/'WorkspaceTaskTransferController.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('logicalBounds(slot, topPortrait)','logicalBounds(slot)').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
+native_hooks=(src/'WorkspaceNativeHooks.java').read_text(encoding='utf-8')
+presentation=(src/'WorkspaceTopPresentationController.java').read_text(encoding='utf-8')
 def member(signature,text=source):
  start=text.index(signature);end=text.index('{',start)+1;depth=1
  while depth:
   depth+=(text[end]=='{')-(text[end]=='}');end+=1
  return text[start:end]
+top_configuration=member('    static void applyTopConfiguration(',native_hooks)
+top_configuration=top_configuration.replace('static void applyTopConfiguration(WorkspaceHost h, Object wct, Object token, Slot slot)','void applyTopConfiguration(Object wct, Object token, Slot slot)')
+top_configuration=re.sub(r'\bh\.','',top_configuration).replace('WorkspaceHost.SLOT_MAIN','SLOT_MAIN').replace('WorkspaceHost.SLOT_TOP','SLOT_TOP').replace('windowLayout.topGeometry()','topGeometry()').replace('slotRegistry.','').replace('logicalBounds(slot, topPortrait)','logicalBounds(slot)')
+prefer_method=member('    void preferMainAfterTopChange(',presentation).replace('host.','').replace('WorkspaceHost.','').replace('slotRegistry.','').replace('taskStates.','')
 body='''package io.github.zerohomers0.onesteplite;
 import java.util.*;import android.graphics.Rect;
 import java.util.concurrent.Executor;
@@ -79,7 +86,7 @@ public class TopConfigRegression {
   boolean ordinaryRoot(Object i,int m){return i instanceof Info&&((Info)i).mode==m;}
   boolean returnTicketCurrent(Promotion p){return currentTicket;}
   void checkReturned(Slot s,Promotion p,int attempt,Runnable success,Consumer<String> failure){returned++;success.run();}
-'''+member('    void applyTopConfiguration(')+member('    void applyFullscreenBounds(', scale).replace('host.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log')+member('    Object fullscreenExitTransaction(')+member('    private void appendTaskViewExitOverrides(')+member('    private void finishNativeReturnWhenIdle(')+member('    private void applyRetainedDesktopReturn(')+member('    private void restoreRetainedMainOpacityAfterHandoff(')+member('    private void restoreTopMainOpacity(')+member('    private void restoreMainOpacity(')+member('    private void preferMainAfterTopChange(').replace('taskStates.','')+'''
+'''+top_configuration+member('    void applyFullscreenBounds(', scale).replace('host.','').replace('slotRegistry.','').replace('liveGeometry.','').replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField').replace('WorkspaceNativeHooks.applyTopConfiguration(host, ','applyTopConfiguration(').replace('WorkspaceNativeHooks.applyWct','applyWct').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log')+member('    Object fullscreenExitTransaction(', transfer).replace('WorkspaceNativeHooks.applyWct','applyWct')+member('    private void appendTaskViewExitOverrides(', transfer).replace('WorkspaceNativeHooks.applyWct','applyWct')+member('    private void finishNativeReturnWhenIdle(', transfer).replace('WorkspaceNativeHooks.applyWct','applyWct')+member('    private void applyRetainedDesktopReturn(', transfer).replace('WorkspaceNativeHooks.applyWct','applyWct')+member('    void restoreRetainedMainOpacityAfterHandoff(', transfer).replace('WorkspaceNativeHooks.applyWct','applyWct')+member('    void restoreTopMainOpacity(', transfer).replace('WorkspaceNativeHooks.applyWct','applyWct')+member('    private void restoreMainOpacity(', transfer).replace('WorkspaceNativeHooks.applyWct','applyWct')+prefer_method+'''
  static TopConfigRegression host(){
   var h=new TopConfigRegression();active=h;h.infos.add(new Info(1,1,"home",false));h.infos.add(new Info(42,6,"upper",true));return h;
  }

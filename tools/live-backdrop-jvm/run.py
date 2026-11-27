@@ -12,9 +12,15 @@ out.mkdir(parents=True, exist_ok=True)
 src=package_dir(root)
 run = (src / 'LiveSwap64.java').read_text(encoding='utf8')
 background = run[run.index('        void background('):run.index('        @Override public void prepare(')]
-host = (src / 'WorkspaceHost.java').read_text(encoding='utf8')
+live_geometry = (src / 'WorkspaceLiveGeometry.java').read_text(encoding='utf8')
+def method_in(text, signature):
+    start=text.index(signature);brace=text.index('{',start);end=brace+1;depth=1
+    while depth:
+        depth+=(text[end]=='{')-(text[end]=='}');end+=1
+    return text[start:end]
 cell = (src / 'WorkspaceCellSurfaceController.java').read_text(encoding='utf8')
-swap = host[host.index('    private Object prepareLiveFlip('):host.index('    private void commitPromotedHandoff(')]
+geometry = (src / 'WorkspaceLiveGeometry.java').read_text(encoding='utf-8')
+swap = geometry[geometry.index('    Object prepareLiveFlip('):geometry.index('    void commitPromotedHandoff(')]
 call = swap[swap.index('ticket.liveBackdrop = LiveBackdrop.create('):]
 call = call[:call.index('canvas ->')]
 side_crops = re.findall(r'liveSideStrip\((?:geometry|target)\)', call)
@@ -22,8 +28,8 @@ if len(side_crops) != 2:
     raise RuntimeError('Expected actual original/target wallpaper crop arguments')
 a = cell.index('    void ensureCellBackground(')
 b = cell.index('    boolean presentsSlot(', a)
-ensure = (cell[a:b].replace('host.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log')
-    .replace('sideRows.isScrolling()','sideScrolling').replace('coordinatorApplyWallpaperBackdrops()','applyWallpaperBackdrops()'))
+ensure = (cell[a:b].replace('host.','').replace('slotRegistry.','').replace('sideRows.isScrolling()','sideScrolling').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log')
+    .replace('sideRows.isScrolling()','sideScrolling').replace('wallpapers.applyWallpaperBackdrops()','applyWallpaperBackdrops()'))
 files = {
 'android/graphics/Color.java': '''package android.graphics;public class Color {public static int red(int c){return 245;}public static int green(int c){return 245;}public static int blue(int c){return 245;}}''',
 'android/graphics/Bitmap.java': '''package android.graphics; public class Bitmap {public boolean recycled;public int getWidth(){return 360;}public int getHeight(){return 820;}public boolean isRecycled(){return recycled;}}''',
@@ -136,7 +142,7 @@ public static void main(String[]args)throws Exception {
  themed.close();
  System.out.println("actual wallpaper lease and same-transaction visibility checks="+checks+" passed");
 }}
-'''.replace('BACKGROUND', background).replace('ENSURE', ensure).replace('CALL_CROPS', ','.join(side_crops)).replace('STRIP',host[host.index('    static Rect liveSideStrip('):host.index('    private boolean livePeerBindingsCurrent(')])
+'''.replace('BACKGROUND', background).replace('ENSURE', ensure).replace('CALL_CROPS', ','.join(side_crops)).replace('STRIP',method_in(live_geometry, '    static Rect liveSideStrip('))
 }
 paths = []
 for name, text in files.items():

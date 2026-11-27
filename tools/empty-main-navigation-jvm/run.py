@@ -7,14 +7,16 @@ root=Path(__file__).resolve().parents[2]
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 src=package_dir(root)
 host=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-def method(signature):
+events=(src/'WorkspaceSystemEvents.java').read_text(encoding='utf-8').replace('WorkspaceHost.currentInstance()', 'sInstance').replace('WorkspaceHost.', '')
+resume=(src/'WorkspaceResumeController.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.', '')
+def method(signature, host=host):
     start=host.index(signature);brace=host.index('{',start);end=brace+1;depth=1
     while depth:
         if host[end]=='{':depth+=1
         elif host[end]=='}':depth-=1
         end+=1
     return host[start:end]
-methods=(method('    public static void onSystemNavigation(')+'\n'+method('    private boolean emptyMainHomeFocused(')).replace('resumes.','')
+methods=(method('    static void onSystemNavigation(', events)+'\n'+method('    boolean emptyMainHomeFocused(', resume)).replace('resumes.','')
 files={
 'android/os/SystemClock.java':'package android.os;public class SystemClock{public static long now;public static long uptimeMillis(){return now;}}',
 'android/os/Handler.java':'package android.os;public class Handler{public void post(Runnable r){r.run();}}',

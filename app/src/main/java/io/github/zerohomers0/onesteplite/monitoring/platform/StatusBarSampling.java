@@ -23,7 +23,7 @@ final class StatusBarSampling {
                     new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     if (p.getResult() instanceof Rect)
-                        p.setResult(physical((Rect) p.getResult(), WorkspaceHost.activeStatusBarTransform()));
+                        p.setResult(physical((Rect) p.getResult(), WorkspaceWindowLayout.activeStatusBarTransform()));
                 }
             });
             Class<?> helper = XposedHelpers.findClass(
@@ -37,7 +37,7 @@ final class StatusBarSampling {
             XposedBridge.hookAllMethods(composition, "register", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     if (p.args.length != 4 || !Integer.valueOf(0).equals(p.args[1])
-                            || !usesMainComposition(p.args[0], WorkspaceHost.activeStatusBarTransform())) return;
+                            || !usesMainComposition(p.args[0], WorkspaceWindowLayout.activeStatusBarTransform())) return;
                     // The OEM's default bar can remain below the main app in the Home task.
                     // Its stop layer would omit that app even with the correct physical region.
                     // Sample the displayed main region; native median/contrast policy stays intact.
@@ -49,7 +49,7 @@ final class StatusBarSampling {
             XposedHelpers.findAndHookMethod(callback, "onRegionDarknessChanged", boolean.class,
                     new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (WorkspaceHost.activeStatusBarTransform() != null)
+                    if (WorkspaceWindowLayout.activeStatusBarTransform() != null)
                         XposedBridge.log("OneStepLite: native main status sampling dark=" + p.args[0]);
                 }
             });
@@ -61,7 +61,7 @@ final class StatusBarSampling {
                     // The native resample runnable passes this logical rectangle directly.
                     // Keep samplingBarBounds logical for DarkIconDispatcher's View tests.
                     if (p.args[0].equals(XposedHelpers.getObjectField(owner, "samplingBounds")))
-                        p.args[0] = physical((Rect) p.args[0], WorkspaceHost.activeStatusBarTransform());
+                        p.args[0] = physical((Rect) p.args[0], WorkspaceWindowLayout.activeStatusBarTransform());
                 }
             });
             XposedBridge.log("OneStepLite: native status-bar sampling follows main geometry");

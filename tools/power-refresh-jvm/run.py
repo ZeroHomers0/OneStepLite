@@ -12,7 +12,11 @@ taskview=(src/'TaskViewWarmup.java').read_text(encoding='utf-8-sig')
 if 'create(generation, 2)' not in taskview:
     raise AssertionError('boot TaskView warmup must stay bounded to two views')
 host=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-if 'DORMANT_TRIM_MS' not in host or 'desktopPublishQueued' not in host:
+memory=(src/'WorkspaceMemoryController.java').read_text(encoding='utf-8')
+resume=(src/'WorkspaceResumeController.java').read_text(encoding='utf-8')
+if ('postDelayed(dormantTrim, DORMANT_TRIM_MS)' not in memory
+        or 'host.memory.schedule()' not in resume or 'host.memory.cancel()' not in resume
+        or 'desktopPublishQueued' not in host):
     raise AssertionError('dormant trim and publish coalescing must remain wired')
 hostentry=(src/'ZoomRuntime.java').read_text(encoding='utf-8-sig')
 if 'sZoomWatchScreenOn' not in hostentry or 'onZoomScreenState(false)' not in (src/'ZoomBridgeReceiver.java').read_text(encoding='utf-8-sig'):
@@ -34,8 +38,9 @@ for signature in ['    void requestOpenedAppsRefresh(', '    void setWorkspaceAc
                   '    @Override protected void onVisibilityChanged(',
                   '    @Override protected void onWindowVisibilityChanged(']:
     rail += member('TopBar.java', signature) + '\n'
-host = member('WorkspaceHost.java', '    private void startWorkspaceHeartbeat(')
-host += member('WorkspaceHost.java', '    void setZoomState(')
+host = member('WorkspaceZoomSession.java', '    void startWorkspaceHeartbeat(')
+host += member('WorkspaceZoomSession.java', '    void setZoomState(')
+host = host.replace('!WorkspaceHost.isCurrentInstance(host)', 'sInstance != Host.this').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('leashPocSlot()','leashPocSlot').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
 watch = '\n'.join(member('ZoomRuntime.java', signature) for signature in [
     '    static void onZoomScreenState(', '    private static void armZoomWatch(',
     '    private static void accelerateZoomWatch('])

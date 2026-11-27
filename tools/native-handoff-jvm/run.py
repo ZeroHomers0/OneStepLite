@@ -7,7 +7,7 @@ root=Path(__file__).resolve().parents[2]
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 src=package_dir(root)
 source=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
-def extract(signature):
+def extract(signature, source=source):
     start=source.index(signature)
     brace=source.index('{',start);end=brace+1;depth=1
     while depth:
@@ -15,7 +15,9 @@ def extract(signature):
         elif source[end]=='}':depth-=1
         end+=1
     return source[start:end]
-method=extract('    void handoffPromotedTask(')+'\n'+extract('    private void commitPromotedHandoff(')
+promotion_source=(src/'WorkspacePromotionController.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
+geometry_source=(src/'WorkspaceLiveGeometry.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')
+method=(extract('    void handoffPromotedTask(', promotion_source)+'\n'+extract('    void commitPromotedHandoff(', geometry_source)).replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField').replace('WorkspaceNativeHooks.applyTopConfiguration(host, ','applyTopConfiguration(')
 
 files={
 'android/graphics/Rect.java': 'package android.graphics;public class Rect {public Rect(int a,int b,int c,int d){}}',

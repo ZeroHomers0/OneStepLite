@@ -11,6 +11,8 @@ wallpaper=(src/'WorkspaceWallpaperController.java').read_text(encoding='utf-8-si
 side=(src/'WorkspaceSideRowController.java').read_text(encoding='utf-8-sig')
 cell=(src/'WorkspaceCellSurfaceController.java').read_text(encoding='utf-8-sig')
 chrome=(src/'WorkspaceChromeController.java').read_text(encoding='utf-8-sig')
+presentation=(src/'WorkspaceWindowPresentation.java').read_text(encoding='utf-8-sig').replace('host.','')
+resume=(src/'WorkspaceResumeController.java').read_text(encoding='utf-8-sig').replace('host.','').replace('WorkspaceHost.','')
 def member(signature, text=host):
  a=text.index(signature);b=text.index('{',a);d=1;i=b+1
  while d:
@@ -18,8 +20,8 @@ def member(signature, text=host):
   elif text[i]=='}':d-=1
   i+=1
  return text[a:i]
-base_signatures=['    private void prepareWorkspaceBackdrop(', '    private void releaseWorkspaceBackdrop(', '    void retireWorkspaceBackdrop(', '    void beginWorkspaceEntry(', '    private void awaitWorkspaceFrame(', '    void setWorkspaceAlpha(', '    Rect workspaceCellCrop(Slot slot)', '    Rect workspaceCellCrop(int[] rect,', '    android.graphics.RectF workspaceMainHole(', '    private android.graphics.RectF workspaceMainHoleAt(', '    android.graphics.RectF workspaceTopHole(', '    android.graphics.RectF workspaceSideHole(', '    private void playWorkspaceFade(', '    void suspendSession(']
-methods='\n'.join(member(s) for s in base_signatures)
+base_signatures=['    private void prepareWorkspaceBackdrop(', '    void releaseWorkspaceBackdrop(', '    void retireWorkspaceBackdrop(', '    void beginWorkspaceEntry(', '    private void awaitWorkspaceFrame(', '    void setWorkspaceAlpha(', '    Rect workspaceCellCrop(Slot slot)', '    Rect workspaceCellCrop(int[] rect,', '    android.graphics.RectF workspaceMainHole(', '    private android.graphics.RectF workspaceMainHoleAt(', '    android.graphics.RectF workspaceTopHole(', '    android.graphics.RectF workspaceSideHole(', '    void playWorkspaceFade(',  ]
+methods='\n'.join(member(s,presentation) for s in base_signatures)+'\n'+member('    void suspendSession(', resume)
 methods=(methods.replace('sideRows.isEmpty()','sideOrder.isEmpty()').replace('sideRows.layoutAll()','layoutSideViewport(true)')
     .replace('sideRows.gestureActive()','sideArmed || sideCaptured || isSideMotionRunning()')
     .replace('sideRows.finishGesture()','finishSideScroll()').replace('sideRows.isScrolling()','sideScrolling').replace('cellSurfaces.','').replace('chrome.','').replace('exits.','').replace('resumes.','').replace('scales.',''))
@@ -33,9 +35,17 @@ side_place=(side_place.replace('workspace.layout','layout').replace('workspace.w
     .replace('workspace.workspaceCellCrop(','workspaceCellCrop('))
 methods+='\n'+side_place
 wallpaper_method=member('    void updateWorkspaceBackdropVisibility() {', wallpaper)
-wallpaper_method=wallpaper_method.replace('host.','').replace('WorkspaceHost.','').replace('coordinatorWorkspaceMainHole()','workspaceMainHole()').replace('coordinatorUpdateWorkspaceBacking(','updateWorkspaceBacking(').replace('coordinatorSlotCount()','SLOT_COUNT')
+wallpaper_method=wallpaper_method.replace('host.','').replace('WorkspaceHost.','').replace('workspaceMainHole()','workspaceMainHole()').replace('chrome.updateWorkspaceBacking(','updateWorkspaceBacking(').replace('SLOT_COUNT','SLOT_COUNT')
 methods+='\n'+wallpaper_method
-methods=methods.replace('WorkspaceHost::log','WorkspaceRegression::log')
+methods=(methods.replace('memory.schedule()','scheduleDormantTrim()').replace('memory.cancel()','cancelDormantTrim()')
+    .replace('topPresentationHost.','').replace('liveHandoff.','').replace('promotionController.','').replace('carriers.','')
+    .replace('zoomSession.','').replace('mainSide.','').replace('slotRegistry.','').replace('sideRows.','')
+    .replace('windowPresentation.','').replace('liveGeometry.','').replace('WorkspaceHost.ACTIVE','ACTIVE')
+    .replace('WorkspaceHost.RESUMING','RESUMING').replace('WorkspaceHost.SUSPENDED','SUSPENDED')
+    .replace('WorkspaceHost.SUSPENDING','SUSPENDING').replace('WorkspaceHost.SLOT_MAIN','SLOT_MAIN')
+    .replace('WorkspaceHost.SLOT_TOP','SLOT_TOP').replace('WorkspaceHost.SLOT_COUNT','SLOT_COUNT')
+    .replace('windowLayout.','').replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField').replace('workspace.','').replace('WorkspaceHost.log','log').replace('WorkspaceHost::log','WorkspaceRegression::log'))
+
 files={
 'android/os/SystemClock.java':'package android.os;public class SystemClock {public static long uptimeMillis(){return 10000;}}',
 'android/animation/Animator.java':'package android.animation;public class Animator {}',
@@ -295,7 +305,7 @@ public class TopControlsCreationRegression {
   if(upper.hint==null)throw new AssertionError("missing task accessibility hint");checks++;
   if(upper.view!=liveView||upper.controller!=controller||upper.taskToken!=token)throw new AssertionError("creation changes the real task owner");checks++;
  }System.out.println("actual asynchronous TOP controls creation checks="+checks+" passed");}
-}'''.replace('__CREATE__',member('    private void createTopTaskControls()'))
+}'''.replace('__CREATE__',member('    void createTopTaskControls()', (src/'WorkspaceTopPresentationController.java').read_text(encoding='utf-8').replace('host.', '').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceHost.', '')))
 files['io/github/zerohomers0/onesteplite/WorkspaceRegression.java']=files['io/github/zerohomers0/onesteplite/WorkspaceRegression.java'].replace('h.beginWorkspaceEntry(()->h.ready++);','WorkspaceRegression initial=h;h.beginWorkspaceEntry(()->initial.ready++);')
 for name,text in files.items():
  p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8')

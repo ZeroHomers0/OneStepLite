@@ -21,7 +21,7 @@ final class PanelInput {
                     p.setObjectExtra(PREVIOUS, active.get());
                     active.remove();
                     try {
-                        if (WorkspaceHost.activeMainTransform() == null) return;
+                        if (WorkspaceWindowLayout.activeMainTransform() == null) return;
                         View view = (View) p.thisObject;
                         MotionEvent event = (MotionEvent) p.args[0];
                         if (event == null || (event.getSource() & InputDevice.SOURCE_CLASS_POINTER) == 0) return;

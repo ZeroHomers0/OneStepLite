@@ -1,16 +1,19 @@
 package io.github.zerohomers0.onesteplite;
 
+import android.content.ComponentName;
+import android.content.Context;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.view.View;
+import android.widget.FrameLayout;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import de.robv.android.xposed.XposedHelpers;
 
 /** Owns chrome clipping, backing bounds and the host touchable region. */
 final class WorkspaceChromeController {
-    private static final int SLOT_TOP = WorkspaceHost.coordinatorSlotTop();
-    private static final int SLOT_COUNT = WorkspaceHost.coordinatorSlotCount();
+    private static final int SLOT_TOP = WorkspaceHost.SLOT_TOP;
+    private static final int SLOT_COUNT = WorkspaceHost.SLOT_COUNT;
 
     private final WorkspaceHost host;
 
@@ -28,12 +31,12 @@ final class WorkspaceChromeController {
         // the window, so a horizontal cut would fight the offset and clip the
         // cells to nothing. Only the swap animation still needs the cut.
         boolean riding = moving && host.mainSideAnimator() == null && !host.layout.tabletLandscape;
-        android.graphics.RectF top = moving && !riding ? host.workspaceTopHole() : null;
-        android.graphics.RectF side = moving && !riding ? host.workspaceSideHole() : null;
+        android.graphics.RectF top = moving && !riding ? host.windowPresentation.workspaceTopHole() : null;
+        android.graphics.RectF side = moving && !riding ? host.windowPresentation.workspaceSideHole() : null;
         // Placeholders never ride: they stay anchored to the wallpaper, so they
         // keep a geometric cut even while the cells are translated. An unclipped
         // page-colour backing washed the whole rail white on entry.
-        android.graphics.RectF backing = moving ? (riding ? host.workspaceMainHole() : side) : null;
+        android.graphics.RectF backing = moving ? (riding ? host.windowPresentation.workspaceMainHole() : side) : null;
         if (host.topBar != null) host.topBar.setWorkspaceMainHole(host.layout.tabletLandscape ? null : top);
         if (host.topLiveClip != null) {
             // The moving main is cut out in dispatchDraw. Keep the left/right
@@ -168,6 +171,96 @@ final class WorkspaceChromeController {
             m.invoke(slot.view, arg);
         } catch (Throwable t) {
             WorkspaceHost.log("updateTouchRegion slot=" + slot.index + " failed: " + t);
+        }
+    }
+
+    boolean isFocusedContentSource(String pkg) {
+        if(pkg==null)return false;
+        try {
+            LiveTask mainTask=host.slotRegistry.findMainTask();
+            if(mainTask!=null) {
+                Object info=host.slotRegistry.rootInfo(mainTask);
+                if(info==null)return false;
+                Object page=XposedHelpers.getObjectField(info,"topActivity");
+                return page instanceof ComponentName component
+                        ?pkg.equals(component.getPackageName()):pkg.equals(mainTask.pkg);
+            }
+            for(Object info:host.slotRegistry.rootInfos()){
+                if(host.slotRegistry.isHomeRoot(info) && XposedHelpers.getBooleanField(info,"isVisible")
+                        && XposedHelpers.getBooleanField(info,"isFocused")) {
+                    Object page=XposedHelpers.getObjectField(info,"topActivity");
+                    if(page instanceof ComponentName component && pkg.equals(component.getPackageName()))return true;
+                }
+            }
+        } catch(Exception unavailable){return false;}
+        return false;
+    }
+
+    void refreshQuickApps() {
+        if (host.topBar == null || host.root == null) return;
+        final TopBar readyBar = host.topBar;
+        final FrameLayout readyRoot = host.root;
+        final long readyEpoch = host.sceneEpoch;
+        Warmup.whenQuickAppsReady(host.ctx, apps -> {
+            if (WorkspaceHost.currentInstance() == host && host.topBar == readyBar && host.root == readyRoot
+                && host.sceneEpoch == readyEpoch && host.screenOn && !host.keyguardLocked)
+                readyBar.setQuickApps(apps);
+        });
+    }
+
+    java.util.Set<String> openedQuickAppPackages() {
+        if(host.scene!=WorkspaceHost.ACTIVE || !host.screenOn || host.keyguardLocked || host.workspaceEntering
+                || host.promotion!=null || host.transferBusy)return null;
+        WorkspaceRuntimeCounters.TASK_LOOKUPS.incrementAndGet();
+        java.util.Set<String> packages=new java.util.HashSet<>();
+        try {
+            LiveTask task=host.slotRegistry.findMainTask();
+            if(task!=null && task.pkg!=null)packages.add(task.pkg);
+        } catch(Throwable unavailable) { return null; }
+        for(Slot slot:host.slots) {
+            if(slot.index==WorkspaceHost.SLOT_TOP || !slot.occupied || slot.closing || slot.parked
+                    || slot.pkg==null)continue;
+            packages.add(slot.pkg);
+        }
+        return packages;
+    }
+
+    void updateTopBarState() {
+        if (host.workspaceAnimator != null || host.workspaceAlpha < 1f) return;
+        boolean available = host.scene == WorkspaceHost.ACTIVE && host.screenOn && !host.keyguardLocked
+                && host.promotion == null && !host.transferBusy;
+        // Moving the workspace chrome does not change the current button appearance.
+        if (host.topBar != null && host.mainSideAnimator == null && host.cells.motion() == null
+                && (host.promotion == null || !host.promotion.keepTopBarAppearance)) {
+            host.topBar.setAlpha(available ? 1f : 0.92f);
+            host.topBar.setSendMainToTopEnabled(available && mainCanFillTop());
+        }
+        host.topPresentationHost.updateTopExitWindow();
+        if(host.topPresentation!=null)host.topPresentation.refreshVideo();
+    }
+
+    boolean mainCanFillTop() {
+        if (host.layout == null || host.layout.tabletLandscape || !host.topPresentationHost.topReady()) return false;
+        if(host.videoPane!=null && host.videoPane.embedded())return false;
+        if (host.slots[WorkspaceHost.SLOT_TOP].occupied) return false;
+        try {
+            TopCandidate candidate = host.topAdmission.currentTopCandidate();
+            return candidate != null && (candidate.landscape || candidate.tryLandscape || candidate.navigation);
+        } catch (Throwable unavailable) {
+            WorkspaceHost.log("upper action state unavailable: " + unavailable);
+            return false;
+        }
+    }
+
+    void collapseStatusBarPanels() {
+        try {
+            Object sbm = host.ctx.getSystemService(Context.STATUS_BAR_SERVICE);
+            if (sbm == null) return;
+            java.lang.reflect.Method method = sbm.getClass().getMethod("collapsePanels");
+            method.invoke(sbm);
+            WorkspaceHost.log("status bar panels collapsed");
+        } catch (Throwable error) {
+            WorkspaceHost.log("collapse status bar panels failed: " + error);
         }
     }
 }

@@ -15,9 +15,9 @@ import de.robv.android.xposed.XposedHelpers;
 
 /** Owns side-slot task launch, PendingIntent creation and TaskView listener admission. */
 final class WorkspaceLaunchController {
-    private static final int SLOT_MAIN = WorkspaceHost.coordinatorSlotMain();
-    private static final int SLOT_TOP = WorkspaceHost.coordinatorSlotTop();
-    private static final int SLOT_COUNT = WorkspaceHost.coordinatorSlotCount();
+    private static final int SLOT_MAIN = WorkspaceHost.SLOT_MAIN;
+    private static final int SLOT_TOP = WorkspaceHost.SLOT_TOP;
+    private static final int SLOT_COUNT = WorkspaceHost.SLOT_COUNT;
     private static final long LAUNCH_TIMEOUT_MS = 4000L;
 
     private final WorkspaceHost host;
@@ -64,7 +64,7 @@ final class WorkspaceLaunchController {
 
     void launchIntoSlot(final int slotIndex, Intent launch, String label) {
         final Slot slot = host.slots[slotIndex];
-        if (!host.isActive(slot) || slot.view == null || slot.launching || slot.promoting || host.promotion != null) {
+        if (!host.slotRegistry.isActive(slot) || slot.view == null || slot.launching || slot.promoting || host.promotion != null) {
             WorkspaceHost.log("launchIntoSlot " + slotIndex + ": no view");
             return;
         }
@@ -73,7 +73,7 @@ final class WorkspaceLaunchController {
         if (pkg == null || Packages.LAUNCHER.equals(pkg)) return;
         for (Slot other : host.slots) {
             if (other != slot && pkg.equals(other.pkg)
-                    && (other.launching || host.sideTaskMatchesEntry(other, host.currentUserId(), launch.getComponent()))) {
+                    && (other.launching || host.mainLaunch.sideTaskMatchesEntry(other, host.slotRegistry.currentUserId(), launch.getComponent()))) {
                 WorkspaceHost.log("launch rejected: application entry already in side slot=" + other.index);
                 return;
             }
@@ -81,19 +81,19 @@ final class WorkspaceLaunchController {
         if (!host.boundsHooksReady || host.scene != WorkspaceHost.ACTIVE || host.transferBusy) return;
         Runnable choose = () -> chooseExistingOrLaunch(slot, launch, label, pkg);
         if (slot.occupied) {
-            host.returnToSystem(slot, false, () -> { host.clearSlot(slot); choose.run(); },
+            host.returnToSystem(slot, false, () -> { host.slotLifecycle.clearSlot(slot); choose.run(); },
                     error -> WorkspaceHost.log("replacement stopped; previous live task retained: " + error));
         } else choose.run();
     }
 
     private void chooseExistingOrLaunch(Slot slot, Intent launch, String label, String pkg) {
-        if (!host.isActive(slot) || host.scene != WorkspaceHost.ACTIVE) return;
+        if (!host.slotRegistry.isActive(slot) || host.scene != WorkspaceHost.ACTIVE) return;
         slot.launching = true;
         if (!host.executeOnShell(() -> {
             try {
-                LiveTask existing = host.findPackageTask(pkg, launch.getComponent());
+                LiveTask existing = host.slotRegistry.findPackageTask(pkg, launch.getComponent());
                 host.main.post(() -> {
-                    if (!host.isActive(slot) || host.scene != WorkspaceHost.ACTIVE) { slot.launching = false; return; }
+                    if (!host.slotRegistry.isActive(slot) || host.scene != WorkspaceHost.ACTIVE) { slot.launching = false; return; }
                     if (existing == null) {
                         startSlot(slot, launch, label);
                     } else {
@@ -113,9 +113,9 @@ final class WorkspaceLaunchController {
     }
 
     private void startSlot(final Slot slot, Intent launch, String label) {
-        if (!host.isActive(slot) || host.scene != WorkspaceHost.ACTIVE || slot.promoting) { slot.launching = false; return; }
+        if (!host.slotRegistry.isActive(slot) || host.scene != WorkspaceHost.ACTIVE || slot.promoting) { slot.launching = false; return; }
         final int index = slot.index;
-        host.resetIdleTaskView(slot);
+        host.taskStates.resetIdleTaskView(slot);
         host.cellSurfaces.prepareCellSurface(slot);
         slot.modeGuardUntil = SystemClock.uptimeMillis() + 2500L;
         slot.modeRepairAttempts = 0;

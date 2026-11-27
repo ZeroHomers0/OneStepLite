@@ -1,6 +1,7 @@
 package io.github.zerohomers0.onesteplite;
 
 import android.content.ComponentName;
+import android.content.Intent;
 import android.graphics.Rect;
 import android.os.SystemClock;
 import android.os.UserHandle;
@@ -29,14 +30,18 @@ final class WorkspaceSlotRegistry {
         return new Rect(0, 0, host.screenW, host.screenH);
     }
 
+    Rect logicalBounds(Slot slot) {
+        return logicalBounds(slot, host.topPortrait);
+    }
+
     Rect logicalBounds(Slot slot, boolean portrait) {
-        if (slot == null || slot.index <= WorkspaceHost.coordinatorSlotMain()) return logicalBounds();
-        if (slot.index != WorkspaceHost.coordinatorSlotTop()) {
+        if (slot == null || slot.index <= WorkspaceHost.SLOT_MAIN) return logicalBounds();
+        if (slot.index != WorkspaceHost.SLOT_TOP) {
             if (slot.rect == null || slot.rect[2] <= slot.rect[0] || slot.rect[3] <= slot.rect[1])
                 return logicalBounds();
             return new Rect(0, 0, slot.rect[2] - slot.rect[0], slot.rect[3] - slot.rect[1]);
         }
-        TopTaskGeometry upper = host.topGeometry();
+        TopTaskGeometry upper = host.windowLayout.topGeometry();
         if (!portrait) return new Rect(0, 0, upper.logicalWidth, upper.logicalHeight);
         int width = Math.max(1, Math.min(upper.logicalWidth,
                 Math.round(upper.logicalHeight * 9f / 16f)));
@@ -49,7 +54,7 @@ final class WorkspaceSlotRegistry {
     }
 
     int[] slotBounds(Slot slot) {
-        return slot.index == WorkspaceHost.coordinatorSlotTop() ? host.topGeometry().bounds()
+        return slot.index == WorkspaceHost.SLOT_TOP ? host.windowLayout.topGeometry().bounds()
                 : slot.index >= host.CELL_SLOT_COUNT ? new int[]{0, 0, 1, 1}
                 : host.layout.cellBounds(slot.index - 1);
     }
@@ -130,7 +135,7 @@ final class WorkspaceSlotRegistry {
         Slot[] current = host.slots;
         return host.root != null && WorkspaceHost.isCurrentInstance(host) && slot.index > 0
                 && slot.index < current.length && current[slot.index] == slot
-                && (slot.index == WorkspaceHost.coordinatorSlotTop() || slot.index < host.CELL_SLOT_COUNT
+                && (slot.index == WorkspaceHost.SLOT_TOP || slot.index < host.CELL_SLOT_COUNT
                 || slot.sideRow >= 0);
     }
 
@@ -156,5 +161,119 @@ final class WorkspaceSlotRegistry {
         } catch (Throwable t) {
             return false;
         }
+    }
+    LiveTask findMainTask() throws Exception {
+        // A closing fullscreen app may remain visible while Home has already taken
+        // focus. Visibility alone cannot make that departing app a swap participant.
+        // If both claim focus the scene is still changing: retain both task bindings.
+        LiveTask candidate = null;
+        LiveTask focusedCandidate = null;
+        boolean focusedHome = false;
+        int visibleCandidates = 0;
+        java.util.List<?> roots = rootInfos();
+        for (Object info : roots) {
+            if (isHomeRoot(info) && XposedHelpers.getBooleanField(info, "isVisible")
+                    && XposedHelpers.getBooleanField(info, "isFocused")) focusedHome = true;
+            if (!ordinaryRoot(info, 1)) continue;
+            int userId = XposedHelpers.getIntField(info, "userId");
+            boolean visible = XposedHelpers.getBooleanField(info, "isVisible");
+            boolean focused = XposedHelpers.getBooleanField(info, "isFocused");
+            boolean sideTask = isSideToken(XposedHelpers.getObjectField(info, "token"));
+            if (!TaskUserPolicy.mayBeMainTask(userId, host.slotRegistry.currentUserId(),
+                    supportedTaskUsers(), visible, focused, sideTask)) continue;
+            if (visible) visibleCandidates++;
+            LiveTask task = new LiveTask(info);
+            if (focused) {
+                if (focusedCandidate != null)
+                    throw new IllegalStateException("ambiguous focused main roots");
+                focusedCandidate = task;
+            }
+            candidate = task;
+            host.taskStates.updateTaskWindowState(0, info, task.id, true);
+        }
+        if (focusedHome && focusedCandidate != null)
+            throw new IllegalStateException("Home/app focus is changing; retain task bindings");
+        if (focusedHome) return null;
+        if (focusedCandidate != null) return focusedCandidate;
+        if (visibleCandidates > 1) throw new IllegalStateException("ambiguous visible main roots");
+        return candidate; // Home（type=2）不会被当主任务。
+    }
+    Object rootInfo(LiveTask task) throws Exception {
+        for (Object info : rootInfos()) if (task.matches(info)) return info;
+        return null;
+    }
+    java.util.List<?> rootInfos() throws Exception {
+        Object service = XposedHelpers.callStaticMethod(Class.forName("android.app.ActivityTaskManager"), "getService");
+        return (java.util.List<?>) XposedHelpers.callMethod(service, "getAllRootTaskInfos");
+    }
+    boolean ordinaryRoot(Object info, int mode) {
+        if (info == null || XposedHelpers.getIntField(info, "displayId") != 0
+                || !supportsTaskUser(XposedHelpers.getIntField(info, "userId"))
+                || Boolean.TRUE.equals(XposedHelpers.callMethod(info, "hasParentTask"))
+                || !Integer.valueOf(mode).equals(XposedHelpers.callMethod(info, "getWindowingMode"))
+                || !Integer.valueOf(1).equals(XposedHelpers.callMethod(info, "getActivityType"))) return false;
+        ComponentName base = (ComponentName) XposedHelpers.getObjectField(info, "baseActivity");
+        return base != null && !Packages.LAUNCHER.equals(base.getPackageName());
+    }
+    void dumpRoots(String reason) {
+        try {
+            java.util.List<?> roots = rootInfos();
+            LiveTask main = null;
+            try { main = findMainTask(); } catch (Throwable error) {
+                WorkspaceHost.log("roots[" + reason + "] findMainTask threw: " + error);
+            }
+            WorkspaceDiagnostics.dumpRoots(reason,roots,main==null?-1:main.id,
+                    this::isSideToken,info->ordinaryRoot(info,1),WorkspaceHost::log);
+        } catch (Throwable error) {
+            WorkspaceHost.log("roots dump[" + reason + "] failed: " + error);
+        }
+    }
+    LiveTask findPackageTask(String pkg) throws Exception {
+        Intent launch = host.ctx.getPackageManager().getLaunchIntentForPackage(pkg);
+        return findPackageTask(pkg, launch == null ? null : launch.getComponent());
+    }
+    LiveTask findPackageTask(String pkg, ComponentName entry) throws Exception {
+        if (entry == null) throw new IllegalStateException("task launcher entry unavailable");
+        LiveTask candidate = null;
+        for (Object info : rootInfos()) {
+            if (!TaskUserPolicy.isCurrentUser(
+                    XposedHelpers.getIntField(info, "userId"), host.slotRegistry.currentUserId())) continue;
+            ComponentName base = (ComponentName) XposedHelpers.getObjectField(info, "baseActivity");
+            if (base == null || !pkg.equals(base.getPackageName())) continue;
+            if (!TaskLaunchIdentity.matches(host.ctx.getPackageManager(), entry, info)) continue;
+            if (!ordinaryRoot(info, 1) || isSideToken(XposedHelpers.getObjectField(info, "token")))
+                throw new IllegalStateException("existing package task has unsupported owner/mode");
+            if (candidate != null) throw new IllegalStateException("multiple package tasks; no implicit relaunch");
+            candidate = new LiveTask(info);
+        }
+        return candidate;
+    }
+    LiveTask existingHomeTask() throws Exception {
+        LiveTask home = null;
+        for (Object info : rootInfos()) {
+            if (!isHomeRoot(info)) continue;
+            if (home != null) throw new IllegalStateException("ambiguous existing Home roots");
+            home = new LiveTask(info);
+        }
+        if (home == null) throw new IllegalStateException("existing Home root unavailable");
+        return home;
+    }
+    boolean isHomeRoot(Object info) {
+        return info != null && Integer.valueOf(2).equals(
+                    XposedHelpers.callMethod(info, "getActivityType"))
+                && XposedHelpers.getIntField(info, "displayId") == 0
+                && XposedHelpers.getIntField(info, "userId") == host.slotRegistry.currentUserId()
+                && !Boolean.TRUE.equals(XposedHelpers.callMethod(info, "hasParentTask"));
+    }
+    LiveTask existingHomeForCollection(LiveTask task) throws Exception {
+        LiveTask home = existingHomeTask();
+        HomeTaskReturn saved = host.coveredHome;
+        if (saved != null && saved.covers(task.id, task.token)
+                && !saved.restores(home.id, home.token))
+            throw new IllegalStateException("covered Home identity changed; keep app in main");
+        return home;
+    }
+    Object homeForCollection(LiveTask task) throws Exception {
+        return existingHomeForCollection(task).token;
     }
 }

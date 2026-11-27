@@ -6,7 +6,7 @@ import sys as _sys, pathlib as _pathlib; _sys.path.insert(0, str(_pathlib.Path(_
 root=Path(__file__).resolve().parents[2]
 src=package_dir(root)
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
-source=(src/'WorkspaceHost.java').read_text(encoding='utf-8-sig')
+source=(src/'WorkspaceTopPresentationController.java').read_text(encoding='utf-8-sig')
 start=source.index('    static boolean ownsTopNativeCaption(')
 end=source.index('{',start)+1;depth=1
 while depth:
@@ -16,10 +16,11 @@ files={
  'io/github/zerohomers0/onesteplite/WorkspaceHost.java':'''package io.github.zerohomers0.onesteplite;
 import de.robv.android.xposed.XposedHelpers;
 class WorkspaceHost {
- static final int ACTIVE=1,SLOT_TOP=4;static WorkspaceHost sInstance;
+ static final int ACTIVE=1,SLOT_TOP=4;static WorkspaceHost sInstance;static WorkspaceHost currentInstance(){return sInstance;}
  Object root=new Object();int scene=ACTIVE;Slot[]slots={null,null,null,null,new Slot()};
  static class Slot {boolean occupied=true;int taskId=42;Object taskToken="upper";}
 '''+ownership+'\n}',
+ 'io/github/zerohomers0/onesteplite/WorkspaceTopPresentationController.java':'''package io.github.zerohomers0.onesteplite;final class WorkspaceTopPresentationController {static boolean ownsTopNativeCaption(Object info){return WorkspaceHost.ownsTopNativeCaption(info);}}''',
  'android/view/MotionEvent.java':'''package android.view;
 public class MotionEvent {public static final int ACTION_DOWN=0;public int getActionMasked(){return 0;}}''',
  'de/robv/android/xposed/XC_MethodHook.java':'''package de.robv.android.xposed;

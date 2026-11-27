@@ -11,7 +11,7 @@ SOURCE_ROOT = Path(os.environ.get('ONESTEPLITE_LAUNCH_SOURCE_ROOT', ROOT))
 text = (package_dir(SOURCE_ROOT)/'WorkspaceLaunchController.java').read_text(encoding='utf-8')
 start = text.index('    private void startSlot(final Slot slot, Intent launch, String label)')
 end = text.index('    private static void callHidden(', start)
-method = (text[start:end].replace('host.','').replace('cellSurfaces.','').replace('resumes.','')
+method = (text[start:end].replace('host.','').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('cellSurfaces.','').replace('resumes.','')
     .replace('WorkspaceHost.log','log').replace('WorkspaceHost.ACTIVE','ACTIVE'))
 OUT.mkdir(parents=True, exist_ok=True)
 source = OUT / 'SideLaunchReplay.java'
