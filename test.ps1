@@ -25,16 +25,30 @@ $productionArgs = @($production | ForEach-Object { '"' + ($_ -replace '\\','/' -
 [IO.File]::WriteAllLines($productionArgFile, $productionArgs, [Text.UTF8Encoding]::new($false))
 & (Join-Path $jdk 'javac.exe') -encoding UTF-8 -nowarn --release 17 -cp "$android;$(Join-Path $root 'libs\xposed-api-82.jar')" -d $classes "@$productionArgFile"
 if($LASTEXITCODE -ne 0){throw 'Production compilation failed.'}
-$tests=@(Get-ChildItem -LiteralPath (Join-Path $root 'tests') -Filter '*.java' | ForEach-Object FullName)
-$cp="$classes;$android;$(Join-Path $root 'libs\xposed-api-82.jar')"
-& (Join-Path $jdk 'javac.exe') -encoding UTF-8 --release 17 -d $out (Join-Path $root 'tools\test-stubs\android\graphics\Rect.java')
-if($LASTEXITCODE -ne 0){throw 'JVM geometry fake compilation failed.'}
-& (Join-Path $jdk 'javac.exe') -encoding UTF-8 --release 17 -cp $cp -d $out @tests
-if($LASTEXITCODE -ne 0){throw 'Policy test compilation failed.'}
-foreach($test in $tests){
-    & (Join-Path $jdk 'java.exe') -cp "$out;$cp" ('io.github.zerohomers0.onesteplite.'+[IO.Path]::GetFileNameWithoutExtension($test))
-    if($LASTEXITCODE -ne 0){throw "Policy test failed: $test"}
+$tiers=@(
+    @{Name='unit'; Path=Join-Path $root 'tests\unit'},
+    @{Name='contract'; Path=Join-Path $root 'tests\contract'},
+    @{Name='android'; Path=Join-Path $root 'tests\android'}
+)
+$tests=@()
+$counts=@{}
+foreach($tier in $tiers){
+    $tierTests=@(Get-ChildItem -LiteralPath $tier.Path -Filter '*.java' -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    $counts[$tier.Name]=$tierTests.Count
+    $tests += $tierTests
 }
+$classOut=Join-Path $out 'jvm'
+New-Item -ItemType Directory -Force -Path $classOut | Out-Null
+$cp="$classes;$android;$(Join-Path $root 'libs\xposed-api-82.jar')"
+& (Join-Path $jdk 'javac.exe') -encoding UTF-8 --release 17 -d $classOut (Join-Path $root 'tools\test-stubs\android\graphics\Rect.java')
+if($LASTEXITCODE -ne 0){throw 'JVM geometry fake compilation failed.'}
+& (Join-Path $jdk 'javac.exe') -encoding UTF-8 --release 17 -cp $cp -d $classOut @tests
+if($LASTEXITCODE -ne 0){throw 'JVM test compilation failed.'}
+foreach($test in $tests){
+    & (Join-Path $jdk 'java.exe') -cp "$classOut;$cp" ('io.github.zerohomers0.onesteplite.'+[IO.Path]::GetFileNameWithoutExtension($test))
+    if($LASTEXITCODE -ne 0){throw "JVM test failed: $test"}
+}
+Write-Output "JVM tiers passed: unit=$($counts.unit), contract=$($counts.contract), android=$($counts.android)"
 $failedSuites=@()
 foreach($suite in @(Get-ChildItem -LiteralPath (Join-Path $root 'tools') -Directory | Where-Object {Test-Path -LiteralPath (Join-Path $_.FullName 'run.py')})){
     & $Python -X utf8 (Join-Path $suite.FullName 'run.py') (Join-Path $root "build\tests\$($suite.Name)")

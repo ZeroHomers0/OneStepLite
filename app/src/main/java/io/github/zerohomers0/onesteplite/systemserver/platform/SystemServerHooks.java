@@ -47,9 +47,9 @@ final class SystemServerHooks {
         startZoomFileWatcher();
     }
     private boolean installDisplayContentHook(ClassLoader cl){
-        try{
-            Class<?> dc=XposedHelpers.findClass("com.android.server.wm.DisplayContent",cl);
-            XposedBridge.hookAllMethods(dc,"configureSurfaces",new XC_MethodHook(){
+        return HookGuard.install("DisplayContent surface capture",cl,HostEntry::log,hooks->{
+            Class<?> dc=hooks.findClass("com.android.server.wm.DisplayContent");
+            hooks.hookAllMethods(dc,"configureSurfaces",new XC_MethodHook(){
                 @Override protected void afterHookedMethod(MethodHookParam param){
                     Object self=param.thisObject;
                     try{
@@ -69,8 +69,7 @@ final class SystemServerHooks {
                     }catch(Throwable failure){sZoomTarget=null;log("capture DisplayContent failed: "+failure);}
                 }
             });
-            log("DisplayContent#configureSurfaces hooked");return true;
-        }catch(Throwable failure){log("hookSystemServer hook failed: "+failure);return false;}
+        });
     }
 
     private void installInputHooks(ClassLoader cl){
@@ -166,22 +165,30 @@ final class SystemServerHooks {
     }
     private void installTransitionMagnificationStart(ClassLoader cl){
         TransitionMagnificationStartHooks.install(cl, new TransitionMagnificationStartHooks.Host() {
-            @Override public boolean zoomed() { return sZoomed; }
-            @Override public ZoomTarget zoomTarget() { return sZoomTarget; }
-            @Override public Object displayContent() { return sDisplayContent; }
-            @Override public NativeFreeformStartGate nativeFreeformStart() {
-                return sNativeFreeformStart;
+            @Override public TransitionMagnificationStartHooks.State state() {
+                return new TransitionMagnificationStartHooks.State() {
+                    @Override public boolean zoomed() { return sZoomed; }
+                    @Override public ZoomTarget zoomTarget() { return sZoomTarget; }
+                    @Override public Object displayContent() { return sDisplayContent; }
+                    @Override public float zoomScale() { return sZoomScale; }
+                    @Override public float zoomOffsetX() { return sZoomOffsetX; }
+                    @Override public float zoomOffsetY() { return sZoomOffset; }
+                };
             }
-            @Override public void finishNativeFreeformStart(ZoomTarget target, Object start) {
-                HostEntry.finishNativeFreeformStart(target, start);
+            @Override public TransitionMagnificationStartHooks.Actions actions() {
+                return new TransitionMagnificationStartHooks.Actions() {
+                    @Override public NativeFreeformStartGate nativeFreeformStart() {
+                        return sNativeFreeformStart;
+                    }
+                    @Override public void finishNativeFreeformStart(ZoomTarget target, Object start) {
+                        HostEntry.finishNativeFreeformStart(target, start);
+                    }
+                    @Override public void reapplyFinalMagnification(
+                            Object display, Object transaction, Object info) {
+                        HostEntry.reapplyFinalMagnification(display, transaction, info);
+                    }
+                };
             }
-            @Override public void reapplyFinalMagnification(
-                    Object display, Object transaction, Object info) {
-                HostEntry.reapplyFinalMagnification(display, transaction, info);
-            }
-            @Override public float zoomScale() { return sZoomScale; }
-            @Override public float zoomOffsetX() { return sZoomOffsetX; }
-            @Override public float zoomOffsetY() { return sZoomOffset; }
         }, HostEntry::log);
     }
     private void installTransitionMagnificationFinish(ClassLoader cl){
@@ -413,29 +420,37 @@ final class SystemServerHooks {
 
     private void installMagnificationSurfaceTracking(ClassLoader cl) {
         MagnificationSurfaceTrackingHooks.install(cl, new MagnificationSurfaceTrackingHooks.Host() {
-            @Override public boolean zoomed() { return sZoomed; }
-            @Override public Object displayContent() { return sDisplayContent; }
-            @Override public ZoomTarget zoomTarget() { return sZoomTarget; }
-            @Override public boolean finalSnapshot() {
-                return Boolean.TRUE.equals(sFinalMagnificationSnapshot.get());
+            @Override public MagnificationSurfaceTrackingHooks.State state() {
+                return new MagnificationSurfaceTrackingHooks.State() {
+                    @Override public boolean zoomed() { return sZoomed; }
+                    @Override public Object displayContent() { return sDisplayContent; }
+                    @Override public ZoomTarget zoomTarget() { return sZoomTarget; }
+                    @Override public boolean finalSnapshot() {
+                        return Boolean.TRUE.equals(sFinalMagnificationSnapshot.get());
+                    }
+                    @Override public Object finishInfo() { return sMagnificationFinishInfo.get(); }
+                };
             }
-            @Override public Object finishInfo() { return sMagnificationFinishInfo.get(); }
-            @Override public Object routeNativeFreeform(Object container, Object display,
-                    Object transaction, boolean snapshot) {
-                return sNativeFreeformStart.route(container, display, transaction, snapshot);
-            }
-            @Override public Object routeLiveSwap(Object container, Object display,
-                    Object transaction, boolean snapshot) {
-                return sLiveSwapZoomSurfaces.route(container, display, transaction, snapshot);
-            }
-            @Override public java.util.Map<Object, Object> trackedSurfaces() {
-                return sMagnifiedSurfaces;
-            }
-            @Override public void remember(Object container, Object spec) {
-                rememberMagnifiedSurface(container, spec);
-            }
-            @Override public void stagePassBlur(Object display, Object transaction, Object spec) {
-                stagePassBlurCoordinates(display, transaction, spec);
+            @Override public MagnificationSurfaceTrackingHooks.Surfaces surfaces() {
+                return new MagnificationSurfaceTrackingHooks.Surfaces() {
+                    @Override public Object routeNativeFreeform(Object container, Object display,
+                            Object transaction, boolean snapshot) {
+                        return sNativeFreeformStart.route(container, display, transaction, snapshot);
+                    }
+                    @Override public Object routeLiveSwap(Object container, Object display,
+                            Object transaction, boolean snapshot) {
+                        return sLiveSwapZoomSurfaces.route(container, display, transaction, snapshot);
+                    }
+                    @Override public java.util.Map<Object, Object> trackedSurfaces() {
+                        return sMagnifiedSurfaces;
+                    }
+                    @Override public void remember(Object container, Object spec) {
+                        rememberMagnifiedSurface(container, spec);
+                    }
+                    @Override public void stagePassBlur(Object display, Object transaction, Object spec) {
+                        stagePassBlurCoordinates(display, transaction, spec);
+                    }
+                };
             }
         }, HostEntry::log);
     }

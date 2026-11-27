@@ -36,32 +36,40 @@ final class TaskRotationController {
                 this::keepTopActivityForRotationConfig,
                 this::preserveTopWindowForRelaunch, HostEntry::log);
         TaskRotationLifecycleHooks.install(cl, new TaskRotationLifecycleHooks.Host() {
-            @Override public Boolean applyFixedRotation(
-                    Object display, Object activity, String source) {
-                return TaskRotationController.this.applyFixedRotationLocked(display, activity, source);
+            @Override public TaskRotationLifecycleHooks.Policy policy() {
+                return new TaskRotationLifecycleHooks.Policy() {
+                    @Override public Boolean applyFixedRotation(
+                            Object display, Object activity, String source) {
+                        return TaskRotationController.this.applyFixedRotationLocked(display, activity, source);
+                    }
+                    @Override public void beforeApplicationOrientationRequest(Object activity, int request) {
+                        TaskRotationController.this.beforeApplicationOrientationRequest(activity, request);
+                    }
+                    @Override public boolean updatingTaskRotation() { return sUpdatingTaskRotation; }
+                    @Override public java.util.Map<Object, Integer> taskRotations() { return sTaskRotations; }
+                    @Override public boolean rotationActive() { return sFullscreenRotationActive; }
+                    @Override public Object displayContent() { return sDisplayContent; }
+                    @Override public int heldRotation() { return sHeldDisplayRotation; }
+                };
             }
-            @Override public void beforeApplicationOrientationRequest(Object activity, int request) {
-                TaskRotationController.this.beforeApplicationOrientationRequest(activity, request);
-            }
-            @Override public boolean updatingTaskRotation() { return sUpdatingTaskRotation; }
-            @Override public java.util.Map<Object, Integer> taskRotations() { return sTaskRotations; }
-            @Override public boolean rotationActive() { return sFullscreenRotationActive; }
-            @Override public Object displayContent() { return sDisplayContent; }
-            @Override public boolean retainTaskRotationOnNativeFinish(Object activity) {
-                return TaskRotationController.this.retainTaskRotationOnNativeFinishLocked(activity);
-            }
-            @Override public void setTaskRotationResolver(Method resolver) {
-                sTaskRotationResolver = resolver;
-            }
-            @Override public int heldRotation() { return sHeldDisplayRotation; }
-            @Override public void queueWorkspaceRotationRefresh(Object displayRotation) {
-                TaskRotationController.this.queueWorkspaceRotationRefresh(displayRotation);
-            }
-            @Override public void evaluateNativeLandscape(Object display, String source) {
-                TaskRotationController.this.evaluateNativeLandscapeLocked(display, source);
-            }
-            @Override public void refreshTaskRotation(Object display) {
-                TaskRotationController.this.refreshTaskRotationLocked(display);
+            @Override public TaskRotationLifecycleHooks.Actions actions() {
+                return new TaskRotationLifecycleHooks.Actions() {
+                    @Override public boolean retainTaskRotationOnNativeFinish(Object activity) {
+                        return TaskRotationController.this.retainTaskRotationOnNativeFinishLocked(activity);
+                    }
+                    @Override public void setTaskRotationResolver(Method resolver) {
+                        sTaskRotationResolver = resolver;
+                    }
+                    @Override public void queueWorkspaceRotationRefresh(Object displayRotation) {
+                        TaskRotationController.this.queueWorkspaceRotationRefresh(displayRotation);
+                    }
+                    @Override public void evaluateNativeLandscape(Object display, String source) {
+                        TaskRotationController.this.evaluateNativeLandscapeLocked(display, source);
+                    }
+                    @Override public void refreshTaskRotation(Object display) {
+                        TaskRotationController.this.refreshTaskRotationLocked(display);
+                    }
+                };
             }
         }, HostEntry::log);
     }
@@ -708,13 +716,22 @@ final class TaskRotationController {
             Context context=(Context)(sSystemContext!=null?sSystemContext:sWmsContext);
             Handler bridge=sZoomBridgeHandler;
             if(context==null || bridge==null || !(token instanceof android.os.Parcelable))return;
-            Intent signal=new Intent(WorkspaceHost.TOP_TASK_STATE_ACTION).setPackage(SYSTEMUI)
-                    .putExtra("task",id).putExtra("user",user).putExtra("token",(android.os.Parcelable)token)
-                    .putExtra("landscape",landscape).putExtra("fullscreen",fullscreen)
-                    .putExtra("focused",focused).putExtra("mode",mode).putExtra("portrait",portrait)
-                    .putExtra("page",page).putExtra("request",request)
-                    .putExtra("viewportOrientation",viewportOrientation)
-                    .putExtra("issued",android.os.SystemClock.uptimeMillis());
+            WorkspaceContract.TopTaskSignal top=new WorkspaceContract.TopTaskSignal(id,user,token,
+                    landscape,fullscreen,focused,mode,portrait,page,request,viewportOrientation,
+                    android.os.SystemClock.uptimeMillis());
+            Intent signal=new Intent(WorkspaceContract.TOP_TASK_STATE).setPackage(SYSTEMUI)
+                    .putExtra(WorkspaceContract.EXTRA_TASK,top.taskId())
+                    .putExtra(WorkspaceContract.EXTRA_USER,top.userId())
+                    .putExtra(WorkspaceContract.EXTRA_TOKEN,(android.os.Parcelable)top.token())
+                    .putExtra(WorkspaceContract.EXTRA_LANDSCAPE,top.landscape())
+                    .putExtra(WorkspaceContract.EXTRA_FULLSCREEN,top.fullscreen())
+                    .putExtra(WorkspaceContract.EXTRA_FOCUSED,top.focused())
+                    .putExtra(WorkspaceContract.EXTRA_MODE,top.mode())
+                    .putExtra(WorkspaceContract.EXTRA_PORTRAIT,top.portrait())
+                    .putExtra(WorkspaceContract.EXTRA_PAGE,top.page())
+                    .putExtra(WorkspaceContract.EXTRA_REQUEST,top.request())
+                    .putExtra(WorkspaceContract.EXTRA_VIEWPORT_ORIENTATION,top.viewportOrientation())
+                    .putExtra(WorkspaceContract.EXTRA_ISSUED,top.issued());
             bridge.post(()->{
                 try {context.sendBroadcast(signal,android.Manifest.permission.WRITE_SECURE_SETTINGS);}
                 catch(Throwable error){log("upper direction bridge: "+error);}

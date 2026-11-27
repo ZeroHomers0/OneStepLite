@@ -205,8 +205,11 @@ final class WorkspaceSettingsPage extends FrameLayout {
         Switch toggle=settingsSwitch(label,checked);
         item.addView(toggle,new LinearLayout.LayoutParams(-2,-2));
         final boolean[] reverting={false};
+        final String description=label+"，"+(detail==null?"":detail+"，");
+        item.setContentDescription(description+(checked?"已开启":"已关闭"));
         toggle.setOnCheckedChangeListener((button,value)->{
             if(reverting[0])return;
+            item.setContentDescription(description+(value?"已开启":"已关闭"));
             if(!save.test(value)) {reverting[0]=true;button.setChecked(!value);reverting[0]=false;}
         });
         item.setOnClickListener(v->toggle.toggle());group.addView(item);
@@ -378,6 +381,7 @@ final class WorkspaceSettingsPage extends FrameLayout {
         arrow.setBackground(new Chevron());
         arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         row.addView(arrow, new LinearLayout.LayoutParams(dp(22), dp(22)));
+        row.setContentDescription(title+"，"+summary);
         row.setOnClickListener(v -> action.run());
         group.addView(row);
         return row;

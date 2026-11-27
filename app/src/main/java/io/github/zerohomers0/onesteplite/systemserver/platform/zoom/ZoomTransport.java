@@ -27,7 +27,7 @@ final class ZoomTransport {
         android.os.Bundle lease = new android.os.Bundle();
         lease.putBinder("host", hostLease);
         android.content.Intent intent = new android.content.Intent(Actions.ZOOM_LEASE)
-                .putExtra("lease", lease)
+                .putExtra(WorkspaceContract.EXTRA_LEASE, lease)
                 .addFlags(android.content.Intent.FLAG_RECEIVER_REGISTERED_ONLY);
         android.content.BroadcastReceiver result = new android.content.BroadcastReceiver() {
             @Override public void onReceive(android.content.Context context, android.content.Intent value) {
@@ -124,10 +124,10 @@ final class ZoomTransport {
             float offsetY = Float.parseFloat(parts[1]);
             float offsetX = Float.parseFloat(parts[2]);
             android.content.Intent intent = new android.content.Intent(Actions.ZOOM);
-            intent.putExtra("request", encoded);
-            intent.putExtra("scale", scale);
-            intent.putExtra("offsetY", offsetY);
-            intent.putExtra("offsetX", offsetX);
+            intent.putExtra(WorkspaceContract.EXTRA_ZOOM_REQUEST, encoded);
+            intent.putExtra(WorkspaceContract.EXTRA_SCALE, scale);
+            intent.putExtra(WorkspaceContract.EXTRA_OFFSET_Y, offsetY);
+            intent.putExtra(WorkspaceContract.EXTRA_OFFSET_X, offsetX);
             intent.addFlags(android.content.Intent.FLAG_RECEIVER_REGISTERED_ONLY);
             ctx.sendBroadcast(intent);
             if (changed) log("zoom broadcast sent: " + command);

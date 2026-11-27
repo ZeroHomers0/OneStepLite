@@ -5,6 +5,7 @@ import android.content.Context;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -127,7 +128,7 @@ final class ShortcutManagementPage extends FrameLayout {
 
     private static ExecutorService worker(boolean applications){return applications?APP_WORKER:SHARE_WORKER;}
     private static String kind(boolean applications){return applications?ShortcutSettingsClient.APPS:ShortcutSettingsClient.SHARE;}
-    private void status(String value){removeAllViews();TextView text=new TextView(getContext());text.setText(value);
+    private void status(String value){removeAllViews();TextView text=new TextView(getContext());text.setText(value);text.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         text.setTextSize(14);text.setTextColor(HyperOsStyle.textSecondary(getContext()));text.setGravity(Gravity.CENTER);
         addView(text,new LayoutParams(-1,-1));}
     private int dp(int value){return Math.round(HyperOsStyle.dp(getContext(),value));}

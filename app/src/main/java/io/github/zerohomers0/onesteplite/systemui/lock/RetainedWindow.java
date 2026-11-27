@@ -41,7 +41,7 @@ final class RetainedWindow {
     interface Reveal { void apply(Object transaction, long generation, float scale, float x, float y) throws Throwable; }
 
     Bundle retain(Object display, Intent intent) {
-        Bundle state = intent.getBundleExtra("state");
+        Bundle state = intent.getBundleExtra(WorkspaceContract.EXTRA_STATE);
         IBinder token = state == null ? null : state.getBinder("host");
         if (display == null || token == null) return null;
         Object service = XposedHelpers.getObjectField(display, "mWmService");
@@ -49,17 +49,17 @@ final class RetainedWindow {
         if (!owns(candidate, display)) {
             return null;
         }
-        long next = intent.getLongExtra("generation", 0);
+        long next = intent.getLongExtra(WorkspaceContract.EXTRA_GENERATION, 0);
         if (next <= 0 || next < generation) return null;
-        if (intent.getBooleanExtra("cancel", false)) {
+        if (intent.getBooleanExtra(WorkspaceContract.EXTRA_CANCEL, false)) {
             if (candidate == window) {
                 releaseMain(XposedHelpers.callMethod(display, "getPendingTransaction"));
                 window = null; generation = next;
             }
             return null;
         }
-        float s = intent.getFloatExtra("scale", Float.NaN);
-        float ox = intent.getFloatExtra("x", Float.NaN), oy = intent.getFloatExtra("y", Float.NaN);
+        float s = intent.getFloatExtra(WorkspaceContract.EXTRA_SCALE, Float.NaN);
+        float ox = intent.getFloatExtra(WorkspaceContract.EXTRA_X, Float.NaN), oy = intent.getFloatExtra(WorkspaceContract.EXTRA_Y, Float.NaN);
         if (!Float.isFinite(s) || s <= 0 || s >= 1 || !Float.isFinite(ox) || !Float.isFinite(oy)) return null;
         // Never authorize warming from goingAway or an occluded-but-on-screen window.
         if (Boolean.TRUE.equals(XposedHelpers.callMethod(candidate, "isOnScreen"))) return null;
@@ -362,8 +362,8 @@ final class RetainedWindow {
             float scale, float x, float y, Consumer<Boolean> ready) {
         Bundle state = new Bundle(); state.putBinder("host", token);
         try {
-            context.sendOrderedBroadcast(new Intent(ACTION).setPackage("android").putExtra("state", state)
-                    .putExtra("generation", generation).putExtra("scale", scale).putExtra("x", x).putExtra("y", y),
+            context.sendOrderedBroadcast(new Intent(ACTION).setPackage("android").putExtra(WorkspaceContract.EXTRA_STATE, state)
+                    .putExtra(WorkspaceContract.EXTRA_GENERATION, generation).putExtra(WorkspaceContract.EXTRA_SCALE, scale).putExtra(WorkspaceContract.EXTRA_X, x).putExtra(WorkspaceContract.EXTRA_Y, y),
                     android.Manifest.permission.WRITE_SECURE_SETTINGS, new BroadcastReceiver() {
                         @Override public void onReceive(Context ignored, Intent intent) {
                             Bundle result = getResultExtras(false);

@@ -167,44 +167,45 @@ public final class WorkspaceHost {
     final android.os.IBinder desktopSceneOwner = new android.os.Binder();
     private boolean desktopPublishQueued;
     private final DesktopSideTaskPublisher desktopSideTaskPublisher =
-            new DesktopSideTaskPublisher(new DesktopSideTaskPublisher.Host() {
-        @Override public TopBar topBar() { return topBar; }
-        @Override public int cellSlotCount() { return CELL_SLOT_COUNT; }
-        @Override public Slot[] slots() { return slots; }
-        @Override public int topSlot() { return SLOT_TOP; }
-        @Override public long sceneEpoch() { return sceneEpoch; }
-        @Override public boolean sceneActive() { return scene == ACTIVE; }
-        @Override public boolean sceneSuspending() { return scene == SUSPENDING; }
-        @Override public boolean sceneSuspended() { return scene == SUSPENDED; }
-        @Override public boolean retainedOnExit() { return retainedOnExit; }
-        @Override public boolean screenOn() { return screenOn; }
-        @Override public boolean keyguardLocked() { return keyguardLocked; }
-        @Override public FrameLayout root() { return root; }
-        @Override public boolean isActive(Slot slot) { return WorkspaceHost.this.slotRegistry.isActive(slot); }
-        @Override public boolean controllerOwns(Slot slot, int taskId, Object token) {
-            return WorkspaceHost.this.slotRegistry.controllerOwns(slot, taskId, token);
-        }
-        @Override public boolean mayWriteSideSurface(Slot slot) {
-            return WorkspaceHost.this.scales.mayWriteSideSurface(slot);
-        }
-        @Override public WorkspaceOptions options() { return workspaceOptions; }
-        @Override public LiveTask findMainTask() throws Exception {
-            return WorkspaceHost.this.slotRegistry.findMainTask();
-        }
-        @Override public Object rootInfo(LiveTask task) throws Exception {
-            return WorkspaceHost.this.slotRegistry.rootInfo(task);
-        }
-        @Override public int windowModeOf(Object info) { return taskStates.windowModeOf(info); }
-        @Override public TopTaskState topTaskState() { return topTaskState; }
-        @Override public boolean topFace() { return topFace; }
-        @Override public TopTaskGeometry topGeometry() { return WorkspaceHost.this.windowLayout.topGeometry(); }
-        @Override public Rect topBounds() { return slotRegistry.logicalBounds(slots[SLOT_TOP]); }
-        @Override public android.os.IBinder sceneOwner() { return desktopSceneOwner; }
-        @Override public Context context() { return ctx; }
-        @Override public boolean executeOnShell(Runnable task) {
-            return WorkspaceHost.this.executeOnShell(task);
-        }
-    }, WorkspaceHost::log);
+            new DesktopSideTaskPublisher(new DesktopSideTaskPublisher.Port(
+        new DesktopSideTaskPublisher.SceneQueries() {
+            @Override public int cellSlotCount() { return CELL_SLOT_COUNT; }
+            @Override public Slot[] slots() { return slots; }
+            @Override public int topSlot() { return SLOT_TOP; }
+            @Override public long sceneEpoch() { return sceneEpoch; }
+            @Override public boolean sceneActive() { return scene == ACTIVE; }
+            @Override public boolean sceneSuspending() { return scene == SUSPENDING; }
+            @Override public boolean sceneSuspended() { return scene == SUSPENDED; }
+            @Override public boolean retainedOnExit() { return retainedOnExit; }
+        },
+        new DesktopSideTaskPublisher.VisibilityQueries() {
+            @Override public boolean screenOn() { return screenOn; }
+            @Override public boolean keyguardLocked() { return keyguardLocked; }
+            @Override public FrameLayout root() { return root; }
+        },
+        new DesktopSideTaskPublisher.TaskQueries() {
+            @Override public boolean isActive(Slot slot) { return slotRegistry.isActive(slot); }
+            @Override public boolean controllerOwns(Slot slot, int taskId, Object token) {
+                return slotRegistry.controllerOwns(slot, taskId, token);
+            }
+            @Override public boolean mayWriteSideSurface(Slot slot) { return scales.mayWriteSideSurface(slot); }
+            @Override public LiveTask findMainTask() throws Exception { return slotRegistry.findMainTask(); }
+            @Override public Object rootInfo(LiveTask task) throws Exception { return slotRegistry.rootInfo(task); }
+            @Override public int windowModeOf(Object info) { return taskStates.windowModeOf(info); }
+        },
+        new DesktopSideTaskPublisher.TopQueries() {
+            @Override public TopTaskState topTaskState() { return topTaskState; }
+            @Override public boolean topFace() { return topFace; }
+            @Override public TopTaskGeometry topGeometry() { return windowLayout.topGeometry(); }
+            @Override public Rect topBounds() { return slotRegistry.logicalBounds(slots[SLOT_TOP]); }
+        },
+        new DesktopSideTaskPublisher.Platform() {
+            @Override public TopBar topBar() { return topBar; }
+            @Override public WorkspaceOptions options() { return workspaceOptions; }
+            @Override public android.os.IBinder sceneOwner() { return desktopSceneOwner; }
+            @Override public Context context() { return ctx; }
+            @Override public boolean executeOnShell(Runnable task) { return WorkspaceHost.this.executeOnShell(task); }
+        }), WorkspaceHost::log);
     final FinishTransactions<RenderBinding> finishTransactions = new FinishTransactions<>(16);
     final FinishTransactions<Long> workspaceFinishes = new FinishTransactions<>(16);
 

@@ -126,10 +126,10 @@ final class ZoomBridgeReceiver extends BroadcastReceiver {
     }
     private void handleZoom(Intent intent){
         try{synchronized(sZoomChannels){
-            long now=System.currentTimeMillis();String encoded=intent.getStringExtra("request");
+            long now=System.currentTimeMillis();String encoded=intent.getStringExtra(WorkspaceContract.EXTRA_ZOOM_REQUEST);
             if(encoded!=null)sZoomChannels.offerEncoded(encoded,now);
-            else sZoomChannels.offer(intent.getFloatExtra("scale",1f)+" "
-                    +intent.getFloatExtra("offsetY",0f)+" "+intent.getFloatExtra("offsetX",0f),now,now);
+            else sZoomChannels.offer(intent.getFloatExtra(WorkspaceContract.EXTRA_SCALE,1f)+" "
+                    +intent.getFloatExtra(WorkspaceContract.EXTRA_OFFSET_Y,0f)+" "+intent.getFloatExtra(WorkspaceContract.EXTRA_OFFSET_X,0f),now,now);
             dispatchCurrentZoom();
         }}catch(Throwable error){log("zoom broadcast submit failed: "+error);}
     }

@@ -9,16 +9,24 @@ import java.util.function.Consumer;
 final class TransitionMagnificationStartHooks {
     private TransitionMagnificationStartHooks() {}
 
-    interface Host {
+    interface State {
         boolean zoomed();
         ZoomTarget zoomTarget();
         Object displayContent();
-        NativeFreeformStartGate nativeFreeformStart();
-        void finishNativeFreeformStart(ZoomTarget target, Object start);
-        void reapplyFinalMagnification(Object display, Object transaction, Object info);
         float zoomScale();
         float zoomOffsetX();
         float zoomOffsetY();
+    }
+
+    interface Actions {
+        NativeFreeformStartGate nativeFreeformStart();
+        void finishNativeFreeformStart(ZoomTarget target, Object start);
+        void reapplyFinalMagnification(Object display, Object transaction, Object info);
+    }
+
+    interface Host {
+        State state();
+        Actions actions();
     }
 
     static void install(ClassLoader loader, Host host, Consumer<String> log) {
@@ -36,9 +44,9 @@ final class TransitionMagnificationStartHooks {
     }
 
     private static void handleTransitionInfo(Host host,Consumer<String> log,XC_MethodHook.MethodHookParam p) {
-                    ZoomTarget target = host.zoomTarget();
-                    if (p.hasThrowable() || !host.zoomed() || target == null
-                            || target.display != host.displayContent()
+                    ZoomTarget target = host.state().zoomTarget();
+                    if (p.hasThrowable() || !host.state().zoomed() || target == null
+                            || target.display != host.state().displayContent()
                             || !Thread.holdsLock(target.globalLock)
                             || !TransitionMagnificationCompat.isStart(p.args)) return;
                     try {
@@ -54,19 +62,19 @@ final class TransitionMagnificationStartHooks {
                                     nativeTask = task;
                             }
                             Object start = p.args[3];
-                            NativeFreeformStartGate gate = host.nativeFreeformStart();
+                            NativeFreeformStartGate gate = host.actions().nativeFreeformStart();
                             if (nativeTask == null || !gate.begin(target.display, start)) return;
                             try {
                                 ((android.view.SurfaceControl.Transaction) start).addTransactionCommittedListener(
                                         command -> target.handler.post(command),
-                                        () -> host.finishNativeFreeformStart(target, start));
+                                        () -> host.actions().finishNativeFreeformStart(target, start));
                                 if (!NativeFreeformHandoff.markNativePrepared(nativeTask))
                                     throw new IllegalStateException("native return source identity changed");
-                                host.reapplyFinalMagnification(target.display, start, null);
+                                host.actions().reapplyFinalMagnification(target.display, start, null);
                                 if (!HomeTransitionMagnification.prepare(
                                         p.getResult(), (java.util.List<?>) p.args[2],
-                                        target.display, start, host.zoomScale(),
-                                        host.zoomOffsetX(), host.zoomOffsetY()))
+                                        target.display, start, host.state().zoomScale(),
+                                        host.state().zoomOffsetX(), host.state().zoomOffsetY()))
                                     throw new IllegalStateException("native return Root scene changed");
                                 log.accept("native return Root/start magnification transferred atomically");
                             } catch (Throwable error) {
@@ -86,17 +94,17 @@ final class TransitionMagnificationStartHooks {
                                     || ((Number) XposedHelpers.callMethod(
                                             task, "getWindowingMode")).intValue() != 5) continue;
                             Object start = p.args[3];
-                            NativeFreeformStartGate gate = host.nativeFreeformStart();
+                            NativeFreeformStartGate gate = host.actions().nativeFreeformStart();
                             if (!gate.begin(target.display, start)) return;
                             try {
                                 android.view.SurfaceControl.Transaction tx =
                                         (android.view.SurfaceControl.Transaction) start;
                                 tx.addTransactionCommittedListener(
                                         command -> target.handler.post(command),
-                                        () -> host.finishNativeFreeformStart(target, start));
+                                        () -> host.actions().finishNativeFreeformStart(target, start));
                                 if (!NativeFreeformHandoff.markPrepared(task))
                                     throw new IllegalStateException("native fullscreen source identity changed");
-                                host.reapplyFinalMagnification(target.display, start, null);
+                                host.actions().reapplyFinalMagnification(target.display, start, null);
                                 log.accept("native freeform main transform transferred in start transaction");
                             } catch (Throwable error) {
                                 gate.finish(target.display, start);
@@ -110,18 +118,18 @@ final class TransitionMagnificationStartHooks {
                             if (task == null) continue;
                             int transitMode = (Integer) XposedHelpers.callMethod(
                                     change, "getTransitMode", container);
-                            if (!MainLaunchMagnification.shouldApply(host.zoomed(), target.display,
+                            if (!MainLaunchMagnification.shouldApply(host.state().zoomed(), target.display,
                                     XposedHelpers.callMethod(task, "getDisplayContent"),
                                     XposedHelpers.callMethod(task, "getRootTask") == task,
                                     Boolean.TRUE.equals(XposedHelpers.callMethod(
                                             task, "isVisibleRequested")),
                                     (Integer) XposedHelpers.callMethod(task, "getWindowingMode"),
                                     transitMode)) continue;
-                            host.reapplyFinalMagnification(target.display, p.args[3], null);
+                            host.actions().reapplyFinalMagnification(target.display, p.args[3], null);
                             if (HomeTransitionMagnification.prepare(
                                     p.getResult(), (java.util.List<?>) p.args[2],
-                                    target.display, p.args[3], host.zoomScale(),
-                                    host.zoomOffsetX(), host.zoomOffsetY()))
+                                    target.display, p.args[3], host.state().zoomScale(),
+                                    host.state().zoomOffsetX(), host.state().zoomOffsetY()))
                                 log.accept("Home transition root retains workspace transform");
                             log.accept("main launch magnification included in transition start task="
                                     + XposedHelpers.getIntField(task, "mTaskId")

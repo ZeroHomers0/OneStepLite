@@ -519,18 +519,26 @@ final class WorkspaceTopPresentationController {
     static void onTopTaskState(Intent intent) {
         WorkspaceHost host=WorkspaceHost.currentInstance();
         if(host==null)return;
-        final int taskId=intent.getIntExtra("task",-1), userId=intent.getIntExtra("user",-1);
-        final Object token=intent.getParcelableExtra("token");
-        final boolean landscape=intent.getBooleanExtra("landscape",false);
-        if(taskId<0 || userId<0 || token==null)return;
-        final TopTaskState.Key key=new TopTaskState.Key(taskId,userId,token);
+        WorkspaceContract.TopTaskSignal signal=new WorkspaceContract.TopTaskSignal(
+                intent.getIntExtra(WorkspaceContract.EXTRA_TASK,-1),
+                intent.getIntExtra(WorkspaceContract.EXTRA_USER,-1),
+                intent.getParcelableExtra(WorkspaceContract.EXTRA_TOKEN),
+                intent.getBooleanExtra(WorkspaceContract.EXTRA_LANDSCAPE,false),
+                intent.getBooleanExtra(WorkspaceContract.EXTRA_FULLSCREEN,false),
+                intent.getBooleanExtra(WorkspaceContract.EXTRA_FOCUSED,false),
+                intent.getIntExtra(WorkspaceContract.EXTRA_MODE,-1),
+                intent.getBooleanExtra(WorkspaceContract.EXTRA_PORTRAIT,false),
+                intent.getStringExtra(WorkspaceContract.EXTRA_PAGE),
+                intent.getIntExtra(WorkspaceContract.EXTRA_REQUEST,Integer.MIN_VALUE),
+                intent.getIntExtra(WorkspaceContract.EXTRA_VIEWPORT_ORIENTATION,0),
+                intent.getLongExtra(WorkspaceContract.EXTRA_ISSUED,0));
+        if(!signal.hasTaskIdentity())return;
+        final TopTaskState.Key key=new TopTaskState.Key(signal.taskId(),signal.userId(),signal.token());
         host.main.post(()->{
-            host.topPresentationHost.topTaskDirection(key,new TopDirection(landscape,intent.getStringExtra("page"),
-                    intent.getIntExtra("request",Integer.MIN_VALUE),intent.getIntExtra("mode",-1),
-                    intent.getIntExtra("viewportOrientation",0)));
-            host.topPresentationHost.observeWideVideo(key,landscape,intent.getBooleanExtra("fullscreen",false),
-                    intent.getBooleanExtra("focused",false),intent.getIntExtra("mode",-1),
-                    intent.getBooleanExtra("portrait",false),intent.getLongExtra("issued",0));
+            host.topPresentationHost.topTaskDirection(key,new TopDirection(signal.landscape(),signal.page(),
+                    signal.request(),signal.mode(),signal.viewportOrientation()));
+            host.topPresentationHost.observeWideVideo(key,signal.landscape(),signal.fullscreen(),
+                    signal.focused(),signal.mode(),signal.portrait(),signal.issued());
         });
     }
 

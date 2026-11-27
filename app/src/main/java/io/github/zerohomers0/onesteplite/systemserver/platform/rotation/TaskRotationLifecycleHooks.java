@@ -11,19 +11,27 @@ import java.util.function.Consumer;
 final class TaskRotationLifecycleHooks {
     private TaskRotationLifecycleHooks() {}
 
-    interface Host {
+    interface Policy {
         Boolean applyFixedRotation(Object display, Object activity, String source);
         void beforeApplicationOrientationRequest(Object activity, int request);
         boolean updatingTaskRotation();
         Map<Object, Integer> taskRotations();
         boolean rotationActive();
         Object displayContent();
+        int heldRotation();
+    }
+
+    interface Actions {
         boolean retainTaskRotationOnNativeFinish(Object activity);
         void setTaskRotationResolver(Method resolver);
-        int heldRotation();
         void queueWorkspaceRotationRefresh(Object displayRotation);
         void evaluateNativeLandscape(Object display, String source);
         void refreshTaskRotation(Object display);
+    }
+
+    interface Host {
+        Policy policy();
+        Actions actions();
     }
 
     static void install(ClassLoader loader, Host host, Consumer<String> log) {
@@ -42,7 +50,7 @@ final class TaskRotationLifecycleHooks {
                     "handleTopActivityLaunchingInDifferentOrientation", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     if (p.args.length < 1 || p.args[0] == null) return;
-                    Boolean decision = host.applyFixedRotation(
+                    Boolean decision = host.policy().applyFixedRotation(
                             p.thisObject, p.args[0], "activity-orientation");
                     if (decision != null) p.setResult(decision);
                 }
@@ -61,18 +69,18 @@ final class TaskRotationLifecycleHooks {
                     new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     if (p.args.length > 0 && p.args[0] instanceof Integer) {
-                        host.beforeApplicationOrientationRequest(
+                        host.policy().beforeApplicationOrientationRequest(
                                 p.thisObject, (Integer) p.args[0]);
                     }
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (!host.rotationActive() || p.thisObject == null) return;
+                    if (!host.policy().rotationActive() || p.thisObject == null) return;
                     try {
                         Object display = XposedHelpers.getObjectField(
                                 p.thisObject, "mDisplayContent");
                         // This path also covers non-top OneStepLite side tasks. The stock
                         // DisplayContent hook only sees the current top activity.
-                        host.applyFixedRotation(
+                        host.policy().applyFixedRotation(
                                 display, p.thisObject, "activity-requested-orientation");
                     } catch (Throwable error) {
                         log.accept("task rotation requested-orientation refresh failed: " + error);
@@ -92,12 +100,12 @@ final class TaskRotationLifecycleHooks {
             XposedBridge.hookAllMethods(activityRecord, "onConfigurationChanged",
                     new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (!host.rotationActive() || p.thisObject == null
-                            || host.updatingTaskRotation()) return;
+                    if (!host.policy().rotationActive() || p.thisObject == null
+                            || host.policy().updatingTaskRotation()) return;
                     try {
                         Object display = XposedHelpers.getObjectField(
                                 p.thisObject, "mDisplayContent");
-                        host.applyFixedRotation(
+                        host.policy().applyFixedRotation(
                                 display, p.thisObject, "activity-configuration-changed");
                     } catch (Throwable error) {
                         log.accept("task rotation configuration refresh failed: " + error);
@@ -118,9 +126,9 @@ final class TaskRotationLifecycleHooks {
                     "setFixedRotationLaunchingAppUnchecked"}) {
                 XposedBridge.hookAllMethods(displayContent, name, new XC_MethodHook() {
                     @Override protected void beforeHookedMethod(MethodHookParam p) {
-                        if (host.rotationActive() && p.thisObject == host.displayContent()
+                        if (host.policy().rotationActive() && p.thisObject == host.policy().displayContent()
                                 && p.args.length > 0 && p.args[0] != null
-                                && host.taskRotations().containsKey(p.args[0])) {
+                                && host.policy().taskRotations().containsKey(p.args[0])) {
                             // OEM promotion paths also try to register an already transformed
                             // token as a display launch. Keep our transform local to that token.
                             p.setResult(null);
@@ -143,7 +151,7 @@ final class TaskRotationLifecycleHooks {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     // A non-null action is a real display rotation, not cancellation.
                     if (p.args.length > 1 || p.args.length == 1 && p.args[0] != null) return;
-                    if (host.retainTaskRotationOnNativeFinish(p.thisObject)) p.setResult(null);
+                    if (host.actions().retainTaskRotationOnNativeFinish(p.thisObject)) p.setResult(null);
                 }
             });
             log.accept("task rotation: owned token transform retained across native transition finish");
@@ -158,7 +166,7 @@ final class TaskRotationLifecycleHooks {
                     "com.android.server.wm.DisplayRotation", loader);
             Method resolver = XposedHelpers.findMethodExact(displayRotation,
                     "rotationForOrientation", int.class, int.class);
-            host.setTaskRotationResolver(resolver);
+            host.actions().setTaskRotationResolver(resolver);
             XposedBridge.hookMethod(resolver, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     try {
@@ -166,9 +174,9 @@ final class TaskRotationLifecycleHooks {
                                 "mDisplayContent");
                         int displayId = (Integer) XposedHelpers.callMethod(display, "getDisplayId");
                         if (FullscreenRotationPolicy.shouldHoldDisplay(
-                                host.rotationActive(), displayId)
-                                && display == host.displayContent()) {
-                            p.setResult(host.heldRotation());
+                                host.policy().rotationActive(), displayId)
+                                && display == host.policy().displayContent()) {
+                            p.setResult(host.policy().heldRotation());
                         }
                     } catch (Throwable error) {
                         log.accept("fixed rotation display hold skipped: " + error);
@@ -180,7 +188,7 @@ final class TaskRotationLifecycleHooks {
                 XposedHelpers.findAndHookMethod(displayRotation, "dispatchProposedRotation", int.class,
                     new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
-                    host.queueWorkspaceRotationRefresh(p.thisObject);
+                    host.actions().queueWorkspaceRotationRefresh(p.thisObject);
                 }
                 });
             } catch (Throwable unavailable) {
@@ -189,14 +197,14 @@ final class TaskRotationLifecycleHooks {
             XposedBridge.hookAllMethods(displayRotation, "updateRotationUnchecked",
                     new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
-                    if (host.updatingTaskRotation()) return;
+                    if (host.policy().updatingTaskRotation()) return;
                     try {
                         Object display = XposedHelpers.getObjectField(p.thisObject,
                                 "mDisplayContent");
-                        if (display != host.displayContent()) return;
-                        host.evaluateNativeLandscape(display, "display rotation updated");
-                        if (!host.rotationActive()) return;
-                        host.refreshTaskRotation(display);
+                        if (display != host.policy().displayContent()) return;
+                        host.actions().evaluateNativeLandscape(display, "display rotation updated");
+                        if (!host.policy().rotationActive()) return;
+                        host.actions().refreshTaskRotation(display);
                     } catch (Throwable error) {
                         log.accept("task rotation policy refresh failed: " + error);
                     }

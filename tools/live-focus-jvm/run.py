@@ -69,7 +69,7 @@ paths=[]
 for name,text in files.items():
     p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8');paths.append(str(p))
 jdk=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
-paths += [str(src/'PromotionFocusTransfer.java'),str(src/'FocusResult.java'),str(src/'TaskUserPolicy.java'),str(root/'tests/PromotionFocusTransferTest.java')]
+paths += [str(src/'PromotionFocusTransfer.java'),str(src/'FocusResult.java'),str(src/'TaskUserPolicy.java'),str(root/'tests/unit/PromotionFocusTransferTest.java')]
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths],check=True)
 for name in ('PromotionFocusTransferTest','LiveFocusRegression'):
     subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.'+name],check=True)

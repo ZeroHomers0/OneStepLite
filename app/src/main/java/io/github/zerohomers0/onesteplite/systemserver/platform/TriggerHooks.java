@@ -38,11 +38,11 @@ final class TriggerHooks {
                         return;
                     }
                     if (WorkspaceHost.LANDSCAPE_MODE_ACTION.equals(action)) {
-                        WorkspaceSystemEvents.onLandscapeMode(intent.getBooleanExtra("fullscreen", false));
+                        WorkspaceSystemEvents.onLandscapeMode(intent.getBooleanExtra(WorkspaceContract.EXTRA_FULLSCREEN, false));
                         return;
                     }
                     if(RetainedWindow.READY.equals(action)) {
-                        WorkspaceSystemEvents.onRetainedNativeReady(intent.getLongExtra("generation",0));return;
+                        WorkspaceSystemEvents.onRetainedNativeReady(intent.getLongExtra(WorkspaceContract.EXTRA_GENERATION,0));return;
                     }
                     if(WorkspaceHost.TOP_TASK_STATE_ACTION.equals(action)) {
                         WorkspaceTopPresentationController.onTopTaskState(intent);return;

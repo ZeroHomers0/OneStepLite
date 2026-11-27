@@ -85,7 +85,7 @@ with tempfile.TemporaryDirectory(prefix='onesteplite-native-coordinates-') as fo
         files.append(str(file))
     files += [str(package_dir(root) / (name + '.java'))
               for name in ('NativeFreeformPolicy', 'NativeFreeformCoordinates', 'Packages')]
-    files.append(str(root / 'tests/NativeFreeformPolicyTest.java'))
+    files.append(str(root / 'tests/android/NativeFreeformPolicyTest.java'))
     subprocess.run([str(jdk / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(work), *files], check=True)
     for name in ('NativeFreeformPolicyTest', 'NativeFreeformCoordinatesTest'):
         subprocess.run([str(jdk / 'java.exe'), '-cp', str(work), 'io.github.zerohomers0.onesteplite.' + name], check=True)

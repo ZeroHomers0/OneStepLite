@@ -74,9 +74,15 @@ final class ShortcutSettingsContent extends LinearLayout {
             detail.setPadding(0,dp(3),0,0);labels.addView(detail);}
         LayoutParams bounds=new LayoutParams(0,-2,1);bounds.setMarginStart(dp(12));bounds.setMarginEnd(dp(16));row.addView(labels,bounds);
         Switch toggle=WorkspaceSwitch.create(getContext(),target.label,chosen.contains(target.key()));row.addView(toggle,new LayoutParams(-2,dp(46)));
-        toggle.setEnabled(target.enabled || chosen.contains(target.key()));if(!target.enabled)icon.setAlpha(.4f);
-        toggle.setOnCheckedChangeListener((button,enabled)->{if(enabled)chosen.add(target.key());else chosen.remove(target.key());
+        boolean enabled=target.enabled || chosen.contains(target.key());
+        toggle.setEnabled(enabled);if(!target.enabled)icon.setAlpha(.4f);
+        String detail=target.unavailableReason.isEmpty()?"":target.unavailableReason+"，";
+        row.setContentDescription(target.label+"，" + detail + (chosen.contains(target.key())?"已启用":"未启用"));
+        row.setEnabled(enabled);row.setAlpha(enabled?1f:.58f);
+        toggle.setOnCheckedChangeListener((button,checked)->{if(checked)chosen.add(target.key());else chosen.remove(target.key());
+            row.setContentDescription(target.label+"，" + detail + (checked?"已启用":"未启用"));
             pinned.refresh();adapter.notifyDataSetChanged();changed();});
+        if(enabled)row.setOnClickListener(v->toggle.toggle());
         return row;
     }
     private void changed(){updateCount();adapter.notifyDataSetChanged();persist.run();}

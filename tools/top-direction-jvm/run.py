@@ -60,5 +60,5 @@ public class DirectionRegression {
 for name,body in FILES.items():
  p=OUT/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body,encoding='utf8')
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN']);classes=OUT/'classes';classes.mkdir(exist_ok=True)
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','-d',str(classes),*[str(OUT/n) for n in FILES]],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','-d',str(classes),*[str(OUT/n) for n in FILES],str(package_dir(ROOT)/'Actions.java'),str(package_dir(ROOT)/'WorkspaceContract.java')],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(classes),'io.github.zerohomers0.onesteplite.DirectionRegression'],check=True)
