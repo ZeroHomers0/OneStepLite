@@ -79,6 +79,7 @@ public final class WorkspaceRetentionTest {
     Object workspaceAnimator;
     boolean screenOn=true, retainedForLock, workspaceEntering, topSelectionPending, transferBusy, keyguardLocked;
     boolean retainedOnExit, mirrorVisible=true, failReturn, releasedBackdrop;
+    Runnable dormantTaskRelease;
     boolean sideCompacting, sideDesktopRevealing, sideScrolling;
     int scene=SUSPENDING;
     long sceneEpoch=7,retainedExitSourceEpoch=-1;
@@ -93,11 +94,13 @@ public final class WorkspaceRetentionTest {
     }
     static final class Handler {
         final ArrayDeque<Runnable> pending=new ArrayDeque<>();
+        void removeCallbacks(Runnable task){pending.remove(task);}
         void postDelayed(Runnable task,long delay){pending.add(task);}
     }
     final Handler main=new Handler();
     boolean mayWriteSideSurface(Slot slot){return true;}
     boolean sideRowInPlace(Slot slot){return true;}
+    void releaseHiddenRetainedTasks(int fromIndex){}
     void revealSideTaskForDesktop(Slot slot,android.os.Bundle binding){throw new AssertionError("unexpected scrolling row");}
     void onSlotTapped(int index){promotions++;}
     void queueSidePromotion(Slot slot,boolean fromDesktop){promotions++;}

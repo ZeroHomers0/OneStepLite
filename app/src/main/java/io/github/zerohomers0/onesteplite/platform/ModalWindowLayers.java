@@ -11,13 +11,24 @@ final class ModalWindowLayers {
     private final Map<Object, Layer> held = new IdentityHashMap<>();
 
     void reconcile(Object display, Object transaction) {
+        reconcile(display, transaction, true);
+    }
+
+    void reconcile(Object display, Object transaction, boolean workspaceActive) {
+        if (!workspaceActive) {
+            restoreHeld(display, transaction);
+            return;
+        }
         Object[] modal={null}, screenshot={null};
         Consumer<Object> scan=window->{
-            if (!Boolean.TRUE.equals(XposedHelpers.callMethod(window,"isVisible"))) return;
-            if (WindowIdentity.ownsPicker(window,display)) modal[0]=window;
             WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(window,"mAttrs");
-            if (attrs.type==WindowTypes.SCREENSHOT && "ScreenshotAnimation".contentEquals(attrs.getTitle())
-                    && "com.miui.screenshot".equals(attrs.packageName)) screenshot[0]=window;
+            if (attrs==null) return;
+            if (attrs.type==WindowTypes.SYSTEM_UI_DIALOG && Packages.SYSTEM_UI.equals(attrs.packageName)) {
+                if (Boolean.TRUE.equals(XposedHelpers.callMethod(window,"isVisible"))
+                        && WindowIdentity.ownsPicker(window,display)) modal[0]=window;
+            } else if (attrs.type==WindowTypes.SCREENSHOT && "com.miui.screenshot".equals(attrs.packageName)
+                    && "ScreenshotAnimation".contentEquals(attrs.getTitle())
+                    && Boolean.TRUE.equals(XposedHelpers.callMethod(window,"isVisible"))) screenshot[0]=window;
         };
         XposedHelpers.callMethod(display,"forAllWindows",scan,false);
         Object anchor=screenshot[0]==null?null:XposedHelpers.callMethod(screenshot[0],"getSurfaceControl");
@@ -25,7 +36,9 @@ final class ModalWindowLayers {
         var iterator=held.entrySet().iterator();
         while (iterator.hasNext()) {
             var entry=iterator.next();Object window=entry.getKey();Layer layer=entry.getValue();
-            if (XposedHelpers.callMethod(window,"getDisplayContent")!=display) continue;
+            Object ownerDisplay=XposedHelpers.callMethod(window,"getDisplayContent");
+            if(ownerDisplay==null){iterator.remove();continue;}
+            if(ownerDisplay!=display)continue;
             if (XposedHelpers.callMethod(window,"getSurfaceControl")!=layer.surface || !valid(layer.surface)) {
                 iterator.remove();continue;
             }
@@ -40,6 +53,23 @@ final class ModalWindowLayers {
         remember(modal[0],layer);
         XposedHelpers.callMethod(modal[0],"assignRelativeLayer",transaction,anchor,1,true);
         layer.anchor=anchor;
+    }
+
+    /** Inactive workspaces need no window scan; only leases from an earlier session remain. */
+    private void restoreHeld(Object display, Object transaction) {
+        if (held.isEmpty()) return;
+        var iterator=held.entrySet().iterator();
+        while (iterator.hasNext()) {
+            var entry=iterator.next();Object window=entry.getKey();Layer layer=entry.getValue();
+            Object ownerDisplay=XposedHelpers.callMethod(window,"getDisplayContent");
+            if(ownerDisplay==null){iterator.remove();continue;}
+            if(ownerDisplay!=display)continue;
+            if (XposedHelpers.callMethod(window,"getSurfaceControl")!=layer.surface || !valid(layer.surface)) {
+                iterator.remove();continue;
+            }
+            remember(window,layer);
+            restore(window,layer,transaction);iterator.remove();
+        }
     }
 
     private static boolean valid(Object surface) {

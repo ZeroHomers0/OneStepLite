@@ -21,6 +21,7 @@ import java.util.*;public class WindowContainerTransaction {
  public final List<String> ops=new ArrayList<>();
  private void op(String n,Object t,Object v){ops.add(n+":"+t+":"+v);}
  public void setWindowingMode(Object t,int v){op("mode",t,v);}public void setBounds(Object t,android.graphics.Rect r){op("bounds",t,r);}
+ public void setDensityDpi(Object t,int v){op("density",t,v);}
  public void setInterceptBackPressedOnTaskRoot(Object t,boolean v){op("back",t,v);}public void setTaskForceExcludedFromRecents(Object t,boolean v){op("excluded",t,v);}
  public void setDisablePip(Object t,boolean v){op("pip",t,v);}public void setDisableLaunchAdjacent(Object t,boolean v){op("adjacent",t,v);}
  public void setAlwaysOnTop(Object t,boolean v){op("top",t,v);}public void setFocusable(Object t,boolean v){op("focusable",t,v);}
@@ -142,6 +143,13 @@ public class LivePairRegression {
  public static void main(String[]args)throws Exception {
   // A fullscreen root can hide every root beneath it. Model the role WCT order in both directions.
   Fixture peers=new Fixture();
+  Fixture compact=new Fixture();
+  compact.pair=new LiveTaskPair(compact.o,compact.views,compact.c,11,"A",12,"B",0,0,
+      new Surface(1),compact.c.mSurfaceControl,new Rect(0,0,300,650),110,s->{});
+  List<String> compactOps=((android.window.WindowContainerTransaction)
+      compact.pair.windowTransaction(new Object[0])).ops;
+  check(compactOps.contains("density:A:110")&&compactOps.contains("density:B:0"),
+        "compact side role commits scaled density and restores native main density");
   Object[] retained={"C","D",null,"A","B"};
   for(boolean reverse:new boolean[]{false,true}){
    Object transaction=reverse?peers.pair.reverseWindowTransaction(retained):peers.pair.windowTransaction(retained);

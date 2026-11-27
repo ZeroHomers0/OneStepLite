@@ -11,7 +11,8 @@ final class LiveTaskPair {
     private final Object organizer, taskViews, controller, lock, firstToken, secondToken;
     private final int firstId, secondId, firstUserId, secondUserId;
     private final Object displayParent, sideParent;
-    private final Rect logical;
+    private final Rect sideBounds;
+    private final int sideDensity;
     private final Consumer<String> log;
     private Object temporaryFirstOwner, firstCanonical, secondCanonical, finishWct;
 
@@ -36,16 +37,23 @@ final class LiveTaskPair {
     LiveTaskPair(Object organizer, Object taskViews, Object controller,
             int firstId, Object firstToken, int secondId, Object secondToken, int firstUserId, int secondUserId,
             Object displayParent, Object sideParent, Rect logical, Consumer<String> log) {
+        this(organizer, taskViews, controller, firstId, firstToken, secondId, secondToken,
+                firstUserId, secondUserId, displayParent, sideParent, logical, 0, log);
+    }
+    LiveTaskPair(Object organizer, Object taskViews, Object controller,
+            int firstId, Object firstToken, int secondId, Object secondToken, int firstUserId, int secondUserId,
+            Object displayParent, Object sideParent, Rect sideBounds, int sideDensity, Consumer<String> log) {
         if (firstId < 0 || secondId < 0 || firstId == secondId || firstToken == null
                 || firstUserId < 0 || secondUserId < 0
-                || secondToken == null || firstToken.equals(secondToken) || logical == null
-                || logical.width() <= 0 || logical.height() <= 0)
+                || secondToken == null || firstToken.equals(secondToken) || sideBounds == null
+                || sideBounds.width() <= 0 || sideBounds.height() <= 0 || sideDensity < 0)
             throw new IllegalArgumentException("invalid single swap identity");
         this.organizer = organizer; this.taskViews = taskViews; this.controller = controller;
         this.firstId = firstId; this.firstToken = firstToken; this.secondId = secondId;
         this.secondToken = secondToken; this.firstUserId = firstUserId; this.secondUserId = secondUserId;
         this.displayParent = displayParent; this.sideParent = sideParent;
-        this.logical = new Rect(logical); this.log = log;
+        this.sideBounds = new Rect(sideBounds);
+        this.sideDensity = sideDensity; this.log = log;
         lock = XposedHelpers.getObjectField(organizer, "mLock");
     }
 
@@ -178,6 +186,7 @@ final class LiveTaskPair {
         set(wct, "setAlwaysOnTop", secondToken, false);
         set(wct, "setFocusable", secondToken, true);
         set(wct, "setBounds", secondToken, new Rect());
+        set(wct, "setDensityDpi", secondToken, 0);
         set(wct, "setForceTranslucent", secondToken, false);
         set(wct, "setHidden", secondToken, false);
         set(wct, "setTaskTrimmableFromRecents", secondToken, true);
@@ -186,7 +195,8 @@ final class LiveTaskPair {
         if (caption != null) XposedHelpers.callMethod(wct, "removeInsetsSource", secondToken,
                 caption, 0, android.view.WindowInsets.Type.captionBar());
         set(wct, "setWindowingMode", firstToken, 6);
-        set(wct, "setBounds", firstToken, new Rect(logical));
+        set(wct, "setBounds", firstToken, new Rect(sideBounds));
+        set(wct, "setDensityDpi", firstToken, sideDensity);
         set(wct, "setForceTranslucent", firstToken, true);
         set(wct, "setAlwaysOnTop", firstToken, true);
         set(wct, "setFocusable", firstToken, true);
@@ -226,6 +236,7 @@ final class LiveTaskPair {
         Object wct = Class.forName("android.window.WindowContainerTransaction").getDeclaredConstructor().newInstance();
         set(wct, "setWindowingMode", firstToken, 0);
         set(wct, "setBounds", firstToken, new Rect());
+        set(wct, "setDensityDpi", firstToken, 0);
         set(wct, "setForceTranslucent", firstToken, false);
         set(wct, "setAlwaysOnTop", firstToken, false);
         set(wct, "setFocusable", firstToken, true);
@@ -234,7 +245,8 @@ final class LiveTaskPair {
         set(wct, "setTaskTrimmableFromRecents", firstToken, true);
         set(wct, "reorder", firstToken, true);
         set(wct, "setWindowingMode", secondToken, 6);
-        set(wct, "setBounds", secondToken, new Rect(logical));
+        set(wct, "setBounds", secondToken, new Rect(sideBounds));
+        set(wct, "setDensityDpi", secondToken, sideDensity);
         set(wct, "setForceTranslucent", secondToken, true);
         set(wct, "setAlwaysOnTop", secondToken, true);
         set(wct, "setFocusable", secondToken, true);
@@ -457,7 +469,7 @@ final class LiveTaskPair {
         XposedHelpers.callMethod(tx, "setMatrix", leash, scale, 0f, 0f, scale);
         XposedHelpers.callMethod(tx, "setPosition", leash, 0f, 0f);
         XposedHelpers.callMethod(tx, "setAlpha", leash, 1f);
-        XposedHelpers.callMethod(tx, "setWindowCrop", leash, side ? new Rect(logical) : null);
+        XposedHelpers.callMethod(tx, "setWindowCrop", leash, side ? new Rect(sideBounds) : null);
         XposedHelpers.callMethod(tx, "show", leash);
     }
 

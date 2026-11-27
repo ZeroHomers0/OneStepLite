@@ -29,8 +29,8 @@ public class ModalLayersRegression {
  public static class Surface {public boolean valid=true;public boolean isValid(){return valid;}}
  public static class Session {public int mUid=1000;}
  public static class Window {
-  public Display display;public LayoutParams mAttrs=new LayoutParams();public int mOwnerUid=1000,mLastLayer=77,assigns,restores;public Session mSession=new Session();public Object mLastRelativeToLayer;public Surface surface=new Surface();public boolean visible=true;
-  public Object getDisplayContent(){return display;}public boolean isVisible(){return visible;}public Object getSurfaceControl(){return surface;}
+  public Display display;public LayoutParams mAttrs=new LayoutParams();public int mOwnerUid=1000,mLastLayer=77,assigns,restores,visibilityReads;public Session mSession=new Session();public Object mLastRelativeToLayer;public Surface surface=new Surface();public boolean visible=true;
+  public Object getDisplayContent(){return display;}public boolean isVisible(){visibilityReads++;return visible;}public Object getSurfaceControl(){return surface;}
   public void assignRelativeLayer(Object tx,Object anchor,int layer,boolean force){assigns++;mLastRelativeToLayer=anchor;mLastLayer=layer;}
   public void setRelativeLayer(Object tx,Object anchor,int layer){restores++;mLastRelativeToLayer=anchor;mLastLayer=layer;}
   public void setLayer(Object tx,int layer){restores++;mLastRelativeToLayer=null;mLastLayer=layer;}
@@ -41,6 +41,9 @@ public class ModalLayersRegression {
  static void apply(){layers.reconcile(dc,tx);}
  public static void main(String[]args){
   fresh();apply();check(modal.mLastRelativeToLayer==shot.surface&&modal.mLastLayer==1,"own picker must sit above screenshot anchor");
+  check(other.visibilityReads==0,"unrelated windows skip visibility inspection");
+  modal.display=null;dc.windows.remove(modal);apply();
+  modal.display=dc;shot.visible=false;apply();check(modal.restores==0,"a detached picker no longer owns a remembered layer");
   fresh();modal.mAttrs.title="OneStepLiteContentPanel";apply();check(modal.mLastRelativeToLayer==shot.surface,"owned content panel shares the screenshot-safe modal lease");
   check(shot.assigns==0&&shot.restores==0&&shot.mLastLayer==900&&other.assigns==0,"native screenshot/permission windows must not be mutated");
   apply();shot.visible=false;apply();check(modal.mLastLayer==77&&modal.mLastRelativeToLayer==null&&modal.restores==1,"preview expiry restores original native layer after repeated reconciliation");
@@ -59,6 +62,8 @@ public class ModalLayersRegression {
   }
   fresh();apply();modal.surface.valid=false;shot.visible=false;apply();check(modal.restores==0,"destroyed surfaces must not be restored");
   fresh();apply();modal.surface=new Surface();modal.mLastLayer=99;modal.mLastRelativeToLayer=null;apply();shot.visible=false;apply();check(modal.mLastLayer==99,"replacement modal surface must use its own native restore point");
+  fresh();apply();layers.reconcile(dc,tx,false);check(modal.mLastLayer==77&&modal.restores==1,
+        "inactive workspace restores held layers without a new scan");
   fresh();apply();Display second=new Display();layers.reconcile(second,tx);check(modal.mLastRelativeToLayer==shot.surface,"another display traversal must not retire this display's modal lease");shot.visible=false;apply();check(modal.mLastLayer==77,"original display still restores its lease");
   fresh();check(!WindowIdentity.ownsShareReceiver(modal),"content source panel is not a share receiver");
   modal.mAttrs.title=WindowIdentity.SHARE_RECEIVER_TITLE;apply();

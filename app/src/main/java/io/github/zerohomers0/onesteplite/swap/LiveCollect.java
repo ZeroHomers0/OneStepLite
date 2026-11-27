@@ -42,11 +42,18 @@ final class LiveCollect implements LiveSwapSession.Scene {
             Object homeToken, int appUserId, int homeUserId, Rect logical, Object hostRoot, Object background,
             BooleanSupplier current, Consumer<Consumer<Boolean>> handoff,
             Consumer<LiveSwap.Result> done, Consumer<String> log) {
+        return start(loader, taskViews, controller, geometry, homeToken, appUserId, homeUserId,
+                logical, 0, hostRoot, background, current, handoff, done, log);
+    }
+    static boolean start(ClassLoader loader, Object taskViews, Object controller, LiveSwapGeometry.Task geometry,
+            Object homeToken, int appUserId, int homeUserId, Rect logical, int sideDensity,
+            Object hostRoot, Object background, BooleanSupplier current,
+            Consumer<Consumer<Boolean>> handoff, Consumer<LiveSwap.Result> done, Consumer<String> log) {
         synchronized (ACTIVE) { if (ACTIVE.containsKey(controller)) return false; }
         LiveCollect run = null;
         try {
             run = new LiveCollect(loader, taskViews, controller, geometry, homeToken, appUserId, homeUserId,
-                    logical, hostRoot, background, current, handoff, done, log);
+                    logical, sideDensity, hostRoot, background, current, handoff, done, log);
             if (!current.getAsBoolean() || !run.task.preflight()) return false;
             Object wct = run.task.windowTransaction(false, false);
             run.task.arm(loader);
@@ -63,7 +70,8 @@ final class LiveCollect implements LiveSwapSession.Scene {
         return false;
     }
     private LiveCollect(ClassLoader loader, Object taskViews, Object controller, LiveSwapGeometry.Task geometry,
-            Object homeToken, int appUserId, int homeUserId, Rect logical, Object hostRoot, Object background,
+            Object homeToken, int appUserId, int homeUserId, Rect logical, int sideDensity,
+            Object hostRoot, Object background,
             BooleanSupplier current, Consumer<Consumer<Boolean>> handoff,
             Consumer<LiveSwap.Result> done, Consumer<String> log) throws Exception {
         this.controller = controller; this.hostRoot = hostRoot; this.background = background;
@@ -83,9 +91,11 @@ final class LiveCollect implements LiveSwapSession.Scene {
                 || XposedHelpers.getIntField(areaInfo, "displayId") != 0 || !LiveHomeTask.valid(hostRoot))
             throw new IllegalStateException("collect real parent unavailable");
         task = new LiveCollectTask(organizer, taskViews, controller, geometry.id, geometry.token,
-                homeToken, appUserId, logical, ShellCompat.call(area, "getDisplayAreaLeash", 0), log);
-        scale = (float) (geometry.end.width / geometry.bufferWidth);
-        if (Math.abs(scale - geometry.end.height / geometry.bufferHeight) > .003)
+                homeToken, appUserId, logical, sideDensity,
+                ShellCompat.call(area, "getDisplayAreaLeash", 0), log);
+        boolean compactSide = sideDensity > 0;
+        scale = compactSide ? 1f : (float) (geometry.end.width / geometry.bufferWidth);
+        if (!compactSide && Math.abs(scale - geometry.end.height / geometry.bufferHeight) > .003)
             throw new IllegalStateException("collect requires uniform task buffer");
         session = new LiveSwapSession(backend, this, new LiveSwapGeometry.Task[]{geometry}, 300L);
     }

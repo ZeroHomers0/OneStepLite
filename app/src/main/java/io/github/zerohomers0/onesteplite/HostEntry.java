@@ -2058,7 +2058,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             XposedBridge.hookAllMethods(display, "assignChildLayers", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     if (p.thisObject != sDisplayContent || p.args.length != 1) return;
-                    try { sModalWindowLayers.reconcile(p.thisObject,p.args[0]); }
+                    try { sModalWindowLayers.reconcile(p.thisObject,p.args[0], sZoomed); }
                     catch (Throwable error) { log("workspace modal layering skipped: " + error); }
                     if (!sZoomed && sNativeFreeformHostLayers.isEmpty()) return;
                     try { layerWorkspaceWithNativeFreeforms(p.thisObject, p.args[0]); }

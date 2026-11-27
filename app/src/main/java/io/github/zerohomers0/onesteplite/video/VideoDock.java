@@ -43,7 +43,8 @@ final class VideoDock {
     private final Handler handler;
     private final Set<Object> inputHandles=Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<Object,Object> suppressedSurfaces=new IdentityHashMap<>();
-    private final Set<Object> dismissed=Collections.newSetFromMap(new IdentityHashMap<>());
+    // WM owns these containers. Releasing the dock must not keep a removed task or window alive.
+    private final Set<Object> dismissed=Collections.newSetFromMap(new java.util.WeakHashMap<>());
     private volatile List<MediaController> players=Collections.emptyList();
     private volatile Map<String,Integer> playStates=Collections.emptyMap();
     private final java.util.concurrent.ConcurrentHashMap<String,Boolean> videoPackages=new java.util.concurrent.ConcurrentHashMap<>();
@@ -131,6 +132,7 @@ final class VideoDock {
     private boolean inputReady=true;
     private MediaSessionManager mediaManager;
     private boolean mediaListenerRegistered, playbackCallbacksReady, mediaMonitoring;
+    private long mediaPollDelay=2000L;
     private final Map<android.media.session.MediaSession.Token,MediaController> observedPlayers = new HashMap<>();
     private final MediaSessionManager.OnActiveSessionsChangedListener sessionsChanged = this::replaceMediaSessions;
     private boolean playbackRefreshQueued;
@@ -152,8 +154,16 @@ final class VideoDock {
             refreshMediaSessions();
             synchronized (lock) {
                 handler.removeCallbacks(this);
-                if (active && owner != null && owner.isBinderAlive())
-                    handler.postDelayed(this, mediaListenerRegistered && playbackCallbacksReady ? 30000L : 2000L);
+                if (active && owner != null && owner.isBinderAlive()) {
+                    long delay;
+                    if (mediaListenerRegistered && playbackCallbacksReady) {
+                        mediaPollDelay=2000L;delay=30000L;
+                    } else {
+                        delay=mediaPollDelay;
+                        mediaPollDelay=Math.min(10000L,mediaPollDelay*2L);
+                    }
+                    handler.postDelayed(this,delay);
+                }
             }
         }
     };
@@ -217,6 +227,7 @@ final class VideoDock {
     }
     private void stopMediaMonitoring() {
         mediaMonitoring = false;
+        mediaPollDelay=2000L;
         handler.removeCallbacks(poll);
         handler.removeCallbacks(playbackRefresh);
         playbackRefreshQueued = false;
@@ -328,6 +339,7 @@ final class VideoDock {
         Boolean cached=videoPackages.get(pkg);if(cached!=null)return cached;
         if(querying.add(pkg))handler.post(()->{
             boolean video=false;try{video=context.getPackageManager().getApplicationInfo(pkg,0).category==ApplicationInfo.CATEGORY_VIDEO;}catch(Exception ignored){}
+            if(videoPackages.size()>=128)videoPackages.clear();
             videoPackages.put(pkg,video);querying.remove(pkg);
         });
         return false;

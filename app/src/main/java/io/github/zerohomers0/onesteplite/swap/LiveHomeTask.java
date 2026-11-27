@@ -57,7 +57,8 @@ final class LiveHomeTask {
     Object windowTransaction(boolean reverse) throws Exception {
         Object wct = Class.forName("android.window.WindowContainerTransaction").getDeclaredConstructor().newInstance();
         set(wct, "setWindowingMode", reverse ? 6 : 0);
-        set(wct, "setBounds", reverse ? new Rect(request.logical) : new Rect());
+        set(wct, "setBounds", reverse ? new Rect(request.sideBounds) : new Rect());
+        set(wct, "setDensityDpi", reverse ? request.sideDensity : 0);
         set(wct, "setForceTranslucent", reverse);
         set(wct, "setAlwaysOnTop", reverse);
         set(wct, "setFocusable", true); set(wct, "setHidden", false);
@@ -186,7 +187,7 @@ final class LiveHomeTask {
             float scale = original ? sideScale : 1f;
             XposedHelpers.callMethod(tx, "setMatrix", current, scale, 0f, 0f, scale);
             XposedHelpers.callMethod(tx, "setPosition", current, 0f, 0f);
-            XposedHelpers.callMethod(tx, "setWindowCrop", current, original ? new Rect(request.logical) : null);
+            XposedHelpers.callMethod(tx, "setWindowCrop", current, original ? new Rect(request.sideBounds) : null);
             XposedHelpers.callMethod(tx, "setAlpha", current, 1f);
             XposedHelpers.callMethod(tx, "show", current);
             stageContainer(tx, original);

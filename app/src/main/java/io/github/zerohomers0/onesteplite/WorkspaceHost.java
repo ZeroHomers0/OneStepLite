@@ -105,6 +105,7 @@ public final class WorkspaceHost {
     private final ZoomTransport zoomTransport;
     volatile int screenW = 1080;
     volatile int screenH = 2460;
+    volatile int displayDensityDpi = 320;
     private final Object taskUsersLock = new Object();
     private final Object taskWindowStatesLock = new Object();
     private final java.util.Map<Integer, TaskWindowState> taskWindowStates =
@@ -869,10 +870,40 @@ public final class WorkspaceHost {
         root.setVisibility(View.GONE);
         setMirrorLayerVisible(false);
         scene = SUSPENDED;
+        if (dormantTaskRelease == null)
+            dormantTaskRelease = () -> releaseHiddenRetainedTasks(1);
+        main.removeCallbacks(dormantTaskRelease);
+        main.postDelayed(dormantTaskRelease, 60_000L);
         publishDesktopSideTasks();
         lockExitPending=false;
         log("host hidden; live TaskView bindings retained: " + describeTasks());
         releaseVisibleNativeRetainedTask();
+    }
+
+    /** One minute keeps fast re-entry useful without retaining full-resolution tasks indefinitely. */
+    private void releaseHiddenRetainedTasks(int fromIndex) {
+        if (scene != SUSPENDED || !retainedOnExit || retainedForLock
+                || transferBusy || promotion != null) return;
+        for (int index = Math.max(1, fromIndex); index < slots.length; index++) {
+            Slot slot = slots[index];
+            if (slot == null || !slot.occupied || slot.parked || slot.promoting
+                    || slot.closing || slot.nativeReleasePending || slot.taskId < 0
+                    || slot.taskToken == null) continue;
+            final int taskId = slot.taskId;
+            final Object token = slot.taskToken;
+            final int next = index + 1;
+            log("hidden retention timeout; release task=" + taskId + " slot=" + index);
+            returnToSystem(slot, false, () -> {
+                if (slot.taskId == taskId && token.equals(slot.taskToken)) clearSlot(slot);
+                retainedOnExit = hasBoundTasks();
+                publishDesktopSideTasks();
+                main.postDelayed(() -> releaseHiddenRetainedTasks(next), 50L);
+            }, error -> log("hidden retained task return stopped task=" + taskId + ": " + error));
+            return;
+        }
+        retainedOnExit = false;
+        publishDesktopSideTasks();
+        log("hidden retained task views released after timeout");
     }
 
     /** A native launch may change the task before the exit fade completes. */
@@ -1576,7 +1607,12 @@ public final class WorkspaceHost {
         return logicalBounds(slot,topPortrait);
     }
     private Rect logicalBounds(Slot slot,boolean portrait) {
-        if(slot==null || slot.index!=SLOT_TOP)return logicalBounds();
+        if(slot==null || slot.index<=SLOT_MAIN)return logicalBounds();
+        if(slot.index!=SLOT_TOP) {
+            if(slot.rect==null || slot.rect[2]<=slot.rect[0] || slot.rect[3]<=slot.rect[1])
+                return logicalBounds();
+            return new Rect(0,0,slot.rect[2]-slot.rect[0],slot.rect[3]-slot.rect[1]);
+        }
         TopTaskGeometry upper=topGeometry();
         if(!portrait)return new Rect(0,0,upper.logicalWidth,upper.logicalHeight);
         // A portrait-only app keeps its own aspect; the strip shows it centred with side bars.
@@ -1596,7 +1632,17 @@ public final class WorkspaceHost {
     }
     /** Keep app metrics in the same logical viewport as the hosted surface and input. */
     private void applyTopConfiguration(Object wct, Object token, Slot slot) {
-        if (slot == null || slot.index != SLOT_TOP) return;
+        if (slot == null || slot.index <= SLOT_MAIN) return;
+        if (slot.index != SLOT_TOP) {
+            if(slot.rect!=null && slot.rect[2]>slot.rect[0] && slot.rect[3]>slot.rect[1]
+                    && screenW>0 && screenH>0 && displayDensityDpi>0) {
+                float scale=Math.min((slot.rect[2]-slot.rect[0])/(float)screenW,
+                        (slot.rect[3]-slot.rect[1])/(float)screenH);
+                int density=Math.max(72,Math.round(displayDensityDpi*scale));
+                XposedHelpers.callMethod(wct,"setDensityDpi",token,density);
+            }
+            return;
+        }
         TopTaskGeometry geometry = topGeometry();
         Rect bounds=logicalBounds(slot);
         XposedHelpers.callMethod(wct, "setAppBounds", token, bounds);
@@ -2560,6 +2606,7 @@ public final class WorkspaceHost {
     private static final long ZOOM_ANIM_MS = WorkspaceMotionSpec.DURATION_MS;
     private static final long DORMANT_TRIM_MS = 5L * 60L * 1000L;
     private Runnable dormantTrim;
+    private Runnable dormantTaskRelease;
     android.animation.ValueAnimator workspaceAnimator;
     android.animation.ValueAnimator mainSideAnimator;
     private float mainSideFrameX = Float.NaN;
@@ -2867,6 +2914,12 @@ public final class WorkspaceHost {
         zoomCommands.write(on?zoomOnCommand():"1 0 0");
     }
 
+    /** Ten-second steady heartbeat touches one file timestamp instead of rewriting Settings. */
+    private void writeZoomLease() {
+        if(layout!=null && !zoomTransport.renew(zoomOnCommand(),System.currentTimeMillis()))
+            writeZoom(true);
+    }
+
     private void writeZoomLine(String command) {
         writeZoomLine(command, System.currentTimeMillis());
     }
@@ -3136,7 +3189,7 @@ public final class WorkspaceHost {
                         || !screenOn || keyguardLocked || root.getVisibility() != View.VISIBLE) return;
                 long now = SystemClock.uptimeMillis();
                 if (!holdsLiveFlipZoom() && now >= zoomAnimUntil) {
-                    if (layout != null) writeZoom(true);
+                    if (layout != null) writeZoomLease();
                     if (now - lastWorkspaceRepair >= 30000L) {
                         lastWorkspaceRepair = now;
                         if (carrierSlotIndex >= 0) reassertCarrier();
@@ -4110,10 +4163,8 @@ public final class WorkspaceHost {
             Object leash = getSurfaceField(slot.controller, "mTaskLeash");
             if (leash != null && leash != surface
                     && Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
-                // The leash carries the full-screen task buffer, so its crop must stay in
-                // logical screen coordinates. The cell-local crop above belongs to the
-                // TaskView parent, which is already cell sized; reusing it here showed
-                // only the buffer's top-left corner until the next scale pass.
+                // The leash carries the task's logical buffer. Side cells now use their
+                // compact pixel bounds while TOP keeps its logical viewport.
                 XposedHelpers.callMethod(tx, "setWindowCrop", leash, logicalBounds(slot));
                 boolean collecting = showing && slot.index == SLOT_TOP && topTransition != null
                         && topTransition.ownsTaskOpacity();
@@ -6392,6 +6443,9 @@ public final class WorkspaceHost {
     private void startLiveCollect(Slot slot, LiveTask task) {
         final WorkspaceLayout geometry = layout;
         final int width = screenW, height = screenH;
+        final Rect sideBounds = logicalBounds(slot);
+        final float sideScale = Math.min(sideBounds.width()/(float)width, sideBounds.height()/(float)height);
+        final int sideDensity = Math.max(72, Math.round(displayDensityDpi*sideScale));
         final Object hostSurface;
         try { hostSurface = liveHostRootSurface(); }
         catch (Throwable error) {
@@ -6461,7 +6515,7 @@ public final class WorkspaceHost {
                         // task once the bind completes.
                         accepted = LiveCollect.start(ctx.getClassLoader(), transitions,
                                 slot.controller, app, ticket.collectionHome.token, candidate.userId, ticket.liveMainUserId,
-                                new Rect(0, 0, width, height), hostSurface, null,
+                                sideBounds, sideDensity, hostSurface, null,
                                 () -> externalPromotionCurrent(ticket) && layout == geometry,
                                 settled -> main.post(() -> prepareCollectHandoff(ticket, settled)),
                                 result -> finishLiveResult(ticket, result), WorkspaceHost::log);
@@ -6515,6 +6569,10 @@ public final class WorkspaceHost {
         statusBar.finish(ticket);
         updateHint(slot);
         updateTouchRegion(slot);
+        if (result.sideOwned && result.rolesConfirmed) {
+            applyFullscreenBounds(slot);
+            applySlotScale(slot);
+        }
         publishDesktopSideTasks();
         log("live collect settled task=" + ticket.taskId + " side=" + result.sideOwned
                 + " confirmed=" + result.rolesConfirmed + " animated=" + result.succeeded + " error=" + result.error);
@@ -6755,10 +6813,14 @@ public final class WorkspaceHost {
                 ? geometry.mainOnRight : options.mainOnRightAfterSwap(geometry.mainOnRight));
         log("live swap mode=" + options.swapMode + " mainRight=" + geometry.mainOnRight + " -> " + target.mainOnRight);
         final int width = screenW, height = screenH;
+        final Rect sideBounds = logicalBounds(ticket.slot);
+        final float sideScale = Math.min(sideBounds.width()/(float)width, sideBounds.height()/(float)height);
+        final int sideDensity = Math.max(72, Math.round(displayDensityDpi*sideScale));
         final LiveTask first = ticket.previousMain;
         LiveSwapGeometry.Task a = new LiveSwapGeometry.Task(first.id, first.token, width, height,
                 liveMainRect(geometry), liveCellRect(target, ticket.slot.index));
-        LiveSwapGeometry.Task b = new LiveSwapGeometry.Task(ticket.taskId, ticket.token, width, height,
+        LiveSwapGeometry.Task b = new LiveSwapGeometry.Task(ticket.taskId, ticket.token,
+                sideBounds.width(), sideBounds.height(),
                 liveCellRect(geometry, ticket.slot.index), liveMainRect(target));
         final Object hostSurface;
         final java.util.List<LiveTaskSwapDriver.Peer> peers = new java.util.ArrayList<>();
@@ -6821,7 +6883,8 @@ public final class WorkspaceHost {
                         ticket.liveMainUserId = sideUser;
                         traceSwapEvent("before-single-native-transition");
                         LiveTaskSwapDriver.Flip request = new LiveTaskSwapDriver.Flip(a, b, user, sideUser,
-                                new Rect(0, 0, width, height), hostSurface, oldZoom, targetZoom,
+                                new Rect(0, 0, width, height), sideBounds, sideDensity,
+                                hostSurface, oldZoom, targetZoom,
                                 (zoom, done) -> applyLiveZoom(ticket, zoom, done),
                                 (zoom, restoring, done) -> applyLiveMainLayout(ticket, zoom, restoring, done),
                                 peers.toArray(new LiveTaskSwapDriver.Peer[0]), cellBackgrounds, ticket.liveBackdrop);
@@ -6901,6 +6964,9 @@ public final class WorkspaceHost {
         }
         final WorkspaceLayout geometry = layout;
         final int width = screenW, height = screenH;
+        final Rect sideBounds = logicalBounds(ticket.slot);
+        final float sideScale = Math.min(sideBounds.width()/(float)width, sideBounds.height()/(float)height);
+        final int sideDensity = Math.max(72, Math.round(displayDensityDpi*sideScale));
         final Object hostSurface;
         try {
             hostSurface = liveHostRootSurface();
@@ -6910,7 +6976,8 @@ public final class WorkspaceHost {
                             1 << ticket.slot.index), WorkspaceHost::log);
         }
         catch (Throwable error) { failPromotion(ticket, "live Home Host preparation: " + error); return; }
-        LiveSwapGeometry.Task app = new LiveSwapGeometry.Task(ticket.taskId, ticket.token, width, height,
+        LiveSwapGeometry.Task app = new LiveSwapGeometry.Task(ticket.taskId, ticket.token,
+                sideBounds.width(), sideBounds.height(),
                 liveCellRect(geometry, ticket.slot.index), liveMainRect(geometry));
         final LiveSwapZoom.Zoom zoom = new LiveSwapZoom.Zoom(zoomCommands.nextGeneration(),
                 geometry.mainScale, geometry.mainOffsetX, geometry.mainOffsetY);
@@ -6971,7 +7038,7 @@ public final class WorkspaceHost {
                         // updateHint()/ensureCellBackground() once the task is bound.
                         LiveTaskSwapDriver.Home request = new LiveTaskSwapDriver.Home(app,
                                 ticket.homeBeforeCover.id, ticket.homeBeforeCover.token, user, homeUser,
-                                new Rect(0, 0, width, height), hostSurface, zoom,
+                                new Rect(0, 0, width, height), sideBounds, sideDensity, hostSurface, zoom,
                                 sideRoots.toArray(new LiveTaskSwapDriver.SideRoot[0]),
                                 new Object[]{null}, ticket.liveBackdrop);
                         accepted = LiveTaskSwapDriver.startHome(ctx.getClassLoader(), transitions,
@@ -7226,6 +7293,8 @@ public final class WorkspaceHost {
             slot.launching = false;
             slot.parked = false;
             updateHint(slot);
+            applyFullscreenBounds(slot);
+            applySlotScale(slot);
             finishPromotionFocus(ticket, () -> {
                 if (promotion != ticket || ticket.cancelled) return;
                 traceSwapEvent("single-native-finish-and-focus");
@@ -7256,6 +7325,10 @@ public final class WorkspaceHost {
             slot.promoting = !original;
             slot.frozen = !original;
             restoreLiveSwapVisual(ticket);
+            if (original) {
+                applyFullscreenBounds(slot);
+                applySlotScale(slot);
+            }
             statusBar.finish(ticket);
             publishDesktopSideTasks();
             log("single native swap unconfirmed; original side retained=" + original + " error=" + result.error);
@@ -7288,6 +7361,10 @@ public final class WorkspaceHost {
             slot.promoting = !original;
             slot.frozen = !original;
             restoreLiveSwapVisual(ticket);
+            if (original) {
+                applyFullscreenBounds(slot);
+                applySlotScale(slot);
+            }
             statusBar.finish(ticket);
             publishDesktopSideTasks();
             log("live Home promotion unconfirmed; original side retained=" + original + " error=" + result.error);
@@ -7425,11 +7502,13 @@ public final class WorkspaceHost {
                 wct, "setDisableLaunchAdjacent", token, false);
         XposedHelpers.callMethod(wct, "setAlwaysOnTop", token, false);
         XposedHelpers.callMethod(wct, "setFocusable", token, true);
+        if (ticket.slot.index != SLOT_MAIN) {
+            XposedHelpers.callMethod(wct, "setDensityDpi", token, 0);
+        }
         if (ticket.slot.index == SLOT_TOP) {
             XposedHelpers.callMethod(wct, "setAppBounds", token, (Object) null);
             XposedHelpers.callMethod(wct, "setScreenSizeDp", token, 0, 0);
             XposedHelpers.callMethod(wct, "setSmallestScreenWidthDp", token, 0);
-            XposedHelpers.callMethod(wct, "setDensityDpi", token, 0);
         }
         // Keep the actual desktop/app below visible while the returning live surface is small.
         // Surface scaling alone does not prevent WM from occluding that underlying task.
@@ -8943,16 +9022,14 @@ public final class WorkspaceHost {
 
     /** Only side tasks are hosted; the system handles main-screen scaling. */
     private float scaleFor(Slot slot) {
+        if (slot.index != SLOT_TOP && slot.sideRow >= 0 && slot.rect != null) return 1f;
         if (slot.sideRow >= 0 && slot.rect != null)
             return Math.min((slot.rect[2] - slot.rect[0]) / (float) screenW,
                     (slot.rect[3] - slot.rect[1]) / (float) screenH);
         return slot.index == SLOT_TOP ? topGeometry().scale : layout.cellScale(slot.index - 1);
     }
 
-    /**
-     * 把任务内容按 k 等比缩放显示到槽位里（官方 DisplayContentSmtEx.applyZoomedMatrixSmt 的等价做法）。
-     * 任务窗口保持满屏（应用按整屏手机排版），只对承载表面做矩阵缩放，视觉就是"整屏缩小"。
-     */
+    /** Side cells render at compact bounds; TOP keeps matrix scaling for its shared strip. */
     private void applySlotScale(Slot slot) {
         if (holdsLiveFlipZoom() || !canRender(slot) || slot.promoting || !slot.occupied || slot.view == null
                 || !mayWriteSideSurface(slot)) {
@@ -8986,9 +9063,8 @@ public final class WorkspaceHost {
             log("applySlotScale slot=" + slot.index + " task=" + slot.taskId
                     + " k=" + k + " onLeash=" + slot.scaleOnLeash + " surface=" + sc);
         }
-        // TaskView 会把任务边界同步成视图大小（真机实测 DeepSeek=[0,622][807,2460]、设置=550
-        // 宽右对齐）→ 改回整屏 1080×2460，应用才按"整屏手机"排版。放在缩放之后执行。
-        // The opening/bounds guards already enforce logical full-screen sizing.
+        // TaskView may rewrite bounds while the surface changes. The opening/bounds
+        // guards reapply this slot's compact bounds and density.
         // 转场/可见性变化可能覆盖矩阵：在几个延迟点重发。
         main.postDelayed(() -> reapplyScale(slot), 300L);
         main.postDelayed(() -> reapplyScale(slot), 1200L);
@@ -9016,7 +9092,7 @@ public final class WorkspaceHost {
         }
     }
 
-    /** 把任务边界改回整屏（0,0,1080,2460），应用即按"整屏手机"排版。 */
+    /** Reapply the slot's native bounds and density after a TaskView transition. */
     private void applyFullscreenBounds(Slot slot) {
         if (holdsLiveFlipZoom() || !canRender(slot) || slot.promoting || slot.taskToken == null
                 || !mayWriteSideSurface(slot)) {
@@ -9233,8 +9309,10 @@ public final class WorkspaceHost {
             Object peerInfo = rootInfo(new LiveTask(peer));
             if (!ordinaryRoot(peerInfo, 6))
                 throw new IllegalStateException("peer user or identity changed slot=" + i);
+            int[] cell = geometry.cellBounds(i - 1);
             peers.add(new LiveTaskSwapDriver.Peer(new LiveSwapGeometry.Task(peer.taskId,
-                    peer.taskToken, width, height, liveCellRect(geometry, i), liveCellRect(target, i)),
+                    peer.taskToken, cell[2]-cell[0], cell[3]-cell[1],
+                    liveCellRect(geometry, i), liveCellRect(target, i)),
                     peer.controller, XposedHelpers.getIntField(peerInfo, "userId")));
         }
         ticket.liveBackdrop = LiveBackdrop.create(hostSurface, wallpaperBackdrop, width, height,

@@ -122,7 +122,10 @@ final class Warmup {
         synchronized (LOCK) {
             cached = cacheUser == user && appsLoaded
                     && SystemClock.elapsedRealtime() - appsPreparedAt < APPS_REFRESH_MILLIS ? apps : null;
-            if (cached == null) pendingApps.add(new PendingApps(user, ready));
+            if (cached == null) {
+                if (pendingApps.size() >= 32) pendingApps.remove(0);
+                pendingApps.add(new PendingApps(user, ready));
+            }
         }
         if (cached != null) deliver(context, new PendingApps(user, ready), cached);
         else {

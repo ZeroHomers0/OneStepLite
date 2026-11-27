@@ -17,7 +17,7 @@ import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 public class TopConfigRegression {
  static int checks;static void check(boolean b,String why){checks++;if(!b)throw new AssertionError(why);}
- static final int SLOT_TOP=4,ACTIVE=1,SUSPENDED=2;int scene=ACTIVE;long sceneEpoch=1;
+ static final int SLOT_MAIN=0,SLOT_TOP=4,ACTIVE=1,SUSPENDED=2;int scene=ACTIVE;long sceneEpoch=1;
  boolean suspendRequested,keyguardLocked,screenOn=true,defer,transferBusy,currentTicket=true,retainedOnExit;
  Object transitions=new Object(),shell=new Object();
  List<Runnable>idleQueue=new ArrayList<>();
@@ -26,7 +26,7 @@ public class TopConfigRegression {
  static class Handler {void post(Runnable r){r.run();}}
  Handler main=new Handler();
  List<Runnable>queue=new ArrayList<>();
- static class Slot {int index=4,taskId=42;Object taskToken="upper",controller=new Object();String pkg="test.app";boolean promoting,frozen;}
+ static class Slot {int index=4,taskId=42;int[] rect;Object taskToken="upper",controller=new Object();String pkg="test.app";boolean promoting,frozen;}
  static class Promotion {Slot slot=new Slot();Object token="upper";int taskId=42;boolean background=true,liveMainReveal,handoffComplete,restoreMainOpacityAfterHandoff;List<Object>otherSideTokens=List.of("side");}
  static class Info {boolean isFocused,isVisible=true;int mode,id;Object token;Info(int i,int m,Object t,boolean focus){id=i;mode=m;token=t;isFocused=focus;}}
  static class LiveTask {int id;Object token;LiveTask(int i,Object t){id=i;token=t;}LiveTask(int i,Object t,String pkg){this(i,t);}}
@@ -67,8 +67,9 @@ public class TopConfigRegression {
  boolean canRender(Slot s){return true;}boolean holdsLiveFlipZoom(){return false;}boolean mayWriteSideSurface(Slot s){return true;}
  boolean controllerOwns(Slot s,int id,Object token){return true;}Object getSurfaceField(Object c,String n){return new Object();}
  TopTaskGeometry topGeometry(){return new TopTaskGeometry(1080,2460,622,true,2.75f);}
+  int screenW=1080,screenH=2460,displayDensityDpi=440;
  boolean topPortrait;
- Rect logicalBounds(Slot s){TopTaskGeometry g=topGeometry();return s.index==4?new Rect(0,0,topPortrait?534:g.logicalWidth,g.logicalHeight):new Rect(0,0,1080,2460);}
+  Rect logicalBounds(Slot s){TopTaskGeometry g=topGeometry();if(s.index==4)return new Rect(0,0,topPortrait?534:g.logicalWidth,g.logicalHeight);if(s.rect!=null)return new Rect(0,0,s.rect[2]-s.rect[0],s.rect[3]-s.rect[1]);return new Rect(0,0,1080,2460);}
  boolean applyWct(String why,Object wct){applied=wct;return true;}static void log(String s){}
  Iterable<Info>rootInfos(){return infos;}int windowModeOf(Object o){return ((Info)o).mode;}
  boolean isSideToken(Object token){return "upper".equals(token)||"side".equals(token);}
@@ -99,6 +100,8 @@ public class TopConfigRegression {
   slot.index=1;h.applyFullscreenBounds(slot);w=(android.window.WindowContainerTransaction)h.applied;
   check(w.calls.stream().noneMatch(s->s.startsWith("setDensityDpi")),"other side density unchanged");
   check(w.calls.stream().noneMatch(s->s.startsWith("setAppBounds")||s.startsWith("setScreenSizeDp")||s.startsWith("setSmallestScreenWidthDp")),"ordinary side tasks acquire no top resource overrides");
+  slot.rect=new int[]{0,0,270,600};h.applyFullscreenBounds(slot);w=(android.window.WindowContainerTransaction)h.applied;
+  check(w.calls.contains("setDensityDpi:upper:107"),"ordinary side task uses compact slot density");
   var p=new Promotion();w=(android.window.WindowContainerTransaction)h.fullscreenExitTransaction(p);
   check(w.calls.contains("setDensityDpi:upper:0"),"top native return clears density override");
   check(w.calls.contains("setAppBounds:upper:null")&&w.calls.contains("setScreenSizeDp:upper:0:0")&&w.calls.contains("setSmallestScreenWidthDp:upper:0"),"return clears all top metrics in the same native transaction");
@@ -108,7 +111,7 @@ public class TopConfigRegression {
   check(w.calls.contains("setForceTranslucent:upper:true"),"live return keeps the real underlying Home/app visible");
   p.liveMainReveal=false;
   p.slot.index=1;w=(android.window.WindowContainerTransaction)h.fullscreenExitTransaction(p);
-  check(w.calls.stream().noneMatch(s->s.startsWith("setDensityDpi")),"side return does not acquire top density override");
+  check(w.calls.contains("setDensityDpi:upper:0"),"side return clears compact density in the same transaction");
   check(w.calls.stream().noneMatch(s->s.startsWith("setAppBounds")||s.startsWith("setScreenSizeDp")||s.startsWith("setSmallestScreenWidthDp")),"ordinary side return leaves resource policy alone");
   h=host();p=new Promotion();h.infos.set(1,new Info(42,1,"upper",true));
   h.finishNativeReturnWhenIdle(p,()->{},error->{throw new AssertionError(error);});

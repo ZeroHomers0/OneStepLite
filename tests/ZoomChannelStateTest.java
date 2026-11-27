@@ -90,8 +90,8 @@ public final class ZoomChannelStateTest {
         ZoomChannelState restarted = new ZoomChannelState(6000);
         check(!restarted.offerEncoded("5000|0.7 744 22", 6100), "new server rejects old boot snapshot");
         check(restarted.current(6100).command.equals("1 0 0"), "new server starts restored");
-        check(ZoomCommand.activeWatchDelay(6_000, 7_000, true) == 2_000,
-                "steady zoom caps the file fallback at two seconds");
+        check(ZoomCommand.activeWatchDelay(6_000, 7_000, true) == 5_000,
+                "steady zoom caps the file fallback at five seconds");
         check(ZoomCommand.activeWatchDelay(6_000, 20_900, true) == 101
                         && ZoomCommand.activeWatchDelay(6_000, 21_000, true) == 1,
                 "a steady fallback never skips the first expired instant");

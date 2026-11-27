@@ -28,7 +28,8 @@ final class LiveTaskSwapDriver {
         Overlays overlays;
         final LiveSwapGeometry.Task first, second;
         final int firstUserId, secondUserId;
-        final Rect logical;
+        final Rect logical, sideBounds;
+        final int sideDensity;
         final Object hostRoot;
         final LiveSwapZoom.Zoom oldZoom, targetZoom;
         final LiveSwapZoom.Bridge zoom;
@@ -53,15 +54,25 @@ final class LiveTaskSwapDriver {
                 Rect logical, Object hostRoot, LiveSwapZoom.Zoom oldZoom, LiveSwapZoom.Zoom targetZoom,
                 LiveSwapZoom.Bridge zoom, LiveSwapZoom.Layout layout, Peer[] peers,
                 Object[] cellBackgrounds, Object backdrop) {
+            this(first, second, firstUserId, secondUserId, logical, logical, 0,
+                    hostRoot, oldZoom, targetZoom, zoom, layout, peers, cellBackgrounds, backdrop);
+        }
+        Flip(LiveSwapGeometry.Task first, LiveSwapGeometry.Task second, int firstUserId, int secondUserId,
+                Rect logical, Rect sideBounds, int sideDensity, Object hostRoot,
+                LiveSwapZoom.Zoom oldZoom, LiveSwapZoom.Zoom targetZoom,
+                LiveSwapZoom.Bridge zoom, LiveSwapZoom.Layout layout, Peer[] peers,
+                Object[] cellBackgrounds, Object backdrop) {
             if (first == null || second == null || first.id == second.id || first.token.equals(second.token)
                     || firstUserId < 0 || secondUserId < 0
-                    || logical == null || logical.isEmpty() || hostRoot == null || oldZoom == null
+                    || logical == null || logical.isEmpty() || sideBounds == null || sideBounds.isEmpty()
+                    || sideDensity < 0 || hostRoot == null || oldZoom == null
                     || targetZoom == null || targetZoom.generation <= oldZoom.generation
                     || zoom == null || layout == null || peers == null || cellBackgrounds == null)
                 throw new IllegalArgumentException("incomplete live flip request");
             this.first = first; this.second = second;
             this.firstUserId = firstUserId; this.secondUserId = secondUserId;
-            this.logical = new Rect(logical); this.hostRoot = hostRoot;
+            this.logical = new Rect(logical); this.sideBounds = new Rect(sideBounds);
+            this.sideDensity = sideDensity; this.hostRoot = hostRoot;
             this.oldZoom = oldZoom; this.targetZoom = targetZoom; this.zoom = zoom; this.layout = layout;
             this.peers = peers.clone(); this.cellBackgrounds = cellBackgrounds.clone();
             this.backdrop = backdrop;
@@ -72,7 +83,8 @@ final class LiveTaskSwapDriver {
         final LiveSwapGeometry.Task app;
         final int homeId, appUserId, homeUserId;
         final Object homeToken, hostRoot;
-        final Rect logical;
+        final Rect logical, sideBounds;
+        final int sideDensity;
         final LiveSwapZoom.Zoom zoom;
         final SideRoot[] sideRoots;
         final Object[] cellBackgrounds;
@@ -93,14 +105,23 @@ final class LiveTaskSwapDriver {
         Home(LiveSwapGeometry.Task app, int homeId, Object homeToken, int appUserId, int homeUserId,
                 Rect logical, Object hostRoot, LiveSwapZoom.Zoom zoom, SideRoot[] sideRoots,
                 Object[] cellBackgrounds, Object backdrop) {
+            this(app, homeId, homeToken, appUserId, homeUserId, logical, logical, 0,
+                    hostRoot, zoom, sideRoots, cellBackgrounds, backdrop);
+        }
+        Home(LiveSwapGeometry.Task app, int homeId, Object homeToken, int appUserId, int homeUserId,
+                Rect logical, Rect sideBounds, int sideDensity, Object hostRoot,
+                LiveSwapZoom.Zoom zoom, SideRoot[] sideRoots,
+                Object[] cellBackgrounds, Object backdrop) {
             if (app == null || homeId < 0 || homeId == app.id || homeToken == null
                     || appUserId < 0 || homeUserId < 0
                     || homeToken.equals(app.token) || logical == null || logical.isEmpty()
+                    || sideBounds == null || sideBounds.isEmpty() || sideDensity < 0
                     || hostRoot == null || zoom == null || sideRoots == null || cellBackgrounds == null)
                 throw new IllegalArgumentException("incomplete live Home request");
             this.app = app; this.homeId = homeId; this.homeToken = homeToken;
             this.appUserId = appUserId; this.homeUserId = homeUserId;
-            this.logical = new Rect(logical); this.hostRoot = hostRoot; this.zoom = zoom;
+            this.logical = new Rect(logical); this.sideBounds = new Rect(sideBounds);
+            this.sideDensity = sideDensity; this.hostRoot = hostRoot; this.zoom = zoom;
             this.sideRoots = sideRoots.clone();
             this.cellBackgrounds = cellBackgrounds.clone();
             this.backdrop = backdrop;

@@ -10,6 +10,19 @@ final class ZoomTransport {
     private String lastBroadcastZoom, lastFileZoom;
     ZoomTransport(Context context,Consumer<String> logger) { ctx=context;this.logger=logger; }
     private void log(String text) { if (RoutineLog.allow(text)) logger.accept(text); }
+    /** Heartbeats renew only the file lease; Settings/DB and broadcast stay event-driven. */
+    boolean renew(String command,long issuedAt) {
+        if (command == null || !command.equals(lastFileZoom)) return false;
+        try {
+            java.io.File f = new java.io.File(ctx.getFilesDir(), "onesteplite-zoom");
+            if (!f.isFile() || !f.setLastModified(issuedAt)) return false;
+            log("zoom lease renewed: " + command);
+            return true;
+        } catch (Throwable failure) {
+            log("zoom lease renewal failed: " + failure);
+            return false;
+        }
+    }
     // Legacy system_server fallback reads only this numeric zoom tuple.
     @android.annotation.SuppressLint("SetWorldReadable")
     void publish(String command,long issuedAt) {

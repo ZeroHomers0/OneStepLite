@@ -2,7 +2,9 @@ package io.github.zerohomers0.onesteplite;
 
 import android.view.SurfaceControl;
 import java.lang.reflect.Proxy;
-import java.util.IdentityHashMap;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -10,7 +12,15 @@ import de.robv.android.xposed.XposedHelpers;
 
 /** Use the controller's existing draw sync; readiness follows its committed transaction. */
 final class SyncPreparation {
-    private static final IdentityHashMap<Object, Object> providerQueues = new IdentityHashMap<>();
+    private static final List<Binding> providerQueues = new ArrayList<>();
+
+    private static final class Binding {
+        final WeakReference<Object> organizer;
+        final Object queue;
+        Binding(Object organizer, Object queue) {
+            this.organizer = new WeakReference<>(organizer);this.queue = queue;
+        }
+    }
 
     private SyncPreparation() {}
 
@@ -18,7 +28,16 @@ final class SyncPreparation {
     static boolean bindProvider(Object organizer, Object queue) {
         if (!hasType(organizer, "com.android.wm.shell.ShellTaskOrganizer")
                 || !hasType(queue, "com.android.wm.shell.common.SyncTransactionQueue")) return false;
-        synchronized (providerQueues) { providerQueues.put(organizer, queue); }
+        synchronized (providerQueues) {
+            providerQueues.removeIf(binding -> binding.organizer.get() == null);
+            for (int i=0;i<providerQueues.size();i++) {
+                if (providerQueues.get(i).organizer.get() == organizer) {
+                    providerQueues.set(i,new Binding(organizer,queue));return true;
+                }
+            }
+            if (providerQueues.size() >= 8) providerQueues.remove(0);
+            providerQueues.add(new Binding(organizer,queue));
+        }
         return true;
     }
 
@@ -33,7 +52,11 @@ final class SyncPreparation {
         try { queue = XposedHelpers.getObjectField(controller, "mSyncQueue"); }
         catch (NoSuchFieldError absent) {
             Object organizer = XposedHelpers.getObjectField(controller, "mTaskOrganizer");
-            synchronized (providerQueues) { queue = providerQueues.get(organizer); }
+            synchronized (providerQueues) {
+                queue = null;
+                for (Binding binding : providerQueues)
+                    if (binding.organizer.get() == organizer) { queue = binding.queue; break; }
+            }
             if (queue == null) throw new IllegalStateException("Native background sync queue is not bound to this organizer", absent);
         }
         if (!hasType(queue, "com.android.wm.shell.common.SyncTransactionQueue"))

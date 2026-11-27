@@ -86,7 +86,7 @@ __WATCH__
   long zoomAnimUntil,lastWorkspaceRepair;Runnable workspaceHeartbeat;int carrierSlotIndex=-1,leashPocSlot=-1,writes,repairs;class Carriers{int leashPocSlot(){return -1;}}Carriers carriers=new Carriers();
   class Slot {boolean carrier,occupied=true,promoting,taskVisible=true;int index=1;}
   Slot[] slots={new Slot()};Host(){sInstance=this;}
-  boolean holdsLiveFlipZoom(){return flip;}void writeZoom(boolean b){writes++;}void reassertCarrier(){}
+  boolean holdsLiveFlipZoom(){return flip;}void writeZoom(boolean b){writes++;}void writeZoomLease(){writes++;}void reassertCarrier(){}
   void ensureCellBackground(Slot s){}void reapplyScale(Slot s){repairs++;}void scheduleSideVisibilityRepair(Slot s){}
 __HOST__
  }

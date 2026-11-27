@@ -117,6 +117,7 @@ public class LiveHostRegression {
  void clearSlot(Slot s){clears++;s.taskId=-1;s.taskToken=null;s.taskEpoch++;}
  void bindTask(Slot s,int id,Object t){binds++;s.taskId=id;s.taskToken=t;s.taskEpoch++;ownedTasks.putIfAbsent(t,new OwnedTask(t));}
  void writeZoom(boolean on){}
+ void applyFullscreenBounds(Slot s){}void applySlotScale(Slot s){}
  void updateCellSurfaceVisibility(Slot s){}
  void resumeNotificationLaunch(Promotion p){}
  int barRefreshes;void updateTopBarState(){barRefreshes++;}

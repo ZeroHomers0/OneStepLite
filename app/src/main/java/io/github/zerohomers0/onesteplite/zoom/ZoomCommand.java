@@ -4,7 +4,7 @@ package io.github.zerohomers0.onesteplite;
 final class ZoomCommand {
     static final long ACTIVE_TIMEOUT_MS = 15_000L;
     static final long FAST_WATCH_MS = 250L;
-    private static final long STEADY_WATCH_MS = 2_000L;
+    private static final long STEADY_WATCH_MS = 5_000L;
 
     private ZoomCommand() {}
 

@@ -11,15 +11,23 @@ final class LiveCollectTask {
     private final Object organizer, taskViews, controller, lock, displayParent, sideParent, token, homeToken;
     private final int id, userId;
     private final Rect logical;
+    private final int sideDensity;
     private final Consumer<String> log;
     private Object lease, leash, finishWct;
     private boolean waitingCancel, originalInfoSeen, releaseWhenSeen, repositoryRegistered = true;
 
     LiveCollectTask(Object organizer, Object taskViews, Object controller, int id, Object token,
             Object homeToken, int userId, Rect logical, Object displayParent, Consumer<String> log) {
+        this(organizer, taskViews, controller, id, token, homeToken, userId, logical, 0,
+                displayParent, log);
+    }
+    LiveCollectTask(Object organizer, Object taskViews, Object controller, int id, Object token,
+            Object homeToken, int userId, Rect logical, int sideDensity,
+            Object displayParent, Consumer<String> log) {
         this.organizer = organizer; this.taskViews = taskViews; this.controller = controller;
         this.id = id; this.token = token; this.homeToken = homeToken; this.userId = userId;
-        this.logical = new Rect(logical); this.displayParent = displayParent; this.log = log;
+        this.logical = new Rect(logical); this.sideDensity = sideDensity;
+        this.displayParent = displayParent; this.log = log;
         sideParent = XposedHelpers.getObjectField(controller, "mSurfaceControl");
         lock = XposedHelpers.getObjectField(organizer, "mLock");
     }
@@ -132,6 +140,7 @@ final class LiveCollectTask {
         Object wct = Class.forName("android.window.WindowContainerTransaction").getDeclaredConstructor().newInstance();
         set(wct, "setWindowingMode", reverse ? 0 : 6);
         set(wct, "setBounds", reverse ? new Rect() : new Rect(logical));
+        set(wct, "setDensityDpi", reverse ? 0 : sideDensity);
         set(wct, "setForceTranslucent", !reverse); set(wct, "setAlwaysOnTop", !reverse);
         // A side task remains visible, but cannot receive Back when the main activity finishes.
         // The inverse restores the original fullscreen task's ability to receive focus.

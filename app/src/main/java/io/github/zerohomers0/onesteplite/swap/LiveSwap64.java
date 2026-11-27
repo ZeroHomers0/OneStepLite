@@ -95,14 +95,16 @@ final class LiveSwap64 {
             if (flip != null) {
                 pair = new LiveTaskPair(organizer, taskViews, controller, flip.first.id, flip.first.token,
                         flip.second.id, flip.second.token, flip.firstUserId, flip.secondUserId,
-                        displayParent, sideParent, flip.logical, log);
+                        displayParent, sideParent, flip.sideBounds, flip.sideDensity, log);
                 single = null;
                 tasks = new LiveSwapGeometry.Task[2 + flip.peers.length];
                 tasks[0] = flip.first; tasks[1] = flip.second;
                 peerLeashes = new Object[flip.peers.length]; peerParents = new Object[flip.peers.length];
                 for (int i = 0; i < flip.peers.length; i++) tasks[i + 2] = flip.peers[i].task;
                 oldSideScale = uniform(flip.second.start, flip.second);
-                targetSideScale = uniform(flip.first.end, flip.first);
+                targetSideScale = flip.sideBounds.width() < flip.logical.width()
+                        || flip.sideBounds.height() < flip.logical.height()
+                        ? 1f : uniform(flip.first.end, flip.first);
             } else {
                 pair = null;
                 single = new LiveHomeTask(organizer, taskViews, controller, displayParent, sideParent, home);
@@ -117,9 +119,9 @@ final class LiveSwap64 {
         }
         static float uniform(LiveSwapGeometry.Rect rect, LiveSwapGeometry.Task task) {
             double x = rect.width / task.bufferWidth, y = rect.height / task.bufferHeight;
-            if (Math.abs(x - y) > .002 || x <= 0 || x >= 1)
+            if (Math.abs(x - y) > .002 || x <= 0 || x > 1.002)
                 throw new IllegalArgumentException("non-uniform or unscaled task geometry");
-            return (float) x;
+            return (float) Math.min(1d, x);
         }
         boolean preflight() {
             if (!current.getAsBoolean()) { log.accept("64 preflight refused: scene no longer current"); return false; }
@@ -293,7 +295,7 @@ final class LiveSwap64 {
                 XposedHelpers.callMethod(tx, "setLayer", leash, 0);
                 XposedHelpers.callMethod(tx, "setMatrix", leash, scale, 0f, 0f, scale);
                 XposedHelpers.callMethod(tx, "setPosition", leash, 0f, 0f);
-                XposedHelpers.callMethod(tx, "setWindowCrop", leash, new Rect(flip.logical));
+                XposedHelpers.callMethod(tx, "setWindowCrop", leash, new Rect(flip.sideBounds));
                 XposedHelpers.callMethod(tx, "setAlpha", leash, 1f); XposedHelpers.callMethod(tx, "show", leash);
             }
         }

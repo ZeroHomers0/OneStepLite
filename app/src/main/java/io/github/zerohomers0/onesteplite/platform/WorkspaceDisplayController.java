@@ -46,6 +46,7 @@ final class WorkspaceDisplayController {
             host.screenW = WorkspaceDisplayPolicy.width(tablet, width, height);
             host.screenH = WorkspaceDisplayPolicy.height(tablet, width, height);
         }
+        host.displayDensityDpi = host.ctx.getResources().getDisplayMetrics().densityDpi;
     }
 
     void scheduleDisplayGeometryRefresh() {

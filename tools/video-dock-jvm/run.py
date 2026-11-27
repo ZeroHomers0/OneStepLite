@@ -74,6 +74,10 @@ public class VideoDockRegression {
   media.open();worker.drain();check(media.context.media.adds==2,"reopening subscribes again");
   var fallback=new VideoDockRegression();fallback.context.media.fail=true;fallback.open();Handler fallbackWorker=(Handler)field(fallback.dock,"handler");fallbackWorker.drain();
   check(fallbackWorker.lastDelay==2000L,"unsupported callbacks retain bounded recovery polling");
+  Runnable fallbackPoll=(Runnable)field(fallback.dock,"poll");
+  fallbackPoll.run();check(fallbackWorker.lastDelay==4000L,"failed media callbacks back off after the first retry");
+  fallbackPoll.run();check(fallbackWorker.lastDelay==8000L,"failed media callbacks continue backing off");
+  fallbackPoll.run();fallbackPoll.run();check(fallbackWorker.lastDelay==10000L,"failed media callback polling stops at ten seconds");
   var h=new VideoDockRegression();var t=new Task();h.wms.mRoot.display.tasks.add(t);h.open();check(h.embedded(),"native PiP accepted");check(t.mode==2&&t.rect.equals(new Rect(600,500,920,680)),"source task mode and logical bounds unchanged");check(t.surface.scale==.92f,"native source matrix unchanged");check(t.surface.parent!=t.parent&&t.surface.parent.parent==h.host,"original video reparented only beneath temporary dock");
   h.command("release");check(!h.embedded()&&t.surface.parent==t.parent&&t.surface.layer==42,"native ownership and layer restored");h.prepare();check(!h.embedded(),"explicit return does not immediately recapture same PiP");
   for(int gate=0;gate<6;gate++){h=new VideoDockRegression();t=new Task();h.wms.mRoot.display.tasks.add(t);switch(gate){case 0:t.mode=1;break;case 1:t.mode=6;break;case 2:t.window.mAttrs.flags=8192;break;case 3:t.visible=false;break;case 4:t.transition=true;break;case 5:EntryGuard.allowed=false;break;}h.open();check(!h.embedded()&&t.surface.parent==t.parent,"ineligible/secure/locked source never moved "+gate);EntryGuard.allowed=true;}

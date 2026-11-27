@@ -72,6 +72,12 @@ public class EntryModulesRegression {
   int writes=android.util.AtomicFile.writes;transport.publish(".75 600 100",1001);
   check(android.util.AtomicFile.writes==writes&&Files.getLastModifiedTime(file).toMillis()==1001,"same command renews file timestamp without rewriting buffers");
   check(c.sent.size()==3&&android.provider.Settings.Global.value.startsWith("1001|"),"timestamp-only file renewal preserves independent broadcast and settings leases");
+  String settingsBeforeRenew=android.provider.Settings.Global.value;int broadcastsBeforeRenew=c.sent.size();
+  check(transport.renew(".75 600 100",1002)&&Files.getLastModifiedTime(file).toMillis()==1002,
+        "lease heartbeat touches only the fallback file timestamp");
+  check(settingsBeforeRenew.equals(android.provider.Settings.Global.value)&&c.sent.size()==broadcastsBeforeRenew,
+        "lease heartbeat avoids Settings and broadcast churn");
+  check(!transport.renew("1 0 0",1003),"heartbeat cannot renew a different steady command");
   Files.delete(file);transport.publish(".75 600 100",1002);
   check(Files.exists(file)&&android.util.AtomicFile.writes==writes+1,"missing fallback file is recreated despite command cache");
   c.sent.subList(1,c.sent.size()).clear();
