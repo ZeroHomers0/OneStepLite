@@ -6588,10 +6588,22 @@ public final class WorkspaceHost {
 
     private long transitionInputStartedAt, transitionInputReleaseRequestedAt;
 
+    private boolean onTransitionContentDrag(View blocker, android.view.DragEvent event) {
+        if (blocker != transitionInputWindow || topBar == null || scene != ACTIVE || !screenOn
+                || keyguardLocked || !workspaceOptions.dragShareEnabled || !dragHoverDropCurrent()
+                || dragHoverDropPackage.equals(dragHoverDropSource)) return false;
+        android.content.ClipDescription clip = event.getClipDescription();
+        if (clip == null || !clip.hasMimeType("image/*")) return false;
+        if (event.getAction() == android.view.DragEvent.ACTION_DRAG_STARTED) return true;
+        if (event.getAction() != android.view.DragEvent.ACTION_DROP || !overDragHoverTarget(event)) return false;
+        return topBar.onPromotedContentDrop(event, dragHoverDropPackage, promotion != null);
+    }
+
     private void acquireTransitionInputWindow() {
         if (transitionInputWindow != null) return;
         View blocker = new View(ctx);
         blocker.setOnTouchListener((view, event) -> true);
+        blocker.setOnDragListener(this::onTransitionContentDrag);
         blocker.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         WindowManager.LayoutParams params = new WindowManager.LayoutParams();
         params.copyFrom(lp);

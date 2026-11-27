@@ -4,6 +4,7 @@ import android.content.ClipData;
 import android.content.ClipDescription;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Environment;
@@ -20,9 +21,9 @@ import java.util.concurrent.ExecutorService;
 final class MediaStoreImageBridge {
     private static final long TTL_MS=10L*60L*1000L;
     private static final String FOLDER=Environment.DIRECTORY_PICTURES+"/.OneStep";
+    private static final Uri PRIMARY_IMAGES=MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
     private static final Handler CLEANUP=new Handler(Looper.getMainLooper());
     private static final ExecutorService IO=BackgroundExecutor.single("OneStepLite-media-store");
-    private static boolean noMediaReady;
     private MediaStoreImageBridge(){}
 
     static boolean isInternalPath(String path){
@@ -39,12 +40,12 @@ final class MediaStoreImageBridge {
                 if(input==null)throw new IOException("MediaStore source unavailable");
                 copy(input,output);
             }
-        });
+        },false);
     }
 
     static Uri publishBytes(Context context,byte[] bytes,String mime){
         if(context==null || bytes==null || bytes.length==0 || mime==null || !mime.startsWith("image/"))return null;
-        return publish(context,mime,output->output.write(bytes));
+        return publish(context,mime,output->output.write(bytes),true);
     }
 
     static ClipData publish(Context context,ClipData source){
@@ -82,8 +83,7 @@ final class MediaStoreImageBridge {
         IO.execute(()->cleanupExpired(app==null?context:app));
     }
 
-    private static Uri publish(Context context,String mime,Writer writer){
-        ensureNoMedia(context);
+    private static Uri publish(Context context,String mime,Writer writer,boolean nativeDrag){
         String extension=extension(mime);
         ContentValues values=new ContentValues();
         values.put(MediaStore.MediaColumns.DISPLAY_NAME,"OneStep-"+UUID.randomUUID()+extension);
@@ -92,7 +92,7 @@ final class MediaStoreImageBridge {
         values.put(MediaStore.MediaColumns.IS_PENDING,1);
         Uri target=null;
         try{
-            target=context.getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values);
+            target=context.getContentResolver().insert(PRIMARY_IMAGES,values);
             if(target==null)throw new IOException("MediaStore insert rejected");
             try(OutputStream output=context.getContentResolver().openOutputStream(target,"w")) {
                 if(output==null)throw new IOException("MediaStore stream unavailable");
@@ -101,6 +101,7 @@ final class MediaStoreImageBridge {
             ContentValues complete=new ContentValues();complete.put(MediaStore.MediaColumns.IS_PENDING,0);
             if(context.getContentResolver().update(target,complete,null,null)<=0)
                 throw new IOException("MediaStore completion rejected");
+            if(nativeDrag)context.grantUriPermission(Packages.SYSTEM_UI,target,Intent.FLAG_GRANT_READ_URI_PERMISSION);
             scheduleDelete(context.getApplicationContext()==null?context:context.getApplicationContext(),target);
             return target;
         }catch(Exception failure){
@@ -115,47 +116,14 @@ final class MediaStoreImageBridge {
         while((read=input.read(buffer))>=0)if(read>0)output.write(buffer,0,read);
     }
 
-    private static synchronized void ensureNoMedia(Context context){
-        if(noMediaReady)return;
-        Uri collection=MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
-        try(Cursor cursor=context.getContentResolver().query(collection,
-                new String[]{MediaStore.MediaColumns.DISPLAY_NAME},
-                MediaStore.MediaColumns.DISPLAY_NAME+"=? AND "+MediaStore.MediaColumns.RELATIVE_PATH+"=?",
-                new String[]{".nomedia",FOLDER},null)){
-            if(cursor!=null && cursor.moveToFirst()){noMediaReady=true;return;}
-        }catch(RuntimeException unavailable){/* Try to create the marker below. */}
-        ContentValues values=new ContentValues();
-        values.put(MediaStore.MediaColumns.DISPLAY_NAME,".nomedia");
-        values.put(MediaStore.MediaColumns.MIME_TYPE,"application/octet-stream");
-        values.put(MediaStore.MediaColumns.RELATIVE_PATH,FOLDER);
-        values.put(MediaStore.MediaColumns.IS_PENDING,1);
-        Uri marker=null;
-        try{
-            marker=context.getContentResolver().insert(collection,values);
-            if(marker==null)throw new IOException("Hidden marker insert rejected");
-            try(OutputStream output=context.getContentResolver().openOutputStream(marker,"w")){
-                if(output==null)throw new IOException("Hidden marker stream unavailable");
-                output.write(new byte[0]);
-            }
-            ContentValues complete=new ContentValues();complete.put(MediaStore.MediaColumns.IS_PENDING,0);
-            if(context.getContentResolver().update(marker,complete,null,null)<=0)
-                throw new IOException("Hidden marker completion rejected");
-            noMediaReady=true;
-        }catch(Exception failure){
-            if(marker!=null)try{context.getContentResolver().delete(marker,null,null);}catch(RuntimeException ignored){}
-            android.util.Log.w(Tags.PROBE,"hidden MediaStore marker unavailable",failure);
-        }
-    }
-
     private static void cleanupExpired(Context context){
         long before=System.currentTimeMillis()/1000L-TTL_MS/1000L;
         try(Cursor cursor=context.getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 new String[]{MediaStore.MediaColumns._ID},
-                MediaStore.MediaColumns.RELATIVE_PATH+"=? AND "+MediaStore.MediaColumns.DATE_ADDED+"<?",
-                new String[]{FOLDER,Long.toString(before)},null)){
+                MediaStore.MediaColumns.RELATIVE_PATH+" IN (?,?) AND "+MediaStore.MediaColumns.DATE_ADDED+"<?",
+                new String[]{FOLDER,FOLDER+"/",Long.toString(before)},null)){
             while(cursor!=null && cursor.moveToNext())
-                context.getContentResolver().delete(android.content.ContentUris.withAppendedId(
-                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,cursor.getLong(0)),null,null);
+                deleteTemporary(context,android.content.ContentUris.withAppendedId(PRIMARY_IMAGES,cursor.getLong(0)));
         }catch(RuntimeException unavailable){
             android.util.Log.w(Tags.PROBE,"MediaStore image startup cleanup deferred",unavailable);
         }
@@ -163,12 +131,24 @@ final class MediaStoreImageBridge {
 
     private static void discard(Context context,Uri uri){
         if(!MediaStore.Images.Media.EXTERNAL_CONTENT_URI.getAuthority().equals(uri.getAuthority()))return;
-        try(Cursor cursor=context.getContentResolver().query(uri,
-                new String[]{MediaStore.MediaColumns.RELATIVE_PATH},null,null,null)){
-            if(cursor==null || !cursor.moveToFirst() || !FOLDER.equals(cursor.getString(0)))return;
-            context.getContentResolver().delete(uri,null,null);
+        try{
+            try(Cursor cursor=context.getContentResolver().query(uri,
+                    new String[]{MediaStore.MediaColumns.RELATIVE_PATH},null,null,null)){
+                if(cursor==null || !cursor.moveToFirst())return;
+                String path=cursor.getString(0);
+                if(!FOLDER.equals(path) && !(FOLDER+"/").equals(path))return;
+            }
+            deleteTemporary(context,uri);
         }catch(RuntimeException unavailable){
             android.util.Log.w(Tags.PROBE,"MediaStore image cleanup deferred",unavailable);
+        }
+    }
+
+    private static void deleteTemporary(Context context,Uri uri){
+        try{
+            context.revokeUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }finally{
+            context.getContentResolver().delete(uri,null,null);
         }
     }
 
