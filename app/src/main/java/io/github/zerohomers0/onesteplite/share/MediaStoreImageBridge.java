@@ -101,14 +101,31 @@ final class MediaStoreImageBridge {
             ContentValues complete=new ContentValues();complete.put(MediaStore.MediaColumns.IS_PENDING,0);
             if(context.getContentResolver().update(target,complete,null,null)<=0)
                 throw new IOException("MediaStore completion rejected");
-            if(nativeDrag)context.grantUriPermission(Packages.SYSTEM_UI,target,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Uri delivery=nativeDrag?grantNativeRead(context,target,mime):target;
             scheduleDelete(context.getApplicationContext()==null?context:context.getApplicationContext(),target);
-            return target;
+            return delivery;
         }catch(Exception failure){
             if(target!=null)try{context.getContentResolver().delete(target,null,null);}catch(RuntimeException ignored){}
             android.util.Log.w(Tags.PROBE,"MediaStore image publication failed",failure);
             return null;
         }
+    }
+
+    private static Uri fileUri(Uri image){
+        return MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY,android.content.ContentUris.parseId(image));
+    }
+
+    private static Uri grantNativeRead(Context context,Uri image,String mime){
+        // MediaProvider first checks the Files URI when the receiver opens the JPEG by path.
+        Uri file=fileUri(image);
+        try{
+            if(mime.equalsIgnoreCase(context.getContentResolver().getType(file))){
+                context.grantUriPermission(Packages.SYSTEM_UI,file,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                return file;
+            }
+        }catch(RuntimeException unavailable){/* Retain native image URI delivery on this provider. */}
+        context.grantUriPermission(Packages.SYSTEM_UI,image,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        return image;
     }
 
     private static void copy(InputStream input,OutputStream output)throws IOException{
@@ -147,6 +164,10 @@ final class MediaStoreImageBridge {
     private static void deleteTemporary(Context context,Uri uri){
         try{
             context.revokeUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Uri alternate=uri.equals(fileUri(uri))
+                    ?android.content.ContentUris.withAppendedId(PRIMARY_IMAGES,android.content.ContentUris.parseId(uri))
+                    :fileUri(uri);
+            context.revokeUriPermission(alternate,Intent.FLAG_GRANT_READ_URI_PERMISSION);
         }finally{
             context.getContentResolver().delete(uri,null,null);
         }

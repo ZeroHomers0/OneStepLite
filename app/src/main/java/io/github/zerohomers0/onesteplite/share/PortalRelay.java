@@ -113,7 +113,9 @@ final class PortalRelay {
             int uid=context.getPackageManager().getApplicationInfo(Packages.SYSTEM_UI,0).uid;
             boolean granted=context.checkUriPermission(uri,-1,uid,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     ==android.content.pm.PackageManager.PERMISSION_GRANTED;
-            result=granted?ShareDiagnostics.Code.SOURCE_IMAGE_GRANTED:ShareDiagnostics.Code.SOURCE_IMAGE_NOT_GRANTED;
+            boolean file=uri.getPathSegments().contains("file");
+            result=file?(granted?ShareDiagnostics.Code.SOURCE_FILE_GRANTED:ShareDiagnostics.Code.SOURCE_FILE_NOT_GRANTED)
+                    :(granted?ShareDiagnostics.Code.SOURCE_IMAGE_GRANTED:ShareDiagnostics.Code.SOURCE_IMAGE_NOT_GRANTED);
         }catch(Exception unavailable){
             result=ShareDiagnostics.Code.SOURCE_CHECK_UNAVAILABLE;
         }

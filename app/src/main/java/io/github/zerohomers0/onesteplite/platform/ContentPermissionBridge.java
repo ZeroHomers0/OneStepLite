@@ -139,9 +139,11 @@ final class ContentPermissionBridge {
             if(!(payload instanceof java.util.List<?> uris) || uris.size()!=1
                     || !(uris.get(0) instanceof Uri uri) || !"media".equals(uri.getAuthority()))return null;
             java.util.List<String> path=uri.getPathSegments();
-            if(path.size()!=4 || !("external_primary".equals(path.get(0)) || "external".equals(path.get(0)))
-                    || !"images".equals(path.get(1)) || !"media".equals(path.get(2))
-                    || ContentUris.parseId(uri)<0)return null;
+            if(path.isEmpty() || !("external_primary".equals(path.get(0)) || "external".equals(path.get(0))))
+                return null;
+            boolean image=path.size()==4 && "images".equals(path.get(1)) && "media".equals(path.get(2));
+            boolean file=path.size()==3 && "external_primary".equals(path.get(0)) && "file".equals(path.get(1));
+            if((!image && !file) || ContentUris.parseId(uri)<0)return null;
             return uri;
         }catch(RuntimeException unavailable){
             return null;
@@ -155,8 +157,12 @@ final class ContentPermissionBridge {
             String target=(String)XposedHelpers.getObjectField(handler,"mTargetPackage");
             Context userContext=diagnosticContext(loader,user);
             int uid=userContext.getPackageManager().getPackageUid(target,0);
-            Uri file=MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY,ContentUris.parseId(image));
-            boolean imageGranted=explicitReadGrant(userContext,image,uid);
+            long id=ContentUris.parseId(image);
+            Uri file=MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY,id);
+            Uri imageUri=image.equals(file)
+                    ?ContentUris.withAppendedId(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),id)
+                    :image;
+            boolean imageGranted=explicitReadGrant(userContext,imageUri,uid);
             boolean fileGranted=explicitReadGrant(userContext,file,uid);
             reportGrant(loader,user,imageGranted?ShareDiagnostics.Code.RECEIVER_IMAGE_GRANTED:ShareDiagnostics.Code.RECEIVER_IMAGE_NOT_GRANTED);
             reportGrant(loader,user,fileGranted?ShareDiagnostics.Code.RECEIVER_FILE_GRANTED:ShareDiagnostics.Code.RECEIVER_FILE_NOT_GRANTED);

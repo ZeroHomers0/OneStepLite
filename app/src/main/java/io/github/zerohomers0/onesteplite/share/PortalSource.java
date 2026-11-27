@@ -151,8 +151,11 @@ final class PortalSource implements AutoCloseable {
         if(distance<=slop*(image?1f:1.5f))return;
         if(held<longPress+150L || android.os.SystemClock.uptimeMillis()<liftAt || !live())return;
         Bundle request=liftCandidate;liftCandidate=null;
-        request.putBoolean("lift",true);offer(request,new Bundle[1],new CountDownLatch(1),new AtomicBoolean());
-        if(window==null){discardCapture(request.getString("capture_id"));discardPublication(request.getString("cleanup_uri"));}
+        Bundle[] result=new Bundle[1];
+        request.putBoolean("lift",true);offer(request,result,new CountDownLatch(1),new AtomicBoolean());
+        if(window==null && (result[0]==null || !result[0].getBoolean("accepted"))){
+            discardCapture(request.getString("capture_id"));discardPublication(request.getString("cleanup_uri"));
+        }
     }
 
     private void clearLiftCandidate() {
@@ -274,7 +277,9 @@ final class PortalSource implements AutoCloseable {
         catch(RuntimeException unavailable){
             if(uri!=null)reportLift(ShareDiagnostics.Code.LIFT_WINDOW_FAILED);
             android.util.Log.w(Tags.PROBE,"native source window unavailable",unavailable);
-            finishRejectedLift(!expired.get() && live());done.countDown();
+            Bundle reply=new Bundle();
+            reply.putBoolean("accepted",finishRejectedLift(!expired.get() && live(),uri));
+            result[0]=reply;done.countDown();
         }
     }
 
@@ -357,14 +362,18 @@ final class PortalSource implements AutoCloseable {
                 android.util.Log.w(Tags.PROBE,"portal drag start rejected",failure);
             }
             startingDrag=false;
-            Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);result[0]=reply;
             if(clip.getDescription().hasMimeType("image/*"))
                 reportLift(accepted?ShareDiagnostics.Code.STARTED:current?outcome:ShareDiagnostics.Code.CANCELLED);
-            if(!accepted)finishRejectedLift(current && token==generation && live());
+            boolean retained=accepted;
+            if(!accepted){
+                android.net.Uri uri=clip.getItemAt(0).getUri();
+                retained=finishRejectedLift(current && token==generation && live(),uri==null?null:uri.toString());
+            }
             else {
                 ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,ShareDiagnostics.Code.STARTED);
                 main.postDelayed(expire,60_000L);
             }
+            Bundle reply=new Bundle();reply.putBoolean("accepted",retained);result[0]=reply;
             done.countDown();
         });
     }
@@ -398,16 +407,25 @@ final class PortalSource implements AutoCloseable {
         return mainBounds!=null && !rect.isEmpty() && mainBounds.contains(rect)?rect:null;
     }
 
-    private void finishRejectedLift(boolean current) {
+    private boolean finishRejectedLift(boolean current,String imageUri) {
+        boolean preview=current && imageUri!=null && ready.getAsBoolean();
         if(nativeCaptureId!=null || nativeCleanupUri!=null){
             ShareDiagnostics.event(ShareDiagnostics.Stage.IMAGE_LIFT,ShareDiagnostics.Code.FAILED);
-            discardCapture(nativeCaptureId);discardPublication(nativeCleanupUri);
+            if(!preview){discardCapture(nativeCaptureId);discardPublication(nativeCleanupUri);}
             nativeCaptureId=null;nativeCleanupUri=null;
         }
         ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,current?ShareDiagnostics.Code.FAILED:ShareDiagnostics.Code.CANCELLED);
         clearWindow();
+        if(preview){
+            dragStarted();
+            if(pointer!=null){pointer.recycle();pointer=null;}
+            imagePreview.accept(android.net.Uri.parse(imageUri));
+            reportLift(ShareDiagnostics.Code.LIFT_PREVIEW_FALLBACK);
+            return true;
+        }
         if(current && ready.getAsBoolean())android.widget.Toast.makeText(anchor.getContext(),
                 "未能提起内容，请松手后重试",android.widget.Toast.LENGTH_SHORT).show();
+        return false;
     }
     private void prepareLiftPreview(Bundle candidate,android.net.Uri uri) {
         android.content.ContentResolver resolver=anchor.getContext().getContentResolver();
