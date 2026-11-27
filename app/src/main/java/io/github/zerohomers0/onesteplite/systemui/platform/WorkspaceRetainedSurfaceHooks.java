@@ -11,8 +11,11 @@ import de.robv.android.xposed.XposedHelpers;
 final class WorkspaceRetainedSurfaceHooks {
     private static boolean surfaceHooksReady;
     private final WorkspaceHost host;
+    private static final int MAX_OVERLAY_REFRESH_ATTEMPTS = 24;
     private Object surfaceObserver;
     private boolean overlayRefreshScheduled;
+    private int overlayRefreshAttempts;
+    private final Runnable overlayRefresh = this::refreshOverlayAfterTransition;
 
     WorkspaceRetainedSurfaceHooks(WorkspaceHost host) {
         this.host = host;
@@ -190,27 +193,35 @@ final class WorkspaceRetainedSurfaceHooks {
     private void scheduleOverlayRefresh() {
         if (overlayRefreshScheduled) return;
         overlayRefreshScheduled = true;
-        host.main.postDelayed(() -> {
-            overlayRefreshScheduled = false;
-            refreshOverlayAfterTransition();
-        }, 60L);
-        host.main.postDelayed(this::refreshOverlayAfterTransition, 380L);
+        overlayRefreshAttempts = 0;
+        host.main.removeCallbacks(overlayRefresh);
+        host.main.postDelayed(overlayRefresh, 60L);
         if (host.topBar != null) host.topBar.requestOpenedAppsRefresh();
     }
 
     private void refreshOverlayAfterTransition() {
-        if (host.scene != WorkspaceHost.ACTIVE || host.root == null || host.keyguardLocked) return;
-        for (Slot slot : host.slots) if (slot.closing) {
-            host.main.postDelayed(this::refreshOverlayAfterTransition, 120L);
+        if (host.scene != WorkspaceHost.ACTIVE || host.root == null || host.keyguardLocked) {
+            overlayRefreshScheduled = false;
+            overlayRefreshAttempts = 0;
             return;
         }
-        if (host.cellMovePreview != null || host.promotion != null
-                || host.transferBusy) {
+        boolean waiting = host.cellMovePreview != null || host.promotion != null || host.transferBusy;
+        for (Slot slot : host.slots) if (slot.closing) { waiting = true; break; }
+        if (waiting) {
             // Relayouting the host window during the visible bridge brings its
-            // SurfaceView children forward for one composition. Retry after handoff.
-            host.main.postDelayed(this::refreshOverlayAfterTransition, 120L);
+            // SurfaceView children forward for one composition. Bound the wait so a
+            // lost native callback cannot leave a permanent 120 ms main-thread poll.
+            if (++overlayRefreshAttempts >= MAX_OVERLAY_REFRESH_ATTEMPTS) {
+                overlayRefreshScheduled = false;
+                overlayRefreshAttempts = 0;
+                WorkspaceHost.log("overlay refresh deadline reached; retain current scene");
+                return;
+            }
+            host.main.postDelayed(overlayRefresh, 120L);
             return;
         }
+        overlayRefreshScheduled = false;
+        overlayRefreshAttempts = 0;
         try {
             host.root.setVisibility(View.VISIBLE);
             host.root.setAlpha(1f);

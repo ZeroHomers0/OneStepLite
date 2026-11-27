@@ -13,6 +13,8 @@ final class WorkspaceRuntimeCounters {
     static final AtomicLong SURFACE_TRANSFORMS = new AtomicLong();
     static final AtomicLong TASK_LOOKUPS = new AtomicLong();
     static final AtomicLong SIDE_ROWS_TRIMMED = new AtomicLong();
+    static final AtomicLong OWNED_TASKS = new AtomicLong();
+    static final AtomicLong TASK_STATES = new AtomicLong();
 
     private WorkspaceRuntimeCounters() {}
 
@@ -25,6 +27,8 @@ final class WorkspaceRuntimeCounters {
                 + " emptyRowTaskViewsReleased=" + EMPTY_ROW_TASK_VIEWS_RELEASED.get()
                 + " surfaceTransform=" + SURFACE_TRANSFORMS.get()
                 + " taskLookup=" + TASK_LOOKUPS.get()
-                + " rowsTrimmed=" + SIDE_ROWS_TRIMMED.get();
+                + " rowsTrimmed=" + SIDE_ROWS_TRIMMED.get()
+                + " ownedTasks=" + OWNED_TASKS.get()
+                + " taskStates=" + TASK_STATES.get();
     }
 }

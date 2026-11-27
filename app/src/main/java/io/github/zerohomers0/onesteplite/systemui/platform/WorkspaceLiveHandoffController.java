@@ -36,7 +36,11 @@ final class WorkspaceLiveHandoffController {
         slot.promoting = true;
         host.promotion = ticket;
         host.transferBusy = false;
-        OwnedTask candidate = host.ownedTasks.computeIfAbsent(task.token, key -> new OwnedTask(task.id, key));
+        OwnedTask candidate = host.retainOwnedTask(task.token, task.id);
+        if (candidate == null) {
+            host.promotionController.failPromotion(ticket, "collect task token unavailable");
+            return;
+        }
         candidate.recoveryController = slot.controller;
         candidate.recoveryCandidate = true;
         ticket.previousMainCandidate = candidate;
@@ -171,19 +175,16 @@ final class WorkspaceLiveHandoffController {
         final Object[] cellBackgrounds = new Object[host.CELL_SLOT_COUNT - 1];
         try { hostSurface = host.prepareLiveFlip(ticket, geometry, target, width, height, peers, cellBackgrounds); }
         catch (Throwable error) { host.promotionController.failPromotion(ticket, "live flip Host preparation: " + error); return; }
-        ticket.nativeSwap = true;
-        ticket.nativeFlip = true;
-        ticket.previousLayout = geometry;
-        ticket.targetLayout = target;
-        ticket.targetMainOnRight = target.mainOnRight;
+        ticket.nativeSwap = true; ticket.nativeFlip = true;
+        ticket.previousLayout = geometry; ticket.targetLayout = target; ticket.targetMainOnRight = target.mainOnRight;
         final LiveSwapZoom.Zoom oldZoom = new LiveSwapZoom.Zoom(host.zoomCommands.nextGeneration(),
                 geometry.mainScale, geometry.mainOffsetX, geometry.mainOffsetY);
         final LiveSwapZoom.Zoom targetZoom = new LiveSwapZoom.Zoom(host.zoomCommands.nextGeneration(),
                 target.mainScale, target.mainOffsetX, target.mainOffsetY);
         ticket.slot.promoting = true;
-        OwnedTask candidate = host.ownedTasks.computeIfAbsent(first.token, token -> new OwnedTask(first.id, token));
-        candidate.recoveryController = ticket.slot.controller;
-        candidate.recoveryCandidate = true;
+        OwnedTask candidate = host.retainOwnedTask(first.token, first.id);
+        if (candidate == null) { host.promotionController.failPromotion(ticket, "swap task token unavailable"); return; }
+        candidate.recoveryController = ticket.slot.controller; candidate.recoveryCandidate = true;
         ticket.previousMainCandidate = candidate;
         OwnedTask oldSide = host.ownedTasks.get(ticket.token);
         if (oldSide != null) {

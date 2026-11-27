@@ -146,6 +146,7 @@ __HOST__
   var shared=BackgroundExecutor.class.getDeclaredField("SHARED");shared.setAccessible(true);
   var workers=(ThreadPoolExecutor)shared.get(null);
   check(workers.allowsCoreThreadTimeOut()&&workers.getKeepAliveTime(TimeUnit.SECONDS)==30,"shared workers can retire after idle timeout");
+  check(workers.getQueue() instanceof java.util.concurrent.ArrayBlockingQueue&&workers.getQueue().remainingCapacity()==64,"shared background queue is bounded");
   var timed=BackgroundExecutor.class.getDeclaredField("TIMED");timed.setAccessible(true);
   var timer=(ScheduledThreadPoolExecutor)timed.get(null);
   var stale=BackgroundExecutor.schedule(()->{},60_000L);

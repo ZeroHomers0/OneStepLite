@@ -10,12 +10,18 @@ method=s[a:b]
 a=s.index('    void finishWallpaperLoad(');b=s.index('{',a)+1;depth=1
 while depth:depth+=(s[b]=='{')-(s[b]=='}');b+=1
 method+='\n'+s[a:b]
+a=s.index('    private void finishWallpaperLoad(');b=s.index('{',a)+1;depth=1
+while depth:depth+=(s[b]=='{')-(s[b]=='}');b+=1
+method+='\n'+s[a:b]
+a=s.index('    private static void recycleWallpaper(');b=s.index('{',a)+1;depth=1
+while depth:depth+=(s[b]=='{')-(s[b]=='}');b+=1
+method+='\n'+s[a:b]
 a=s.index('    void scheduleWallpaperRetry(');b=s.index('{',a)+1;depth=1
 while depth:depth+=(s[b]=='{')-(s[b]=='}');b+=1
 method+='\n'+s[a:b]
 method=method.replace('host.','').replace('slotRegistry.','').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('motion()','cells.motion()').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','')
 method=method.replace('WorkspaceHost.','').replace('log.accept(','log(')
-method+='\n int wallpaperRetryAttempt;'
+method+='\n static final int MAX_TRANSITION_WAIT_ATTEMPTS=20; static final long TRANSITION_WAIT_MS=50L;\n int wallpaperRetryAttempt;'
 method+='\n final Runnable wallpaperRetry=this::loadWallpaperBackdrop;'
 java=r'''package io.github.zerohomers0.onesteplite;
 import java.util.*;
@@ -49,6 +55,7 @@ public class WallpaperRefreshRegression {
   h=new WallpaperRefreshRegression();old=h.wallpaperBackdrop;HyperOsStyle.fail=true;h.loadWallpaperBackdrop();waitQueued(h,1);h.main.drain();check(h.applies==0&&h.wallpaperBackdrop==old&&!old.recycled&&h.main.retries==1,"capture failure keeps the last texture instead of flashing blank");HyperOsStyle.fail=false;
   check(h.main.delay==1500,"first failure uses initial retry interval");
   h=new WallpaperRefreshRegression();old=h.wallpaperBackdrop;h.mainSideAnimator=new Object();h.loadWallpaperBackdrop();waitQueued(h,1);h.main.drain();check(h.applies==0&&h.wallpaperBackdrop==old&&h.wallpaperBackdropRequested,"active side transition keeps a single wallpaper texture");h.mainSideAnimator=null;h.main.delayed.run();check(h.applies==1&&!h.wallpaperBackdropRequested,"deferred texture publishes after the motion owner releases");
+  h=new WallpaperRefreshRegression();h.wallpaperLoadGeneration=1;h.wallpaperBackdropRequested=true;h.mainSideAnimator=new Object();Bitmap pendingWallpaper=new Bitmap(),pendingWell=new Bitmap();h.finishWallpaperLoad(1,1080,2400,pendingWallpaper,pendingWell);for(int i=0;i<20&&h.main.delayed!=null;i++){Runnable next=h.main.delayed;h.main.delayed=null;next.run();}check(pendingWallpaper.recycled&&pendingWell.recycled&&!h.wallpaperBackdropRequested,"stuck transition releases deferred wallpaper at the deadline");
   h=new WallpaperRefreshRegression();h.wallpaperBackdrop=null;h.wallpaperBackdropDirty=false;Bitmap pre=new Bitmap(),preWell=new Bitmap();Warmup.ready=new Bitmap[]{pre,preWell};count=HyperOsStyle.produced.size();h.loadWallpaperBackdrop();
   waitQueued(h,1);h.main.drain();check(h.wallpaperBackdrop==pre&&h.wellWallpaperBackdrop==preWell&&h.applies==1,"boot glass is published after checking the selected background");
   check(HyperOsStyle.produced.size()==count&&h.main.queue.isEmpty()&&Warmup.ready==null,"warm cache is consumed once without another capture");

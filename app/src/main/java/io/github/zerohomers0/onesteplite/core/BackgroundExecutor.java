@@ -1,33 +1,36 @@
 package io.github.zerohomers0.onesteplite;
 
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /** Process-local daemon pools for finite one-shot work; lifecycle polls stay on their owning Handler. */
 final class BackgroundExecutor {
-    private static final ExecutorService SHARED=workerPool(2,"OneStepLite-background");
+    private static final int QUEUE_CAPACITY=64;
+    private static final ThreadPoolExecutor SHARED=workerPool(2,"OneStepLite-background");
     private static final ScheduledThreadPoolExecutor TIMED=new ScheduledThreadPoolExecutor(
             1,daemonFactory("OneStepLite-timer"));
     static {TIMED.setRemoveOnCancelPolicy(true);}
-    private static final AtomicInteger QUEUED=new AtomicInteger(),ACTIVE=new AtomicInteger();
+    private static final java.util.concurrent.atomic.AtomicInteger ACTIVE=new java.util.concurrent.atomic.AtomicInteger();
     private static final AtomicLong SUBMITTED=new AtomicLong(),COMPLETED=new AtomicLong(),
-            FAILED=new AtomicLong(),MAX_MILLIS=new AtomicLong();
+            FAILED=new AtomicLong(),DROPPED=new AtomicLong(),MAX_MILLIS=new AtomicLong();
     private BackgroundExecutor(){}
 
     static void execute(Runnable task){
         if(task==null)return;
-        SUBMITTED.incrementAndGet();QUEUED.incrementAndGet();
+        SUBMITTED.incrementAndGet();
         try{
             SHARED.execute(()->runMeasured(task));
         }catch(RuntimeException rejected){
-            QUEUED.decrementAndGet();FAILED.incrementAndGet();throw rejected;
+            FAILED.incrementAndGet();
+            DROPPED.incrementAndGet();
+            throw rejected;
         }
     }
 
@@ -41,9 +44,17 @@ final class BackgroundExecutor {
 
     private static ThreadPoolExecutor workerPool(int size,String name){
         ThreadPoolExecutor executor=new ThreadPoolExecutor(size,size,30L,TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(),daemonFactory(name));
+                new ArrayBlockingQueue<Runnable>(QUEUE_CAPACITY),daemonFactory(name),dropOldest());
         executor.allowCoreThreadTimeOut(true);
         return executor;
+    }
+
+    private static RejectedExecutionHandler dropOldest(){
+        return (task,executor) -> {
+            if(executor.isShutdown())return;
+            if(executor.getQueue().poll()!=null)DROPPED.incrementAndGet();
+            if(!executor.isShutdown()&&!executor.getQueue().offer(task))DROPPED.incrementAndGet();
+        };
     }
 
     static ThreadFactory daemonFactory(String name){
@@ -56,12 +67,13 @@ final class BackgroundExecutor {
 
     static String diagnostics(){
         return "background pool submitted="+SUBMITTED.get()+" completed="+COMPLETED.get()
-                +" failed="+FAILED.get()+" active="+ACTIVE.get()+" queued="+QUEUED.get()
+                +" failed="+FAILED.get()+" active="+ACTIVE.get()
+                +" queued="+SHARED.getQueue().size()+" dropped="+DROPPED.get()
                 +" maxMs="+MAX_MILLIS.get();
     }
 
     private static void runMeasured(Runnable task){
-        QUEUED.decrementAndGet();ACTIVE.incrementAndGet();
+        ACTIVE.incrementAndGet();
         long started=System.nanoTime();
         try{
             task.run();COMPLETED.incrementAndGet();

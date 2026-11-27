@@ -169,6 +169,7 @@ final class WorkspaceSlotLifecycle {
     }
 
     void clearSlot(Slot slot) {
+        Object retiredToken = slot.taskToken;
         host.scales.clearFrameRateHint(slot);
         if(slot.index==WorkspaceHost.SLOT_TOP && host.topTaskState.owner()!=null) {
             host.topTaskState.release(host.topTaskState.owner()); host.topOriginalSlot=null;
@@ -192,6 +193,7 @@ final class WorkspaceSlotLifecycle {
         slot.injecting = false;
         slot.modeGuardUntil = 0L;
         host.taskStates.clearWindowState(slot);
+        host.releaseOwnedTask(retiredToken);
         slot.taskUid = 0;
         slot.pkg = null;
         slot.modeAdmissionPending = false;

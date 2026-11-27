@@ -15,6 +15,11 @@ import android.view.View;
 import android.view.WindowManager;
 import android.util.Log;
 import android.widget.FrameLayout;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import de.robv.android.xposed.XposedBridge;
@@ -203,7 +208,8 @@ public final class WorkspaceHost {
     final FinishTransactions<RenderBinding> finishTransactions = new FinishTransactions<>(16);
     final FinishTransactions<Long> workspaceFinishes = new FinishTransactions<>(16);
 
-    final java.util.Map<Object, OwnedTask> ownedTasks = new java.util.HashMap<>();
+    static final int MAX_OWNED_TASKS = 96;
+    final Map<Object, OwnedTask> ownedTasks = new LinkedHashMap<>(16, 0.75f, true);
 
     final FinishTransactions<NativeObservation> nativeObservations = new FinishTransactions<>(16);
     volatile NativeObservation pendingNativeObservation;
@@ -453,6 +459,41 @@ public final class WorkspaceHost {
 
     void recycleBuffered(Slot slot) {
         WorkspaceSideInteraction.recycleBuffered(slot);
+    }
+
+    OwnedTask retainOwnedTask(Object token, int taskId) {
+        if (token == null) return null;
+        OwnedTask task = ownedTasks.computeIfAbsent(token, ignored -> new OwnedTask(taskId, token));
+        pruneOwnedTasks();
+        WorkspaceRuntimeCounters.OWNED_TASKS.set(ownedTasks.size());
+        return task;
+    }
+
+    void pruneOwnedTasks() {
+        if (ownedTasks.size() <= MAX_OWNED_TASKS) return;
+        Set<Object> protectedTokens = new LinkedHashSet<>();
+        for (Slot slot : slots) if (slot != null && slot.taskToken != null) protectedTokens.add(slot.taskToken);
+        Promotion current = promotion;
+        if (current != null) {
+            protectedTokens.add(current.token);
+            if (current.previousMainCandidate != null) protectedTokens.add(current.previousMainCandidate.token);
+            if (current.previousMain != null) protectedTokens.add(current.previousMain.token);
+            if (current.homeBeforeCover != null) protectedTokens.add(current.homeBeforeCover.token);
+            if (current.collectionHome != null) protectedTokens.add(current.collectionHome.token);
+        }
+        Iterator<Map.Entry<Object, OwnedTask>> iterator = ownedTasks.entrySet().iterator();
+        while (ownedTasks.size() > MAX_OWNED_TASKS && iterator.hasNext()) {
+            Map.Entry<Object, OwnedTask> entry = iterator.next();
+            if (!protectedTokens.contains(entry.getKey())) iterator.remove();
+        }
+    }
+
+    void releaseOwnedTask(Object token) {
+        if (token == null || transferBusy) return;
+        Promotion current = promotion;
+        if (current != null && (current.token == token || token.equals(current.token))) return;
+        ownedTasks.remove(token);
+        WorkspaceRuntimeCounters.OWNED_TASKS.set(ownedTasks.size());
     }
 
     boolean livePeerBindingsCurrent(Promotion ticket) {

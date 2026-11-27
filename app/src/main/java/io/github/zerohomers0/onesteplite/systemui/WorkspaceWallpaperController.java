@@ -11,6 +11,8 @@ import java.util.function.Consumer;
 
 /** Owns asynchronous wallpaper loading, publication and backing drawables. */
 final class WorkspaceWallpaperController {
+    private static final int MAX_TRANSITION_WAIT_ATTEMPTS = 20;
+    private static final long TRANSITION_WAIT_MS = 50L;
     private final WorkspaceHost host;
     private final Consumer<String> log;
 
@@ -60,7 +62,7 @@ final class WorkspaceWallpaperController {
                 Bitmap[] prepared = source == null && canUseWarmup
                         ? Warmup.takePreparedWallpaper(user, width, height) : null;
                 if (prepared != null) {
-                    host.main.post(() -> finishWallpaperLoad(request, width, height, prepared[0], prepared[1]));
+                    host.main.post(() -> finishWallpaperLoad(request, width, height, prepared[0], prepared[1], 0));
                     return;
                 }
                 if (source == null) source = HyperOsStyle.blurredWallpaper(host.ctx, width, height);
@@ -74,29 +76,44 @@ final class WorkspaceWallpaperController {
             }
             final Bitmap bitmap = ready;
             final Bitmap wellBitmap = wellReady;
-            host.main.post(() -> finishWallpaperLoad(request, width, height, bitmap, wellBitmap));
+            host.main.post(() -> finishWallpaperLoad(request, width, height, bitmap, wellBitmap, 0));
         });
     }
 
     void finishWallpaperLoad(long request, int width, int height, Bitmap bitmap, Bitmap wellBitmap) {
+        finishWallpaperLoad(request, width, height, bitmap, wellBitmap, 0);
+    }
+
+    private void finishWallpaperLoad(long request, int width, int height,
+            Bitmap bitmap, Bitmap wellBitmap, int waitAttempt) {
         if (request != host.wallpaperLoadGeneration || host.root == null || width != host.screenW || height != host.screenH
+                || (host.scene != WorkspaceHost.ACTIVE && host.scene != WorkspaceHost.RESUMING)
                 || !WallpaperSnapshot.canCapture(host.ctx)) {
-            if (bitmap != null) bitmap.recycle();
-            if (wellBitmap != null) wellBitmap.recycle();
+            recycleWallpaper(bitmap, wellBitmap);
             if (request == host.wallpaperLoadGeneration) {
                 host.wallpaperBackdropRequested = false;
                 scheduleWallpaperRetry();
             }
             return;
         }
-        if (bitmap != null && !bitmap.isRecycled()
-                && (host.mainSideAnimator != null || host.workspaceAnimator != null || host.promotion != null || host.cells.motion() != null)) {
+        boolean transitionOwnsTexture = host.mainSideAnimator != null || host.workspaceAnimator != null
+                || host.promotion != null || host.cells.motion() != null;
+        if (bitmap != null && !bitmap.isRecycled() && transitionOwnsTexture) {
+            if (waitAttempt >= MAX_TRANSITION_WAIT_ATTEMPTS) {
+                recycleWallpaper(bitmap, wellBitmap);
+                host.wallpaperBackdropRequested = false;
+                log.accept("wallpaper publication deadline reached; retain previous texture");
+                scheduleWallpaperRetry();
+                return;
+            }
             // Every layer of one transition keeps the same texture until its final frame.
-            host.main.postDelayed(() -> finishWallpaperLoad(request, width, height, bitmap, wellBitmap), 50L);
+            host.main.postDelayed(() -> finishWallpaperLoad(
+                    request, width, height, bitmap, wellBitmap, waitAttempt + 1), TRANSITION_WAIT_MS);
             return;
         }
         host.wallpaperBackdropRequested = false;
         if (bitmap == null || bitmap.isRecycled()) {
+            recycleWallpaper(bitmap, wellBitmap);
             log.accept("wallpaper blur unavailable; retain last desktop texture");
             scheduleWallpaperRetry();
             return;
@@ -111,6 +128,18 @@ final class WorkspaceWallpaperController {
         log.accept("wallpaper gaussian backdrop ready " + bitmap.getWidth() + "x" + bitmap.getHeight());
         applyWallpaperBackdrops();
         }
+
+    void cancelPending() {
+        ++host.wallpaperLoadGeneration;
+        host.wallpaperBackdropRequested = false;
+        host.wallpaperRetryAttempt = 0;
+        host.main.removeCallbacks(wallpaperRetry);
+    }
+
+    private static void recycleWallpaper(Bitmap bitmap, Bitmap wellBitmap) {
+        if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
+        if (wellBitmap != null && !wellBitmap.isRecycled()) wellBitmap.recycle();
+    }
 
     void applyWallpaperBackdrops() {
         if (host.root != null && host.layout != null) {

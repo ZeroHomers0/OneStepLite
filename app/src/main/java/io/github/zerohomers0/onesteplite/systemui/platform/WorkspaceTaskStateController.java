@@ -5,7 +5,8 @@ import android.os.SystemClock;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import de.robv.android.xposed.XposedHelpers;
 
@@ -17,7 +18,9 @@ final class WorkspaceTaskStateController {
 
     private final WorkspaceHost host;
     private final Object taskWindowStatesLock = new Object();
-    private final Map<Integer, TaskWindowState> taskWindowStates = new HashMap<>();
+    private static final int MAX_TASK_STATES = 96;
+    private final Map<Integer, TaskWindowState> taskWindowStates =
+            new LinkedHashMap<Integer, TaskWindowState>(16, 0.75f, true);
     private static boolean legacyTaskInfoCallbacks;
 
     WorkspaceTaskStateController(WorkspaceHost host) {
@@ -27,6 +30,20 @@ final class WorkspaceTaskStateController {
     static void setLegacyTaskInfoCallbacks(boolean value) { legacyTaskInfoCallbacks = value; }
     static boolean legacyTaskInfoCallbacks() { return legacyTaskInfoCallbacks; }
 
+    private void trimTaskWindowStatesLocked() {
+        if (taskWindowStates.size() <= MAX_TASK_STATES) return;
+        Iterator<Map.Entry<Integer, TaskWindowState>> iterator = taskWindowStates.entrySet().iterator();
+        while (taskWindowStates.size() > MAX_TASK_STATES && iterator.hasNext()) {
+            Map.Entry<Integer, TaskWindowState> entry = iterator.next();
+            boolean active = false;
+            for (Slot slot : host.slots) {
+                if (slot != null && slot.taskId == entry.getKey()) { active = true; break; }
+            }
+            if (!active) iterator.remove();
+        }
+        WorkspaceRuntimeCounters.TASK_STATES.set(taskWindowStates.size());
+    }
+
     void clearWindowState(Slot slot) {
         if (slot == null || slot.windowState == null) return;
         slot.windowState.clear();
@@ -34,6 +51,7 @@ final class WorkspaceTaskStateController {
             taskWindowStates.remove(slot.windowState.taskId);
         }
         slot.windowState = null;
+        WorkspaceRuntimeCounters.TASK_STATES.set(taskWindowStates.size());
     }
 
     Object makeListener(final int slotIndex) {
@@ -266,10 +284,11 @@ final class WorkspaceTaskStateController {
                 slot.windowState = new TaskWindowState(taskId);
                 taskWindowStates.put(taskId, slot.windowState);
             }
+            trimTaskWindowStatesLocked();
         }
         slot.windowState.slotIndex = slot.index;
-        OwnedTask retained = host.ownedTasks.computeIfAbsent(token, ignored -> new OwnedTask(taskId, token));
-        retained.recoveryController = slot.controller;
+        OwnedTask retained = host.retainOwnedTask(token, taskId);
+        if (retained != null) retained.recoveryController = slot.controller;
     }
 
     static int windowModeOf(Object info) {
@@ -312,6 +331,7 @@ final class WorkspaceTaskStateController {
                     state = new TaskWindowState(taskId);
                     taskWindowStates.put(taskId, state);
                 }
+                trimTaskWindowStatesLocked();
             }
             state.update(slotIndex, configurationOrientation, requestedOrientation,
                     TaskWindowState.UNKNOWN_ROTATION, mode, mode == 1, active);

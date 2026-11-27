@@ -8,22 +8,21 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Environment;
-import android.os.Handler;
-import android.os.Looper;
 import android.provider.MediaStore;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Publishes module-owned images as short-lived MediaStore items for the share activity. */
 final class MediaStoreImageBridge {
     private static final long TTL_MS=10L*60L*1000L;
     private static final String FOLDER=Environment.DIRECTORY_PICTURES+"/.OneStep";
     private static final Uri PRIMARY_IMAGES=MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
-    private static final Handler CLEANUP=new Handler(Looper.getMainLooper());
     private static final ExecutorService IO=BackgroundExecutor.single("OneStepLite-media-store");
+    private static final AtomicBoolean CLEANUP_PENDING = new AtomicBoolean();
     private MediaStoreImageBridge(){}
 
     static boolean isInternalPath(String path){
@@ -73,9 +72,7 @@ final class MediaStoreImageBridge {
     }
 
     static void cleanupAsync(Context context){
-        if(context==null)return;
-        Context app=context.getApplicationContext();
-        IO.execute(()->cleanupExpired(app==null?context:app));
+        scheduleCleanup(context);
     }
 
     private static Uri publish(Context context,String mime,Writer writer){
@@ -96,7 +93,7 @@ final class MediaStoreImageBridge {
             ContentValues complete=new ContentValues();complete.put(MediaStore.MediaColumns.IS_PENDING,0);
             if(context.getContentResolver().update(target,complete,null,null)<=0)
                 throw new IOException("MediaStore completion rejected");
-            scheduleDelete(context.getApplicationContext()==null?context:context.getApplicationContext(),target);
+            scheduleCleanup(context.getApplicationContext()==null?context:context.getApplicationContext());
             return target;
         }catch(Exception failure){
             if(target!=null)try{context.getContentResolver().delete(target,null,null);}catch(RuntimeException ignored){}
@@ -164,8 +161,14 @@ final class MediaStoreImageBridge {
         };
     }
 
-    private static void scheduleDelete(Context context,Uri uri){
-        CLEANUP.postDelayed(()->IO.execute(()->discard(context,uri)),TTL_MS);
+    private static void scheduleCleanup(Context context){
+        if(context==null)return;
+        final Context app=context.getApplicationContext()==null?context:context.getApplicationContext();
+        if(!CLEANUP_PENDING.compareAndSet(false,true))return;
+        IO.execute(() -> {
+            try { cleanupExpired(app); }
+            finally { CLEANUP_PENDING.set(false); }
+        });
     }
 
     @FunctionalInterface private interface Writer{void write(OutputStream output)throws IOException;}

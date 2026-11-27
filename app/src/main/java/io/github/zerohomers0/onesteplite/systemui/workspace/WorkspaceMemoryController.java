@@ -49,6 +49,7 @@ final class WorkspaceMemoryController {
     }
 
     void releaseDormantBackdrops() {
+        host.wallpapers.cancelPending();
         host.windowPresentation.releaseWorkspaceBackdrop();
         if (host.mainBackdrop != null && !host.mainBackdrop.isRecycled()) host.mainBackdrop.recycle();
         host.mainBackdrop = null;
