@@ -1,6 +1,7 @@
 package io.github.zerohomers0.onesteplite;
 
 import android.content.ClipData;
+import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -9,6 +10,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Parcel;
+import android.provider.MediaStore;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
@@ -24,6 +26,7 @@ final class ContentPermissionBridge {
         try {
             Class<?> handler=XposedHelpers.findClass("com.android.server.wm.DragAndDropPermissionsHandler",loader);
             Class<?> stub=XposedHelpers.findClass("com.android.internal.view.IDragAndDropPermissions$Stub",loader);
+            installGrantDiagnostics(handler,loader);
             XposedBridge.hookAllMethods(stub,"onTransact",new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam call) {
                     if(!Integer.valueOf(DropPermissionContract.DELEGATE).equals(call.args[0]) || !handler.isInstance(call.thisObject))return;
@@ -43,6 +46,84 @@ final class ContentPermissionBridge {
                 }
             });
         } catch(Throwable unavailable) {android.util.Log.w(Tags.PROBE,"drop bridge unavailable on this ROM",unavailable);}
+    }
+
+    private static void installGrantDiagnostics(Class<?> handler,ClassLoader loader) {
+        try {
+            XposedBridge.hookAllConstructors(handler,new XC_MethodHook(){
+                @Override protected void afterHookedMethod(MethodHookParam call) {
+                    if(!call.hasThrowable() && diagnosticImage(call.thisObject)!=null){
+                        android.util.Log.i("OneStepLiteShare",BuildIdentity.RUNTIME_MARKER);
+                        logGrant(ShareDiagnostics.Code.RECEIVER_HANDLER_CREATED);
+                    }
+                }
+            });
+            if(XposedBridge.hookAllMethods(handler,"doTake",new XC_MethodHook(){
+                @Override protected void beforeHookedMethod(MethodHookParam call) {
+                    if(diagnosticImage(call.thisObject)!=null)
+                        logGrant(ShareDiagnostics.Code.RECEIVER_TAKE_STARTED);
+                }
+                @Override protected void afterHookedMethod(MethodHookParam call) {
+                    Uri uri=diagnosticImage(call.thisObject);
+                    if(uri==null)return;
+                    if(call.hasThrowable())logGrant(ShareDiagnostics.Code.RECEIVER_TAKE_FAILED);
+                    logReceiverGrants(call.thisObject,loader,uri);
+                }
+            }).isEmpty())logGrant(ShareDiagnostics.Code.RECEIVER_HOOK_UNAVAILABLE);
+        }catch(RuntimeException unavailable){
+            logGrant(ShareDiagnostics.Code.RECEIVER_HOOK_UNAVAILABLE);
+        }
+    }
+
+    private static Uri diagnosticImage(Object handler) {
+        try {
+            if(!"com.tencent.mm".equals(XposedHelpers.getObjectField(handler,"mTargetPackage"))
+                    || XposedHelpers.getIntField(handler,"mSourceUserId")!=XposedHelpers.getIntField(handler,"mTargetUserId")
+                    || (XposedHelpers.getIntField(handler,"mMode")&Intent.FLAG_GRANT_READ_URI_PERMISSION)==0)
+                return null;
+            Object payload=XposedHelpers.getObjectField(handler,"mUris");
+            if(!(payload instanceof java.util.List<?> uris) || uris.size()!=1
+                    || !(uris.get(0) instanceof Uri uri) || !"media".equals(uri.getAuthority()))return null;
+            java.util.List<String> path=uri.getPathSegments();
+            if(path.size()!=4 || !("external_primary".equals(path.get(0)) || "external".equals(path.get(0)))
+                    || !"images".equals(path.get(1)) || !"media".equals(path.get(2))
+                    || ContentUris.parseId(uri)<0)return null;
+            return uri;
+        }catch(RuntimeException unavailable){
+            return null;
+        }
+    }
+
+    private static void logReceiverGrants(Object handler,ClassLoader loader,Uri image) {
+        long identity=Binder.clearCallingIdentity();
+        try {
+            Class<?> activityThread=XposedHelpers.findClass("android.app.ActivityThread",loader);
+            Object thread=XposedHelpers.callStaticMethod(activityThread,"currentActivityThread");
+            Context context=(Context)XposedHelpers.callMethod(thread,"getSystemContext");
+            int user=XposedHelpers.getIntField(handler,"mTargetUserId");
+            String target=(String)XposedHelpers.getObjectField(handler,"mTargetPackage");
+            Context userContext=(Context)XposedHelpers.callMethod(context,"createContextAsUser",
+                    android.os.UserHandle.getUserHandleForUid(user*100000),0);
+            int uid=userContext.getPackageManager().getPackageUid(target,0);
+            Uri file=MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY,ContentUris.parseId(image));
+            boolean imageGranted=explicitReadGrant(userContext,image,uid);
+            boolean fileGranted=explicitReadGrant(userContext,file,uid);
+            logGrant(imageGranted?ShareDiagnostics.Code.RECEIVER_IMAGE_GRANTED:ShareDiagnostics.Code.RECEIVER_IMAGE_NOT_GRANTED);
+            logGrant(fileGranted?ShareDiagnostics.Code.RECEIVER_FILE_GRANTED:ShareDiagnostics.Code.RECEIVER_FILE_NOT_GRANTED);
+        }catch(Exception unavailable){
+            logGrant(ShareDiagnostics.Code.RECEIVER_CHECK_UNAVAILABLE);
+        }finally{
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    private static boolean explicitReadGrant(Context context,Uri uri,int uid) {
+        return context.checkUriPermission(uri,-1,uid,Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                ==android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
+    private static void logGrant(ShareDiagnostics.Code result) {
+        ShareDiagnostics.event(ShareDiagnostics.Stage.GRANT,result);
     }
 
     private static IBinder delegate(Context context,Object source,ClipData clip,IBinder owner,boolean active) throws Exception {

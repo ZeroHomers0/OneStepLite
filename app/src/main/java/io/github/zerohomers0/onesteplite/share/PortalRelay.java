@@ -80,8 +80,13 @@ final class PortalRelay {
             if(image!=null) {
                 CaptureInboxStore.validateEncoded(image);
                 published=MediaStoreImageBridge.publishBytes(context,image,"image/jpeg");
-                if(published!=null)request.putString("cleanup_uri",published.toString());
+                android.util.Log.i("OneStepLiteShare",BuildIdentity.RUNTIME_MARKER);
+                if(published!=null){
+                    request.putString("cleanup_uri",published.toString());
+                    logPublishedGrant(context,published);
+                }
                 else {
+                    ShareDiagnostics.event(ShareDiagnostics.Stage.GRANT,ShareDiagnostics.Code.FAILED);
                     Bundle stored=CaptureInboxStore.store(context,image);id=stored.getString("id");
                     request.putString("uri",stored.getString("uri"));
                     request.putString("capture_id",id);
@@ -102,4 +107,16 @@ final class PortalRelay {
         }
     }
 
+    private static void logPublishedGrant(Context context,android.net.Uri uri) {
+        ShareDiagnostics.Code result;
+        try {
+            int uid=context.getPackageManager().getApplicationInfo(Packages.SYSTEM_UI,0).uid;
+            boolean granted=context.checkUriPermission(uri,-1,uid,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    ==android.content.pm.PackageManager.PERMISSION_GRANTED;
+            result=granted?ShareDiagnostics.Code.SOURCE_IMAGE_GRANTED:ShareDiagnostics.Code.SOURCE_IMAGE_NOT_GRANTED;
+        }catch(Exception unavailable){
+            result=ShareDiagnostics.Code.SOURCE_CHECK_UNAVAILABLE;
+        }
+        ShareDiagnostics.event(ShareDiagnostics.Stage.GRANT,result);
+    }
 }
