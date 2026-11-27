@@ -272,6 +272,7 @@ final class PortalSource implements AutoCloseable {
         }
         try{startNativeLift(request,uri,text,result,done,expired);}
         catch(RuntimeException unavailable){
+            if(uri!=null)reportLift(ShareDiagnostics.Code.LIFT_WINDOW_FAILED);
             android.util.Log.w(Tags.PROBE,"native source window unavailable",unavailable);
             finishRejectedLift(!expired.get() && live());done.countDown();
         }
@@ -279,6 +280,19 @@ final class PortalSource implements AutoCloseable {
 
     private android.graphics.Bitmap nativePreview;
     private String nativeCaptureId,nativeCleanupUri;
+
+    private static ShareDiagnostics.Code imageSource(String source) {
+        if("com.tencent.mobileqq".equals(source))return ShareDiagnostics.Code.SOURCE_QQ;
+        if("com.xingin.xhs".equals(source))return ShareDiagnostics.Code.SOURCE_XIAOHONGSHU;
+        if("com.ss.android.ugc.aweme".equals(source))return ShareDiagnostics.Code.SOURCE_DOUYIN;
+        return ShareDiagnostics.Code.SOURCE_OTHER;
+    }
+
+    private void reportLift(ShareDiagnostics.Code code) {
+        Context context=anchor.getContext();
+        Context application=context.getApplicationContext();
+        ShareDiagnosticReport.forward(()->application==null?context:application,ShareDiagnostics.Stage.IMAGE_LIFT,code);
+    }
 
     @android.annotation.SuppressLint("RtlHardcoded") // Physical display coordinates, not layout direction.
     private void startNativeLift(Bundle request,String uri,String text,Bundle[] result,CountDownLatch done,AtomicBoolean expired) {
@@ -335,10 +349,17 @@ final class PortalSource implements AutoCloseable {
                 return;
             }
             boolean accepted=false;
+            ShareDiagnostics.Code outcome=readySurface?ShareDiagnostics.Code.LIFT_START_REJECTED
+                    :ShareDiagnostics.Code.LIFT_SURFACE_TIMEOUT;
             try{if(readySurface)accepted=PortalInputCompat.start(source,clip,pointer);}
-            catch(RuntimeException failure){android.util.Log.w(Tags.PROBE,"portal drag start rejected",failure);}
+            catch(RuntimeException failure){
+                outcome=ShareDiagnostics.Code.LIFT_START_EXCEPTION;
+                android.util.Log.w(Tags.PROBE,"portal drag start rejected",failure);
+            }
             startingDrag=false;
             Bundle reply=new Bundle();reply.putBoolean("accepted",accepted);result[0]=reply;
+            if(clip.getDescription().hasMimeType("image/*"))
+                reportLift(accepted?ShareDiagnostics.Code.STARTED:current?outcome:ShareDiagnostics.Code.CANCELLED);
             if(!accepted)finishRejectedLift(current && token==generation && live());
             else {
                 ShareDiagnostics.event(ShareDiagnostics.Stage.DRAG,ShareDiagnostics.Code.STARTED);
@@ -358,7 +379,11 @@ final class PortalSource implements AutoCloseable {
                 || request.getBoolean("await_image"))
             liftAt=Math.max(liftAt,now+PortalGesturePolicy.PREFERRED_SOURCE_WAIT_MS);
         if(priority==PortalGesturePolicy.REGION)liftAt=Math.max(liftAt,now+350L);
-        if(uri!=null)prepareLiftPreview(candidate,android.net.Uri.parse(uri));
+        if(uri!=null){
+            reportLift(imageSource(candidate.getString("source")));
+            reportLift(ShareDiagnostics.Code.LIFT_CANDIDATE_READY);
+            prepareLiftPreview(candidate,android.net.Uri.parse(uri));
+        }
         main.postDelayed(()->{
             if(liftCandidate==candidate && live())moveLiftCandidate(pointer);
         },Math.max(0L,liftAt-now));

@@ -111,20 +111,52 @@ final class PortalDragInput {
         Touch activeTouch=touch;
         if(parts.length==2 && activeTouch!=null && activeTouch.display()==display
                 && (activeTouch.down()+":"+activeTouch.device()+":"+activeTouch.pointer()).equals(parts[1])){
-            for(Object window:((Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap")).values())
+            for(Object window:((Map<?,?>)XposedHelpers.getObjectField(wm,"mWindowMap")).values()){
                 if(activeTouch.input().equals(XposedHelpers.getObjectField(window,"mInputChannelToken")))
-                    return eligibleTouch(window,source,expected)?remember(source,window):null;
+                    return bindInput(wm,source,window,eligibleTouch(window,source,expected));
+            }
+            reportInput(wm,source,ShareDiagnostics.Code.LIFT_INPUT_CHANNEL_MISSING);
             return null;
         }
         Object focus=XposedHelpers.getObjectField(display,"mCurrentFocus");
-        if(focus==null || focus==source || !Boolean.TRUE.equals(XposedHelpers.callMethod(focus,"isVisible")))return null;
+        if(focus==null || focus==source || !Boolean.TRUE.equals(XposedHelpers.callMethod(focus,"isVisible"))){
+            reportInput(wm,source,ShareDiagnostics.Code.LIFT_INPUT_FOCUS_MISMATCH);
+            return null;
+        }
         WindowManager.LayoutParams focused=(WindowManager.LayoutParams)XposedHelpers.getObjectField(focus,"mAttrs");
-        if(!expected.equals(focused.packageName))return null;
+        if(!expected.equals(focused.packageName)){
+            reportInput(wm,source,ShareDiagnostics.Code.LIFT_INPUT_FOCUS_MISMATCH);
+            return null;
+        }
         if(subWindow(focused)){
-            if(!eligibleTouch(focus,source,expected))return null;
+            if(!eligibleTouch(focus,source,expected))return bindInput(wm,source,focus,false);
             focus=XposedHelpers.callMethod(focus,"getParentWindow");
         }
-        return eligible(focus,source,expected)?remember(source,focus):null;
+        return bindInput(wm,source,focus,eligible(focus,source,expected));
+    }
+
+    private static IBinder bindInput(Object wm,Object source,Object window,boolean allowed) {
+        IBinder channel=allowed?remember(source,window):null;
+        ShareDiagnostics.Code result;
+        if(channel!=null)result=ShareDiagnostics.Code.LIFT_INPUT_BOUND;
+        else if(allowed)result=ShareDiagnostics.Code.LIFT_INPUT_CHANNEL_MISSING;
+        else {
+            WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(window,"mAttrs");
+            result=(attrs.flags&WindowManager.LayoutParams.FLAG_SECURE)!=0?ShareDiagnostics.Code.LIFT_INPUT_SECURE_WINDOW
+                    :ShareDiagnostics.Code.LIFT_INPUT_WINDOW_REJECTED;
+        }
+        reportInput(wm,source,result);
+        return channel;
+    }
+
+    private static void reportInput(Object wm,Object source,ShareDiagnostics.Code code) {
+        // These events use the same user as the verified SystemUI source window.
+        int sourceUser=XposedHelpers.getIntField(source,"mOwnerUid")/100000;
+        ShareDiagnosticReport.forward(()->{
+            android.content.Context context=(android.content.Context)XposedHelpers.getObjectField(wm,"mContext");
+            return (android.content.Context)XposedHelpers.callMethod(context,"createContextAsUser",
+                    android.os.UserHandle.getUserHandleForUid(sourceUser*100000),0);
+        },ShareDiagnostics.Stage.IMAGE_LIFT,code);
     }
 
     private static IBinder remember(Object portalWindow,Object window) {

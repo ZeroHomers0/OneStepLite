@@ -45,6 +45,17 @@ public final class ContentInboxProvider extends ContentProvider {
     @Override public Bundle call(String method,String arg,Bundle extras) {
         if(method!=null && method.startsWith("portal_"))return PortalRelay.call(getContext(),method,arg,extras);
         if("paste_register".equals(method))return EditorPasteCompat.relay(getContext(),method,extras);
+        if(ShareDiagnosticReport.RECORD.equals(method)){
+            int caller=Binder.getCallingUid();
+            boolean systemServer=caller==1000;
+            if(!systemServer){
+                enforceHost();
+                if(caller/100000!=android.os.Process.myUid()/100000)
+                    throw new SecurityException("Different diagnostic user");
+            }
+            ShareDiagnosticReport.record(extras,systemServer);
+            return new Bundle();
+        }
         enforceHost();
         if(Binder.getCallingUid()/100000!=android.os.Process.myUid()/100000)throw new SecurityException("Different content user");
         if("share_diagnostics".equals(method)){Bundle result=new Bundle();result.putString("events",ShareDiagnostics.snapshot());return result;}

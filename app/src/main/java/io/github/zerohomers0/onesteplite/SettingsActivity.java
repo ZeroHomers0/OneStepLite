@@ -20,6 +20,7 @@ import android.widget.TextView;
 /** Workspace settings opened by the native system Settings entry. */
 public final class SettingsActivity extends Activity {
     private static final int PICK_WORKSPACE_BACKGROUND = 41;
+    private static final int SAVE_SHARE_DIAGNOSTICS = 42;
     private WorkspaceSettingsPage settings;
     private TextView pageTitle;
     private Resources systemSettingsResources;
@@ -103,11 +104,43 @@ public final class SettingsActivity extends Activity {
         }
     }
 
+    void exportShareDiagnostics() {
+        String stamp=new java.text.SimpleDateFormat("yyyyMMdd-HHmmss",java.util.Locale.ROOT)
+                .format(new java.util.Date());
+        Intent picker=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("text/plain").putExtra(Intent.EXTRA_TITLE,"onestep-drag-"+stamp+".txt");
+        try{
+            startActivityForResult(picker,SAVE_SHARE_DIAGNOSTICS);
+        }catch(android.content.ActivityNotFoundException unavailable){
+            android.widget.Toast.makeText(this,"无法打开文件保存位置",android.widget.Toast.LENGTH_SHORT).show();
+        }
+    }
+
     @Override
     protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
-        if (request == PICK_WORKSPACE_BACKGROUND && result == RESULT_OK
-                && data != null && data.getData() != null) updateWorkspaceBackground(data.getData());
+        if(result!=RESULT_OK || data==null || data.getData()==null)return;
+        if(request==PICK_WORKSPACE_BACKGROUND)updateWorkspaceBackground(data.getData());
+        else if(request==SAVE_SHARE_DIAGNOSTICS)writeShareDiagnostics(data.getData());
+    }
+
+    private void writeShareDiagnostics(Uri uri) {
+        android.content.ContentResolver resolver=getApplicationContext().getContentResolver();
+        BackgroundExecutor.execute(()->{
+            String message;
+            try(java.io.OutputStream output=resolver.openOutputStream(uri,"wt")){
+                if(output==null)throw new java.io.IOException("Missing file output");
+                output.write(ShareDiagnosticReport.snapshot().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                message="拖曳诊断已保存";
+            }catch(java.io.IOException | RuntimeException unavailable){
+                message="无法保存拖曳诊断";
+            }
+            String result=message;
+            runOnUiThread(()->{
+                if(!isDestroyed() && !isFinishing())
+                    android.widget.Toast.makeText(this,result,android.widget.Toast.LENGTH_SHORT).show();
+            });
+        });
     }
 
     void updateWorkspaceBackground(Uri uri) {

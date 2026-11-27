@@ -23,6 +23,7 @@ final class ContentPermissionBridge {
     private ContentPermissionBridge(){}
 
     static void install(ClassLoader loader,BooleanSupplier interactive) {
+        installDropDiagnostics(loader);
         try {
             Class<?> handler=XposedHelpers.findClass("com.android.server.wm.DragAndDropPermissionsHandler",loader);
             Class<?> stub=XposedHelpers.findClass("com.android.internal.view.IDragAndDropPermissions$Stub",loader);
@@ -48,25 +49,78 @@ final class ContentPermissionBridge {
         } catch(Throwable unavailable) {android.util.Log.w(Tags.PROBE,"drop bridge unavailable on this ROM",unavailable);}
     }
 
+    private static void installDropDiagnostics(ClassLoader loader) {
+        try {
+            Class<?> state=XposedHelpers.findClass("com.android.server.wm.DragState",loader);
+            Class<?> window=XposedHelpers.findClass("com.android.server.wm.WindowState",loader);
+            XC_MethodHook inspect=new XC_MethodHook(){
+                @Override protected void afterHookedMethod(MethodHookParam call){
+                    if(!(call.getResult() instanceof android.view.DragEvent event)
+                            || event.getAction()!=android.view.DragEvent.ACTION_DROP
+                            || event.getClipDescription()==null || !event.getClipDescription().hasMimeType("image/*"))return;
+                    for(Object argument:call.args){
+                        if(!window.isInstance(argument))continue;
+                        inspectDrop(loader,argument,event);
+                        return;
+                    }
+                }
+            };
+            if(XposedBridge.hookAllMethods(state,"createDropEvent",inspect).isEmpty()
+                    && XposedBridge.hookAllMethods(state,"obtainDragEvent",inspect).isEmpty())
+                logGrant(ShareDiagnostics.Code.DROP_PERMISSION_UNAVAILABLE);
+        }catch(RuntimeException unavailable){
+            logGrant(ShareDiagnostics.Code.DROP_PERMISSION_UNAVAILABLE);
+        }
+    }
+
+    private static void inspectDrop(ClassLoader loader,Object window,android.view.DragEvent event) {
+        int user;
+        try{
+            if(!"com.tencent.mm".equals(XposedHelpers.callMethod(window,"getOwningPackage")))return;
+            user=XposedHelpers.getIntField(window,"mOwnerUid")/100000;
+        }catch(RuntimeException unavailable){return;}
+        ShareDiagnostics.Code result;
+        try{
+            result=XposedHelpers.callMethod(event,"getDragAndDropPermissions")==null
+                    ?ShareDiagnostics.Code.DROP_PERMISSION_MISSING:ShareDiagnostics.Code.DROP_PERMISSION_ATTACHED;
+        }catch(RuntimeException unavailable){result=ShareDiagnostics.Code.DROP_PERMISSION_UNAVAILABLE;}
+        reportGrant(loader,user,result);
+    }
+
+    private static Context diagnosticContext(ClassLoader loader,int user) {
+        Class<?> activityThread=XposedHelpers.findClass("android.app.ActivityThread",loader);
+        Object thread=XposedHelpers.callStaticMethod(activityThread,"currentActivityThread");
+        Context context=(Context)XposedHelpers.callMethod(thread,"getSystemContext");
+        return (Context)XposedHelpers.callMethod(context,"createContextAsUser",
+                android.os.UserHandle.getUserHandleForUid(user*100000),0);
+    }
+
+    private static void reportGrant(ClassLoader loader,int user,ShareDiagnostics.Code code) {
+        ShareDiagnosticReport.forward(()->diagnosticContext(loader,user),ShareDiagnostics.Stage.GRANT,code);
+    }
+
     private static void installGrantDiagnostics(Class<?> handler,ClassLoader loader) {
         try {
             XposedBridge.hookAllConstructors(handler,new XC_MethodHook(){
                 @Override protected void afterHookedMethod(MethodHookParam call) {
                     if(!call.hasThrowable() && diagnosticImage(call.thisObject)!=null){
                         android.util.Log.i("OneStepLiteShare",BuildIdentity.RUNTIME_MARKER);
-                        logGrant(ShareDiagnostics.Code.RECEIVER_HANDLER_CREATED);
+                        reportGrant(loader,XposedHelpers.getIntField(call.thisObject,"mTargetUserId"),
+                                ShareDiagnostics.Code.RECEIVER_HANDLER_CREATED);
                     }
                 }
             });
             if(XposedBridge.hookAllMethods(handler,"doTake",new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam call) {
                     if(diagnosticImage(call.thisObject)!=null)
-                        logGrant(ShareDiagnostics.Code.RECEIVER_TAKE_STARTED);
+                        reportGrant(loader,XposedHelpers.getIntField(call.thisObject,"mTargetUserId"),
+                                ShareDiagnostics.Code.RECEIVER_TAKE_STARTED);
                 }
                 @Override protected void afterHookedMethod(MethodHookParam call) {
                     Uri uri=diagnosticImage(call.thisObject);
                     if(uri==null)return;
-                    if(call.hasThrowable())logGrant(ShareDiagnostics.Code.RECEIVER_TAKE_FAILED);
+                    if(call.hasThrowable())reportGrant(loader,XposedHelpers.getIntField(call.thisObject,"mTargetUserId"),
+                            ShareDiagnostics.Code.RECEIVER_TAKE_FAILED);
                     logReceiverGrants(call.thisObject,loader,uri);
                 }
             }).isEmpty())logGrant(ShareDiagnostics.Code.RECEIVER_HOOK_UNAVAILABLE);
@@ -95,23 +149,19 @@ final class ContentPermissionBridge {
     }
 
     private static void logReceiverGrants(Object handler,ClassLoader loader,Uri image) {
+        int user=XposedHelpers.getIntField(handler,"mTargetUserId");
         long identity=Binder.clearCallingIdentity();
         try {
-            Class<?> activityThread=XposedHelpers.findClass("android.app.ActivityThread",loader);
-            Object thread=XposedHelpers.callStaticMethod(activityThread,"currentActivityThread");
-            Context context=(Context)XposedHelpers.callMethod(thread,"getSystemContext");
-            int user=XposedHelpers.getIntField(handler,"mTargetUserId");
             String target=(String)XposedHelpers.getObjectField(handler,"mTargetPackage");
-            Context userContext=(Context)XposedHelpers.callMethod(context,"createContextAsUser",
-                    android.os.UserHandle.getUserHandleForUid(user*100000),0);
+            Context userContext=diagnosticContext(loader,user);
             int uid=userContext.getPackageManager().getPackageUid(target,0);
             Uri file=MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY,ContentUris.parseId(image));
             boolean imageGranted=explicitReadGrant(userContext,image,uid);
             boolean fileGranted=explicitReadGrant(userContext,file,uid);
-            logGrant(imageGranted?ShareDiagnostics.Code.RECEIVER_IMAGE_GRANTED:ShareDiagnostics.Code.RECEIVER_IMAGE_NOT_GRANTED);
-            logGrant(fileGranted?ShareDiagnostics.Code.RECEIVER_FILE_GRANTED:ShareDiagnostics.Code.RECEIVER_FILE_NOT_GRANTED);
+            reportGrant(loader,user,imageGranted?ShareDiagnostics.Code.RECEIVER_IMAGE_GRANTED:ShareDiagnostics.Code.RECEIVER_IMAGE_NOT_GRANTED);
+            reportGrant(loader,user,fileGranted?ShareDiagnostics.Code.RECEIVER_FILE_GRANTED:ShareDiagnostics.Code.RECEIVER_FILE_NOT_GRANTED);
         }catch(Exception unavailable){
-            logGrant(ShareDiagnostics.Code.RECEIVER_CHECK_UNAVAILABLE);
+            reportGrant(loader,user,ShareDiagnostics.Code.RECEIVER_CHECK_UNAVAILABLE);
         }finally{
             Binder.restoreCallingIdentity(identity);
         }

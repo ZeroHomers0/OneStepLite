@@ -11,6 +11,9 @@ out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
 files = {
 'android/os/IBinder.java': 'package android.os; public interface IBinder {}',
+'android/os/UserHandle.java': 'package android.os; public class UserHandle {public static UserHandle getUserHandleForUid(int uid){return new UserHandle();}}',
+'android/os/SystemClock.java': 'package android.os; public class SystemClock {public static long uptimeMillis(){return 1;}}',
+'android/content/Context.java': 'package android.content; public class Context {}',
 'android/view/InputDevice.java':'package android.view; public class InputDevice {public static final int SOURCE_TOUCHSCREEN=4098;}',
 'android/view/MotionEvent.java':'''package android.view; public class MotionEvent {
 public static final int ACTION_DOWN=0,ACTION_UP=1,ACTION_CANCEL=3,ACTION_POINTER_DOWN=5;
@@ -23,7 +26,7 @@ public class WindowManager {public static class LayoutParams {
 public static final int FIRST_SUB_WINDOW=1000,LAST_SUB_WINDOW=1999,FLAG_SECURE=8192;public int type=2,flags;
 public String packageName;public CharSequence accessibilityTitle,title;
 public CharSequence getTitle(){return title;}}}''',
-'android/util/Log.java': 'package android.util; public class Log {public static int w(String t,String s,Throwable e){return 0;}}',
+'android/util/Log.java': 'package android.util; public class Log {public static int w(String t,String s,Throwable e){return 0;}public static int i(String t,String s){return 0;}}',
 'de/robv/android/xposed/XC_MethodHook.java': '''package de.robv.android.xposed;
 public class XC_MethodHook {public static class MethodHookParam {public Object[] args;}
 protected void beforeHookedMethod(MethodHookParam call) throws Throwable {}}''',
@@ -50,6 +53,10 @@ import java.util.*;import android.os.IBinder;import android.view.MotionEvent;imp
 import de.robv.android.xposed.XposedBridge;
 class Tags {static final String PROBE="test";}
 class WindowIdentity {static boolean ownsPicker(Object w,Object d){return ((PortalInputRegression.Win)w).authorized;}}
+class ShareDiagnosticReport {
+static ShareDiagnostics.Code last;
+static void forward(java.util.function.Supplier<android.content.Context> context,ShareDiagnostics.Stage stage,ShareDiagnostics.Code code){last=code;}
+}
 public class PortalInputRegression {
 public static class Token implements IBinder {}
 public static class Task {public int mode=1;public int getWindowingMode(){return mode;}}
@@ -67,7 +74,8 @@ Display display=new Display();Win source=new Win(),focus=new Win();display.mCurr
 source.mAttrs.title=PortalDragInput.TITLE;source.mAttrs.accessibilityTitle="source.app";focus.mAttrs.packageName="source.app";
 display.mWmService.mWindowMap.put("source",source);display.mWmService.mWindowMap.put("focus",focus);
 boolean[] active={true};PortalDragInput.install(PortalInputRegression.class.getClassLoader(),()->display,()->active[0]);
-check(XposedBridge.transfer(source.mInputChannelToken)==focus.mInputChannelToken);
+check(XposedBridge.transfer(source.mInputChannelToken)==focus.mInputChannelToken
+        && ShareDiagnosticReport.last==ShareDiagnostics.Code.LIFT_INPUT_BOUND);
 MotionEvent down=new MotionEvent(MotionEvent.ACTION_DOWN);
 display.touched=focus;PortalDragInput.observeTouch(display,down);
 source.mAttrs.accessibilityTitle=PortalDragInput.identity("source.app",down);
@@ -123,5 +131,5 @@ for name, body in files.items():
     paths.append(str(path))
 jdk = Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(out),
-                *paths, str(src / 'PortalDragInput.java')], check=True)
+                *paths, str(src / 'PortalDragInput.java'), str(src / 'ShareDiagnostics.java')], check=True)
 subprocess.run([str(jdk / 'java.exe'), '-cp', str(out), 'io.github.zerohomers0.onesteplite.PortalInputRegression'], check=True)
