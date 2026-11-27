@@ -61,10 +61,14 @@ public class VideoDockRegression {
   Handler worker=(Handler)field(media.dock,"handler");worker.drain();
   check(media.context.media.adds==1&&player.registers==1&&worker.lastDelay==30000L,"media observers replace fast polling with a 30 second watchdog");
   int queries=media.context.media.queries;media.open();worker.drain();check(media.context.media.queries==queries,"geometry renewal does not enumerate sessions again");
-  player.state.state=2;player.callback.onPlaybackStateChanged(player.state);
+  Runnable playback=(Runnable)field(media.dock,"playbackRefresh");
+  player.state.state=2;for(int i=0;i<5;i++)player.callback.onPlaybackStateChanged(player.state);
+  check(Collections.frequency(worker.delayed,playback)==1&&worker.lastDelay==40L,"playback callbacks share one short refresh");
+  worker.delayed.remove(playback);playback.run();
   check(((Map<?,?>)field(media.dock,"playStates")).get(player.pkg).equals(2)&&media.context.media.queries==queries,"playback callback updates state without session enumeration");
   var second=new MediaController();media.context.media.listener.onActiveSessionsChanged(List.of(second));
   check(player.unregisters==1&&second.registers==1,"session replacement unregisters the retired controller");
+  second.callback.onPlaybackStateChanged(second.state);
   media.context.receiver.onReceive(media.context,media.message(VideoDock.HOST).putExtra("sequence",media.seq++).putExtra("active",false));
   worker.drain();check(media.context.media.removes==1&&second.unregisters==1&&worker.delayed.isEmpty(),"hidden host unregisters observers and cancels its watchdog");
   media.open();worker.drain();check(media.context.media.adds==2,"reopening subscribes again");

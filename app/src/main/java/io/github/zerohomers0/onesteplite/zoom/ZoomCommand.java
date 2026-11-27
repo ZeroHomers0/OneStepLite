@@ -3,8 +3,15 @@ package io.github.zerohomers0.onesteplite;
 /** Reject stale active requests after boot or loss of the SystemUI host. */
 final class ZoomCommand {
     static final long ACTIVE_TIMEOUT_MS = 15_000L;
+    static final long FAST_WATCH_MS = 250L;
+    private static final long STEADY_WATCH_MS = 2_000L;
 
     private ZoomCommand() {}
+
+    static long activeWatchDelay(long modified,long now,boolean steady) {
+        if(!steady || modified>now || now-modified>ACTIVE_TIMEOUT_MS)return FAST_WATCH_MS;
+        return Math.min(STEADY_WATCH_MS,ACTIVE_TIMEOUT_MS-(now-modified)+1L);
+    }
 
     static float[] read(String line, long modified, long started, long now) {
         if (line == null || line.trim().isEmpty()) return identity();

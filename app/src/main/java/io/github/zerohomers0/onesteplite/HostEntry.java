@@ -348,12 +348,12 @@ public class HostEntry implements IXposedHookLoadPackage {
         synchronized(sZoomWatchLock){
             if(!sZoomWatchScreenOn)return;
             if(sZoomWatch!=null){
-                if(sZoomWatch.getDelay(java.util.concurrent.TimeUnit.MILLISECONDS)<=250L)return;
+                if(sZoomWatch.getDelay(java.util.concurrent.TimeUnit.MILLISECONDS)<=ZoomCommand.FAST_WATCH_MS)return;
                 sZoomWatch.cancel(false);
                 sZoomWatch=null;
                 sZoomWatchGeneration++;
             }
-            armZoomWatch(250L);
+            armZoomWatch(ZoomCommand.FAST_WATCH_MS);
         }
     }
     private static void pollZoomFiles(long generation){
@@ -370,11 +370,23 @@ public class HostEntry implements IXposedHookLoadPackage {
         }catch(Throwable ignored){
             // FileObserver/settings/broadcast paths remain authoritative; this is a bounded fallback.
         }finally{
-            long idle=sZoomObserversArmed?60_000L:10_000L;
+            long delay=nextZoomWatchDelay();
             synchronized(sZoomWatchLock){
-                if(generation==sZoomWatchGeneration)armZoomWatch(sZoomed||sZoomScale<1f?250L:idle);
+                if(generation==sZoomWatchGeneration)armZoomWatch(delay);
             }
         }
+    }
+    private static long nextZoomWatchDelay(){
+        if(!sZoomed && sZoomScale==1f && sZoomAnimator==null)return sZoomObserversArmed?60_000L:10_000L;
+        long now=System.currentTimeMillis();
+        ZoomChannelState.Request request=sZoomChannels.current(now);
+        float[] geometry=ZoomCommand.read(request.command,request.modified,sZoomWatcherStarted,now);
+        boolean steady=sZoomObserversArmed && geometry[0]<1f && matchesAppliedZoom(geometry);
+        return ZoomCommand.activeWatchDelay(request.modified,now,steady);
+    }
+    private static boolean matchesAppliedZoom(float[] geometry){
+        return sZoomTarget!=null && sZoomAnimator==null
+                && sZoomScale==geometry[0] && sZoomOffset==geometry[1] && sZoomOffsetX==geometry[2];
     }
     static volatile boolean sZoomBridgeArmed;
     static volatile android.content.Context sWmsContext;
@@ -625,7 +637,8 @@ public class HostEntry implements IXposedHookLoadPackage {
             } else {
                 float[] request = ZoomCommand.read(selected.command,
                         selected.modified, sZoomWatcherStarted, now);
-                if(request[0]<1f)accelerateZoomWatch();
+                if((request[0]<1f || sZoomed || sZoomAnimator!=null) && !matchesAppliedZoom(request))
+                    accelerateZoomWatch();
                 if (!selected.command.equals(sZoomLastDispatched)) {
                     sZoomLastDispatched = selected.command;
                     log("zoom dispatch " + java.util.Arrays.toString(request)

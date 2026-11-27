@@ -133,8 +133,17 @@ final class VideoDock {
     private boolean mediaListenerRegistered, playbackCallbacksReady, mediaMonitoring;
     private final Map<android.media.session.MediaSession.Token,MediaController> observedPlayers = new HashMap<>();
     private final MediaSessionManager.OnActiveSessionsChangedListener sessionsChanged = this::replaceMediaSessions;
+    private boolean playbackRefreshQueued;
+    private final Runnable playbackRefresh = () -> {
+        playbackRefreshQueued = false;
+        if (mediaMonitoring && active && owner != null && owner.isBinderAlive()) refreshPlaybackStates();
+    };
     private final MediaController.Callback playbackChanged = new MediaController.Callback() {
-        @Override public void onPlaybackStateChanged(PlaybackState state) { refreshPlaybackStates(); }
+        @Override public void onPlaybackStateChanged(PlaybackState state) {
+            if (!mediaMonitoring || !active || playbackRefreshQueued) return;
+            playbackRefreshQueued = true;
+            handler.postDelayed(playbackRefresh, 40L);
+        }
         @Override public void onSessionDestroyed() { refreshMediaSessions(); }
     };
     private final Runnable poll = new Runnable() {
@@ -191,6 +200,10 @@ final class VideoDock {
         refreshPlaybackStates();
     }
     private void refreshPlaybackStates() {
+        if (playbackRefreshQueued) {
+            handler.removeCallbacks(playbackRefresh);
+            playbackRefreshQueued = false;
+        }
         if (!active) return;
         Map<String,Integer> states = new HashMap<>();
         for (MediaController player : players) {
@@ -205,6 +218,8 @@ final class VideoDock {
     private void stopMediaMonitoring() {
         mediaMonitoring = false;
         handler.removeCallbacks(poll);
+        handler.removeCallbacks(playbackRefresh);
+        playbackRefreshQueued = false;
         if (mediaManager != null && mediaListenerRegistered) {
             try { mediaManager.removeOnActiveSessionsChangedListener(sessionsChanged); }
             catch (Throwable error) { log("video session listener removal: " + error); }
