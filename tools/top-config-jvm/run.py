@@ -67,7 +67,8 @@ public class TopConfigRegression {
  boolean canRender(Slot s){return true;}boolean holdsLiveFlipZoom(){return false;}boolean mayWriteSideSurface(Slot s){return true;}
  boolean controllerOwns(Slot s,int id,Object token){return true;}Object getSurfaceField(Object c,String n){return new Object();}
  TopTaskGeometry topGeometry(){return new TopTaskGeometry(1080,2460,622,true,2.75f);}
- Rect logicalBounds(Slot s){TopTaskGeometry g=topGeometry();return s.index==4?new Rect(0,0,g.logicalWidth,g.logicalHeight):new Rect(0,0,1080,2460);}
+ boolean topPortrait;
+ Rect logicalBounds(Slot s){TopTaskGeometry g=topGeometry();return s.index==4?new Rect(0,0,topPortrait?534:g.logicalWidth,g.logicalHeight):new Rect(0,0,1080,2460);}
  boolean applyWct(String why,Object wct){applied=wct;return true;}static void log(String s){}
  Iterable<Info>rootInfos(){return infos;}int windowModeOf(Object o){return ((Info)o).mode;}
  boolean isSideToken(Object token){return "upper".equals(token)||"side".equals(token);}
@@ -87,6 +88,10 @@ public class TopConfigRegression {
   check(w.calls.contains("setAppBounds:upper:0,0,1647,949"),"phone app metrics use the compact logical viewport");
   check(w.calls.contains("setScreenSizeDp:upper:599:345"),"resources match the logical viewport and selected density");
   check(w.calls.contains("setSmallestScreenWidthDp:upper:345"),"smallest width belongs to the compact viewport");
+  h.topPortrait=true;h.applyFullscreenBounds(slot);w=(android.window.WindowContainerTransaction)h.applied;
+  check(w.calls.contains("setAppBounds:upper:0,0,534,949")&&w.calls.contains("setScreenSizeDp:upper:194:345"),
+        "portrait navigation resources match the portrait viewport");
+  h.topPortrait=false;
   var g=h.topGeometry();
   check(Math.round(g.logicalWidth*g.scale)==1080&&Math.round(g.logicalHeight*g.scale)==622,"compact renderer and input fill the original strip");
   var wide=new TopTaskGeometry(1080,2460,622,false,2.75f);
@@ -167,7 +172,7 @@ files={'android/view/SurfaceControl.java':'package android.view;public class Sur
  'io/github/zerohomers0/onesteplite/TopConfigRegression.java':body,
  'android/window/WindowContainerTransaction.java':'package android.window;public class WindowContainerTransaction {public java.util.List<String>calls=new java.util.ArrayList<>();}',
  'android/view/WindowInsets.java':'package android.view;public class WindowInsets {public static class Type {public static int captionBar(){return 32;}}}',
- 'android/graphics/Rect.java':'package android.graphics;public class Rect {int a,b,c,d;public Rect(){}public Rect(int a,int b,int c,int d){this.a=a;this.b=b;this.c=c;this.d=d;}public String toString(){return a+","+b+","+c+","+d;}}',
+ 'android/graphics/Rect.java':'package android.graphics;public class Rect {int a,b,c,d;public Rect(){}public Rect(int a,int b,int c,int d){this.a=a;this.b=b;this.c=c;this.d=d;}public int width(){return c-a;}public int height(){return d-b;}public String toString(){return a+","+b+","+c+","+d;}}',
  'android/app/ActivityTaskManager.java':'package android.app;public class ActivityTaskManager {}'}
 paths=[]
 for name,text in files.items():

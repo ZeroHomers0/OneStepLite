@@ -10,15 +10,15 @@ final class ZoomFileObserverHooks {
     private static final String NAME="onesteplite-zoom";
     private ZoomFileObserverHooks() {}
 
-    /** Returns whether the legacy /data/system directory is actively observed. */
+    /** Returns whether both file channels have an observer. */
     static boolean install(Consumer<FileObserver[]> installed,
             Consumer<java.io.File> dispatchZoom, Consumer<String> log) {
         List<FileObserver> observers=new ArrayList<>();
         boolean system=observe(new java.io.File("/data/system"),"system",observers,dispatchZoom,log);
-        observe(new java.io.File("/data/user_de/0/com.android.systemui/files"),"SystemUI",
+        boolean systemUi=observe(new java.io.File("/data/user_de/0/com.android.systemui/files"),"SystemUI",
                 observers,dispatchZoom,log);
         if(!observers.isEmpty())installed.accept(observers.toArray(new FileObserver[0]));
-        return system;
+        return system && systemUi;
     }
 
     private static boolean observe(java.io.File dir,String label,List<FileObserver> observers,
@@ -29,9 +29,9 @@ final class ZoomFileObserverHooks {
         }
         try {
             FileObserver observer=new FileObserver(dir,
-                    FileObserver.CLOSE_WRITE | FileObserver.MOVED_TO | FileObserver.CREATE) {
+                    FileObserver.CLOSE_WRITE | FileObserver.MOVED_TO) {
                 @Override public void onEvent(int event,String path) {
-                    if(path==null || !path.endsWith(NAME))return;
+                    if(!NAME.equals(path))return;
                     dispatchZoom.accept(new java.io.File(dir,NAME));
                 }
             };

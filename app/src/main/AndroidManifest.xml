@@ -12,10 +12,12 @@
     <package android:name="com.ss.android.lark" />
     <package android:name="com.miui.home" />
     <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
+    <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.APP_MAPS" /></intent>
     <intent><action android:name="android.intent.action.SEND" /><data android:mimeType="*/*" /></intent>
     <intent><action android:name="android.intent.action.SEND_MULTIPLE" /><data android:mimeType="*/*" /></intent>
     <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="https" /></intent>
     <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="geo" /></intent>
+    <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="google.navigation" /></intent>
     <intent><action android:name="android.intent.action.WEB_SEARCH" /></intent>
     <intent><action android:name="android.intent.action.TRANSLATE" /></intent>
     <intent><action android:name="android.intent.action.EDIT" /><data android:mimeType="image/*" /></intent>

@@ -7,13 +7,15 @@ final class TopCandidate {
     final Slot source;
     final boolean landscape;
     final boolean tryLandscape;
+    final boolean navigation;
 
     TopCandidate(LiveTask task, TopTaskState.Key key, Slot source, boolean landscape,
-            boolean tryLandscape) {
+            boolean tryLandscape, boolean navigation) {
         this.task = task;
         this.key = key;
         this.source = source;
         this.landscape = landscape;
         this.tryLandscape = tryLandscape;
+        this.navigation = navigation;
     }
 }

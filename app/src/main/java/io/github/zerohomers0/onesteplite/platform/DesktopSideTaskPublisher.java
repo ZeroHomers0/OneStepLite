@@ -32,6 +32,7 @@ final class DesktopSideTaskPublisher {
         TopTaskState topTaskState();
         boolean topFace();
         TopTaskGeometry topGeometry();
+        android.graphics.Rect topBounds();
         IBinder sceneOwner();
         Context context();
         boolean executeOnShell(Runnable task);
@@ -122,11 +123,13 @@ final class DesktopSideTaskPublisher {
                 ||owner.taskId!=upper.taskId||!owner.token.equals(upper.taskToken)||!host.isActive(upper)||!upper.occupied
                 ||upper.parked||upper.frozen||upper.promoting||upper.launching||upper.taskToken==null
                 ||!host.controllerOwns(upper,upper.taskId,upper.taskToken))return;
-        TopTaskGeometry geometry=host.topGeometry();android.os.Bundle topInput=new android.os.Bundle();
+        TopTaskGeometry geometry=host.topGeometry();android.graphics.Rect bounds=host.topBounds();
+        float left=geometry.left+Math.max(0f,(geometry.right-geometry.left-bounds.width()*geometry.scale)*.5f);
+        android.os.Bundle topInput=new android.os.Bundle();
         topInput.putBinder("task",(IBinder)XposedHelpers.callMethod(upper.taskToken,"asBinder"));
         topInput.putInt("taskId",upper.taskId);topInput.putInt("userId",owner.userId);topInput.putInt("displayId",0);
-        topInput.putInt("width",geometry.logicalWidth);topInput.putInt("height",geometry.logicalHeight);
-        topInput.putFloat("scale",geometry.scale);topInput.putFloat("left",geometry.left);topInput.putFloat("top",geometry.top);
+        topInput.putInt("width",bounds.width());topInput.putInt("height",bounds.height());
+        topInput.putFloat("scale",geometry.scale);topInput.putFloat("left",left);topInput.putFloat("top",geometry.top);
         state.putBundle("topInput",topInput);
         if(upper.pkg!=null&&host.mayWriteSideSurface(upper)){
             android.os.Bundle launch=new android.os.Bundle(topInput);launch.putString("package",upper.pkg);

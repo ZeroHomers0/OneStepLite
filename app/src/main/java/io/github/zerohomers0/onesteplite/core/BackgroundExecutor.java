@@ -1,9 +1,9 @@
 package io.github.zerohomers0.onesteplite;
 
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -12,10 +12,10 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /** Process-local daemon pools for finite one-shot work; lifecycle polls stay on their owning Handler. */
 final class BackgroundExecutor {
-    private static final ExecutorService SHARED=Executors.newFixedThreadPool(2,
-            daemonFactory("OneStepLite-background"));
-    private static final ScheduledExecutorService TIMED=Executors.newSingleThreadScheduledExecutor(
-            daemonFactory("OneStepLite-timer"));
+    private static final ExecutorService SHARED=workerPool(2,"OneStepLite-background");
+    private static final ScheduledThreadPoolExecutor TIMED=new ScheduledThreadPoolExecutor(
+            1,daemonFactory("OneStepLite-timer"));
+    static {TIMED.setRemoveOnCancelPolicy(true);}
     private static final AtomicInteger QUEUED=new AtomicInteger(),ACTIVE=new AtomicInteger();
     private static final AtomicLong SUBMITTED=new AtomicLong(),COMPLETED=new AtomicLong(),
             FAILED=new AtomicLong(),MAX_MILLIS=new AtomicLong();
@@ -31,12 +31,16 @@ final class BackgroundExecutor {
         }
     }
 
-    static void schedule(Runnable task,long delayMillis){
-        if(task!=null)TIMED.schedule(task,Math.max(0L,delayMillis),TimeUnit.MILLISECONDS);
+    static ScheduledFuture<?> schedule(Runnable task,long delayMillis){
+        return TIMED.schedule(task,Math.max(0L,delayMillis),TimeUnit.MILLISECONDS);
     }
 
     static ExecutorService single(String name){
-        ThreadPoolExecutor executor=new ThreadPoolExecutor(1,1,30L,TimeUnit.SECONDS,
+        return workerPool(1,name);
+    }
+
+    private static ThreadPoolExecutor workerPool(int size,String name){
+        ThreadPoolExecutor executor=new ThreadPoolExecutor(size,size,30L,TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(),daemonFactory(name));
         executor.allowCoreThreadTimeOut(true);
         return executor;

@@ -36,13 +36,16 @@ for signature in ['    void requestOpenedAppsRefresh(', '    void setWorkspaceAc
     rail += member('TopBar.java', signature) + '\n'
 host = member('WorkspaceHost.java', '    private void startWorkspaceHeartbeat(')
 host += member('WorkspaceHost.java', '    private void setZoomState(')
+watch = '\n'.join(member('HostEntry.java', signature) for signature in [
+    '    static void onZoomScreenState(', '    private static void armZoomWatch(',
+    '    private static void accelerateZoomWatch('])
 body = '''package io.github.zerohomers0.onesteplite;
 import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.*;
 public class PowerRefreshRegression {
  static int checks;static void check(boolean ok,String why){checks++;if(!ok)throw new AssertionError(why);}
  static class Queue {
-  Map<Runnable,Long> pending=new LinkedHashMap<>();
-  void removeCallbacks(Runnable r){pending.remove(r);}void postDelayed(Runnable r,long delay){pending.put(r,delay);}
+  Map<Runnable,Long> pending=new LinkedHashMap<>();int posts;
+  void removeCallbacks(Runnable r){pending.remove(r);}void postDelayed(Runnable r,long delay){posts++;pending.put(r,delay);}
   void run(){Runnable r=pending.keySet().iterator().next();pending.remove(r);r.run();}
  }
  static class View extends Queue {
@@ -54,7 +57,7 @@ public class PowerRefreshRegression {
   protected void onWindowVisibilityChanged(int value){windowVisibility=value;}
  }
  static class Rail extends View {
-  boolean workspaceActive=true,dragShareEnabled=true;int reads,updates,closes;
+  boolean workspaceActive=true,dragShareEnabled=true,openedAppsRefreshQueued;int reads,updates,closes;
   class Listener {Set<String> openedAppPackages(){reads++;return Set.of("main");}}
   class QuickRail {void setOpenedPackages(Set<String> p){updates++;}}
   class Picker {void close(){closes++;}}
@@ -66,6 +69,15 @@ __RAIL__
  static class SystemClock {static long now=40000;static long uptimeMillis(){return now;}}
  static class HotZoneGesture {static boolean isAttached(){return true;}static void raiseAll(){}}
  static class HostEntry {static void setHostZoomed(boolean b){}}
+ static class ZoomWatch {
+  static final Object sZoomWatchLock=new Object();
+  static boolean sZoomWatchScreenOn=true;
+  static ScheduledFuture<?> sZoomWatch;
+  static long sZoomWatchGeneration;
+  static CountDownLatch wake=new CountDownLatch(1);
+  static void pollZoomFiles(long generation){if(generation==sZoomWatchGeneration)wake.countDown();}
+__WATCH__
+ }
  static class StatusBarSampling {static void geometryChanged(){}}
  static class Host {
   static final int ACTIVE=1;static Host sInstance;int scene=ACTIVE;boolean screenOn=true,keyguardLocked,lockExitPending,zoomed=true,flip;
@@ -80,7 +92,7 @@ __HOST__
  }
  public static void main(String[] args)throws Exception{
   Rail r=new Rail();for(int i=0;i<20;i++)r.requestOpenedAppsRefresh();
-  check(r.pending.size()==1&&r.pending.values().iterator().next()==100L,"task bursts coalesce before querying Binder");
+  check(r.posts==1&&r.pending.size()==1&&r.pending.values().iterator().next()==100L,"task bursts share one queued Binder refresh");
   r.run();check(r.reads==1&&r.updates==1&&r.pending.isEmpty(),"visible rail refresh is event-driven");
   r.onVisibilityChanged(r,8);check(r.pending.isEmpty(),"hidden rail has no timer");
   r.onVisibilityChanged(r,0);check(r.pending.size()==1,"showing rail schedules a current snapshot");
@@ -112,6 +124,21 @@ __HOST__
   check(poolRan.await(2,TimeUnit.SECONDS)&&poolThread.get()!=null&&poolThread.get().startsWith("OneStepLite-background"),
         "shared background work uses a named pool");
   check(poolDaemon[0],"background pool workers are daemon threads");
+  var shared=BackgroundExecutor.class.getDeclaredField("SHARED");shared.setAccessible(true);
+  var workers=(ThreadPoolExecutor)shared.get(null);
+  check(workers.allowsCoreThreadTimeOut()&&workers.getKeepAliveTime(TimeUnit.SECONDS)==30,"shared workers can retire after idle timeout");
+  var timed=BackgroundExecutor.class.getDeclaredField("TIMED");timed.setAccessible(true);
+  var timer=(ScheduledThreadPoolExecutor)timed.get(null);
+  var stale=BackgroundExecutor.schedule(()->{},60_000L);
+  check(stale.cancel(false)&&timer.getQueue().isEmpty(),"cancelling the idle watchdog removes its pending timer");
+  ZoomWatch.armZoomWatch(60_000L);var idle=ZoomWatch.sZoomWatch;
+  ZoomWatch.accelerateZoomWatch();var accelerated=ZoomWatch.sZoomWatch;
+  check(idle.isCancelled()&&accelerated!=idle&&accelerated.getDelay(TimeUnit.MILLISECONDS)<=250,
+        "an active zoom request preempts the idle timer");
+  ZoomWatch.onZoomScreenState(false);
+  check(accelerated.isCancelled()&&ZoomWatch.sZoomWatch==null,"screen off removes the queued check");
+  ZoomWatch.wake=new CountDownLatch(1);ZoomWatch.onZoomScreenState(true);
+  check(ZoomWatch.wake.await(2,TimeUnit.SECONDS),"screen on performs a fresh check instead of waiting for the old timer");
   String poolDiagnostics=null;
   for(int i=0;i<200;i++){String current=BackgroundExecutor.diagnostics();
     if(current.contains("completed=1")&&current.contains("queued=0")&&current.contains("active=0")){poolDiagnostics=current;break;}
@@ -121,7 +148,7 @@ __HOST__
         "background pool diagnostics expose queue, result and duration state");
   System.out.println("Production power refresh lifecycle checks="+checks+" passed");
  }
-}'''.replace('__RAIL__', rail).replace('__HOST__', host.replace('WorkspaceHost.this', 'thisHost()'))
+}'''.replace('__RAIL__', rail).replace('__HOST__', host.replace('WorkspaceHost.this', 'thisHost()')).replace('__WATCH__',watch)
 # The production inner Runnable captures its enclosing Host, just as the Android host does.
 body = body.replace('static Host sInstance;', 'Host thisHost(){return this;}static Host sInstance;')
 p = out/'PowerRefreshRegression.java'; p.write_text(body, encoding='utf-8')

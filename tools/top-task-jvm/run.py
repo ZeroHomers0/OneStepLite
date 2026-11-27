@@ -35,7 +35,7 @@ public final class TopAdmissionRegression {
  TopDirection topPageDirection(Object info,TopTaskState.Key key){return direction;}
  int topPageOrientation(Object info,TopDirection signal){return pageOrientation;}
  Slot[]slots={new Slot(0),new Slot(1),new Slot(2),new Slot(3),new Slot(4)};Slot topOriginalSlot;
- Context ctx=new Context();Handler main=new Handler();IBinder desktopSceneOwner=new Binder();Rect logicalBounds(Slot s){return new Rect(0,0,2964,1707);}
+ Context ctx=new Context();Handler main=new Handler();IBinder desktopSceneOwner=new Binder();Rect logicalBounds(Slot s,boolean portrait){return new Rect(0,0,portrait?960:2964,1707);}
  TopTaskState topTaskState=new TopTaskState();
  void adoptExisting(Slot slot,Task task,boolean fromMain,Runnable success,Consumer<String> failure){
   adopted++;if(defer)pending=success;else if(fail)failure.accept("not visible");else success.run();
@@ -174,7 +174,7 @@ public class TopDirectionRegression {
  record TopDirection(boolean landscape){}
  Object root=new Object();Map<TopTaskState.Key,TopDirection> topDirections=new HashMap<>();
  TopTaskState topTaskState=new TopTaskState();boolean topAuto=true,topFace=true;
- static class TopCandidate {TopTaskState.Key key;boolean landscape,tryLandscape;}TopCandidate current;int opened,claimed;
+ static class TopCandidate {TopTaskState.Key key;boolean landscape,tryLandscape,navigation;}TopCandidate current;int opened,claimed;
  static final int ACTIVE=1,SLOT_TOP=4;int scene=ACTIVE;boolean screenOn=true,keyguardLocked,transferBusy;
  static class Promotion {boolean keepTopBarAppearance;}Promotion promotion;
  Object workspaceAnimator,mainSideAnimator,cellMotion;float workspaceAlpha=1f;
@@ -201,6 +201,9 @@ public class TopDirectionRegression {
   if(!h.topBar.enabled||h.topBar.alpha!=1f)throw new AssertionError("follow-app swap changed the bar appearance");
   h.promotion=null;
   h.topTaskDirection(a,false);if(h.topBar.enabled)throw new AssertionError("return to portrait did not disable action");
+  h.current.navigation=true;h.topTaskDirection(a,false);
+  if(!h.topBar.enabled)throw new AssertionError("portrait navigation page cannot be pinned");
+  h.current.navigation=false;
   h.current.tryLandscape=true;h.topTaskDirection(a,false);
   if(!h.topBar.enabled)throw new AssertionError("flexible portrait page cannot try manual landscape admission");
   if(h.opened!=0||h.claimed!=0||h.topTaskState.owner()!=null||h.topTaskState.busy())throw new AssertionError("direction change admitted/opened upper task");
@@ -210,7 +213,7 @@ public class TopDirectionRegression {
   if(h.topDirections.containsKey(foreign))throw new AssertionError("unsupported user recorded");
   h.root=null;h.topTaskDirection(new TopTaskState.Key(9,0,"late"),true);
   if(h.topDirections.size()!=1)throw new AssertionError("detached Host consumed direction callback");
-  System.out.println("Production upper manual-only direction checks=10 passed");
+  System.out.println("Production upper manual-only direction checks=11 passed");
  }
 }'''
 p=out/'io/github/zerohomers0/onesteplite/TopDirectionRegression.java';p.write_text(direction,encoding='utf-8')

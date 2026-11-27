@@ -96,6 +96,7 @@ public final class WorkspaceHost {
     WindowManager.LayoutParams lp;
     DisplayManager displayManager;
     DisplayManager.DisplayListener displayListener;
+    private Boolean defaultDisplayOn;
     volatile int displayRotation = -1;
     boolean geometryRefreshQueued;
     int geometryRefreshDeferrals;
@@ -145,6 +146,10 @@ public final class WorkspaceHost {
     private VideoPane videoPane;
     private final TopTaskState topTaskState = new TopTaskState();
     private final java.util.Map<TopTaskState.Key, TopDirection> topDirections = new java.util.HashMap<>();
+    private String navigationPackage;
+    private int navigationUser = -1;
+    private long navigationCacheUntil;
+    private boolean navigationApp;
     private final WideVideoPolicy wideVideoPolicy = new WideVideoPolicy();
     /** Scratch main hole: every consumer copies it before the next frame. */
     private final android.graphics.RectF workspaceHole = new android.graphics.RectF();
@@ -231,6 +236,7 @@ public final class WorkspaceHost {
         @Override public TopTaskState topTaskState() { return topTaskState; }
         @Override public boolean topFace() { return topFace; }
         @Override public TopTaskGeometry topGeometry() { return WorkspaceHost.this.topGeometry(); }
+        @Override public Rect topBounds() { return logicalBounds(slots[SLOT_TOP]); }
         @Override public android.os.IBinder sceneOwner() { return desktopSceneOwner; }
         @Override public Context context() { return ctx; }
         @Override public boolean executeOnShell(Runnable task) {
@@ -1567,9 +1573,12 @@ public final class WorkspaceHost {
 
     private Rect logicalBounds() { return new Rect(0, 0, screenW, screenH); }
     private Rect logicalBounds(Slot slot) {
+        return logicalBounds(slot,topPortrait);
+    }
+    private Rect logicalBounds(Slot slot,boolean portrait) {
         if(slot==null || slot.index!=SLOT_TOP)return logicalBounds();
         TopTaskGeometry upper=topGeometry();
-        if(!topPortrait)return new Rect(0,0,upper.logicalWidth,upper.logicalHeight);
+        if(!portrait)return new Rect(0,0,upper.logicalWidth,upper.logicalHeight);
         // A portrait-only app keeps its own aspect; the strip shows it centred with side bars.
         int width=Math.max(1,Math.min(upper.logicalWidth,
                 Math.round(upper.logicalHeight*9f/16f)));
@@ -1589,11 +1598,12 @@ public final class WorkspaceHost {
     private void applyTopConfiguration(Object wct, Object token, Slot slot) {
         if (slot == null || slot.index != SLOT_TOP) return;
         TopTaskGeometry geometry = topGeometry();
-        XposedHelpers.callMethod(wct, "setAppBounds", token, logicalBounds(slot));
+        Rect bounds=logicalBounds(slot);
+        XposedHelpers.callMethod(wct, "setAppBounds", token, bounds);
         // Inherit native density so retained app Views never mix cached px at two DPIs.
         XposedHelpers.callMethod(wct, "setDensityDpi", token, 0);
-        int widthDp = Math.max(1, Math.round(geometry.logicalWidth * 160f / geometry.densityDpi));
-        int heightDp = Math.max(1, Math.round(geometry.logicalHeight * 160f / geometry.densityDpi));
+        int widthDp = Math.max(1, Math.round(bounds.width() * 160f / geometry.densityDpi));
+        int heightDp = Math.max(1, Math.round(bounds.height() * 160f / geometry.densityDpi));
         XposedHelpers.callMethod(wct, "setScreenSizeDp", token, widthDp, heightDp);
         XposedHelpers.callMethod(wct, "setSmallestScreenWidthDp", token, Math.min(widthDp, heightDp));
     }
@@ -3491,9 +3501,33 @@ public final class WorkspaceHost {
         boolean landscape=!FullscreenRotationPolicy.requestsPortrait(orientation)
                 && (FullscreenRotationPolicy.requestsLandscape(orientation)
                 || (directed!=null?directed.landscape():configurationOrientationOf(info)==2));
-        boolean tryLandscape=!landscape && !layout.tabletLandscape
+        boolean navigation=source==null && !landscape && !layout.tabletLandscape
+                && isNavigationApp(task.pkg,key.userId);
+        boolean tryLandscape=!landscape && !navigation && !layout.tabletLandscape
                 && FullscreenRotationPolicy.allowsEitherOrientation(orientation);
-        return new TopCandidate(task,key,source,landscape,tryLandscape);
+        return new TopCandidate(task,key,source,landscape,tryLandscape,navigation);
+    }
+
+    private boolean isNavigationApp(String pkg,int user) {
+        if(pkg==null)return false;
+        switch(pkg){
+            case "com.autonavi.minimap", "com.baidu.BaiduMap", "com.tencent.map",
+                    "com.google.android.apps.maps", "com.waze",
+                    "net.osmand", "net.osmand.plus", "app.organicmaps" -> {return true;}
+        }
+        long now=SystemClock.uptimeMillis();
+        if(pkg.equals(navigationPackage) && navigationUser==user && now<navigationCacheUntil)return navigationApp;
+        try {
+            android.content.pm.PackageManager packages=ctx.getPackageManager();
+            Intent maps=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MAPS).setPackage(pkg);
+            Intent directions=new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("google.navigation:q=0,0")).setPackage(pkg);
+            navigationApp=packages.resolveActivity(maps,0)!=null
+                    || packages.resolveActivity(directions,android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)!=null;
+        }catch(RuntimeException unavailable){return false;}
+        navigationPackage=pkg;
+        navigationUser=user;
+        navigationCacheUntil=now+60_000L;
+        return navigationApp;
     }
 
     private TopDirection topPageDirection(Object info, TopTaskState.Key key) {
@@ -3549,7 +3583,7 @@ public final class WorkspaceHost {
             if(selected.source!=null && (!ordinaryRoot(fresh,6) || !controllerOwns(selected.source,selected.task.id,selected.task.token))) {cancelTopTaskTransition();return;}
             TopCandidate checked=candidate(fresh,selected.source);
             if(selected.source==null && !layout.tabletLandscape
-                    && !checked.landscape && !checked.tryLandscape) {
+                    && !checked.landscape && !checked.tryLandscape && !checked.navigation) {
                 cancelTopTaskTransition();
                 return;
             }
@@ -3580,7 +3614,7 @@ public final class WorkspaceHost {
             row.putBinder("owner",desktopSceneOwner);
             row.putBinder("task",(android.os.IBinder)XposedHelpers.callMethod(selected.task.token,"asBinder"));
             row.putInt("taskId",selected.key.taskId);row.putInt("userId",selected.key.userId);
-            row.putParcelable("bounds",logicalBounds(slots[SLOT_TOP]));
+            row.putParcelable("bounds",logicalBounds(slots[SLOT_TOP],!selected.landscape && !selected.tryLandscape));
             main.postDelayed(timeout,1500L);
             ctx.sendOrderedBroadcast(new Intent(DesktopLaunchBridge.PREPARE_TOP).setPackage("android")
                     .putExtra("state",row),android.Manifest.permission.WRITE_SECURE_SETTINGS,
@@ -3599,10 +3633,11 @@ public final class WorkspaceHost {
 
     private void adoptTopTaskPrepared(TopCandidate selected, TopTaskState.Ticket ticket, boolean fromMain) {
         if(!topTaskState.current(ticket,sceneEpoch)) {cancelTopTaskTransition();return;}
+        boolean previousPortrait=topPortrait;
+        topPortrait=!selected.landscape && !selected.tryLandscape;
         adoptExisting(slots[SLOT_TOP],selected.task,fromMain,()->{
             if(!topTaskState.commit(ticket,sceneEpoch)) {releaseTopTask(false,false,null);return;}
             topOriginalSlot=selected.source;topFromMain=fromMain;
-            topPortrait=!selected.landscape && !selected.tryLandscape;
             updateTopTaskGeometry();applyFullscreenBounds(slots[SLOT_TOP]);applySlotScale(slots[SLOT_TOP]);
             // The strip's surface is shared with the main window during a cross-fade,
             // so its alpha and crop must be re-staged for the new owner explicitly.
@@ -3615,7 +3650,10 @@ public final class WorkspaceHost {
             if(selected.tryLandscape)verifyTopLandscape(selected);
             preferMainAfterTopChange();
             finishPendingSuspend();
-        },error->topAdoptionFailed(selected,ticket,error));
+        },error->{
+            if(topTaskState.current(ticket,sceneEpoch))topPortrait=previousPortrait;
+            topAdoptionFailed(selected,ticket,error);
+        });
     }
 
     private void verifyTopLandscape(TopCandidate selected) {
@@ -4180,7 +4218,10 @@ public final class WorkspaceHost {
                     // USER_PRESENT can precede STATE_ON while screenOn was already set by
                     // the broadcast. Re-run the idempotent transition so retained privacy
                     // cannot remain stuck after the physical display becomes ready.
-                    if (display != null) main.post(() -> onScreenState(displayOn));
+                    if (display != null && !Boolean.valueOf(displayOn).equals(defaultDisplayOn)) {
+                        defaultDisplayOn=displayOn;
+                        onScreenState(displayOn);
+                    }
                 }
             };
             displayManager.registerDisplayListener(displayListener, main);
@@ -4255,7 +4296,7 @@ public final class WorkspaceHost {
         if (slots[SLOT_TOP].occupied) return false;
         try {
             TopCandidate candidate = currentTopCandidate();
-            return candidate != null && (candidate.landscape || candidate.tryLandscape);
+            return candidate != null && (candidate.landscape || candidate.tryLandscape || candidate.navigation);
         } catch (Throwable unavailable) {
             log("upper action state unavailable: " + unavailable);
             return false;

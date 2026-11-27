@@ -144,9 +144,11 @@ public class HostEntry implements IXposedHookLoadPackage {
     static final KeyguardZoom sKeyguardZoom = new KeyguardZoom();
     static final ZoomChannelState sZoomChannels = new ZoomChannelState(sZoomWatcherStarted);
     static volatile android.os.FileObserver[] sZoomFileObservers;
-    static volatile boolean sSystemZoomObserverArmed;
+    static volatile boolean sZoomObserversArmed;
+    private static final Object sZoomWatchLock=new Object();
     static volatile boolean sZoomWatchScreenOn = true;
-    static boolean sZoomWatchQueued;
+    private static java.util.concurrent.ScheduledFuture<?> sZoomWatch;
+    private static long sZoomWatchGeneration;
     static volatile Handler sZoomBridgeHandler;
     static volatile boolean sHostZoomed;
     static volatile long sUnlockPhysicalShadeGeneration, sUnlockPhysicalShadeUntil;
@@ -318,22 +320,47 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
     static void startZoomFileWatcher(){
         try{
+            Context context=(Context)sSystemContext;
+            android.os.PowerManager power=context==null?null:context.getSystemService(android.os.PowerManager.class);
+            if(power!=null)onZoomScreenState(power.isInteractive());
             armZoomWatch(0L);
             log("ZOOM lease watcher armed; transforms only on locked WMS handler");
         }catch(Throwable failure){log("ZOOM watcher failed: "+failure);}
     }
-    static synchronized void onZoomScreenState(boolean on){
-        sZoomWatchScreenOn=on;
-        if(on)armZoomWatch(0L);
+    static void onZoomScreenState(boolean on){
+        synchronized(sZoomWatchLock){
+            if(sZoomWatchScreenOn==on)return;
+            sZoomWatchScreenOn=on;
+            sZoomWatchGeneration++;
+            if(sZoomWatch!=null)sZoomWatch.cancel(false);
+            sZoomWatch=null;
+            if(on)armZoomWatch(0L);
+        }
     }
-    private static synchronized void armZoomWatch(long delay){
-        if(sZoomWatchQueued||!sZoomWatchScreenOn)return;
-        sZoomWatchQueued=true;
-        BackgroundExecutor.schedule(HostEntry::pollZoomFiles,delay);
+    private static void armZoomWatch(long delay){
+        synchronized(sZoomWatchLock){
+            if(sZoomWatch!=null||!sZoomWatchScreenOn)return;
+            long generation=sZoomWatchGeneration;
+            sZoomWatch=BackgroundExecutor.schedule(()->pollZoomFiles(generation),delay);
+        }
     }
-    private static void pollZoomFiles(){
-        synchronized(HostEntry.class){sZoomWatchQueued=false;}
-        if(!sZoomWatchScreenOn)return;
+    private static void accelerateZoomWatch(){
+        synchronized(sZoomWatchLock){
+            if(!sZoomWatchScreenOn)return;
+            if(sZoomWatch!=null){
+                if(sZoomWatch.getDelay(java.util.concurrent.TimeUnit.MILLISECONDS)<=250L)return;
+                sZoomWatch.cancel(false);
+                sZoomWatch=null;
+                sZoomWatchGeneration++;
+            }
+            armZoomWatch(250L);
+        }
+    }
+    private static void pollZoomFiles(long generation){
+        synchronized(sZoomWatchLock){
+            if(generation!=sZoomWatchGeneration || !sZoomWatchScreenOn)return;
+            sZoomWatch=null;
+        }
         try{
             java.io.File systemFile=new java.io.File("/data/system/onesteplite-zoom");
             java.io.File uiFile=new java.io.File("/data/user_de/0/com.android.systemui/files/onesteplite-zoom");
@@ -343,8 +370,10 @@ public class HostEntry implements IXposedHookLoadPackage {
         }catch(Throwable ignored){
             // FileObserver/settings/broadcast paths remain authoritative; this is a bounded fallback.
         }finally{
-            long idle=sSystemZoomObserverArmed?60_000L:10_000L;
-            armZoomWatch(sZoomed||sZoomScale<1f?250L:idle);
+            long idle=sZoomObserversArmed?60_000L:10_000L;
+            synchronized(sZoomWatchLock){
+                if(generation==sZoomWatchGeneration)armZoomWatch(sZoomed||sZoomScale<1f?250L:idle);
+            }
         }
     }
     static volatile boolean sZoomBridgeArmed;
@@ -591,10 +620,12 @@ public class HostEntry implements IXposedHookLoadPackage {
             ZoomAnimCommand.Plan anim = ZoomAnimCommand.parse(selected.command,
                     selected.modified, sZoomWatcherStarted, now);
             if (anim != null) {
+                accelerateZoomWatch();
                 target.submitAnim(anim, selected.animationKey);
             } else {
                 float[] request = ZoomCommand.read(selected.command,
                         selected.modified, sZoomWatcherStarted, now);
+                if(request[0]<1f)accelerateZoomWatch();
                 if (!selected.command.equals(sZoomLastDispatched)) {
                     sZoomLastDispatched = selected.command;
                     log("zoom dispatch " + java.util.Arrays.toString(request)
@@ -995,7 +1026,7 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     /** 宿主写 SystemUI 私有文件时立即处理，避免 250ms 轮询造成的桥/缩放不同帧。 */
     static void installZoomFileObserver() {
-        sSystemZoomObserverArmed=ZoomFileObserverHooks.install(
+        sZoomObserversArmed=ZoomFileObserverHooks.install(
                 observers -> sZoomFileObservers=observers,
                 HostEntry::readAndDispatchZoom, HostEntry::log);
     }

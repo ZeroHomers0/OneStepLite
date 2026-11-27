@@ -46,8 +46,10 @@ final class TopBar extends FrameLayout {
     private TopBarGeometry geometry;
     private boolean workspaceActive = true;
     private boolean dragShareEnabled=true;
+    private boolean openedAppsRefreshQueued;
     private final Runnable refreshOpenedApps = new Runnable() {
         @Override public void run() {
+            openedAppsRefreshQueued=false;
             if (!workspaceActive || !isAttachedToWindow() || !isShown()
                     || getWindowVisibility() != VISIBLE) return;
             java.util.Set<String> packages = listener.openedAppPackages();
@@ -56,9 +58,13 @@ final class TopBar extends FrameLayout {
     };
 
     void requestOpenedAppsRefresh() {
-        removeCallbacks(refreshOpenedApps);
-        if (workspaceActive && isAttachedToWindow() && isShown()
-                && getWindowVisibility() == VISIBLE) postDelayed(refreshOpenedApps, 100L);
+        if (!workspaceActive || !isAttachedToWindow() || !isShown() || getWindowVisibility() != VISIBLE) {
+            if(openedAppsRefreshQueued)removeCallbacks(refreshOpenedApps);
+            openedAppsRefreshQueued=false;
+        } else if(!openedAppsRefreshQueued) {
+            openedAppsRefreshQueued=true;
+            postDelayed(refreshOpenedApps, 100L);
+        }
     }
     void setWorkspaceActive(boolean active) {
         workspaceActive = active;
@@ -236,7 +242,9 @@ final class TopBar extends FrameLayout {
         super.onAttachedToWindow();requestOpenedAppsRefresh();
     }
     @Override protected void onDetachedFromWindow() {
-        removeCallbacks(refreshOpenedApps);if(tabletToolsAnimator!=null){tabletToolsAnimator.cancel();tabletToolsAnimator=null;}super.onDetachedFromWindow();
+        removeCallbacks(refreshOpenedApps);openedAppsRefreshQueued=false;
+        if(tabletToolsAnimator!=null){tabletToolsAnimator.cancel();tabletToolsAnimator=null;}
+        super.onDetachedFromWindow();
     }
     @Override protected void onVisibilityChanged(View view,int visibility) {
         super.onVisibilityChanged(view,visibility);
@@ -323,6 +331,7 @@ final class TopBar extends FrameLayout {
         void setSendMainToTopEnabled(boolean enabled) {
             if (topAppAvailable == enabled) return;
             topAppAvailable=enabled;
+            topApp.setEnabled(enabled);
             topApp.setAlpha(enabled ? 1f : .32f);
             topApp.setFocusable(enabled);
             String description=enabled?"把主窗应用放到顶栏":"主窗应用为竖屏，暂时无法置顶";
