@@ -11,6 +11,7 @@ import android.content.IntentFilter;
 import android.graphics.Rect;
 import android.os.Binder;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 import android.view.View;
@@ -150,6 +151,7 @@ public class HostEntry implements IXposedHookLoadPackage {
     private static java.util.concurrent.ScheduledFuture<?> sZoomWatch;
     private static long sZoomWatchGeneration;
     static volatile Handler sZoomBridgeHandler;
+    static final ZoomHostLease sZoomHostLease = new ZoomHostLease(HostEntry::onZoomHostLost);
     static volatile boolean sHostZoomed;
     static volatile long sUnlockPhysicalShadeGeneration, sUnlockPhysicalShadeUntil;
     static final RetainedWindow sRetainedWindow = new RetainedWindow();
@@ -378,9 +380,10 @@ public class HostEntry implements IXposedHookLoadPackage {
     }
     private static long nextZoomWatchDelay(){
         if(!sZoomed && sZoomScale==1f && sZoomAnimator==null)return sZoomObserversArmed?60_000L:10_000L;
+        if(sZoomHostLease.alive())return 60_000L;
         long now=System.currentTimeMillis();
         ZoomChannelState.Request request=sZoomChannels.current(now);
-        float[] geometry=ZoomCommand.read(request.command,request.modified,sZoomWatcherStarted,now);
+        float[] geometry=ZoomCommand.read(request.command,request.modified,sZoomWatcherStarted,now,false);
         boolean steady=sZoomObserversArmed && geometry[0]<1f && matchesAppliedZoom(geometry);
         return ZoomCommand.activeWatchDelay(request.modified,now,steady);
     }
@@ -436,6 +439,21 @@ public class HostEntry implements IXposedHookLoadPackage {
         return sDragShareEnabled && sZoomScale>0 && sZoomScale<1f && !sKeyguardZoom.sleeping();
     }
 
+    static boolean acceptZoomLease(IBinder lease) {
+        boolean accepted = sZoomHostLease.accept(lease);
+        if (accepted) log("zoom host binder lease accepted");
+        return accepted;
+    }
+
+    private static void onZoomHostLost() {
+        log("zoom host binder died; restoring steady state");
+        long now = System.currentTimeMillis();
+        synchronized (sZoomChannels) {
+            sZoomChannels.offer("1 0 0", now, now);
+            dispatchCurrentZoom();
+        }
+    }
+
     /** 文件通道在部分机型被 SELinux/权限挡住；再开一条 SystemUI -> system_server 的广播直投。 */
     static synchronized void armZoomBridge(Object service) {
         try {
@@ -451,6 +469,7 @@ public class HostEntry implements IXposedHookLoadPackage {
             sRetainedWindow.setHandler(handler);
             BroadcastReceiver receiver = new ZoomBridgeReceiver(context,service);
             IntentFilter filter = new IntentFilter(Actions.ZOOM);
+            filter.addAction(Actions.ZOOM_LEASE);
             filter.addAction(LiveSwapZoomProtocol.APPLY);
             filter.addAction(UnlockHandoff.RELEASE);
             filter.addAction(RetainedWindow.ACTION);
@@ -636,7 +655,7 @@ public class HostEntry implements IXposedHookLoadPackage {
                 target.submitAnim(anim, selected.animationKey);
             } else {
                 float[] request = ZoomCommand.read(selected.command,
-                        selected.modified, sZoomWatcherStarted, now);
+                        selected.modified, sZoomWatcherStarted, now, sZoomHostLease.alive());
                 if((request[0]<1f || sZoomed || sZoomAnimator!=null) && !matchesAppliedZoom(request))
                     accelerateZoomWatch();
                 if (!selected.command.equals(sZoomLastDispatched)) {

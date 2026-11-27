@@ -133,6 +133,7 @@ final class VideoDock {
     private MediaSessionManager mediaManager;
     private boolean mediaListenerRegistered, playbackCallbacksReady, mediaMonitoring;
     private long mediaPollDelay=2000L;
+    private int stableMediaPolls;
     private final Map<android.media.session.MediaSession.Token,MediaController> observedPlayers = new HashMap<>();
     private final MediaSessionManager.OnActiveSessionsChangedListener sessionsChanged = this::replaceMediaSessions;
     private boolean playbackRefreshQueued;
@@ -157,8 +158,11 @@ final class VideoDock {
                 if (active && owner != null && owner.isBinderAlive()) {
                     long delay;
                     if (mediaListenerRegistered && playbackCallbacksReady) {
-                        mediaPollDelay=2000L;delay=30000L;
+                        mediaPollDelay=2000L;
+                        stableMediaPolls++;
+                        delay=stableMediaPolls>=4 ? 60000L : 30000L;
                     } else {
+                        stableMediaPolls=0;
                         delay=mediaPollDelay;
                         mediaPollDelay=Math.min(10000L,mediaPollDelay*2L);
                     }
@@ -171,6 +175,7 @@ final class VideoDock {
         if (!active || owner == null || !owner.isBinderAlive()) { stopMediaMonitoring(); return; }
         if (mediaMonitoring) return;
         mediaMonitoring = true;
+        stableMediaPolls=0;
         try {
             if (mediaManager == null) mediaManager = context.getSystemService(MediaSessionManager.class);
             if (mediaManager != null && !mediaListenerRegistered) {
@@ -228,6 +233,7 @@ final class VideoDock {
     private void stopMediaMonitoring() {
         mediaMonitoring = false;
         mediaPollDelay=2000L;
+        stableMediaPolls=0;
         handler.removeCallbacks(poll);
         handler.removeCallbacks(playbackRefresh);
         playbackRefreshQueued = false;

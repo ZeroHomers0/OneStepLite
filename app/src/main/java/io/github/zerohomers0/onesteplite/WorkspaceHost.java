@@ -195,6 +195,7 @@ public final class WorkspaceHost {
     private static boolean legacyTaskInfoCallbacks;
     private static boolean surfaceHooksReady;
     private Object surfaceObserver;
+    private boolean frameRateHintUnavailableLogged;
     private boolean compactPending;
     CellMotion cellMotion;
     private SideDismiss sideDismiss;
@@ -2914,8 +2915,9 @@ public final class WorkspaceHost {
         zoomCommands.write(on?zoomOnCommand():"1 0 0");
     }
 
-    /** Ten-second steady heartbeat touches one file timestamp instead of rewriting Settings. */
+    /** Renew only the cheapest live lease; an acknowledged Binder lease avoids file writes. */
     private void writeZoomLease() {
+        if(zoomTransport.leaseAcked()){zoomTransport.maintainLease();return;}
         if(layout!=null && !zoomTransport.renew(zoomOnCommand(),System.currentTimeMillis()))
             writeZoom(true);
     }
@@ -3190,7 +3192,7 @@ public final class WorkspaceHost {
                 long now = SystemClock.uptimeMillis();
                 if (!holdsLiveFlipZoom() && now >= zoomAnimUntil) {
                     if (layout != null) writeZoomLease();
-                    if (now - lastWorkspaceRepair >= 30000L) {
+                    if (now - lastWorkspaceRepair >= (zoomTransport.leaseAcked() ? 60000L : 30000L)) {
                         lastWorkspaceRepair = now;
                         if (carrierSlotIndex >= 0) reassertCarrier();
                         if (!zoomed && !HotZoneGesture.isAttached()) HotZoneGesture.raiseAll();
@@ -3203,11 +3205,11 @@ public final class WorkspaceHost {
                         }
                     }
                 }
-                main.postDelayed(this, 8000L);
+                main.postDelayed(this, zoomTransport.leaseAcked() ? 60000L : 8000L);
             }
         };
         main.removeCallbacks(workspaceHeartbeat);
-        main.postDelayed(workspaceHeartbeat, 8000L);
+        main.postDelayed(workspaceHeartbeat, zoomTransport.leaseAcked() ? 60000L : 8000L);
     }
 
     private void createSubViews() {
@@ -3956,6 +3958,10 @@ public final class WorkspaceHost {
     }
 
     private void createNext(final int index) {
+        if (index < SLOT_TOP && index >= CELL_SLOT_COUNT) {
+            createNext(index + 1);
+            return;
+        }
         if (index >= SLOT_COUNT) {
             configureTabletTools();
             log("TaskViews ready cells="+layout.cellCount+" interactive=1; system main has no TaskView");
@@ -5774,6 +5780,7 @@ public final class WorkspaceHost {
         if (sideOrder.isEmpty()) {
             for (int i = 1; i <= WorkspaceLayout.CELL_COUNT; i++) sideOrder.add(slots[i]);
         }
+        if (!sideCompacting) trimTrailingEmptySideRows();
         final boolean wasScrolling = sideScrolling;
         final float previousOffset = sideOffset;
         final int requestedRow = Math.round(wasScrolling ? previousOffset : savedSideOffset);
@@ -5842,6 +5849,51 @@ public final class WorkspaceHost {
         } catch (Throwable error) {
             creatingSideView = false;
             log("add side row TaskView: " + error);
+        }
+    }
+
+    /** Release only empty tails outside the viewport; occupied history is never dropped. */
+    private void trimTrailingEmptySideRows() {
+        if (root == null || scene != ACTIVE || sideCompacting || sideCaptured
+                || isSideMotionRunning() || sideDesktopRevealing || creatingSideView || transferBusy
+                || promotion != null || sideOrder.size() <= WorkspaceLayout.CELL_COUNT) return;
+        int removed = 0;
+        int protectedRows = Math.max(WorkspaceLayout.CELL_COUNT,
+                Math.round(sideOffset) + WorkspaceLayout.CELL_COUNT);
+        while (sideOrder.size() > protectedRows) {
+            Slot tail = sideOrder.get(sideOrder.size() - 1);
+            if (tail.occupied || tail.parked || tail.promoting || tail.launching
+                    || tail.frozen || tail.closing || tail.nativeReleasePending
+                    || tail.taskId >= 0 || tail.taskToken != null) break;
+            sideOrder.remove(sideOrder.size() - 1);
+            releaseDetachedSideRow(tail);
+            removed++;
+        }
+        if (removed == 0) return;
+        int required = SLOT_COUNT + Math.max(0, sideOrder.size() - WorkspaceLayout.CELL_COUNT);
+        if (required < slots.length) slots = java.util.Arrays.copyOf(slots, required);
+        sideAttached.removeIf(slot -> slot.index >= slots.length);
+        sideCompactionShift.keySet().removeIf(slot -> slot.index >= slots.length);
+        savedSideOffset = Math.max(0f, Math.min(savedSideOffset,
+                sideOrder.maxOffset(WorkspaceLayout.CELL_COUNT, slot -> slot.occupied)));
+        sideOffset = Math.max(0f, Math.min(sideOffset, savedSideOffset));
+        log("trimmed empty side rows=" + removed + " remaining=" + sideOrder.size());
+    }
+
+    private void releaseDetachedSideRow(Slot slot) {
+        removeCellBackground(slot);
+        View view = slot.view;
+        View hint = slot.hint;
+        slot.view = null;
+        slot.hint = null;
+        slot.controller = null;
+        if (hint != null && hint.getParent() instanceof ViewGroup)
+            ((ViewGroup) hint.getParent()).removeView(hint);
+        if (view != null && view.getParent() instanceof ViewGroup)
+            ((ViewGroup) view.getParent()).removeView(view);
+        if (view != null) {
+            try { ShellCompat.call(view, "release"); }
+            catch (Throwable ignored) { /* The native controller may already be released. */ }
         }
     }
 
@@ -7855,6 +7907,7 @@ public final class WorkspaceHost {
     }
 
     private void clearSlot(Slot slot) {
+        clearFrameRateHint(slot);
         if(slot.index==SLOT_TOP && topTaskState.owner()!=null) {
             topTaskState.release(topTaskState.owner()); topOriginalSlot=null;
         }
@@ -9159,11 +9212,64 @@ public final class WorkspaceHost {
             }
             XposedHelpers.callMethod(tx, "setMatrix", sc, k, 0f, 0f, k);
             appendSlotViewport(tx, slot);
+            applyFrameRateHint(tx, slot, sc);
             XposedHelpers.callMethod(tx, "apply");
             return true;
         } catch (Throwable t) {
             log("applyScaleTransform slot=" + slot.index + " failed: " + t);
             return false;
+        } finally {
+            closeSurfaceObject(tx, "close");
+        }
+    }
+
+    private void applyFrameRateHint(Object tx, Slot slot, Object surface) {
+        if (tx == null || slot == null || surface == null) return;
+        boolean focused = false;
+        if (slot.index != SLOT_TOP && slot.controller != null && slot.taskId >= 0) {
+            try {
+                Object info = ShellCompat.currentTaskInfo(slot.controller, slot.taskId);
+                focused = info != null && XposedHelpers.getBooleanField(info, "isFocused");
+            } catch (Throwable ignored) { /* Focus is optional; idle policy remains safe. */ }
+        }
+        float fps = SideRefreshPolicy.target(slot.index == SLOT_TOP, focused,
+                slot.promoting || slot.launching);
+        try {
+            if (!ShellCompat.hasMethod(tx.getClass(), "setFrameRate", 3))
+                throw new NoSuchMethodException("SurfaceControl.Transaction.setFrameRate");
+            XposedHelpers.callMethod(tx, "setFrameRate", surface, fps, 1);
+            Object parent = getSurfaceField(slot.controller, "mSurfaceControl");
+            if (parent != null && parent != surface)
+                XposedHelpers.callMethod(tx, "setFrameRate", parent, fps, 1);
+        } catch (Throwable unavailable) {
+            if (!frameRateHintUnavailableLogged) {
+                frameRateHintUnavailableLogged = true;
+                log("side frame-rate hint unavailable: " + unavailable);
+            }
+        }
+    }
+
+    private void clearFrameRateHint(Slot slot) {
+        if (slot == null || slot.controller == null) return;
+        Object leash = getSurfaceField(slot.controller, "mTaskLeash");
+        Object parent = getSurfaceField(slot.controller, "mSurfaceControl");
+        if (leash == null && parent == null) return;
+        Object tx = null;
+        try {
+            tx = Class.forName("android.view.SurfaceControl$Transaction")
+                    .getDeclaredConstructor().newInstance();
+            boolean clear = ShellCompat.hasMethod(tx.getClass(), "clearFrameRate", 1);
+            for (Object surface : new Object[] {leash, parent}) {
+                if (surface == null) continue;
+                try {
+                    if (clear) XposedHelpers.callMethod(tx, "clearFrameRate", surface);
+                    else if (ShellCompat.hasMethod(tx.getClass(), "setFrameRate", 3))
+                        XposedHelpers.callMethod(tx, "setFrameRate", surface, 0f, 0);
+                } catch (Throwable ignored) { /* Another layer may still retain a hint. */ }
+            }
+            XposedHelpers.callMethod(tx, "apply");
+        } catch (Throwable ignored) {
+            /* A departed task may already have released both layers. */
         } finally {
             closeSurfaceObject(tx, "close");
         }

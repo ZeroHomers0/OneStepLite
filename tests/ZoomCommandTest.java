@@ -19,6 +19,10 @@ public final class ZoomCommandTest {
         check(identity(ZoomCommand.read("1 0 0", now - 100, started, now)), "identity command");
         check(identity(ZoomCommand.read("0.7147 744 22", started - 1000, started, now)), "pre-boot stale rejected");
         check(identity(ZoomCommand.read("0.7147 744 22", now - 20_000, started, now)), "expired request rejected");
+        check(ZoomCommand.read("0.7147 744 22", now - 20_000, started, now, true)[0] == 0.7147f,
+                "live host lease ignores timestamp expiry");
+        check(identity(ZoomCommand.read("0.7147 744 22", now - 20_000, started, now, false)),
+                "missing host lease retains expiry");
         check(identity(ZoomCommand.read("0 744 22", now - 100, started, now)), "zero scale rejected");
         check(identity(ZoomCommand.read("1.5 744 22", now - 100, started, now)), "scale > 1 rejected");
         check(identity(ZoomCommand.read("0.7 -1 22", now - 100, started, now)), "negative offsetY rejected");

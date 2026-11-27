@@ -9,13 +9,23 @@ root=Path(__file__).resolve().parents[2];src=package_dir(root)
 out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 files={
 'android/annotation/SuppressLint.java':'package android.annotation;public @interface SuppressLint {String[] value();}',
+'android/os/IBinder.java':'package android.os;public interface IBinder {interface DeathRecipient{void binderDied();}boolean isBinderAlive();void linkToDeath(DeathRecipient d,int f)throws RemoteException;boolean unlinkToDeath(DeathRecipient d,int f);}',
+'android/os/RemoteException.java':'package android.os;public class RemoteException extends Exception{}',
+'android/os/Binder.java':'package android.os;public class Binder implements IBinder {public boolean isBinderAlive(){return true;}public void linkToDeath(DeathRecipient d,int f)throws RemoteException{}public boolean unlinkToDeath(DeathRecipient d,int f){return true;}}',
+'android/os/Looper.java':'package android.os;public class Looper {public static Looper getMainLooper(){return new Looper();}}',
+'android/os/SystemClock.java':'package android.os;public class SystemClock {public static long now=1L;public static long uptimeMillis(){return now;}}',
+'android/os/Handler.java':'package android.os;public class Handler {public Handler(Looper l){}public boolean post(Runnable r){r.run();return true;}public boolean postDelayed(Runnable r,long d){r.run();return true;}public void removeCallbacks(Runnable r){}}',
+'android/os/Bundle.java':'package android.os;import java.util.*;public class Bundle {public Map<String,IBinder> binders=new HashMap<>();public void putBinder(String k,IBinder v){binders.put(k,v);}public IBinder getBinder(String k){return binders.get(k);}}',
+'android/Manifest.java':'package android;public class Manifest {public static class permission {public static final String WRITE_SECURE_SETTINGS="android.permission.WRITE_SECURE_SETTINGS";}}',
+'android/app/Activity.java':'package android.app;public class Activity {public static final int RESULT_OK=-1,RESULT_CANCELED=0;}',
 'android/content/Context.java':'''package android.content;public class Context {
  public static final int RECEIVER_EXPORTED=2;public java.io.File files;public BroadcastReceiver receiver;public IntentFilter filter;
- public java.util.List<Intent> sent=new java.util.ArrayList<>();public boolean fail;
+ public java.util.List<Intent> sent=new java.util.ArrayList<>(),ordered=new java.util.ArrayList<>();public boolean fail,ackLease,dropOrderedResult;
  public java.io.File getFilesDir(){return files;}public Object getContentResolver(){return this;}
  public void sendBroadcast(Intent i){if(fail)throw new IllegalStateException();sent.add(i);}
+ public void sendOrderedBroadcast(Intent i,String permission,BroadcastReceiver result,android.os.Handler handler,int code,String data,android.os.Bundle extras){ordered.add(i);if(result!=null&&!dropOrderedResult){result.resultCode=ackLease?android.app.Activity.RESULT_OK:code;result.onReceive(this,i);}}
  public void registerReceiver(BroadcastReceiver r,IntentFilter f,int flags){receiver=r;filter=f;}}''',
-'android/content/BroadcastReceiver.java':'package android.content;public abstract class BroadcastReceiver {public abstract void onReceive(Context c,Intent i);}',
+'android/content/BroadcastReceiver.java':'package android.content;public abstract class BroadcastReceiver {public int resultCode;public int getResultCode(){return resultCode;}public void setResultCode(int c){resultCode=c;}public abstract void onReceive(Context c,Intent i);}',
 'android/content/Intent.java':'''package android.content;public class Intent {
  public static final String ACTION_SCREEN_ON="on",ACTION_SCREEN_OFF="off",ACTION_USER_PRESENT="present",ACTION_CLOSE_SYSTEM_DIALOGS="dialogs";
  public static final int FLAG_RECEIVER_REGISTERED_ONLY=1;String action;public int flags;public java.util.Map<String,Object> extras=new java.util.HashMap<>();
@@ -62,8 +72,10 @@ public class EntryModulesRegression {
  public static class Target {public Object leash=new Object();}
  static XC_MethodHook.MethodHookParam param(Object result,Object...args){var p=new XC_MethodHook.MethodHookParam();p.result=result;p.args=args;return p;}
  public static void main(String[]args)throws Exception {
-  Context c=new Context();c.files=new java.io.File(args[0]);c.files.mkdirs();var log=new java.util.ArrayList<String>();var transport=new ZoomTransport(c,log::add);
+  Context c=new Context();c.files=new java.io.File(args[0]);c.files.mkdirs();c.ackLease=true;var log=new java.util.ArrayList<String>();var transport=new ZoomTransport(c,log::add);
   transport.publish("anim .75 600 100 300 at=99",1000);
+  check(transport.leaseAcked()&&c.ordered.size()==1&&Actions.ZOOM_LEASE.equals(c.ordered.get(0).getAction()),
+        "ordered host lease is acknowledged once");
   check("1000|anim .75 600 100 300 at=99".equals(android.provider.Settings.Global.value),"settings retains leased animation request");
   Intent sent=c.sent.get(0);check((float)sent.extras.get("scale")==.75f&&(float)sent.extras.get("offsetY")==600,"broadcast carries same target geometry");
   check(sent.flags==Intent.FLAG_RECEIVER_REGISTERED_ONLY,"zoom broadcast cannot start stopped receivers");
@@ -84,6 +96,9 @@ public class EntryModulesRegression {
   android.provider.Settings.Global.fail=true;transport.publish("1 0 0",1001);check(c.sent.size()==2&&Files.readString(file).equals("1 0 0"),"settings failure cannot suppress broadcast or file");
   android.provider.Settings.Global.fail=false;c.fail=true;transport.publish(".5 800 0",1002);check(Files.readString(file).equals(".5 800 0"),"broadcast failure cannot suppress atomic-file channel");
   c.fail=false;c.files=new java.io.File(args[0],"missing/child");transport.publish("1 0 0",1003);check(c.sent.size()==3,"file failure cannot suppress broadcast channel");
+  Context stalled=new Context();stalled.files=new java.io.File(args[0],"stalled");stalled.files.mkdirs();stalled.ackLease=true;stalled.dropOrderedResult=true;var timed=new ZoomTransport(stalled,log::add);
+  timed.publish("1 0 0",1004);check(!timed.leaseAcked()&&stalled.ordered.size()==1,"missing ordered result leaves lease unacknowledged");
+  stalled.dropOrderedResult=false;android.os.SystemClock.now+=5000L;timed.publish("1 0 0",1005);check(timed.leaseAcked()&&stalled.ordered.size()==2,"lease request retries after the bounded result timeout");
   WorkspaceScreenObserver.install(c,log::add);check(c.filter.actions.size()==4,"screen observer registers all four native signals");
   for(String reason:new String[]{"homekey","fs_gesture","gestureNav","recentapps"})c.receiver.onReceive(c,new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS).putExtra("reason",reason));
   check(WorkspaceHost.nav.equals(java.util.List.of("homekey","fs_gesture","gestureNav","recentapps")),"navigation aliases route without changing ordering");

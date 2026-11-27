@@ -60,9 +60,7 @@ final class TaskViewWarmup {
         } catch (Throwable unavailable) { pending = 0; }
     }
     static void trimForMemory() {
-        MAIN.post(() -> {
-            if (!claimed) clear();
-        });
+        MAIN.post(TaskViewWarmup::discard);
     }
 
     static Object take(Context target, Object creator) {
@@ -90,6 +88,13 @@ final class TaskViewWarmup {
     private static void clear() {
         generation++;pending = 0;
         while (!READY.isEmpty()) release(READY.poll());
+    }
+    /** Release the detached development host; later demand uses the normal factory path. */
+    private static void discard() {
+        clear();
+        base = context = null;
+        executor = null;factory = null;configuration = null;
+        prepared = true;claimed = true;
     }
     private static void release(Object view) {
         try { ShellCompat.call(view, "release"); }

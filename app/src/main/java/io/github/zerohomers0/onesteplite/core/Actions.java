@@ -12,6 +12,7 @@ final class Actions {
     static final String DESKTOP_SIDE_TASKS = "io.github.zerohomers0.onesteplite.DESKTOP_SIDE_TASKS";
     /** Shell hands one live layout handoff to the host. */
     static final String ZOOM = "io.github.zerohomers0.onesteplite.ZOOM";
+    static final String ZOOM_LEASE = "io.github.zerohomers0.onesteplite.ZOOM_LEASE";
     static final String ZOOM64 = "io.github.zerohomers0.onesteplite.ZOOM64";
     static final String ZOOM64_ACK = "io.github.zerohomers0.onesteplite.ZOOM64_ACK";
     static final String TRANSFER_TOUCH = "io.github.zerohomers0.onesteplite.TRANSFER_TOUCH";

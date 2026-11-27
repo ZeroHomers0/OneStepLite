@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.IBinder;
 import static io.github.zerohomers0.onesteplite.HostEntry.*;
 import de.robv.android.xposed.XposedHelpers;
 
@@ -25,9 +26,15 @@ final class ZoomBridgeReceiver extends BroadcastReceiver {
         else if(InputTrace.ACTION.equals(action))handleInputTrace(intent);
         else if(DesktopLaunchBridge.PREPARE_TOP.equals(action))handleDesktopPrepare(intent);
         else if(DesktopLaunchBridge.ACTION.equals(action))handleDesktopUpdate(intent);
+        else if(Actions.ZOOM_LEASE.equals(action))handleLease(intent);
         else if(Actions.TRANSFER_TOUCH.equals(action))
             SideTouchTransfer.transfer(intent,()->sZoomTarget,()->sZoomScale,HostEntry::log);
         else handleZoom(intent);
+    }
+    private void handleLease(Intent intent){
+        Bundle lease=intent.getBundleExtra("lease");
+        IBinder token=lease==null?null:lease.getBinder("host");
+        setResultCode(acceptZoomLease(token)?android.app.Activity.RESULT_OK:android.app.Activity.RESULT_CANCELED);
     }
     private void handleRetained(Intent intent){
         ZoomTarget target=sZoomTarget;android.os.Bundle reply=null;

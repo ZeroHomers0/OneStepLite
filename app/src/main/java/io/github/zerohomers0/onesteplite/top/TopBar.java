@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.os.SystemClock;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.TextView;
@@ -47,6 +48,7 @@ final class TopBar extends FrameLayout {
     private boolean workspaceActive = true;
     private boolean dragShareEnabled=true;
     private boolean openedAppsRefreshQueued;
+    private long openedAppsRefreshedAt;
     private final Runnable refreshOpenedApps = new Runnable() {
         @Override public void run() {
             openedAppsRefreshQueued=false;
@@ -54,6 +56,7 @@ final class TopBar extends FrameLayout {
                     || getWindowVisibility() != VISIBLE) return;
             java.util.Set<String> packages = listener.openedAppPackages();
             if (packages != null) quickRail.setOpenedPackages(packages);
+            openedAppsRefreshedAt = SystemClock.uptimeMillis();
         }
     };
 
@@ -63,7 +66,8 @@ final class TopBar extends FrameLayout {
             openedAppsRefreshQueued=false;
         } else if(!openedAppsRefreshQueued) {
             openedAppsRefreshQueued=true;
-            postDelayed(refreshOpenedApps, 100L);
+            postDelayed(refreshOpenedApps,
+                    OpenedAppsRefreshPolicy.delay(SystemClock.uptimeMillis(), openedAppsRefreshedAt));
         }
     }
     void setWorkspaceActive(boolean active) {

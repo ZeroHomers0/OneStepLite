@@ -14,6 +14,10 @@ final class ZoomCommand {
     }
 
     static float[] read(String line, long modified, long started, long now) {
+        return read(line, modified, started, now, false);
+    }
+
+    static float[] read(String line, long modified, long started, long now, boolean hostLeaseAlive) {
         if (line == null || line.trim().isEmpty()) return identity();
         try {
             String[] parts = line.trim().split("\\s+");
@@ -27,7 +31,7 @@ final class ZoomCommand {
                 return identity();
             }
             if (scale == 1f) return identity();
-            if (modified < started || now - modified > ACTIVE_TIMEOUT_MS) {
+            if (!hostLeaseAlive && (modified < started || now - modified > ACTIVE_TIMEOUT_MS)) {
                 return identity();
             }
             return new float[]{scale, offsetY, offsetX};

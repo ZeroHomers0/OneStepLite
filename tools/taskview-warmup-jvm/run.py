@@ -54,6 +54,12 @@ public class TaskViewWarmupRegression {
   check(ShellCompat.creates==before+1,"factory failure cannot create a retry loop");
   ShellCompat.fail=false;before=ShellCompat.creates;TaskViewWarmup.configure(c,Runnable::run,new Object());Handler.drain();TaskViewWarmup.prepare();Handler.drain();
   check(ShellCompat.creates==before,"same boot is not retried after a simulated SystemUI restart");
+  c=new Context();factory=new Object();TaskViewWarmup.configure(c,Runnable::run,factory);Handler.drain();
+  android.provider.Settings.Global.boot++;TaskViewWarmup.userChanged();TaskViewWarmup.prepare();Handler.drain();
+  int warmReleases=ShellCompat.releases;TaskViewWarmup.trimForMemory();Handler.drain();
+  check(ShellCompat.releases==warmReleases+2,"memory trim releases every unused prewarmed TaskView");
+  before=ShellCompat.creates;TaskViewWarmup.prepare();Handler.drain();
+  check(ShellCompat.creates==before,"memory trim retires boot warmup until a fresh host configuration");
   System.out.println("Production one-shot boot TaskView warmup checks="+checks+" passed");
  }
 }'''

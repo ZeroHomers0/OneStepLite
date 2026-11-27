@@ -60,6 +60,9 @@ public class VideoDockRegression {
   var media=new VideoDockRegression();var player=new MediaController();media.context.media.players.add(player);media.open();
   Handler worker=(Handler)field(media.dock,"handler");worker.drain();
   check(media.context.media.adds==1&&player.registers==1&&worker.lastDelay==30000L,"media observers replace fast polling with a 30 second watchdog");
+  Runnable stablePoll=(Runnable)field(media.dock,"poll");
+  stablePoll.run();stablePoll.run();stablePoll.run();
+  check(worker.lastDelay==60000L,"stable media callbacks relax the watchdog to 60 seconds");
   int queries=media.context.media.queries;media.open();worker.drain();check(media.context.media.queries==queries,"geometry renewal does not enumerate sessions again");
   Runnable playback=(Runnable)field(media.dock,"playbackRefresh");
   player.state.state=2;for(int i=0;i<5;i++)player.callback.onPlaybackStateChanged(player.state);

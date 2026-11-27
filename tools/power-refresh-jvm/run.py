@@ -57,7 +57,7 @@ public class PowerRefreshRegression {
   protected void onWindowVisibilityChanged(int value){windowVisibility=value;}
  }
  static class Rail extends View {
-  boolean workspaceActive=true,dragShareEnabled=true,openedAppsRefreshQueued;int reads,updates,closes;
+  boolean workspaceActive=true,dragShareEnabled=true,openedAppsRefreshQueued;long openedAppsRefreshedAt;int reads,updates,closes;
   class Listener {Set<String> openedAppPackages(){reads++;return Set.of("main");}}
   class QuickRail {void setOpenedPackages(Set<String> p){updates++;}}
   class Picker {void close(){closes++;}}
@@ -79,14 +79,15 @@ __RAIL__
 __WATCH__
  }
  static class StatusBarSampling {static void geometryChanged(){}}
+ static class ZoomTransport {static boolean acks;boolean leaseAcked(){return acks;}void maintainLease(){}}
  static class Host {
   static final int ACTIVE=1;static Host sInstance;int scene=ACTIVE;boolean screenOn=true,keyguardLocked,lockExitPending,zoomed=true,flip;
   View root=new View();Object layout=new Object(),ctx;Queue main=new Queue();Rail topBar=new Rail();
   class Replay {void clear(){}}Replay unlockGeometryReplay=new Replay();
-  long zoomAnimUntil,lastWorkspaceRepair;Runnable workspaceHeartbeat;int carrierSlotIndex=-1,leashPocSlot=-1,writes,repairs;class Carriers{int leashPocSlot(){return -1;}}Carriers carriers=new Carriers();
+  long zoomAnimUntil,lastWorkspaceRepair;Runnable workspaceHeartbeat;int carrierSlotIndex=-1,leashPocSlot=-1,writes,repairs;class Carriers{int leashPocSlot(){return -1;}}Carriers carriers=new Carriers();ZoomTransport zoomTransport=new ZoomTransport();
   class Slot {boolean carrier,occupied=true,promoting,taskVisible=true;int index=1;}
   Slot[] slots={new Slot()};Host(){sInstance=this;}
-  boolean holdsLiveFlipZoom(){return flip;}void writeZoom(boolean b){writes++;}void writeZoomLease(){writes++;}void reassertCarrier(){}
+  boolean holdsLiveFlipZoom(){return flip;}void writeZoom(boolean b){writes++;}void writeZoomLease(){if(!ZoomTransport.acks)writes++;}void reassertCarrier(){}
   void ensureCellBackground(Slot s){}void reapplyScale(Slot s){repairs++;}void scheduleSideVisibilityRepair(Slot s){}
 __HOST__
  }
@@ -94,6 +95,9 @@ __HOST__
   Rail r=new Rail();for(int i=0;i<20;i++)r.requestOpenedAppsRefresh();
   check(r.posts==1&&r.pending.size()==1&&r.pending.values().iterator().next()==100L,"task bursts share one queued Binder refresh");
   r.run();check(r.reads==1&&r.updates==1&&r.pending.isEmpty(),"visible rail refresh is event-driven");
+  r.requestOpenedAppsRefresh();check(r.pending.size()==1&&r.pending.values().iterator().next()==1000L,
+        "single-second floor coalesces later task updates");
+  SystemClock.now+=1000;r.run();check(r.reads==2,"trailing refresh reads the latest task set once");
   r.onVisibilityChanged(r,8);check(r.pending.isEmpty(),"hidden rail has no timer");
   r.onVisibilityChanged(r,0);check(r.pending.size()==1,"showing rail schedules a current snapshot");
   r.setWorkspaceActive(false);r.requestOpenedAppsRefresh();check(r.pending.isEmpty(),"locked workspace has no rail timer");
@@ -102,12 +106,20 @@ __HOST__
   r.dragShareEnabled=true;r.setWorkspaceActive(true);r.onWindowVisibilityChanged(8);check(r.pending.isEmpty(),"native hidden window cancels rail work");
   r.onWindowVisibilityChanged(0);r.onDetachedFromWindow();check(r.pending.isEmpty(),"detaching removes the queued runnable");
   r.onAttachedToWindow();check(r.pending.size()==1,"reattach restarts exactly once");
-  Host h=new Host();h.startWorkspaceHeartbeat();h.startWorkspaceHeartbeat();
+  SystemClock.now=40000;Host h=new Host();h.startWorkspaceHeartbeat();h.startWorkspaceHeartbeat();
   check(h.main.pending.size()==1&&h.main.pending.values().iterator().next()==8000L,"one lease timer remains below the 15 second expiry");
   h.main.run();check(h.writes==1&&h.repairs==1,"initial recovery remains available");
   SystemClock.now+=8000;h.main.run();check(h.writes==2&&h.repairs==1,"lease renewal avoids redundant TaskView writes");
   SystemClock.now+=24000;h.main.run();check(h.repairs==2,"bounded surface recovery runs after its interval");
-  h.flip=true;h.main.run();check(h.writes==3&&h.repairs==2,"live swaps keep sole transform ownership");
+  ZoomTransport.acks=true;int leasedWrites=h.writes;h.main.run();
+  check(h.writes==leasedWrites&&h.main.pending.values().iterator().next()==60000L,
+        "acknowledged binder lease removes file renewals and slows maintenance");
+  int leasedRepairs=h.repairs;SystemClock.now+=30000;h.main.run();
+  check(h.repairs==leasedRepairs,"leased heartbeat leaves stable task surfaces untouched for a minute");
+  SystemClock.now+=30000;h.main.run();
+  check(h.repairs==leasedRepairs+1,"leased surface recovery still runs at the one-minute fallback");
+  ZoomTransport.acks=false;
+  h.flip=true;h.main.run();check(h.writes==3&&h.repairs==leasedRepairs+1,"live swaps keep sole transform ownership");
   h.setZoomState(false);check(h.main.pending.isEmpty()&&!h.zoomed,"exiting cancels lease work immediately");
   h.flip=false;h.setZoomState(true);check(h.main.pending.size()==1,"resume restarts maintenance");
   h.keyguardLocked=true;h.setZoomState(true);check(h.main.pending.isEmpty()&&!h.zoomed,"locked resume cannot renew zoom");
@@ -154,5 +166,5 @@ body = body.replace('static Host sInstance;', 'Host thisHost(){return this;}stat
 p = out/'PowerRefreshRegression.java'; p.write_text(body, encoding='utf-8')
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 anim=out/'android/animation/ValueAnimator.java';anim.parent.mkdir(parents=True,exist_ok=True);anim.write_text('package android.animation;public class ValueAnimator{public void cancel(){}}',encoding='utf-8')
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(p),str(src/'RoutineLog.java'),str(src/'BackgroundExecutor.java'),str(src/'ZoomCommand.java'),str(anim)],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(p),str(src/'RoutineLog.java'),str(src/'BackgroundExecutor.java'),str(src/'ZoomCommand.java'),str(src/'OpenedAppsRefreshPolicy.java'),str(anim)],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.PowerRefreshRegression'],check=True)
