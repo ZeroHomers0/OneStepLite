@@ -61,6 +61,8 @@ public final class ZoomChannelStateTest {
         dispatch(state, dispatcher, target, 6000);
         check(queue.isEmpty(), "heartbeat does not repeat native transaction");
         check(state.current(21000).command.startsWith("0.714"), "lease boundary remains active");
+        check(state.current(66000, true).command.equals("0.71472394 744 22"),
+                "live Binder lease retains steady geometry beyond the file timeout");
         dispatch(state, dispatcher, target, 21001);
         queue.removeFirst().run();
         check(applied.size() == 2 && applied.get(1) == 1f, "host death restores after 15 seconds");
@@ -77,6 +79,8 @@ public final class ZoomChannelStateTest {
         dispatch(pending, dispatcher, target, 3300);
         queue.removeFirst().run();
         check(applied.get(3) == 1f, "exit wins across transports");
+        check(pending.current(63000, true).command.equals("1 0 0"),
+                "live Binder lease does not retain zoom across explicit exit");
 
         ZoomChannelState fileOnly = new ZoomChannelState(1000);
         check(fileOnly.offer("0.7472 622 0", 4000, 4000), "legacy raw file remains supported");
@@ -86,6 +90,8 @@ public final class ZoomChannelStateTest {
         check(fileOnly.offer("anim 1 0 0 300", 5001, 5001), "file observes same animation later");
         check(fileOnly.current(5001).animationKey.equals(animationKey),
                 "duplicate channels do not restart animation");
+        check(fileOnly.current(21000, true).command.equals("1 0 0"),
+                "live Binder lease does not replay an expired animation");
         check(!fileOnly.offer("anim 0 0 0 300", 5100, 5100), "invalid animation ignored");
         ZoomChannelState restarted = new ZoomChannelState(6000);
         check(!restarted.offerEncoded("5000|0.7 744 22", 6100), "new server rejects old boot snapshot");

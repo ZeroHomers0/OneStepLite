@@ -29,11 +29,9 @@ final class WorkspaceScaleController {
     }
 
     float scaleFor(Slot slot) {
-        if (slot.index != SLOT_TOP && slot.sideRow >= 0 && slot.rect != null) return 1f;
-        if (slot.sideRow >= 0 && slot.rect != null)
-            return Math.min((slot.rect[2] - slot.rect[0]) / (float) frames.screenWidth(),
-                    (slot.rect[3] - slot.rect[1]) / (float) frames.screenHeight());
-        return slot.index == SLOT_TOP ? frames.windowLayout().topGeometry().scale : frames.layout().cellScale(slot.index - 1);
+        if (slot.index == SLOT_TOP) return frames.windowLayout().topGeometry().scale;
+        // Fixed and scrolling side tasks both use cell-sized logical bounds.
+        return 1f;
     }
 
 

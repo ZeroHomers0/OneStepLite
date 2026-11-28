@@ -65,8 +65,13 @@ final class ZoomChannelState {
     }
 
     synchronized Request current(long now) {
+        return current(now, false);
+    }
+
+    synchronized Request current(long now, boolean hostLeaseAlive) {
         if (latest == null || now < latest.modified
-                || now - latest.modified > ZoomCommand.ACTIVE_TIMEOUT_MS) {
+                || (now - latest.modified > ZoomCommand.ACTIVE_TIMEOUT_MS
+                    && (!hostLeaseAlive || latest.command.startsWith("anim")))) {
             return new Request("1 0 0", now, generation);
         }
         return latest;

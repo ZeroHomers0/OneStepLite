@@ -141,7 +141,8 @@ final class ZoomRuntime {
     static void dispatchCurrentZoom() {
         synchronized (sZoomChannels) {
             long now = System.currentTimeMillis();
-            ZoomChannelState.Request selected = sZoomChannels.current(now);
+            boolean hostLeaseAlive = sZoomHostLease.alive();
+            ZoomChannelState.Request selected = sZoomChannels.current(now, hostLeaseAlive);
             ZoomTarget target = sZoomTarget;
             if (target == null) {
                 if (!selected.command.equals(sZoomLastTargetNull)) {
@@ -157,7 +158,7 @@ final class ZoomRuntime {
                 target.submitAnim(anim, selected.animationKey);
             } else {
                 float[] request = ZoomCommand.read(selected.command,
-                        selected.modified, sZoomWatcherStarted, now, sZoomHostLease.alive());
+                        selected.modified, sZoomWatcherStarted, now, hostLeaseAlive);
                 if((request[0]<1f || sZoomed || sZoomAnimator!=null) && !matchesAppliedZoom(request))
                     accelerateZoomWatch();
                 if (!selected.command.equals(sZoomLastDispatched)) {
