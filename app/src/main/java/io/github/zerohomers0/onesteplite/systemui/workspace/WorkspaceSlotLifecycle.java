@@ -170,6 +170,7 @@ final class WorkspaceSlotLifecycle {
 
     void clearSlot(Slot slot) {
         Object retiredToken = slot.taskToken;
+        host.scales.cancelScaleRepair(slot);
         host.scales.clearFrameRateHint(slot);
         if(slot.index==WorkspaceHost.SLOT_TOP && host.topTaskState.owner()!=null) {
             host.topTaskState.release(host.topTaskState.owner()); host.topOriginalSlot=null;

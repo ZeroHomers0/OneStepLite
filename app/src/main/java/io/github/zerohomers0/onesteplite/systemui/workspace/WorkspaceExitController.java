@@ -38,6 +38,8 @@ final class WorkspaceExitController {
         if (host.scene != WorkspaceHost.SUSPENDING || host.sceneEpoch != epoch) return;
         host.retainedOnExit = true;
         host.windowPresentation.retireWorkspaceBackdrop();
+        host.scales.cancelAllScaleRepairs();
+        host.scales.clearAllFrameRateHints();
         host.root.setVisibility(View.GONE);
         host.carriers.setMirrorLayerVisible(false);
         host.scene = WorkspaceHost.SUSPENDED;
@@ -49,6 +51,13 @@ final class WorkspaceExitController {
         host.lockExitPending=false;
         WorkspaceHost.log("host hidden; live TaskView bindings retained: " + host.debug.describeTasks());
         releaseVisibleNativeRetainedTask();
+    }
+
+    /** Under memory pressure, favor task retention over keeping hidden TaskViews resident. */
+    void releaseHiddenRetainedTasksForMemory() {
+        if (host.scene == WorkspaceHost.SUSPENDED && host.retainedOnExit && !host.retainedForLock) {
+            releaseHiddenRetainedTasks(1);
+        }
     }
 
     private void releaseHiddenRetainedTasks(int fromIndex) {
@@ -175,6 +184,8 @@ final class WorkspaceExitController {
     void parkNext(int index) {
         if (index >= host.slots.length) {
             host.windowPresentation.retireWorkspaceBackdrop();
+            host.scales.cancelAllScaleRepairs();
+            host.scales.clearAllFrameRateHints();
             host.root.setVisibility(View.GONE);
             host.carriers.setMirrorLayerVisible(false);
             host.scene = WorkspaceHost.SUSPENDED;

@@ -304,6 +304,7 @@ final class WorkspaceResumeController {
     }
 
     void suspendSession(String reason) {
+        host.scales.cancelAllScaleRepairs();
         host.mainSide.cancelMainSideSwitch();
         if (host.topBar != null) host.topBar.closeContentUi();
         if (!"native-landscape".equals(reason)) host.landscapeSuspended = false;

@@ -64,6 +64,7 @@ final class WorkspaceMemoryController {
     }
 
     void releaseDormantBackdrops() {
+        tasks.releaseHiddenRetainedTasks();
         wallpapers.wallpapers().cancelPending();
         wallpapers.windowPresentation().releaseWorkspaceBackdrop();
         if (backdrops.mainBackdrop() != null && !backdrops.mainBackdrop().isRecycled())

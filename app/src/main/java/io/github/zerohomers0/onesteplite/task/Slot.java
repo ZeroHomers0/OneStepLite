@@ -20,6 +20,11 @@ final class Slot implements SlotPositions.Entry {
     boolean occupied;
     boolean taskVisible;
     boolean reassertPending;
+    Runnable scaleRepair;
+    boolean scaleRepairRunning;
+    boolean frameRateHinted;
+    float frameRateApplied = -1f;
+    boolean taskFocused;
     long modeGuardUntil;
     int modeRepairAttempts;
     boolean modeAdmissionPending;

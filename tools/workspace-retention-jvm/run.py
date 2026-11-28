@@ -34,13 +34,13 @@ members = "\n".join(method(signature, exit_source) for signature in (
     "    void releaseRetainedTaskToMain(Slot slot, boolean nativeAlreadyFullscreen) {",
 ))
 members += "\n" + method("    void preannounceDesktopLaunch(android.os.Bundle binding) {", launch_source)
-members = members.replace("host.", "").replace("WorkspaceHost.", "").replace("sideRows.isCompacting()","sideCompacting").replace("sideRows.isDesktopRevealing()","sideDesktopRevealing").replace("sideRows.isScrolling()","sideScrolling").replace("sideRows.isRowInPlace(slot)","sideRowInPlace(slot)").replace("sideRows.revealForDesktop(","revealSideTaskForDesktop(").replace("exits.","").replace("WorkspaceHost.log","log").replace("scales.","")
+members = members.replace("host.", "").replace("WorkspaceHost.", "").replace("sideRows.isCompacting()","sideCompacting").replace("sideRows.isDesktopRevealing()","sideDesktopRevealing").replace("sideRows.isScrolling()","sideScrolling").replace("sideRows.isRowInPlace(slot)","sideRowInPlace(slot)").replace("sideRows.revealForDesktop(","revealSideTaskForDesktop(").replace("exits.","").replace("scales.","").replace("WorkspaceHost.log","log").replace("scales.","")
 exit_members = "\n".join(method(signature, exit_source) for signature in (
     "    boolean canRetainBoundTasks() {",
     "    void finishRetainedSuspend(long epoch) {",
     "    void releaseForegroundRetainedTasks(long epoch,",
     "    boolean hasBoundTasks() {",
-)).replace("host.","").replace("WorkspaceHost.ACTIVE","ACTIVE").replace("WorkspaceHost.SUSPENDING","SUSPENDING").replace("WorkspaceHost.SUSPENDED","SUSPENDED").replace("WorkspaceHost.RESUMING","RESUMING").replace("exits.","").replace("WorkspaceHost.log","log")
+)).replace("host.","").replace("WorkspaceHost.ACTIVE","ACTIVE").replace("WorkspaceHost.SUSPENDING","SUSPENDING").replace("WorkspaceHost.SUSPENDED","SUSPENDED").replace("WorkspaceHost.RESUMING","RESUMING").replace("exits.","").replace("scales.","").replace("WorkspaceHost.log","log")
 members += "\n" + exit_members
 members=(members.replace("slotLifecycle.","").replace("slotRegistry.","").replace("mainTaskActions.","").replace("promotionController.","").replace("windowPresentation.","").replace("carriers.","").replace("debug.",""))
 harness = r'''
@@ -49,6 +49,7 @@ import java.util.function.Consumer;
 
 public final class WorkspaceRetentionTest {
  void cancelMainSideSwitch(){}boolean lockExitPending;
+ void cancelAllScaleRepairs(){} void clearAllFrameRateHints(){}
     static int checks;
     static void check(boolean value, String message) {
         checks++;

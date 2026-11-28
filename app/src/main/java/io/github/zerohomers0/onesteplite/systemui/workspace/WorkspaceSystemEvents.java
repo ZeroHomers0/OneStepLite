@@ -18,6 +18,8 @@ final class WorkspaceSystemEvents {
             h.screenOn = on;
             h.publishDesktopSideTasks();
             if (!on) {
+                h.scales.cancelAllScaleRepairs();
+                h.scales.clearAllFrameRateHints();
                 UnlockHandoff pending = h.unlockHandoff;
                 h.unlockHandoff = null;
                 if (pending != null) pending.cancel();

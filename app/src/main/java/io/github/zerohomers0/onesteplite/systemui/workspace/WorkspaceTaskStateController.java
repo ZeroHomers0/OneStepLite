@@ -136,6 +136,9 @@ final class WorkspaceTaskStateController {
             }
             boolean visible = XposedHelpers.getBooleanField(info, "isVisible");
             boolean running = XposedHelpers.getBooleanField(info, "isRunning");
+            boolean focused = false;
+            try { focused = XposedHelpers.getBooleanField(info, "isFocused"); }
+            catch (Throwable ignored) { /* Some OEM callbacks omit focus. */ }
             int mode = windowModeOf(info);
             if (host.retainedOnExit && (host.scene == WorkspaceHost.SUSPENDING || host.scene == WorkspaceHost.SUSPENDED) && running && mode == 1
                     && slot.occupied && taskId == slot.taskId && token != null
@@ -154,6 +157,12 @@ final class WorkspaceTaskStateController {
                 return;
             }
             if (token == null || !host.slotRegistry.controllerOwns(slot, taskId, token)) return;
+            TaskWindowState previousWindowState = slot.windowState;
+            int previousOrientation = previousWindowState == null ? TaskWindowState.UNKNOWN_ORIENTATION : previousWindowState.configurationOrientation;
+            int previousRequested = previousWindowState == null ? -1 : previousWindowState.requestedOrientation;
+            int previousRotation = previousWindowState == null ? TaskWindowState.UNKNOWN_ROTATION : previousWindowState.resolvedRotation;
+            int previousWindowing = previousWindowState == null ? -1 : previousWindowState.windowingMode;
+            boolean focusChanged = slot.taskFocused != focused;
             boolean surfaceGeometryChanged = slot.taskId != taskId || slot.windowMode != mode;
             boolean changed = slot.taskId != taskId || slot.occupied != running
                     || slot.taskVisible != visible || slot.windowMode != mode;
@@ -170,6 +179,14 @@ final class WorkspaceTaskStateController {
                 slot.modeRepairAttempts = 0;
             }
             updateTaskWindowState(slotIndex, info, taskId, running);
+            TaskWindowState currentWindowState = slot.windowState;
+            boolean windowStateChanged = currentWindowState != previousWindowState
+                    || currentWindowState == null
+                    || currentWindowState.configurationOrientation != previousOrientation
+                    || currentWindowState.requestedOrientation != previousRequested
+                    || currentWindowState.resolvedRotation != previousRotation
+                    || currentWindowState.windowingMode != previousWindowing;
+            slot.taskFocused = focused;
             if (changed) {
                 WorkspaceHost.log("taskInfo slot=" + slotIndex + " task=" + taskId
                         + " running=" + running + " visible=" + visible
@@ -178,9 +195,12 @@ final class WorkspaceTaskStateController {
                 host.slotLifecycle.updateHint(slot);
                 host.chrome.updateTouchRegion(slot);
             }
-            if (running) {
+            boolean geometryDirty = surfaceGeometryChanged || windowStateChanged || slot.scaleSurface == null;
+            if (running && geometryDirty) {
                 // Wait for the native leash first. Early bounds writes can interrupt prepareOpen.
-                host.scales.reapplyScale(slot);
+                host.scales.requestScaleRepair(slot);
+            } else if (running && focusChanged) {
+                host.scales.refreshFrameRateHint(slot);
             }
             if (running && slotIndex > SLOT_MAIN && mode == 6 && surfaceGeometryChanged) {
                 host.scheduleSideSurfaceRestore(slot, taskId, token, slot.taskEpoch, host.sceneEpoch);
@@ -261,6 +281,7 @@ final class WorkspaceTaskStateController {
 
     void bindTask(Slot slot, int taskId, Object token) {
         if (slot.taskId != taskId || !java.util.Objects.equals(slot.taskToken, token)) {
+            host.scales.cancelScaleRepair(slot);
             slot.pendingSidePromotion = null;
             slot.taskEpoch++;
             slot.removalCheckTask = -1;
@@ -272,6 +293,9 @@ final class WorkspaceTaskStateController {
             slot.scaleAttempts = 0;
             slot.taskUid = 0;
             slot.reassertPending = false;
+            slot.taskFocused = false;
+            slot.frameRateHinted = false;
+            slot.frameRateApplied = -1f;
             slot.windowMode = -1;
             slot.modeRepairAttempts = 0;
             host.recycleBuffered(slot);

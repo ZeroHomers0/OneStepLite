@@ -70,6 +70,7 @@ final class WorkspacePorts {
         Promotion promotion();
         boolean transferBusy();
         WorkspaceScaleController scales();
+        void releaseHiddenRetainedTasks();
     }
 
 
@@ -198,6 +199,7 @@ final class WorkspacePorts {
             @Override public Promotion promotion() { return host.promotion; }
             @Override public boolean transferBusy() { return host.transferBusy; }
             @Override public WorkspaceScaleController scales() { return host.scales; }
+            @Override public void releaseHiddenRetainedTasks() { host.exits.releaseHiddenRetainedTasksForMemory(); }
         };
         return new Runtime() {
             @Override public ScenePort scenes() { return scenes; }

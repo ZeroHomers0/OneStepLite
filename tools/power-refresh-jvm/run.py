@@ -21,6 +21,20 @@ if ('postDelayed(dormantTrim, DORMANT_TRIM_MS)' not in memory
 hostentry=(src/'ZoomRuntime.java').read_text(encoding='utf-8-sig')
 if 'sZoomWatchScreenOn' not in hostentry or 'onZoomScreenState(false)' not in (src/'ZoomBridgeReceiver.java').read_text(encoding='utf-8-sig'):
     raise AssertionError('zoom watchdog must stop while the screen is off')
+scale=(src/'WorkspaceScaleController.java').read_text(encoding='utf-8')
+task_state=(src/'WorkspaceTaskStateController.java').read_text(encoding='utf-8')
+exit_controller=(src/'WorkspaceExitController.java').read_text(encoding='utf-8')
+system_events=(src/'WorkspaceSystemEvents.java').read_text(encoding='utf-8')
+if ('slot.scaleRepair' not in scale or 'requestScaleRepair(Slot slot)' not in scale
+        or 'postDelayed(() -> reapplyScale(slot), 1200L)' in scale):
+    raise AssertionError('TaskInfo bursts must share one cancellable scale-repair chain')
+if ('windowStateChanged' not in task_state or 'host.scales.requestScaleRepair(slot)' not in task_state
+        or 'boolean geometryDirty' not in task_state):
+    raise AssertionError('TaskInfo scale repair must be gated by observed geometry changes')
+if ('releaseHiddenRetainedTasksForMemory()' not in exit_controller or 'tasks.releaseHiddenRetainedTasks()' not in memory
+        or 'cancelAllScaleRepairs()' not in exit_controller or 'clearAllFrameRateHints()' not in exit_controller
+        or 'clearAllFrameRateHints()' not in system_events):
+    raise AssertionError('hidden and locked workspaces must cancel repairs and clear frame hints')
 clock=(src/'WorkspaceClock.java').read_text(encoding='utf-8-sig')
 if 'Objects.hash(' in clock:
     raise AssertionError('clock draw path still allocates a varargs hash array each frame')

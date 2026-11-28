@@ -11,6 +11,13 @@ final class WorkspaceRuntimeCounters {
     static final AtomicLong TASK_VIEWS_CREATED = new AtomicLong();
     static final AtomicLong EMPTY_ROW_TASK_VIEWS_RELEASED = new AtomicLong();
     static final AtomicLong SURFACE_TRANSFORMS = new AtomicLong();
+    static final AtomicLong SCALE_REPAIRS_SCHEDULED = new AtomicLong();
+    static final AtomicLong SCALE_REPAIRS_EXECUTED = new AtomicLong();
+    static final AtomicLong SCALE_REPAIRS_COALESCED = new AtomicLong();
+    static final AtomicLong SCALE_REPAIRS_SKIPPED = new AtomicLong();
+    static final AtomicLong FRAME_RATE_HINTS_SET = new AtomicLong();
+    static final AtomicLong FRAME_RATE_HINTS_SKIPPED = new AtomicLong();
+    static final AtomicLong FRAME_RATE_HINTS_CLEARED = new AtomicLong();
     static final AtomicLong TASK_LOOKUPS = new AtomicLong();
     static final AtomicLong SIDE_ROWS_TRIMMED = new AtomicLong();
     static final AtomicLong OWNED_TASKS = new AtomicLong();
@@ -26,6 +33,13 @@ final class WorkspaceRuntimeCounters {
                 + " taskViewCreated=" + TASK_VIEWS_CREATED.get()
                 + " emptyRowTaskViewsReleased=" + EMPTY_ROW_TASK_VIEWS_RELEASED.get()
                 + " surfaceTransform=" + SURFACE_TRANSFORMS.get()
+                + " scaleRepairScheduled=" + SCALE_REPAIRS_SCHEDULED.get()
+                + " scaleRepairExecuted=" + SCALE_REPAIRS_EXECUTED.get()
+                + " scaleRepairCoalesced=" + SCALE_REPAIRS_COALESCED.get()
+                + " scaleRepairSkipped=" + SCALE_REPAIRS_SKIPPED.get()
+                + " frameRateSet=" + FRAME_RATE_HINTS_SET.get()
+                + " frameRateSkipped=" + FRAME_RATE_HINTS_SKIPPED.get()
+                + " frameRateCleared=" + FRAME_RATE_HINTS_CLEARED.get()
                 + " taskLookup=" + TASK_LOOKUPS.get()
                 + " rowsTrimmed=" + SIDE_ROWS_TRIMMED.get()
                 + " ownedTasks=" + OWNED_TASKS.get()

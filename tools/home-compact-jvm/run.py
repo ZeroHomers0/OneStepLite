@@ -121,7 +121,7 @@ public class HomeCompactRegression {
  void releaseRetainedTopSnapshot(){}
  void finishPendingSuspend(){focusDone++;}void log(String s){}void closeSwapPreview(){}
  void recycleBuffered(Slot s){s.bufferedDown=null;}
- void clearFrameRateHint(Slot s){}void trimTrailingEmptySideRows(){}
+ void clearFrameRateHint(Slot s){}void cancelScaleRepair(Slot s){}void trimTrailingEmptySideRows(){}
  void updateHint(Slot s){s.view.hintUpdates++;}void updateTouchRegion(Slot s){s.view.touchUpdates++;}
  void clearWindowState(Slot s){s.windowState=null;}List<Object> releasedOwned=new ArrayList<>();void releaseOwnedTask(Object token){releasedOwned.add(token);}void onTaskCreated(Slot s){}
  void applyRect(Slot s){s.view.rectUpdates++;}void reapplyScale(Slot s){}

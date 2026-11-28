@@ -7,6 +7,8 @@ import de.robv.android.xposed.XposedHelpers;
 final class WorkspaceScaleController {
     private static final int SLOT_MAIN = WorkspaceHost.SLOT_MAIN;
     private static final int SLOT_TOP = WorkspaceHost.SLOT_TOP;
+    private static final long SCALE_REPAIR_FIRST_MS = 300L;
+    private static final long SCALE_REPAIR_FINAL_MS = 900L;
 
     private final WorkspacePorts.SlotPort slots;
     private final WorkspacePorts.FramePort frames;
@@ -34,6 +36,63 @@ final class WorkspaceScaleController {
         return slot.index == SLOT_TOP ? frames.windowLayout().topGeometry().scale : frames.layout().cellScale(slot.index - 1);
     }
 
+
+    /** Coalesces TaskInfo bursts into one cancellable first/final repair chain per slot. */
+    void requestScaleRepair(Slot slot) {
+        if (slot == null || slot.scaleRepairRunning) return;
+        if (slot.scaleRepair != null) {
+            frames.main().removeCallbacks(slot.scaleRepair);
+            slot.scaleRepair = null;
+            WorkspaceRuntimeCounters.SCALE_REPAIRS_COALESCED.incrementAndGet();
+        }
+        scheduleScaleRepair(slot, slot.taskId, slot.taskToken, slot.taskEpoch, 0,
+                SCALE_REPAIR_FIRST_MS);
+    }
+
+    private void scheduleScaleRepair(Slot slot, int taskId, Object token, long taskEpoch,
+            int step, long delay) {
+        if (!scaleRepairCurrent(slot, taskId, token, taskEpoch)) {
+            WorkspaceRuntimeCounters.SCALE_REPAIRS_SKIPPED.incrementAndGet();
+            return;
+        }
+        Runnable repair = () -> {
+            slot.scaleRepair = null;
+            if (!scaleRepairCurrent(slot, taskId, token, taskEpoch)) {
+                WorkspaceRuntimeCounters.SCALE_REPAIRS_SKIPPED.incrementAndGet();
+                return;
+            }
+            slot.scaleRepairRunning = true;
+            try {
+                WorkspaceRuntimeCounters.SCALE_REPAIRS_EXECUTED.incrementAndGet();
+                reapplyScale(slot);
+            } finally {
+                slot.scaleRepairRunning = false;
+            }
+            if (step == 0 && scaleRepairCurrent(slot, taskId, token, taskEpoch)) {
+                scheduleScaleRepair(slot, taskId, token, taskEpoch, 1, SCALE_REPAIR_FINAL_MS);
+            }
+        };
+        slot.scaleRepair = repair;
+        WorkspaceRuntimeCounters.SCALE_REPAIRS_SCHEDULED.incrementAndGet();
+        frames.main().postDelayed(repair, delay);
+    }
+
+    private boolean scaleRepairCurrent(Slot slot, int taskId, Object token, long taskEpoch) {
+        return slot != null && slots.slotRegistry().canRender(slot)
+                && slot.taskId == taskId && slot.taskEpoch == taskEpoch
+                && java.util.Objects.equals(slot.taskToken, token);
+    }
+
+    void cancelScaleRepair(Slot slot) {
+        if (slot == null || slot.scaleRepair == null) return;
+        frames.main().removeCallbacks(slot.scaleRepair);
+        slot.scaleRepair = null;
+    }
+
+    void cancelAllScaleRepairs() {
+        for (Slot slot : slots.slots()) cancelScaleRepair(slot);
+    }
+
     void applySlotScale(Slot slot) {
         if (frames.liveGeometry().holdsLiveFlipZoom() || !slots.slotRegistry().canRender(slot) || slot.promoting || !slot.occupied || slot.view == null
                 || !mayWriteSideSurface(slot)) {
@@ -57,6 +116,7 @@ final class WorkspaceScaleController {
         }
         slot.scaleAttempts = 0;
         Object sc = liveLeash;
+        if (slot.scaleSurface != sc) { slot.frameRateHinted = false; slot.frameRateApplied = -1f; }
         slot.scaleOnLeash = true;
         if (applyScaleTransform(slot, sc)) {
             slot.scaleSurface = sc;
@@ -67,11 +127,9 @@ final class WorkspaceScaleController {
             WorkspaceHost.log("applySlotScale slot=" + slot.index + " task=" + slot.taskId
                     + " k=" + k + " onLeash=" + slot.scaleOnLeash + " surface=" + sc);
         }
-        // TaskView may rewrite bounds while the surface changes. The opening/bounds
-        // guards reapply this slot's compact bounds and density.
-        // 转场/可见性变化可能覆盖矩阵：在几个延迟点重发。
-        frames.main().postDelayed(() -> reapplyScale(slot), 300L);
-        frames.main().postDelayed(() -> reapplyScale(slot), 1200L);
+        // TaskView may rewrite bounds while the surface changes. Keep one coalesced
+        // first/final repair chain instead of accumulating anonymous callbacks.
+        requestScaleRepair(slot);
     }
 
     void reapplyScale(Slot slot) {
@@ -87,13 +145,15 @@ final class WorkspaceScaleController {
             applySlotScale(slot);
             return;
         }
-        if (!applyScaleTransform(slot, slot.scaleSurface)) {
+        boolean applied = applyScaleTransform(slot, slot.scaleSurface);
+        if (!applied) {
             // 表面可能已失效（任务重启/改边界后转场重建）：清缓存 + 放开去重门槛，
             // 下次 TaskInfo 变化时重新解析并整套重来。
             slot.scaleSurface = null;
             slot.scaleTaskId = Integer.MIN_VALUE;
             slot.scaleApplied = -1f;
         }
+        requestScaleRepair(slot);
     }
 
     void applyFullscreenBounds(Slot slot) {
@@ -172,15 +232,12 @@ final class WorkspaceScaleController {
 
     private void applyFrameRateHint(Object tx, Slot slot, Object surface) {
         if (tx == null || slot == null || surface == null) return;
-        boolean focused = false;
-        if (slot.index != SLOT_TOP && slot.controller != null && slot.taskId >= 0) {
-            try {
-                Object info = ShellCompat.currentTaskInfo(slot.controller, slot.taskId);
-                focused = info != null && XposedHelpers.getBooleanField(info, "isFocused");
-            } catch (Throwable ignored) { /* Focus is optional; idle policy remains safe. */ }
-        }
-        float fps = SideRefreshPolicy.target(slot.index == SLOT_TOP, focused,
+        float fps = SideRefreshPolicy.target(slot.index == SLOT_TOP, slot.taskFocused,
                 slot.promoting || slot.launching);
+        if (slot.frameRateHinted && Math.abs(slot.frameRateApplied - fps) < 0.01f) {
+            WorkspaceRuntimeCounters.FRAME_RATE_HINTS_SKIPPED.incrementAndGet();
+            return;
+        }
         try {
             if (!ShellCompat.hasMethod(tx.getClass(), "setFrameRate", 3))
                 throw new NoSuchMethodException("SurfaceControl.Transaction.setFrameRate");
@@ -188,6 +245,9 @@ final class WorkspaceScaleController {
             Object parent = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl");
             if (parent != null && parent != surface)
                 XposedHelpers.callMethod(tx, "setFrameRate", parent, fps, 1);
+            slot.frameRateHinted = true;
+            slot.frameRateApplied = fps;
+            WorkspaceRuntimeCounters.FRAME_RATE_HINTS_SET.incrementAndGet();
         } catch (Throwable unavailable) {
             if (!frameRateHintUnavailableLogged) {
                 frameRateHintUnavailableLogged = true;
@@ -197,10 +257,17 @@ final class WorkspaceScaleController {
     }
 
     void clearFrameRateHint(Slot slot) {
-        if (slot == null || slot.controller == null) return;
+        if (slot == null) return;
+        boolean wasHinted = slot.frameRateHinted;
+        slot.frameRateHinted = false;
+        slot.frameRateApplied = -1f;
+        if (slot.controller == null) return;
         Object leash = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mTaskLeash");
         Object parent = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl");
-        if (leash == null && parent == null) return;
+        if (leash == null && parent == null) {
+            if (wasHinted) WorkspaceRuntimeCounters.FRAME_RATE_HINTS_CLEARED.incrementAndGet();
+            return;
+        }
         Object tx = null;
         try {
             tx = TransactionCompat.newSurfaceTransaction();
@@ -216,6 +283,28 @@ final class WorkspaceScaleController {
             XposedHelpers.callMethod(tx, "apply");
         } catch (Throwable ignored) {
             /* A departed task may already have released both layers. */
+        } finally {
+            slots.sideRows().closeSurfaceObject(tx, "close");
+        }
+        if (wasHinted) WorkspaceRuntimeCounters.FRAME_RATE_HINTS_CLEARED.incrementAndGet();
+    }
+
+    void clearAllFrameRateHints() {
+        for (Slot slot : slots.slots()) clearFrameRateHint(slot);
+    }
+
+    void refreshFrameRateHint(Slot slot) {
+        if (slot == null || !slots.slotRegistry().canRender(slot) || slot.controller == null) return;
+        Object surface = slot.scaleSurface;
+        if (surface == null) surface = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mTaskLeash");
+        if (surface == null) return;
+        Object tx = null;
+        try {
+            tx = TransactionCompat.newSurfaceTransaction();
+            applyFrameRateHint(tx, slot, surface);
+            XposedHelpers.callMethod(tx, "apply");
+        } catch (Throwable ignored) {
+            /* The next geometry repair will retry the hint. */
         } finally {
             slots.sideRows().closeSurfaceObject(tx, "close");
         }

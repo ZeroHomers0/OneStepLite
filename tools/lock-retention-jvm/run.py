@@ -114,7 +114,7 @@ public class WorkspaceHost {
  void closeSwapPreview(){}void closeCellMovePreview(){}void publishDesktopSideTasks(){}void hideIme(){}
  static class TopPresentationController {void releaseVideo(){}}TopPresentationController topPresentation;void releaseTopExitWindow(){}
  void suspendSession(String reason){suspends++;scene=SUSPENDED;}
- void resumeSession(){}void updateTopBarState(){}void updateTopExitWindow(){}void reapplyScale(Slot s){repairs++;}
+ void resumeSession(){}void updateTopBarState(){}void updateTopExitWindow(){}void reapplyScale(Slot s){repairs++;}void cancelAllScaleRepairs(){}void clearAllFrameRateHints(){}void cancelScaleRepair(Slot s){}void requestScaleRepair(Slot s){}void refreshFrameRateHint(Slot s){}
  void awaitRetainedWorkspaceFrame(long epoch){confirmRetainedResume(epoch,0);}
  void confirmRetainedResume(long epoch,int attempt){throw new AssertionError("ordinary hidden resume in lock fixture");}
  void scheduleSideVisibilityRepair(Slot s){}void setMirrorLayerVisible(boolean value){mirror=value;}
