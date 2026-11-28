@@ -139,6 +139,10 @@ public static void main(String[]args)throws Exception {
  Surface.fail=true;try{LiveBackdrop.create(parent,wallpaper,1080,2460,s->{});throw new AssertionError("producer failure accepted");}catch(IllegalStateException e){check(SurfaceControl.latest.releases==1&&SurfaceControl.Transaction.latest.removes==1,"partial producer construction releases owned control");}finally{Surface.fail=false;}
  Canvas.fail=true;try{LiveBackdrop.create(parent,wallpaper,1080,2460,s->{});throw new AssertionError("draw failure accepted");}catch(IllegalStateException e){check(Surface.latest.posts==1&&Surface.latest.releases==1&&SurfaceControl.latest.releases==1,"draw failure posts/unlocks and cleans only owned resources");}finally{Canvas.fail=false;}
  try{LiveBackdrop.create(parent,null,1080,2460,s->{});throw new AssertionError("missing wallpaper accepted");}catch(IllegalStateException e){checks++;}
+ Canvas.source=null;
+ LiveBackdrop fallback=LiveBackdrop.create(parent,null,1080,2460,null,null,c->c.drawColor(0xffeeeeee),s->{});
+ check(Canvas.source==null&&Canvas.tint==0xffeeeeee,"fallback draws a usable transition buffer without a bitmap");
+ fallback.close();
  LiveBackdrop themed=LiveBackdrop.createThemed(parent,wallpaper,1080,2460,0x99080a10,s->{});
  Surface themedSurface=Surface.latest;
  check(Canvas.tint==0x99080a10&&themedSurface.posts==1,"dark tint is present in the first live buffer");

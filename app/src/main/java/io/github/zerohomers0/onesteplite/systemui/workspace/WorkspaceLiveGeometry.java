@@ -229,11 +229,18 @@ final class WorkspaceLiveGeometry {
     void drawLiveEmptyHints(android.graphics.Canvas canvas, WorkspaceLayout original,
             WorkspaceLayout target, int revealEmptySlots) {
         // Match the resting side background, including gaps outside the hint bounds.
-        canvas.drawColor(HyperOsStyle.topWallpaperTint(host.ctx));
+        boolean hasWallpaper = host.wallpaperBackdrop != null && !host.wallpaperBackdrop.isRecycled();
+        if (hasWallpaper) {
+            canvas.drawColor(HyperOsStyle.topWallpaperTint(host.ctx));
+        } else {
+            android.graphics.drawable.Drawable background = HyperOsStyle.topBackground(host.ctx);
+            background.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+            background.draw(canvas);
+        }
         int outer = canvas.save();
         try {
-            canvas.scale((float) host.wallpaperBackdrop.getWidth() / original.width,
-                    (float) host.wallpaperBackdrop.getHeight() / original.height);
+            canvas.scale((float) canvas.getWidth() / original.width,
+                    (float) canvas.getHeight() / original.height);
             for (int i = 1; i < host.CELL_SLOT_COUNT; i++) {
                 Slot slot = host.slots[i];
                 boolean revealed = (revealEmptySlots & (1 << i)) != 0;
@@ -253,11 +260,13 @@ final class WorkspaceLiveGeometry {
                         if (revealed) {
                             // An occupied hint may still have its pre-wallpaper fallback.
                             // Paint fresh empty chrome rather than revealing that dark tile.
-                            WallpaperCropDrawable empty = new WallpaperCropDrawable(host.wallpaperBackdrop,
-                                    original.width, original.height, rect[0], rect[1],
-                                    HyperOsStyle.topWallpaperTint(host.ctx));
-                            empty.setBounds(0, 0, rect[2] - rect[0], rect[3] - rect[1]);
-                            empty.draw(canvas);
+                            if (hasWallpaper) {
+                                WallpaperCropDrawable empty = new WallpaperCropDrawable(host.wallpaperBackdrop,
+                                        original.width, original.height, rect[0], rect[1],
+                                        HyperOsStyle.topWallpaperTint(host.ctx));
+                                empty.setBounds(0, 0, rect[2] - rect[0], rect[3] - rect[1]);
+                                empty.draw(canvas);
+                            }
                             host.drawEmptyCellPlus(canvas, rect[2] - rect[0], rect[3] - rect[1],
                                     HyperOsStyle.textSecondary(host.ctx), new android.graphics.Paint(
                                             android.graphics.Paint.ANTI_ALIAS_FLAG));

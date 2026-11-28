@@ -19,7 +19,8 @@ final class WorkspaceResumeController {
         if (host.scene != WorkspaceHost.SUSPENDED || !host.screenOn || host.root == null || !EntryGuard.canOpen(host.ctx)) return;
         host.landscapeSuspended = false;
         host.scene = WorkspaceHost.RESUMING;
-        if (host.wallpaperBackdropDirty) host.wallpapers.loadWallpaperBackdrop();
+        if (host.wallpaperBackdropDirty || host.wallpaperBackdrop == null || host.wallpaperBackdrop.isRecycled())
+            host.wallpapers.loadWallpaperBackdrop();
         final long epoch = ++host.sceneEpoch;
         // Read the foreground before showing our overlay or reclaiming any saved task.
         // A desktop launch while suspended is the user's new main-task choice.

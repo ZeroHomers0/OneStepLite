@@ -48,31 +48,34 @@ final class LiveBackdrop implements AutoCloseable {
 
     static LiveBackdrop create(Object parent, Bitmap wallpaper, int width, int height,
             Rect originalSide, Rect targetSide, Consumer<Canvas> emptyControls, Consumer<String> log) throws Exception {
-        if (parent == null || wallpaper == null || wallpaper.isRecycled() || width <= 0 || height <= 0)
+        boolean hasWallpaper = wallpaper != null && !wallpaper.isRecycled();
+        if (parent == null || width <= 0 || height <= 0 || (!hasWallpaper && emptyControls == null))
             throw new IllegalStateException("live wallpaper unavailable");
+        int bufferWidth = hasWallpaper ? wallpaper.getWidth() : Math.max(1, width / 3);
+        int bufferHeight = hasWallpaper ? wallpaper.getHeight() : Math.max(1, height / 3);
         LiveBackdrop lease = new LiveBackdrop(log);
-        lease.fullCrop = new Rect(0, 0, wallpaper.getWidth(), wallpaper.getHeight());
-        lease.originalCrop = bufferCrop(originalSide, wallpaper, width, height);
-        lease.targetCrop = bufferCrop(targetSide, wallpaper, width, height);
+        lease.fullCrop = new Rect(0, 0, bufferWidth, bufferHeight);
+        lease.originalCrop = bufferCrop(originalSide, bufferWidth, bufferHeight, width, height);
+        lease.targetCrop = bufferCrop(targetSide, bufferWidth, bufferHeight, width, height);
         Object tx = null;
         try {
             Object builder = Class.forName("android.view.SurfaceControl$Builder").getDeclaredConstructor().newInstance();
             XposedHelpers.callMethod(builder, "setName", "OneStepLiteLiveWallpaper");
             XposedHelpers.callMethod(builder, "setParent", parent);
-            XposedHelpers.callMethod(builder, "setBufferSize", wallpaper.getWidth(), wallpaper.getHeight());
+            XposedHelpers.callMethod(builder, "setBufferSize", bufferWidth, bufferHeight);
             XposedHelpers.callMethod(builder, "setFormat", PixelFormat.RGBA_8888);
             lease.surface = XposedHelpers.callMethod(builder, "build");
             lease.producer = (Surface) Surface.class.getDeclaredConstructor(Class.forName("android.view.SurfaceControl"))
                     .newInstance(lease.surface);
             Canvas canvas = lease.producer.lockCanvas(null);
             try {
-                canvas.drawBitmap(wallpaper, null, new Rect(0, 0, wallpaper.getWidth(), wallpaper.getHeight()),
+                if (hasWallpaper) canvas.drawBitmap(wallpaper, null, lease.fullCrop,
                         new Paint(Paint.FILTER_BITMAP_FLAG));
                 if (emptyControls != null) emptyControls.accept(canvas);
             } finally { lease.producer.unlockCanvasAndPost(canvas); }
             tx = transaction();
             XposedHelpers.callMethod(tx, "setMatrix", lease.surface,
-                    (float) width / wallpaper.getWidth(), 0f, 0f, (float) height / wallpaper.getHeight());
+                    (float) width / bufferWidth, 0f, 0f, (float) height / bufferHeight);
             XposedHelpers.callMethod(tx, "setPosition", lease.surface, 0f, 0f);
             XposedHelpers.callMethod(tx, "setWindowCrop", lease.surface,
                     lease.originalCrop);
@@ -91,9 +94,9 @@ final class LiveBackdrop implements AutoCloseable {
         return TransactionCompat.newSurfaceTransaction();
     }
 
-    private static Rect bufferCrop(Rect side, Bitmap bitmap, int width, int height) {
-        if (side == null) return new Rect(0, 0, bitmap.getWidth(), bitmap.getHeight());
-        double x = (double) bitmap.getWidth() / width, y = (double) bitmap.getHeight() / height;
+    private static Rect bufferCrop(Rect side, int bufferWidth, int bufferHeight, int width, int height) {
+        if (side == null) return new Rect(0, 0, bufferWidth, bufferHeight);
+        double x = (double) bufferWidth / width, y = (double) bufferHeight / height;
         return new Rect((int) Math.floor(side.left * x), (int) Math.floor(side.top * y),
                 (int) Math.ceil(side.right * x), (int) Math.ceil(side.bottom * y));
     }
