@@ -26,6 +26,7 @@ task_state=(src/'WorkspaceTaskStateController.java').read_text(encoding='utf-8')
 exit_controller=(src/'WorkspaceExitController.java').read_text(encoding='utf-8')
 resume_controller=(src/'WorkspaceResumeController.java').read_text(encoding='utf-8')
 system_events=(src/'WorkspaceSystemEvents.java').read_text(encoding='utf-8')
+zoom_session=(src/'WorkspaceZoomSession.java').read_text(encoding='utf-8')
 if ('slot.scaleRepair' not in scale or 'requestScaleRepair(Slot slot)' not in scale
         or 'postDelayed(() -> reapplyScale(slot), 1200L)' in scale):
     raise AssertionError('TaskInfo bursts must share one cancellable scale-repair chain')
@@ -36,7 +37,9 @@ if ('releaseHiddenRetainedTasksForMemory()' not in exit_controller or 'tasks.rel
         or 'cancelAllScaleRepairs()' not in exit_controller or 'clearAllFrameRateHints()' not in exit_controller
         or 'clearAllFrameRateHints()' not in system_events
         or 'host.scales.reapplyScale(slot)' not in resume_controller
-        or 'host.cellSurfaces.updateCellSurfaceVisibility(slot)' not in resume_controller):
+        or 'host.cellSurfaces.updateCellSurfaceVisibility(slot)' not in resume_controller
+        or 'void requestReassert()' not in zoom_session
+        or 'host.zoomSession.requestReassert()' not in task_state):
     raise AssertionError('hidden and locked workspaces must cancel repairs and clear frame hints')
 clock=(src/'WorkspaceClock.java').read_text(encoding='utf-8-sig')
 if 'Objects.hash(' in clock:
@@ -107,7 +110,7 @@ __WATCH__
   static final int ACTIVE=1;static Host sInstance;int scene=ACTIVE;boolean screenOn=true,keyguardLocked,lockExitPending,zoomed=true,flip;
   View root=new View();Object layout=new Object(),ctx;Queue main=new Queue();Rail topBar=new Rail();
   class Replay {void clear(){}}Replay unlockGeometryReplay=new Replay();
-  long zoomAnimUntil,lastWorkspaceRepair;Runnable workspaceHeartbeat;WorkspaceSceneTracker sceneTracker=new WorkspaceSceneTracker();int carrierSlotIndex=-1,leashPocSlot=-1,writes,repairs;class Carriers{int leashPocSlot(){return -1;}}Carriers carriers=new Carriers();ZoomTransport zoomTransport=new ZoomTransport();
+  long zoomAnimUntil,lastWorkspaceRepair;Runnable workspaceHeartbeat,reassertZoom;WorkspaceSceneTracker sceneTracker=new WorkspaceSceneTracker();int carrierSlotIndex=-1,leashPocSlot=-1,writes,repairs;class Carriers{int leashPocSlot(){return -1;}}Carriers carriers=new Carriers();ZoomTransport zoomTransport=new ZoomTransport();
   class Slot {boolean carrier,occupied=true,promoting,taskVisible=true;int index=1;}
   static void log(String s){}
   Slot[] slots={new Slot()};Host(){sInstance=this;}

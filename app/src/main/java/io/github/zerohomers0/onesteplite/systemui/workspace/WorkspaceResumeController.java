@@ -249,6 +249,7 @@ final class WorkspaceResumeController {
                     host.cellSurfaces.updateCellSurfaceVisibility(slot);
                 }
             }
+            host.zoomSession.writeZoom(true);
         }, 80L);
         // Leaving the workspace tears the exit plate down with the host.scene; a retained
         // upper task needs it back as soon as the host.scene is active again.

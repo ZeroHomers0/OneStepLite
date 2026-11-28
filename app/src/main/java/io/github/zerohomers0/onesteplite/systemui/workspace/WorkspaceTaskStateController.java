@@ -196,6 +196,7 @@ final class WorkspaceTaskStateController {
                 host.chrome.updateTouchRegion(slot);
             }
             boolean geometryDirty = surfaceGeometryChanged || windowStateChanged || slot.scaleSurface == null;
+            if (slotIndex == SLOT_MAIN && running && (changed || windowStateChanged)) host.zoomSession.requestReassert();
             if (running && geometryDirty) {
                 // Wait for the native leash first. Early bounds writes can interrupt prepareOpen.
                 host.scales.requestScaleRepair(slot);
