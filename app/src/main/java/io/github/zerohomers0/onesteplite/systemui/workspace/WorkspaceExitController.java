@@ -40,6 +40,7 @@ final class WorkspaceExitController {
         host.windowPresentation.retireWorkspaceBackdrop();
         host.scales.cancelAllScaleRepairs();
         host.scales.clearAllFrameRateHints();
+        host.scales.invalidateAllScaleGeometry();
         host.root.setVisibility(View.GONE);
         host.carriers.setMirrorLayerVisible(false);
         host.scene = WorkspaceHost.SUSPENDED;
@@ -186,6 +187,7 @@ final class WorkspaceExitController {
             host.windowPresentation.retireWorkspaceBackdrop();
             host.scales.cancelAllScaleRepairs();
             host.scales.clearAllFrameRateHints();
+            host.scales.invalidateAllScaleGeometry();
             host.root.setVisibility(View.GONE);
             host.carriers.setMirrorLayerVisible(false);
             host.scene = WorkspaceHost.SUSPENDED;

@@ -93,6 +93,18 @@ final class WorkspaceScaleController {
         for (Slot slot : slots.slots()) cancelScaleRepair(slot);
     }
 
+    /** Force a fresh geometry pass after a hidden/restored window; caches can outlive the zoom owner. */
+    void invalidateAllScaleGeometry() {
+        for (Slot slot : slots.slots()) {
+            if (slot == null) continue;
+            slot.scaleSurface = null;
+            slot.scaleTaskId = Integer.MIN_VALUE;
+            slot.scaleApplied = -1f;
+            slot.scaleOnLeash = false;
+            slot.scaleAttempts = 0;
+        }
+    }
+
     void applySlotScale(Slot slot) {
         if (frames.liveGeometry().holdsLiveFlipZoom() || !slots.slotRegistry().canRender(slot) || slot.promoting || !slot.occupied || slot.view == null
                 || !mayWriteSideSurface(slot)) {

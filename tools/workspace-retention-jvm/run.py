@@ -49,7 +49,7 @@ import java.util.function.Consumer;
 
 public final class WorkspaceRetentionTest {
  void cancelMainSideSwitch(){}boolean lockExitPending;
- void cancelAllScaleRepairs(){} void clearAllFrameRateHints(){}
+ void cancelAllScaleRepairs(){} void clearAllFrameRateHints(){} void invalidateAllScaleGeometry(){}
     static int checks;
     static void check(boolean value, String message) {
         checks++;

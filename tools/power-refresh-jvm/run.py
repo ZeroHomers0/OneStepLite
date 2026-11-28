@@ -24,6 +24,7 @@ if 'sZoomWatchScreenOn' not in hostentry or 'onZoomScreenState(false)' not in (s
 scale=(src/'WorkspaceScaleController.java').read_text(encoding='utf-8')
 task_state=(src/'WorkspaceTaskStateController.java').read_text(encoding='utf-8')
 exit_controller=(src/'WorkspaceExitController.java').read_text(encoding='utf-8')
+resume_controller=(src/'WorkspaceResumeController.java').read_text(encoding='utf-8')
 system_events=(src/'WorkspaceSystemEvents.java').read_text(encoding='utf-8')
 if ('slot.scaleRepair' not in scale or 'requestScaleRepair(Slot slot)' not in scale
         or 'postDelayed(() -> reapplyScale(slot), 1200L)' in scale):
@@ -33,7 +34,9 @@ if ('windowStateChanged' not in task_state or 'host.scales.requestScaleRepair(sl
     raise AssertionError('TaskInfo scale repair must be gated by observed geometry changes')
 if ('releaseHiddenRetainedTasksForMemory()' not in exit_controller or 'tasks.releaseHiddenRetainedTasks()' not in memory
         or 'cancelAllScaleRepairs()' not in exit_controller or 'clearAllFrameRateHints()' not in exit_controller
-        or 'clearAllFrameRateHints()' not in system_events):
+        or 'clearAllFrameRateHints()' not in system_events
+        or 'host.scales.reapplyScale(slot)' not in resume_controller
+        or 'host.cellSurfaces.updateCellSurfaceVisibility(slot)' not in resume_controller):
     raise AssertionError('hidden and locked workspaces must cancel repairs and clear frame hints')
 clock=(src/'WorkspaceClock.java').read_text(encoding='utf-8-sig')
 if 'Objects.hash(' in clock:

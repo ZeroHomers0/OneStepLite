@@ -20,6 +20,7 @@ final class WorkspaceSystemEvents {
             if (!on) {
                 h.scales.cancelAllScaleRepairs();
                 h.scales.clearAllFrameRateHints();
+                h.scales.invalidateAllScaleGeometry();
                 UnlockHandoff pending = h.unlockHandoff;
                 h.unlockHandoff = null;
                 if (pending != null) pending.cancel();

@@ -241,6 +241,15 @@ final class WorkspaceResumeController {
         host.topBar.applyOptions(host.workspaceOptions);
         host.chrome.refreshQuickApps();
         host.retainedSurfaces.reassertSideTaskViews(retained ? "resume retained bindings" : "resume complete");
+        host.main.postDelayed(() -> {
+            if (host.scene != WorkspaceHost.ACTIVE || !host.screenOn || host.keyguardLocked) return;
+            for (Slot slot : host.slots) {
+                if (slot != null && slot.occupied && !slot.parked && slot.windowMode == 6) {
+                    host.scales.reapplyScale(slot);
+                    host.cellSurfaces.updateCellSurfaceVisibility(slot);
+                }
+            }
+        }, 80L);
         // Leaving the workspace tears the exit plate down with the host.scene; a retained
         // upper task needs it back as soon as the host.scene is active again.
         host.topPresentationHost.updateTopExitWindow();

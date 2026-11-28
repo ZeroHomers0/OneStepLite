@@ -42,7 +42,7 @@ zoom_source=(src / 'WorkspaceZoomSession.java').read_text(encoding='utf-8').repl
 methods += '\n' + member('    void writeZoomLine(String command, long issuedAt)', zoom_source)
 resume_methods = '\n'.join(member(signature, resume_source) for signature in [
     '    private void showResumingSession(', '    void resumeNext(',
-    '    private void completeWorkspaceResume(']).replace('host.','').replace('host::','this::').replace('exits.','').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('WorkspaceHost.SUSPENDING','SUSPENDING').replace('WorkspaceHost.SUSPENDED','SUSPENDED').replace('WorkspaceHost.RESUMING','RESUMING').replace('WorkspaceHost.log','log').replace('scales.','')
+    '    private void completeWorkspaceResume(']).replace('host.','').replace('host::','this::').replace('exits.','').replace('WorkspaceHost.ACTIVE','ACTIVE').replace('WorkspaceHost.SUSPENDING','SUSPENDING').replace('WorkspaceHost.SUSPENDED','SUSPENDED').replace('WorkspaceHost.RESUMING','RESUMING').replace('WorkspaceHost.log','log').replace('scales.','').replace('cellSurfaces.','')
 methods += '\n' + resume_methods
 methods=(methods.replace('liveHandoff.','').replace('keyguard.','').replace('chrome.','').replace('mainSide.','').replace('zoomSession.','').replace('windowLayout.','').replace('displays.','').replace('windowPresentation.','').replace('carriers.','').replace('WorkspaceSystemEvents.','').replace('resumes.','').replace('h.keyguard::','h::').replace('mainSide::','::').replace('chrome::','this::').replace('slotLifecycle.','').replace('topPresentationHost.','').replace('retainedSurfaces.','').replace('debug.describeTasks()','describeTasks()'))
 files = {
@@ -92,7 +92,7 @@ public class WorkspaceHost {
  static class NativeRecents {static boolean show(){return false;}}
  static class DeviceProfile {static boolean isTablet(Context c){return false;}}
  static class StatusBar {void restore(){}}
- static class Slot {int taskId;Object token=new Object(),controller=new Object();boolean occupied=true,parked,promoting;}
+ static class Slot {int taskId;int windowMode=6;Object token=new Object(),controller=new Object();boolean occupied=true,parked,promoting;}
  static class LiveTask {LiveTask(Slot s){}}
  static final int ACTIVE=0,SUSPENDING=1,SUSPENDED=2,RESUMING=3,SLOT_COUNT=6;
  static WorkspaceHost sInstance;
@@ -114,7 +114,7 @@ public class WorkspaceHost {
  void closeSwapPreview(){}void closeCellMovePreview(){}void publishDesktopSideTasks(){}void hideIme(){}
  static class TopPresentationController {void releaseVideo(){}}TopPresentationController topPresentation;void releaseTopExitWindow(){}
  void suspendSession(String reason){suspends++;scene=SUSPENDED;}
- void resumeSession(){}void updateTopBarState(){}void updateTopExitWindow(){}void reapplyScale(Slot s){repairs++;}void cancelAllScaleRepairs(){}void clearAllFrameRateHints(){}void cancelScaleRepair(Slot s){}void requestScaleRepair(Slot s){}void refreshFrameRateHint(Slot s){}
+ void resumeSession(){}void updateTopBarState(){}void updateTopExitWindow(){}void reapplyScale(Slot s){repairs++;}void cancelAllScaleRepairs(){}void clearAllFrameRateHints(){}void invalidateAllScaleGeometry(){}void cancelScaleRepair(Slot s){}void requestScaleRepair(Slot s){}void refreshFrameRateHint(Slot s){}void updateCellSurfaceVisibility(Slot s){}
  void awaitRetainedWorkspaceFrame(long epoch){confirmRetainedResume(epoch,0);}
  void confirmRetainedResume(long epoch,int attempt){throw new AssertionError("ordinary hidden resume in lock fixture");}
  void scheduleSideVisibilityRepair(Slot s){}void setMirrorLayerVisible(boolean value){mirror=value;}
