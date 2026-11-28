@@ -54,7 +54,7 @@ public final class TopAdmissionRegression {
  static int checks;static void check(boolean v,String why){checks++;if(!v)throw new AssertionError(why);}
  static class Slot {int index;boolean occupied,promoting;long taskEpoch;Slot(int i){index=i;}}
  static class Task {int id=42;Object token=new Binder();}
- static class TopCandidate {Task task=new Task();TopTaskState.Key key=new TopTaskState.Key(42,0,"token");Slot source;boolean landscape=true,tryLandscape;}
+ static class TopCandidate {Task task=new Task();TopTaskState.Key key=new TopTaskState.Key(42,0,"token");Slot source;boolean landscape=true,tryLandscape,navigation;}
  static class View {static final int VISIBLE=0,INVISIBLE=4;}
  static class Pane {boolean occupied;void occupied(boolean v){occupied=v;}void message(String s){}void setVisibility(int v){}}
  static class Root {void requestLayout(){}}
@@ -69,7 +69,7 @@ public final class TopAdmissionRegression {
  TopDirection topPageDirection(Object info,TopTaskState.Key key){return direction;}
  int topPageOrientation(Object info,TopDirection signal){return pageOrientation;}
  Slot[]slots={new Slot(0),new Slot(1),new Slot(2),new Slot(3),new Slot(4)};Slot topOriginalSlot;
- Context ctx=new Context();Handler main=new Handler();IBinder desktopSceneOwner=new Binder();Rect logicalBounds(Slot s,boolean portrait){return new Rect(0,0,portrait?960:2964,1707);}
+ Context ctx=new Context();Handler main=new Handler();IBinder desktopSceneOwner=new Binder();boolean preparedPortrait;Rect logicalBounds(Slot s,boolean portrait){preparedPortrait=portrait;return new Rect(0,0,portrait?960:2964,1707);}
  TopTaskState topTaskState=new TopTaskState();
  void adoptExisting(Slot slot,Task task,boolean fromMain,Runnable success,Consumer<String> failure){
   adopted++;if(defer)pending=success;else if(fail)failure.accept("not visible");else success.run();
@@ -113,6 +113,10 @@ public final class TopAdmissionRegression {
   h.main.fire();check(h.released==0,"confirmed landscape stays pinned");
   h.verifyTopLandscape(c);h.direction=new TopDirection(1);h.main.fire();check(h.released==1,"portrait Activity returns despite a wide task");
   h.verifyTopLandscape(c);h.slots[SLOT_TOP].taskEpoch++;h.main.fire();check(h.released==1,"late verification cannot return a new binding");
+  h=new TopAdmissionRegression();c=candidate(h);c.source=null;c.landscape=false;c.navigation=true;h.fail=false;
+  h.adoptTopTask(c,ticket(h,c),true);
+  check(h.adopted==1&&!h.preparedPortrait&&!h.topPortrait&&h.main.queued.isEmpty(),
+        "recognized navigation uses the landscape viewport before and after native adoption");
   System.out.println("Production top admission/lock/late-callback checks="+checks+" passed");
  }
 }'''
