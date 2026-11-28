@@ -31,7 +31,8 @@ final class TopTaskFrame {
     private final Runnable pollFrame=this::poll;
     private Runnable drawn;
     private int pollAttempt;
-    private final Runnable timeout=()->fail("top destination draw timed out");
+    private volatile String phase="destination layout";
+    private final Runnable timeout=()->fail("top destination draw timed out: "+phase);
 
     private TopTaskFrame(Handler ui,View view,Executor shell,Target target,BooleanSupplier current,
             Runnable ready,Consumer<String> failed) {
@@ -47,7 +48,7 @@ final class TopTaskFrame {
 
     private void poll() {
         if(!session.active()) {retire();return;}
-        if(SystemClock.uptimeMillis()>=deadline) {fail("top destination draw timed out");return;}
+        if(SystemClock.uptimeMillis()>=deadline) {timeout.run();return;}
         if(view.getWidth()!=target.width || view.getHeight()!=target.height || !view.isAttachedToWindow()) {
             retry();return;
         }
@@ -62,6 +63,7 @@ final class TopTaskFrame {
 
     private void checkNative() {
         if(!session.active()) {ui.post(this::retire);return;}
+        phase="native task geometry and transition idle";
         try {
             Object info=ShellCompat.currentTaskInfo(target.controller,target.taskId);
             Object configuration=XposedHelpers.getObjectField(info,"configuration");
@@ -75,6 +77,7 @@ final class TopTaskFrame {
             }
             Object wct=TransactionCompat.newWindowTransaction();
             XposedHelpers.callMethod(wct,"setBounds",target.token,target.bounds);
+            phase="native draw transaction commit";
             SyncPreparation.submit(target.controller,wct,ui::post,this::nativeCommitted,
                     error->fail("top destination draw sync failed: "+error));
         } catch(Throwable busy) {
@@ -87,6 +90,7 @@ final class TopTaskFrame {
         // RenderThread must have submitted the hidden destination at the final
         // layout before the canonical task can fade in above the original strip.
         if(!view.isAttachedToWindow() || !view.isHardwareAccelerated()) {fail("top destination detached");return;}
+        phase="host frame commit";
         drawn=()->{
             if(!session.active()) {retire();return;}
             if(view.getWidth()!=target.width || view.getHeight()!=target.height) {
@@ -95,7 +99,9 @@ final class TopTaskFrame {
             retire();ready.run();
         };
         view.getViewTreeObserver().registerFrameCommitCallback(drawn);
-        view.invalidate();
+        // The transition holds the destination at zero alpha. Request a frame
+        // from the attached window root so that hidden child invalidation cannot be dropped.
+        view.getRootView().invalidate();
     }
 
     private void fail(String reason) {

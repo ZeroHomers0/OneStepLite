@@ -141,7 +141,8 @@ final class WorkspaceTopAdmissionController {
             row.putBinder("owner",host.desktopSceneOwner);
             row.putBinder("task",(android.os.IBinder)XposedHelpers.callMethod(selected.task.token,"asBinder"));
             row.putInt("taskId",selected.key.taskId);row.putInt("userId",selected.key.userId);
-            row.putParcelable("bounds",host.slotRegistry.logicalBounds(host.slots[WorkspaceHost.SLOT_TOP],!selected.landscape && !selected.tryLandscape));
+            row.putParcelable("bounds",host.slotRegistry.logicalBounds(host.slots[WorkspaceHost.SLOT_TOP],
+                    !selected.landscape && !selected.tryLandscape && !selected.navigation));
             host.main.postDelayed(timeout,1500L);
             host.ctx.sendOrderedBroadcast(new Intent(DesktopLaunchBridge.PREPARE_TOP).setPackage("android")
                     .putExtra("state",row),android.Manifest.permission.WRITE_SECURE_SETTINGS,
@@ -161,7 +162,7 @@ final class WorkspaceTopAdmissionController {
     private void adoptTopTaskPrepared(TopCandidate selected, TopTaskState.Ticket ticket, boolean fromMain) {
         if(!host.topTaskState.current(ticket,host.sceneEpoch)) {host.topPresentationHost.cancelTopTaskTransition();return;}
         boolean previousPortrait=host.topPortrait;
-        host.topPortrait=!selected.landscape && !selected.tryLandscape;
+        host.topPortrait=!selected.landscape && !selected.tryLandscape && !selected.navigation;
         host.adoptExisting(host.slots[WorkspaceHost.SLOT_TOP],selected.task,fromMain,()->{
             if(!host.topTaskState.commit(ticket,host.sceneEpoch)) {host.topPresentationHost.releaseTopTask(false,false,null);return;}
             host.topOriginalSlot=selected.source;host.topFromMain=fromMain;
