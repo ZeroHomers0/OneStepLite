@@ -54,7 +54,7 @@ final class ZoomTransport {
         requestLease(false);
         if (command == null || !command.equals(lastFileZoom)) return false;
         try {
-            java.io.File f = new java.io.File(ctx.getFilesDir(), "onesteplite-zoom");
+            java.io.File f = new java.io.File(ctx.getFilesDir(), ZoomProtocol.FILE_NAME);
             if (!f.isFile() || !f.setLastModified(issuedAt)) return false;
             log("zoom lease renewed: " + command);
             return true;
@@ -76,7 +76,7 @@ final class ZoomTransport {
         // Independent transport: a failed private-file write must not suppress zoom/restore.
         broadcastZoom(command, issuedAt);
         try {
-            java.io.File f = new java.io.File(ctx.getFilesDir(), "onesteplite-zoom");
+            java.io.File f = new java.io.File(ctx.getFilesDir(), ZoomProtocol.FILE_NAME);
             // Identical contents only need a fresh lease timestamp, not another fsync.
             if (!command.trim().startsWith("anim") && command.equals(lastFileZoom) && f.isFile() && f.setLastModified(issuedAt)) return;
             android.util.AtomicFile file = new android.util.AtomicFile(f);
@@ -103,17 +103,12 @@ final class ZoomTransport {
 
     private void broadcastZoom(String command, long issuedAt) {
         try {
-            String encoded = ZoomChannelState.encode(command, issuedAt);
-            String steady = command.trim();
-            if (steady.startsWith("anim")) {
-                String[] parts = steady.split("\\s+");
-                if (parts.length < 4) return;
-                steady = parts[1] + " " + parts[2] + " " + parts[3];
-            }
+            String encoded = ZoomProtocol.encode(command, issuedAt);
+            String steady = ZoomProtocol.steady(command);
             boolean changed = !command.equals(lastBroadcastZoom);
             try {
                 // A heartbeat renews the timestamp too; rereading Settings must not renew it.
-                if (!android.provider.Settings.Global.putString(ctx.getContentResolver(), "onesteplite_zoom", encoded)) {
+                if (!android.provider.Settings.Global.putString(ctx.getContentResolver(), ZoomProtocol.SETTINGS_KEY, encoded)) {
                     log("zoom settings write returned false");
                 }
             } catch (Throwable settingsError) {
@@ -124,6 +119,7 @@ final class ZoomTransport {
             float offsetY = Float.parseFloat(parts[1]);
             float offsetX = Float.parseFloat(parts[2]);
             android.content.Intent intent = new android.content.Intent(Actions.ZOOM);
+            intent.putExtra(WorkspaceContract.EXTRA_PROTOCOL_VERSION, ProtocolVersion.CURRENT);
             intent.putExtra(WorkspaceContract.EXTRA_ZOOM_REQUEST, encoded);
             intent.putExtra(WorkspaceContract.EXTRA_SCALE, scale);
             intent.putExtra(WorkspaceContract.EXTRA_OFFSET_Y, offsetY);

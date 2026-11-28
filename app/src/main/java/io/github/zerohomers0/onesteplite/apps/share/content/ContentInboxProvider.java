@@ -18,8 +18,8 @@ import java.util.UUID;
 
 /** Module-owned inbox files and one-use launch capabilities, never arbitrary filesystem paths. */
 public final class ContentInboxProvider extends ContentProvider {
-    static final String AUTHORITY="io.github.zerohomers0.onesteplite.content";
-    static final String MODULE="io.github.zerohomers0.onesteplite";
+    static final String AUTHORITY=ContentProtocol.AUTHORITY;
+    static final String MODULE=ContentProtocol.MODULE;
     static final Uri ROOT=Uri.parse("content://"+AUTHORITY);
     private static final ShareLaunchRequests<Launch> LAUNCHES=new ShareLaunchRequests<>(8,
             request->DropPermissionContract.release(request.grant));

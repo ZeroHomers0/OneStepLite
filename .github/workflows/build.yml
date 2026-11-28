@@ -102,6 +102,9 @@ jobs:
         run: |
           ./test.ps1 -SdkPath $env:ANDROID_HOME -JavaHome $env:JAVA_HOME
           if ($LASTEXITCODE -ne 0) { throw 'Offline tests failed.' }
+      - name: Run standard JUnit tests
+        shell: pwsh
+        run: ./gradlew.bat --no-daemon --console=plain :app:testDebugUnitTest
 
   # GitHub artifacts always need a signed-in account and always arrive as a zip,
   # so every main build also refreshes a rolling prerelease. Its assets are plain

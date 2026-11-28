@@ -41,7 +41,7 @@ final class SystemServerZoomBridge {
             filter.addAction(BottomReplayInput.ACTION);
             filter.addAction(DesktopLaunchBridge.ACTION);
             filter.addAction(DesktopLaunchBridge.PREPARE_TOP);
-            filter.addAction(WorkspaceBackdrop.ACTION);
+            filter.addAction(Actions.WORKSPACE_WALLPAPER_PARENT);
             // SystemUI / shell can send; ordinary apps cannot change display magnification.
             // minSdk is 34, so the exported-receiver flag is always available.
             context.registerReceiver(receiver, filter, android.Manifest.permission.WRITE_SECURE_SETTINGS,

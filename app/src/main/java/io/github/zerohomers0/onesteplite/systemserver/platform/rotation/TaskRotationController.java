@@ -340,7 +340,7 @@ final class TaskRotationController {
             Object rawContext = sSystemContext != null ? sSystemContext : sWmsContext;
             Context context = (Context) rawContext;
             if (context == null) throw new IllegalStateException("system context unavailable");
-            final Intent intent = new Intent(WorkspaceHost.LANDSCAPE_MODE_ACTION)
+            final Intent intent = new Intent(WorkspaceContract.LANDSCAPE_MODE)
                     .setPackage(SYSTEMUI).putExtra("fullscreen", fullscreen);
             final Handler bridge = sZoomBridgeHandler;
             final Runnable send = () -> {

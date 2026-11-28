@@ -35,16 +35,15 @@ final class SystemServerHooks {
      */
     void install(ClassLoader cl) {
         log("=== attached to system_server (android) " + RUNTIME_MARKER);
-        Recents.install(cl);
-        NativeRawInputBridge.install();
+        HookGuard.run("systemserver recents",HostEntry::log,()->Recents.install(cl));
+        HookGuard.run("systemserver raw input",HostEntry::log,NativeRawInputBridge::install);
         if(!installDisplayContentHook(cl))return;
-        installInputHooks(cl);
-        installKeyguardHooks(cl);
-        installRotationAndFocusHooks(cl);
-        captureSystemContext(cl);
-        installDesktopIconLaunchBridge(cl);
-        installZoomFileObserver();
-        startZoomFileWatcher();
+        HookGuard.run("systemserver input",HostEntry::log,()->installInputHooks(cl));
+        HookGuard.run("systemserver keyguard",HostEntry::log,()->installKeyguardHooks(cl));
+        HookGuard.run("systemserver rotation and focus",HostEntry::log,()->installRotationAndFocusHooks(cl));
+        HookGuard.run("systemserver context",HostEntry::log,()->captureSystemContext(cl));
+        HookGuard.run("systemserver desktop launch",HostEntry::log,()->installDesktopIconLaunchBridge(cl));
+        HookGuard.run("systemserver zoom observer",HostEntry::log,()->{installZoomFileObserver();startZoomFileWatcher();});
     }
     private boolean installDisplayContentHook(ClassLoader cl){
         return HookGuard.install("DisplayContent surface capture",cl,HostEntry::log,hooks->{

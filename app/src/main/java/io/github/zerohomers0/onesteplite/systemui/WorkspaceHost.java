@@ -61,10 +61,12 @@ public final class WorkspaceHost {
     final WorkspaceLaunchController launches = new WorkspaceLaunchController(this);
     final WorkspaceTaskStateController taskStates = new WorkspaceTaskStateController(this);
     final WorkspaceSideCloseController sideCloses = new WorkspaceSideCloseController(this);
-    final WorkspaceScaleController scales = new WorkspaceScaleController(this);
+    final WorkspacePorts.Runtime ports = WorkspacePorts.of(this);
+    final WorkspaceScaleController scales = new WorkspaceScaleController(ports.slots(),ports.surfaces(),ports.presentation());
     final WorkspaceCellMotionController cells = new WorkspaceCellMotionController(this);
     final WorkspaceSlotRegistry slotRegistry = new WorkspaceSlotRegistry(this, WorkspaceHost::log);
-    final WorkspaceMemoryController memory = new WorkspaceMemoryController(this);
+    final WorkspaceMemoryController memory = new WorkspaceMemoryController(
+            ports.scenes(),ports.surfaces(),ports.presentation(),ports.tasks());
     final WorkspaceMainSideController mainSide = new WorkspaceMainSideController(this);
 
     volatile WorkspaceLayout layout;
@@ -158,7 +160,7 @@ public final class WorkspaceHost {
     final WorkspaceMainTaskActions mainTaskActions = new WorkspaceMainTaskActions(this);
     final WorkspaceTransitionWindow transitionWindow = new WorkspaceTransitionWindow(this);
     final WorkspaceLiveGeometry liveGeometry = new WorkspaceLiveGeometry(this);
-    final WorkspaceContentDragController contentDrag = new WorkspaceContentDragController(this);
+    final WorkspaceContentDragController contentDrag = new WorkspaceContentDragController(ports.scenes(),ports.slots(),ports.surfaces(),ports.presentation(),ports.tasks());
     final WorkspaceSlotLifecycle slotLifecycle = new WorkspaceSlotLifecycle(this);
     final WorkspaceZoomSession zoomSession;
     final WorkspaceSideInteraction sideInteraction = new WorkspaceSideInteraction(this);
@@ -241,8 +243,10 @@ public final class WorkspaceHost {
         this.factory = factory;
         this.transitions = transitions;
         statusBar = new StatusBar(main, WorkspaceHost::log);
-        WorkspaceNativeHooks.install(ctx.getClassLoader());
-        retainedSurfaces.installRetainedSurfaces(ctx.getClassLoader());
+        HookGuard.run("workspace TaskView hooks",WorkspaceHost::log,
+                ()->WorkspaceNativeHooks.install(ctx.getClassLoader()));
+        HookGuard.run("workspace retained surfaces",WorkspaceHost::log,
+                ()->retainedSurfaces.installRetainedSurfaces(ctx.getClassLoader()));
         for (int i = 0; i < SLOT_COUNT; i++) {
             slots[i] = new Slot(i);
         }

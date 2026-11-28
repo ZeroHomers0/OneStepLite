@@ -20,6 +20,10 @@ final class HookGuard {
         void install(Session session) throws Throwable;
     }
 
+    interface Action {
+        void run() throws Throwable;
+    }
+
     static final class Session implements AutoCloseable {
         private final String scope;
         private final ClassLoader loader;
@@ -95,6 +99,18 @@ final class HookGuard {
     }
 
     private HookGuard() {}
+
+    /** Isolates a legacy feature installer that owns its own unhook bookkeeping. */
+    static boolean run(String scope, Consumer<String> log, Action action) {
+        try {
+            action.run();
+            log.accept(scope + " hooks installed");
+            return true;
+        } catch (Throwable unavailable) {
+            log.accept(scope + " unavailable: " + unavailable);
+            return false;
+        }
+    }
 
     static boolean install(String scope, ClassLoader loader, Consumer<String> log, Body body) {
         Session session = new Session(scope, loader, log);

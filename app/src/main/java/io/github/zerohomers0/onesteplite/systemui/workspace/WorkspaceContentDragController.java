@@ -3,7 +3,11 @@ package io.github.zerohomers0.onesteplite;
 
 /** Routes content drags to live workspace tasks and owns the hover target. */
 final class WorkspaceContentDragController {
-    private final WorkspaceHost host;
+    private final WorkspacePorts.ScenePort scenes;
+    private final WorkspacePorts.SlotPort slots;
+    private final WorkspacePorts.SurfacePort surfaces;
+    private final WorkspacePorts.PresentationPort presentation;
+    private final WorkspacePorts.TaskPort tasks;
     private Slot contentDropSlot;
     private String contentDropIdentity;
     private final DropTargetHighlight contentDropHighlight=new DropTargetHighlight();
@@ -12,12 +16,15 @@ final class WorkspaceContentDragController {
     private int dragHoverDropUser;
     private int[] dragHoverDropTarget;
 
-    WorkspaceContentDragController(WorkspaceHost host) {
-        this.host = host;
+    WorkspaceContentDragController(WorkspacePorts.ScenePort scenes,WorkspacePorts.SlotPort slots,
+            WorkspacePorts.SurfacePort surfaces,WorkspacePorts.PresentationPort presentation,
+            WorkspacePorts.TaskPort tasks) {
+        this.scenes=scenes;this.slots=slots;this.surfaces=surfaces;
+        this.presentation=presentation;this.tasks=tasks;
     }
 
     String contentHoverKeyFor(String pkg) {
-        if(pkg==null || host.scene!=WorkspaceHost.ACTIVE || host.promotion!=null || host.transferBusy || !host.screenOn || host.keyguardLocked || host.taskCellsCovered){
+        if(pkg==null || scenes.scene()!=WorkspaceHost.ACTIVE || tasks.promotion()!=null || tasks.transferBusy() || !scenes.screenOn() || scenes.keyguardLocked() || scenes.taskCellsCovered()){
             return null;
         }
         Slot slot=contentDropSlot;
@@ -31,7 +38,7 @@ final class WorkspaceContentDragController {
 
     private boolean dragHoverDropCurrent() {
         return DragHoverDropPolicy.current(dragHoverDropPackage!=null,dragHoverDropScene,
-                host.sceneEpoch,dragHoverDropUser,host.slotRegistry.currentUserId());
+                scenes.sceneEpoch(),dragHoverDropUser,slots.slotRegistry().currentUserId());
     }
 
     private boolean overDragHoverTarget(android.view.DragEvent event) {
@@ -41,19 +48,19 @@ final class WorkspaceContentDragController {
     }
 
     private int[] dragHoverTargetBounds(boolean hadMain) {
-        if(host.layout==null)return null;
-        boolean right=host.layout.tabletLandscape || !hadMain
-                ?host.layout.mainOnRight:host.workspaceOptions.mainOnRightAfterSwap(host.layout.mainOnRight);
-        return host.windowLayout.makeAdaptiveLayout(right).mainBounds();
+        if(surfaces.layout()==null)return null;
+        boolean right=surfaces.layout().tabletLandscape || !hadMain
+                ?surfaces.layout().mainOnRight:presentation.options().mainOnRightAfterSwap(surfaces.layout().mainOnRight);
+        return surfaces.windowLayout().makeAdaptiveLayout(right).mainBounds();
     }
 
     private String contentDropKey(Slot slot) {
-        if(!host.slotRegistry.isActive(slot) || !slot.occupied || slot.parked || slot.frozen || slot.carrier
+        if(!slots.slotRegistry().isActive(slot) || !slot.occupied || slot.parked || slot.frozen || slot.carrier
                 || slot.launching || slot.promoting || slot.closing || slot.pkg==null
                 || slot.taskId<0 || slot.taskToken==null || slot.windowMode!=6
-                || !host.slotRegistry.controllerOwns(slot,slot.taskId,slot.taskToken) || !host.scales.mayWriteSideSurface(slot)
+                || !slots.slotRegistry().controllerOwns(slot,slot.taskId,slot.taskToken) || !tasks.scales().mayWriteSideSurface(slot)
                 || slot.view==null || !slot.view.isShown())return null;
-        return slot.pkg+"\n"+slot.taskId+":"+slot.taskEpoch+":"+host.sceneEpoch+":"+host.slotRegistry.currentUserId();
+        return slot.pkg+"\n"+slot.taskId+":"+slot.taskEpoch+":"+scenes.sceneEpoch()+":"+slots.slotRegistry().currentUserId();
     }
 
     void promoteContentHover(String key) {
@@ -63,61 +70,61 @@ final class WorkspaceContentDragController {
         // The cell is about to be rebound to the previous main. Capture the source
         // package and predicted main bounds while the hovered task still owns the cell.
         LiveTask main=null;
-        try{main=host.slotRegistry.findMainTask();}catch(Exception unavailable){/* Home/main identity is optional. */}
+        try{main=slots.slotRegistry().findMainTask();}catch(Exception unavailable){/* Home/main identity is optional. */}
         int[] target=dragHoverTargetBounds(main!=null);
         String source=main==null?null:main.pkg;
         contentDropHighlight.close();
-        if(WorkspaceMainLaunchController.promoteForNotification(pkg,host.slotRegistry.currentUserId(),()->{})){
-            host.promotion.dragHover=true;
+        if(WorkspaceMainLaunchController.promoteForNotification(pkg,slots.slotRegistry().currentUserId(),()->{})){
+            tasks.promotion().dragHover=true;
             dragHoverDropPackage=pkg;dragHoverDropSource=source;
-            dragHoverDropScene=host.sceneEpoch;dragHoverDropUser=host.slotRegistry.currentUserId();dragHoverDropTarget=target;
+            dragHoverDropScene=scenes.sceneEpoch();dragHoverDropUser=slots.slotRegistry().currentUserId();dragHoverDropTarget=target;
         }
     }
 
     boolean onWindowContentDrag(android.view.DragEvent event) {
-        if(host.root==null)return false;
+        if(presentation.root()==null)return false;
         int action=event.getAction();
         if(action==android.view.DragEvent.ACTION_DRAG_ENDED
                 || action==android.view.DragEvent.ACTION_DRAG_EXITED) {
-            contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();host.sideInteraction.showQuickDrop(host.root,null);
-            boolean accepted=host.topBar!=null && host.topBar.onWindowContentDrag(event,null);
+            contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();presentation.sideInteraction().showQuickDrop(presentation.root(),null);
+            boolean accepted=presentation.topBar()!=null && presentation.topBar().onWindowContentDrag(event,null);
             if(action==android.view.DragEvent.ACTION_DRAG_ENDED)clearDragHoverDrop();
             return accepted;
         }
         boolean hoverDrop=dragHoverDropCurrent();
-        boolean promotionBlocks=host.promotion!=null && !DragHoverDropPolicy.keepPromotionDrag(hoverDrop,
+        boolean promotionBlocks=tasks.promotion()!=null && !DragHoverDropPolicy.keepPromotionDrag(hoverDrop,
                 action==android.view.DragEvent.ACTION_DRAG_STARTED,
                 action==android.view.DragEvent.ACTION_DRAG_LOCATION,
                 action==android.view.DragEvent.ACTION_DROP);
-        if(host.topBar==null || !host.workspaceOptions.dragShareEnabled || host.scene!=WorkspaceHost.ACTIVE || !host.screenOn || host.keyguardLocked
-                || host.transferBusy || host.taskCellsCovered || promotionBlocks) {
-            contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();host.sideInteraction.showQuickDrop(host.root,null);
+        if(presentation.topBar()==null || !presentation.options().dragShareEnabled || scenes.scene()!=WorkspaceHost.ACTIVE || !scenes.screenOn() || scenes.keyguardLocked()
+                || tasks.transferBusy() || scenes.taskCellsCovered() || promotionBlocks) {
+            contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();presentation.sideInteraction().showQuickDrop(presentation.root(),null);
             if(promotionBlocks || !hoverDrop)clearDragHoverDrop();
             return false;
         }
         if(action==android.view.DragEvent.ACTION_DRAG_STARTED){
             if(!hoverDrop)clearDragHoverDrop();
             contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();
-            if(host.promotion!=null)return true;
-            return host.topBar.onWindowContentDrag(event,null);
+            if(tasks.promotion()!=null)return true;
+            return presentation.topBar().onWindowContentDrag(event,null);
         }
         Slot hit=null;String identity=null;
-        for(int index=1;index<host.CELL_SLOT_COUNT;index++) {
-            Slot slot=host.slots[index];int[] rect=slot.rect;
+        for(int index=1;index<slots.cellSlotCount();index++) {
+            Slot slot=slots.slots()[index];int[] rect=slot.rect;
             if(rect==null || event.getX()<rect[0] || event.getX()>=rect[2]
                     || event.getY()<rect[1] || event.getY()>=rect[3])continue;
             identity=contentDropKey(slot);if(identity!=null)hit=slot;
             break;
         }
         if(action==android.view.DragEvent.ACTION_DRAG_LOCATION){
-            if(host.promotion!=null){
+            if(tasks.promotion()!=null){
                 // The hovered cell has moved into the main area. Keep this drag session
                 // alive without pretending the empty old cell is still the target.
                 contentDropSlot=null;contentDropIdentity=null;
                 return hoverDrop;
             }
             contentDropSlot=hit;contentDropIdentity=identity;
-            boolean accepted=host.topBar.onWindowContentDrag(event,hit==null?null:hit.pkg);
+            boolean accepted=presentation.topBar().onWindowContentDrag(event,hit==null?null:hit.pkg);
             contentDropHighlight.show(accepted && hit!=null?hit.view:null);
             return accepted;
         }
@@ -132,10 +139,10 @@ final class WorkspaceContentDragController {
         // keep the task the user aimed at instead of silently cancelling the session.
         boolean promoted=DragHoverDropPolicy.usePromotedTarget(hoverDrop,hit!=null,
                 overDragHoverTarget(event),sameSource);
-        contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();host.sideInteraction.showQuickDrop(host.root,null);
-        if(promoted)return host.topBar.onPromotedContentDrop(event,dragHoverDropPackage,
-                DragHoverDropPolicy.deferUntilReady(host.promotion!=null));
-        return host.topBar.onWindowContentDrag(event,target);
+        contentDropSlot=null;contentDropIdentity=null;contentDropHighlight.close();presentation.sideInteraction().showQuickDrop(presentation.root(),null);
+        if(promoted)return presentation.topBar().onPromotedContentDrop(event,dragHoverDropPackage,
+                DragHoverDropPolicy.deferUntilReady(tasks.promotion()!=null));
+        return presentation.topBar().onWindowContentDrag(event,target);
     }
     void clearHighlight() {
         contentDropSlot = null;
@@ -144,14 +151,14 @@ final class WorkspaceContentDragController {
     }
 
     boolean onTransitionDrop(android.view.DragEvent event) {
-        if (host.topBar == null || host.scene != WorkspaceHost.ACTIVE || !host.screenOn
-                || host.keyguardLocked || !host.workspaceOptions.dragShareEnabled || !dragHoverDropCurrent()
+        if (presentation.topBar() == null || scenes.scene() != WorkspaceHost.ACTIVE || !scenes.screenOn()
+                || scenes.keyguardLocked() || !presentation.options().dragShareEnabled || !dragHoverDropCurrent()
                 || dragHoverDropPackage.equals(dragHoverDropSource)) return false;
         android.content.ClipDescription clip = event.getClipDescription();
         if (clip == null || !clip.hasMimeType("image/*")) return false;
         if (event.getAction() == android.view.DragEvent.ACTION_DRAG_STARTED) return true;
         if (event.getAction() != android.view.DragEvent.ACTION_DROP || !overDragHoverTarget(event)) return false;
-        return host.topBar.onPromotedContentDrop(event, dragHoverDropPackage, host.promotion != null);
+        return presentation.topBar().onPromotedContentDrop(event, dragHoverDropPackage, tasks.promotion() != null);
     }
 
 }

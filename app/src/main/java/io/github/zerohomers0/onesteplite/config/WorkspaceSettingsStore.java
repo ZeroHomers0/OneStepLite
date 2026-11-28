@@ -7,14 +7,17 @@ import android.os.Bundle;
 
 /** The module app owns persistence. SystemUI receives only a read-only snapshot. */
 final class WorkspaceSettingsStore {
-    static final Uri URI = Uri.parse("content://io.github.zerohomers0.onesteplite.settings/options");
-    static final String READ = "read", LUNAR = "show_lunar", TIME = "show_time", DATE = "show_date", SWAP = "swap_mode",
-            ENTRY_GESTURE = "entry_gesture", KEEP_ON_LOCK = "keep_on_lock",
-            SCROLL_SIDE_TASKS = "scroll_side_tasks", LANDSCAPE_VIDEO = "landscape_video",
-            HIDE_RECENTS = "hide_side_recents", PARK_MAIN = "park_main_on_launch", DELETE_SHARED_IMAGES = "delete_shared_images";
-    static final String DRAG_SHARE="drag_share_enabled";
-    static final String THEME="theme_mode";
-    static final String FOLLOW_TOP_BAR_SIDE="follow_top_bar_side";
+    static final Uri URI = Uri.parse(SettingsProtocol.OPTIONS_URI);
+    static final String READ = SettingsProtocol.READ_OPTIONS, LUNAR = SettingsProtocol.KEY_LUNAR,
+            TIME = SettingsProtocol.KEY_TIME, DATE = SettingsProtocol.KEY_DATE, SWAP = SettingsProtocol.KEY_SWAP,
+            ENTRY_GESTURE = SettingsProtocol.KEY_ENTRY_GESTURE, KEEP_ON_LOCK = SettingsProtocol.KEY_KEEP_ON_LOCK,
+            SCROLL_SIDE_TASKS = SettingsProtocol.KEY_SCROLL_SIDE_TASKS,
+            LANDSCAPE_VIDEO = SettingsProtocol.KEY_LANDSCAPE_VIDEO,
+            HIDE_RECENTS = SettingsProtocol.KEY_HIDE_RECENTS, PARK_MAIN = SettingsProtocol.KEY_PARK_MAIN,
+            DELETE_SHARED_IMAGES = SettingsProtocol.KEY_DELETE_SHARED_IMAGES;
+    static final String DRAG_SHARE=SettingsProtocol.KEY_DRAG_SHARE;
+    static final String THEME=SettingsProtocol.KEY_THEME;
+    static final String FOLLOW_TOP_BAR_SIDE=SettingsProtocol.KEY_FOLLOW_TOP_BAR_SIDE;
     private WorkspaceSettingsStore() {}
 
     private static SharedPreferences preferences(Context context) {
@@ -52,7 +55,7 @@ final class WorkspaceSettingsStore {
             context.getContentResolver().notifyChange(URI, null);
             // A wakeup only: receivers reread the authenticated provider, never extras.
             try {
-                context.sendBroadcast(new android.content.Intent(Actions.SETTINGS_CHANGED).setPackage(Packages.SYSTEM_UI),
+                context.sendBroadcast(new android.content.Intent(Actions.SETTINGS_CHANGED).setPackage(Packages.SYSTEM_UI).putExtra(WorkspaceContract.EXTRA_PROTOCOL_VERSION,ProtocolVersion.CURRENT),
                         Actions.SETTINGS_WAKEUP_PERMISSION);
             } catch(RuntimeException unavailable) { /* The provider observer remains the primary channel. */ }
         }
@@ -61,6 +64,7 @@ final class WorkspaceSettingsStore {
 
     static Bundle bundle(WorkspaceOptions options) {
         Bundle result = new Bundle();
+        result.putInt(WorkspaceContract.EXTRA_PROTOCOL_VERSION,ProtocolVersion.CURRENT);
         result.putInt(THEME,options.themeMode);result.putBoolean(LUNAR, options.showLunar);
         result.putBoolean(TIME,options.showTime);result.putBoolean(DATE,options.showDate);result.putInt(SWAP, options.swapMode);
         result.putInt(ENTRY_GESTURE, options.entryGesture);
@@ -77,6 +81,8 @@ final class WorkspaceSettingsStore {
 
     static WorkspaceOptions decode(Bundle bundle) {
         if (bundle == null) throw new IllegalArgumentException("Settings provider returned no snapshot");
+        int protocol=bundle.getInt(WorkspaceContract.EXTRA_PROTOCOL_VERSION,ProtocolVersion.CURRENT);
+        if(!ProtocolVersion.compatible(protocol))throw new IllegalArgumentException("Unsupported settings protocol");
         return new WorkspaceOptions(0, bundle.getInt(SWAP, 0),
                 bundle.getInt(ENTRY_GESTURE, WorkspaceOptions.STATUS_BAR_INWARD),
                 bundle.getBoolean(KEEP_ON_LOCK, false), bundle.getBoolean(SCROLL_SIDE_TASKS, false), bundle.getBoolean(LUNAR, true),

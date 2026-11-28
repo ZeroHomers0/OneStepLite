@@ -72,7 +72,7 @@ final class BottomReplayInput {
                     false, new ContentObserver(handler) {
                         @Override public void onChange(boolean changed) { reconcile(); }
                     });
-            context.getContentResolver().registerContentObserver(Settings.Global.getUriFor("onesteplite_zoom"),
+            context.getContentResolver().registerContentObserver(Settings.Global.getUriFor(ZoomProtocol.SETTINGS_KEY),
                     false, new ContentObserver(handler) {
                         @Override public void onChange(boolean changed) { reconcile(); }
                     });
@@ -90,7 +90,7 @@ final class BottomReplayInput {
     }
 
     private boolean allowed() {
-        String zoom = Settings.Global.getString(context.getContentResolver(), "onesteplite_zoom");
+        String zoom = Settings.Global.getString(context.getContentResolver(), ZoomProtocol.SETTINGS_KEY);
         return selected == WorkspaceOptions.BOTTOM_CENTER_OUTWARD
                 && EntryGestureSettings.lineHidden(context) && EntryGuard.canOpen(context)
                 && zoom != null && zoom.matches(".*\\|1(?:\\.0+)? 0 0");

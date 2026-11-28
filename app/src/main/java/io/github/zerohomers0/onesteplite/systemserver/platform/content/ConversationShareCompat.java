@@ -20,7 +20,7 @@ final class ConversationShareCompat {
         List<ShareTarget> result=new ArrayList<>();
         try {
             Bundle request=new Bundle();request.putParcelable("types",description);request.putInt("count",count);request.putBoolean("editing",editing);
-            Bundle reply=context.getContentResolver().call(ContentInboxProvider.ROOT,"conversation_list",null,request);
+            Bundle reply=context.getContentResolver().call(android.net.Uri.parse(ContentProtocol.ROOT_URI),"conversation_list",null,request);
             ArrayList<Bundle> rows=reply==null?null:reply.getParcelableArrayList("rows",Bundle.class);if(rows==null)return result;
             for(Bundle row:rows) {
                 ComponentName activity=ComponentName.unflattenFromString(row.getString("activity",""));if(activity==null)continue;

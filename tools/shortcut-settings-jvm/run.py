@@ -15,7 +15,7 @@ files = {
 'android/net/Uri.java': 'package android.net;public record Uri(String value) {public static Uri parse(String value){return new Uri(value);}}',
 'android/os/ParcelFileDescriptor.java': 'package android.os;public class ParcelFileDescriptor {}',
 'android/os/Bundle.java': '''package android.os;import java.util.*;public class Bundle {
-private final Map<String,Object> data=new HashMap<>();public void putString(String k,String v){data.put(k,v);}
+private final Map<String,Object> data=new HashMap<>();public Bundle(){}public void putString(String k,String v){data.put(k,v);}public void putInt(String k,int v){data.put(k,v);}public int getInt(String k,int fallback){return (Integer)data.getOrDefault(k,fallback);}
 public String getString(String k){return (String)data.get(k);}public void putBoolean(String k,boolean v){data.put(k,v);}
 public boolean getBoolean(String k){return Boolean.TRUE.equals(data.get(k));}}''',
 'android/os/Binder.java': 'package android.os;public class Binder {public static int uid=12345;public static int getCallingUid(){return uid;}}',
@@ -105,7 +105,7 @@ for name, body in files.items():
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding='utf-8')
     paths.append(str(path))
-paths += [str(src / 'WorkspaceSettingsProvider.java'), str(src / 'ShortcutSettingsStore.java'),
+paths += [str(src / 'WorkspaceSettingsProvider.java'), str(src / 'ShortcutSettingsStore.java'), str(src / 'WorkspaceContract.java'), str(src / 'Actions.java'), str(src / 'ProtocolVersion.java'), str(src / 'SettingsProtocol.java'),
           str(src / 'ShortcutSettingsClient.java')]
 jdk = Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(out), *paths], check=True)

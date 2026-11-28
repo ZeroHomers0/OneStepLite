@@ -23,7 +23,7 @@ final class ZoomSettingsRuntime {
         };
         try {
             context.getContentResolver().registerContentObserver(
-                    android.provider.Settings.Global.getUriFor("onesteplite_zoom"), false, observer);
+                    android.provider.Settings.Global.getUriFor(ZoomProtocol.SETTINGS_KEY), false, observer);
             sZoomSettingsObserver = observer;
             sZoomSettingsWatcherArmed = true;
             readZoomSetting(context);
@@ -37,7 +37,7 @@ final class ZoomSettingsRuntime {
     static void readZoomSetting(android.content.Context context) {
         try {
             String value = android.provider.Settings.Global.getString(
-                    context.getContentResolver(), "onesteplite_zoom");
+                    context.getContentResolver(), ZoomProtocol.SETTINGS_KEY);
             synchronized (sZoomChannels) {
                 long now = System.currentTimeMillis();
                 boolean accepted = sZoomChannels.offerEncoded(value, now);

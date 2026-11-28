@@ -24,7 +24,7 @@ final class ZoomBridgeReceiver extends BroadcastReceiver {
         if(RetainedWindow.ACTION.equals(action))handleRetained(intent);
         else if(UnlockHandoff.RELEASE.equals(action))handleUnlockRelease(intent);
         else if(BottomReplayInput.ACTION.equals(action))BottomReplayInput.setMode(intent.getIntExtra("mode",0));
-        else if(WorkspaceBackdrop.ACTION.equals(action))handleBackdrop(intent);
+        else if(Actions.WORKSPACE_WALLPAPER_PARENT.equals(action))handleBackdrop(intent);
         else if(SwapOverlayBridge.ACTION.equals(action))handleSwapOverlay(intent);
         else if(LiveSwapZoomProtocol.APPLY.equals(action))receiveLiveZoom(context,intent);
         else if(InputTrace.ACTION.equals(action))handleInputTrace(intent);
@@ -36,7 +36,7 @@ final class ZoomBridgeReceiver extends BroadcastReceiver {
         else handleZoom(intent);
     }
     private void handleLease(Intent intent){
-        Bundle lease=intent.getBundleExtra("lease");
+        Bundle lease=intent.getBundleExtra(WorkspaceContract.EXTRA_LEASE);
         IBinder token=lease==null?null:lease.getBinder("host");
         setResultCode(acceptZoomLease(token)?android.app.Activity.RESULT_OK:android.app.Activity.RESULT_CANCELED);
     }
@@ -82,7 +82,7 @@ final class ZoomBridgeReceiver extends BroadcastReceiver {
         ZoomTarget target=sZoomTarget;
         if(target==null || target.display!=sDisplayContent)return;
         try{synchronized(target.globalLock){
-            android.os.Bundle reply=WorkspaceBackdrop.capture(target.display,intent);
+            android.os.Bundle reply=WorkspaceBackdropCapture.capture(target.display,intent);
             if(reply!=null){setResultExtras(reply);setResultCode(-1);}
         }}catch(Throwable error){log("workspace wallpaper parent rejected: "+error);}
     }
@@ -125,6 +125,8 @@ final class ZoomBridgeReceiver extends BroadcastReceiver {
         }catch(Throwable unavailable){log("workspace lease focus refresh skipped: "+unavailable);}
     }
     private void handleZoom(Intent intent){
+        int protocol=intent.getIntExtra(WorkspaceContract.EXTRA_PROTOCOL_VERSION,ProtocolVersion.CURRENT);
+        if(!ProtocolVersion.compatible(protocol)){log("unsupported zoom protocol "+protocol);return;}
         try{synchronized(sZoomChannels){
             long now=System.currentTimeMillis();String encoded=intent.getStringExtra(WorkspaceContract.EXTRA_ZOOM_REQUEST);
             if(encoded!=null)sZoomChannels.offerEncoded(encoded,now);

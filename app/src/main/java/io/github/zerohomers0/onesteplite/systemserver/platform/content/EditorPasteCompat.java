@@ -26,14 +26,14 @@ final class EditorPasteCompat {
     private static final Binder REGISTRY=new Binder();
     private EditorPasteCompat(){}
     static boolean available(Context context) {
-        try{return context.getContentResolver().call(ContentInboxProvider.ROOT,"paste_status",null,null)!=null;}
+        try{return context.getContentResolver().call(android.net.Uri.parse(ContentProtocol.ROOT_URI),"paste_status",null,null)!=null;}
         catch(RuntimeException unavailable){return false;}
     }
     static boolean paste(Context context,String text) {
         try {
-            Bundle state=context.getContentResolver().call(ContentInboxProvider.ROOT,"paste_status",null,null);
+            Bundle state=context.getContentResolver().call(android.net.Uri.parse(ContentProtocol.ROOT_URI),"paste_status",null,null);
             if(state==null)return false;state.putString("text",text);
-            Bundle reply=context.getContentResolver().call(ContentInboxProvider.ROOT,"paste_commit",null,state);
+            Bundle reply=context.getContentResolver().call(android.net.Uri.parse(ContentProtocol.ROOT_URI),"paste_commit",null,state);
             return reply!=null && reply.getBoolean("accepted");
         }catch(RuntimeException unavailable){android.util.Log.w(Tags.PROBE,"clipboard editor paste unavailable",unavailable);return false;}
     }
@@ -90,7 +90,7 @@ final class EditorPasteCompat {
             @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags) throws android.os.RemoteException {
                 if(code!=1 && code!=2 && code!=3)return super.onTransact(code,data,reply,flags);
                 data.enforceInterface(DESCRIPTOR);
-                try{if(Binder.getCallingUid()!=context.getPackageManager().getApplicationInfo(ContentInboxProvider.MODULE,0).uid)
+                try{if(Binder.getCallingUid()!=context.getPackageManager().getApplicationInfo(ContentProtocol.MODULE,0).uid)
                     throw new SecurityException("Not module paste relay");}
                 catch(android.content.pm.PackageManager.NameNotFoundException missing){throw new SecurityException("Module missing",missing);}
                 Bundle input=data.readBundle(EditorPasteCompat.class.getClassLoader());long identity=Binder.clearCallingIdentity();
@@ -112,7 +112,7 @@ final class EditorPasteCompat {
             if(registry!=null || !context.getSystemService(UserManager.class).isUserUnlocked() || !registering.compareAndSet(false,true))return;
             BackgroundExecutor.execute(()->{
                 try{Bundle request=new Bundle();request.putBinder("host",endpoint);
-                    Bundle reply=context.getContentResolver().call(ContentInboxProvider.ROOT,"paste_register",null,request);
+                    Bundle reply=context.getContentResolver().call(android.net.Uri.parse(ContentProtocol.ROOT_URI),"paste_register",null,request);
                     IBinder token=reply==null?null:reply.getBinder("registry");
                     if(token!=null){registry=token;token.linkToDeath(()->registry=null,0);}
                 }catch(Exception unavailable){registry=null;android.util.Log.w(Tags.PROBE,"editor paste registration unavailable",unavailable);}

@@ -33,6 +33,19 @@ final class TriggerHooks {
                 @Override
                 public void onReceive(android.content.Context context, android.content.Intent intent) {
                     String action = intent.getAction();
+                    String command = Actions.DEBUG.equals(action) ? WorkspaceControlRequest.DEBUG
+                            : Actions.TOGGLE.equals(action) ? WorkspaceControlRequest.TOGGLE : null;
+                    if (command != null) {
+                        WorkspaceControlRequest request = new WorkspaceControlRequest(command,
+                                intent.getIntExtra(WorkspaceContract.EXTRA_PROTOCOL_VERSION,ProtocolVersion.CURRENT),
+                                intent.getLongExtra(WorkspaceContract.EXTRA_REQUEST_ID,0L),
+                                intent.getStringExtra("reason"));
+                        if (!request.supported()) {
+                            WorkspaceControlResult rejected = new WorkspaceControlResult(request.requestId(),
+                                    WorkspaceControlResult.Status.UNSUPPORTED,"protocol or command unsupported");
+                            log.accept(rejected.status()+" control request: "+rejected.detail());return;
+                        }
+                    }
                     if (Actions.DEBUG.equals(action)) {
                         DebugConsole.handle(intent, context, factory, executor, transitions, log);
                         return;

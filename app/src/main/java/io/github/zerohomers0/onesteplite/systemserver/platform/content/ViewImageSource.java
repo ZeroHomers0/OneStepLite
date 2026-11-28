@@ -185,7 +185,7 @@ final class ViewImageSource {
                 if(!LEASE.active(lease))return;
                 String pkg=context.getPackageName();
                 Bundle touch=new Bundle();touch.putLong("down",down);
-                Bundle state=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_view_status",pkg,touch);
+                Bundle state=context.getContentResolver().call(android.net.Uri.parse(ContentProtocol.ROOT_URI),"portal_view_status",pkg,touch);
                 if(state==null || state.getLong("down")!=down || !state.getBoolean("prefer_image")
                         || !main.post(()->{
                             try {
@@ -297,7 +297,7 @@ final class ViewImageSource {
 
     private static void submit(android.content.Context context,Bundle state) {
         try {
-            Bundle result=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_view_offer",context.getPackageName(),state);
+            Bundle result=context.getContentResolver().call(android.net.Uri.parse(ContentProtocol.ROOT_URI),"portal_view_offer",context.getPackageName(),state);
             ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,
                     result!=null && result.getBoolean("accepted")?ShareDiagnostics.Code.ACCEPTED:ShareDiagnostics.Code.REJECTED);
         } catch(RuntimeException unavailable){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.UNSUPPORTED);}

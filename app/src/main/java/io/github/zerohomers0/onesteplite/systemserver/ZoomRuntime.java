@@ -56,8 +56,8 @@ final class ZoomRuntime {
             sZoomWatch=null;
         }
         try{
-            java.io.File systemFile=new java.io.File("/data/system/onesteplite-zoom");
-            java.io.File uiFile=new java.io.File("/data/user_de/0/com.android.systemui/files/onesteplite-zoom");
+            java.io.File systemFile=new java.io.File("/data/system/"+ZoomProtocol.FILE_NAME);
+            java.io.File uiFile=new java.io.File("/data/user_de/0/com.android.systemui/files/"+ZoomProtocol.FILE_NAME);
             java.io.File file=systemFile;
             if(uiFile.exists()&&(!systemFile.exists()||uiFile.lastModified()>systemFile.lastModified()))file=uiFile;
             readAndDispatchZoom(file);

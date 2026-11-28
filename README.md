@@ -56,7 +56,7 @@ OneStepLite 是面向小米 HyperOS 的 LSPosed 多任务模块。工作区包�
 
 ## 开发与反馈
 
-构建需要 JDK 21、Android SDK 和 Python 3。运行 `./gradlew :app:lintRelease :app:stageRelease` 和 `./test.ps1`，产物位于 `dist/`。正式 APK 由仓库 CI 签名发布。
+构建需要 JDK 21、Android SDK 和 Python 3。运行 `./gradlew :app:lintRelease :app:stageRelease :app:testDebugUnitTest` 和 `./test.ps1`，产物位于 `dist/`。正式 APK 由仓库 CI 签名发布。
 
 - [项目结构与代码规范](docs/项目结构与代码规范.md)
 - [界面与交互规范](docs/界面与交互规范.md)

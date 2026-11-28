@@ -291,19 +291,27 @@ final class WorkspaceNativeHooks {
     }
 
     static void applyTopConfiguration(WorkspaceHost h, Object wct, Object token, Slot slot) {
+        WorkspacePorts.Runtime ports=WorkspacePorts.of(h);
+        applyTopConfiguration(ports.slots(),ports.surfaces(),ports.presentation(),wct,token,slot);
+    }
+
+    static void applyTopConfiguration(WorkspacePorts.SlotPort slots,
+            WorkspacePorts.SurfacePort surfaces, WorkspacePorts.PresentationPort presentation,
+            Object wct, Object token, Slot slot) {
         if (slot == null || slot.index <= WorkspaceHost.SLOT_MAIN) return;
         if (slot.index != WorkspaceHost.SLOT_TOP) {
             if(slot.rect!=null && slot.rect[2]>slot.rect[0] && slot.rect[3]>slot.rect[1]
-                    && h.screenW>0 && h.screenH>0 && h.displayDensityDpi>0) {
-                float scale=Math.min((slot.rect[2]-slot.rect[0])/(float)h.screenW,
-                        (slot.rect[3]-slot.rect[1])/(float)h.screenH);
-                int density=Math.max(72,Math.round(h.displayDensityDpi*scale));
+                    && surfaces.screenWidth()>0 && surfaces.screenHeight()>0
+                    && surfaces.displayDensityDpi()>0) {
+                float scale=Math.min((slot.rect[2]-slot.rect[0])/(float)surfaces.screenWidth(),
+                        (slot.rect[3]-slot.rect[1])/(float)surfaces.screenHeight());
+                int density=Math.max(72,Math.round(surfaces.displayDensityDpi()*scale));
                 XposedHelpers.callMethod(wct,"setDensityDpi",token,density);
             }
             return;
         }
-        TopTaskGeometry geometry = h.windowLayout.topGeometry();
-        Rect bounds=h.slotRegistry.logicalBounds(slot, h.topPortrait);
+        TopTaskGeometry geometry = surfaces.windowLayout().topGeometry();
+        Rect bounds=slots.slotRegistry().logicalBounds(slot, presentation.topPortrait());
         XposedHelpers.callMethod(wct, "setAppBounds", token, bounds);
         // Inherit native density so retained app Views never mix cached px at two DPIs.
         XposedHelpers.callMethod(wct, "setDensityDpi", token, 0);

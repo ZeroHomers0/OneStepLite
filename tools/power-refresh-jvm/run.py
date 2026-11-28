@@ -73,7 +73,7 @@ __RAIL__
  }
  static class SystemClock {static long now=40000;static long uptimeMillis(){return now;}}
  static class HotZoneGesture {static boolean isAttached(){return true;}static void raiseAll(){}}
- static class HostEntry {static void setHostZoomed(boolean b){}}
+ static class HostEntry {static boolean sHostZoomed;}
  static class ZoomRuntime {static void setHostZoomed(boolean b){}}
  static class ZoomWatch {
   static final Object sZoomWatchLock=new Object();

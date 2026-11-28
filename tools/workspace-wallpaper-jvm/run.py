@@ -39,7 +39,7 @@ public class WallpaperLeaseRegression {
    var d=new Display();var parent=new Node();parent.display=d;parent.parent=d;var wallpaper=new Node();wallpaper.parent=parent;wallpaper.display=d;d.mWallpaperController.mWallpaperTokens.add(wallpaper);
    var host=new Host();host.display=d;host.mOwnerUid=10237;host.mSession.mUid=10237;d.mWmService.mContext.pm.owners.put(10237,new String[]{"com.android.systemui"});IBinder token=new IBinder(){};d.mWmService.mWindowMap.put(token,host);var state=new Bundle();state.putBinder("host",token);var i=new Intent("x").putExtra("state",state);
    if(gate==1)host.mOwnerUid=12345;if(gate==2)host.mAttrs.packageName="other";if(gate==3)host.mAttrs.title="other";if(gate==4)host.visible=false;if(gate==5)parent.mLastMagnificationSpec=new Object();if(gate==6)wallpaper.surface.valid=false;if(gate==7)host.display=new Display();if(gate==8)d.mWmService.mWindowMap.clear();
-   var result=WorkspaceBackdrop.capture(d,i);
+   var result=WorkspaceBackdropCapture.capture(d,i);
    check((result!=null)==(gate==0||gate==5),"exact native host and physical wallpaper parent gate "+gate);
    if(result!=null)check(result.getParcelable("parent",SurfaceControl.class)==(gate==5?d.surface:parent.surface)&&result.getParcelable("anchor",SurfaceControl.class)==(gate==5?parent.surface:wallpaper.surface),"parent/anchor remain outside magnified wallpaper branch, never an app task");
   }
@@ -50,7 +50,7 @@ public class WallpaperLeaseRegression {
    var host=new Host();host.display=d;host.mOwnerUid=10237;host.mSession.mUid=10237;d.mWmService.mContext.pm.owners.put(10237,new String[]{"com.android.systemui"});IBinder token=new IBinder(){};d.mWmService.mWindowMap.put(token,host);var request=new Bundle();request.putBinder("host",token);
    if(state==1)branch.mLastMagnificationSpec=new Object();
    if(state==2){branch.magnifiable=false;branch.mLastMagnificationSpec=new Object();}
-   var result=WorkspaceBackdrop.capture(d,new Intent("x").putExtra("state",request));
+   var result=WorkspaceBackdropCapture.capture(d,new Intent("x").putExtra("state",request));
    check(result!=null,"cold/active/retiring native wallpaper branch accepted "+state);
    check(result.getParcelable("parent",SurfaceControl.class)==outer.surface,"wallpaper stays outside future magnification even before first spec "+state);
    check(result.getParcelable("anchor",SurfaceControl.class)==branch.surface,"native excluded OneHanded ancestor remains the physical parent "+state);
@@ -68,11 +68,11 @@ public class WallpaperLeaseRegression {
   }
   var d=new Display();var host=new Host();host.display=d;IBinder token=new IBinder(){};d.mWmService.mWindowMap.put(token,host);
   var query=new Bundle();query.putBinder("host",token);query.putBoolean("release",true);query.putLong("sequence",1L);var request=new Intent("x").putExtra("state",query);
-  host.visible=false;var pending=WorkspaceBackdrop.capture(d,request);
+  host.visible=false;var pending=WorkspaceBackdropCapture.capture(d,request);
   check(pending!=null&&!pending.getBoolean("settled",false),"hidden Host cannot release backing before native restore transaction commits");
-  d.tx.committed.run();check(WorkspaceBackdrop.capture(d,request).getBoolean("settled",false),"native transaction acknowledgement releases backing after full-screen restore");
-  query.putLong("sequence",2L);check(!WorkspaceBackdrop.capture(d,request).getBoolean("settled",false),"new exit cannot reuse an older committed full-screen frame");
-  query.putLong("sequence",1L);check(WorkspaceBackdrop.capture(d,request)==null,"late exit query cannot replace a newer native acknowledgement");
+  d.tx.committed.run();check(WorkspaceBackdropCapture.capture(d,request).getBoolean("settled",false),"native transaction acknowledgement releases backing after full-screen restore");
+  query.putLong("sequence",2L);check(!WorkspaceBackdropCapture.capture(d,request).getBoolean("settled",false),"new exit cannot reuse an older committed full-screen frame");
+  query.putLong("sequence",1L);check(WorkspaceBackdropCapture.capture(d,request)==null,"late exit query cannot replace a newer native acknowledgement");
   var c=new Context();var handler=new Handler();int[] releases={0};boolean[] current={true};
   WorkspaceBackdrop.retire(c,handler,token,()->current[0],()->releases[0]++,s->{});
   c.receiver.reply=new Bundle();c.receiver.code=-1;c.receiver.onReceive(c,new Intent("pending"));
@@ -89,7 +89,7 @@ public class WallpaperLeaseRegression {
 paths=[]
 for n,t in files.items():
  p=out/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(t,encoding='utf-8');paths.append(str(p))
-paths.extend(str(package_dir(root)/n) for n in ['WorkspaceBackdrop.java','WindowIdentity.java','Actions.java','Packages.java','WindowTypes.java'])
+paths.extend(str(package_dir(root)/n) for n in ['WorkspaceBackdrop.java','WorkspaceBackdropCapture.java','WindowIdentity.java','Actions.java','Packages.java','WindowTypes.java'])
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.WallpaperLeaseRegression'],check=True)

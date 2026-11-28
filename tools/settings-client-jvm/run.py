@@ -11,7 +11,7 @@ files={
 'android/os/Looper.java':'''package android.os;public class Looper {public java.util.List<Runnable> tasks=new java.util.ArrayList<>();public void drain(){while(!tasks.isEmpty())tasks.remove(0).run();}}''',
 'android/os/Handler.java':'''package android.os;public class Handler {public final Looper loop;public Handler(Looper l){loop=l;}public void post(Runnable r){loop.tasks.add(r);}public void removeCallbacks(Runnable r){loop.tasks.removeIf(t->t==r);}}''',
 'android/os/HandlerThread.java':'''package android.os;public class HandlerThread {public static Looper latest;public HandlerThread(String n){latest=new Looper();}public void start(){}public Looper getLooper(){return latest;}}''',
-'android/os/Bundle.java':'package android.os;public class Bundle {public int mode;public Bundle(int m){mode=m;}}',
+'android/os/Bundle.java':'package android.os;public class Bundle {public int mode;public Bundle(){}public Bundle(int m){mode=m;}public void putInt(String k,int v){mode=v;}}',
 'android/database/ContentObserver.java':'package android.database;public class ContentObserver {public ContentObserver(android.os.Handler h){}public void onChange(boolean changed){}}',
 'android/content/BroadcastReceiver.java':'package android.content;public abstract class BroadcastReceiver {public abstract void onReceive(Context c,Intent i);}',
 'android/content/Intent.java':'package android.content;public class Intent {public int untrustedMode;}',
@@ -59,6 +59,8 @@ for name,body in files.items():
 paths.append(str(src/'WorkspaceSettingsClient.java'))
 paths.append(str(src/'Actions.java'))
 paths.append(str(src/'Tags.java'))
+paths.append(str(src/'WorkspaceContract.java'))
+paths.append(str(src/'ProtocolVersion.java'))
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.SettingsClientRegression'],check=True)

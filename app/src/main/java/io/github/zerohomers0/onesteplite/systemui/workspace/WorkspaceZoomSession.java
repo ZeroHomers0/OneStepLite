@@ -24,7 +24,7 @@ final class WorkspaceZoomSession {
         if (on) startWorkspaceHeartbeat();
         else if (workspaceHeartbeat != null) host.main.removeCallbacks(workspaceHeartbeat);
         if (!on) host.unlockGeometryReplay.clear();
-        ZoomRuntime.setHostZoomed(on);
+        HostEntry.sHostZoomed=on;
         StatusBarSampling.geometryChanged();
         HotZoneGesture.raiseAll();
     }

@@ -16,12 +16,15 @@ public final class WorkspaceSettingsProvider extends ContentProvider {
 
     @Override public Bundle call(String method, String arg, Bundle extras) {
         int uid = Binder.getCallingUid();
+        int protocol = extras == null ? ProtocolVersion.CURRENT
+                : extras.getInt(WorkspaceContract.EXTRA_PROTOCOL_VERSION, ProtocolVersion.CURRENT);
+        if (!ProtocolVersion.compatible(protocol)) throw new UnsupportedOperationException("Unsupported settings protocol");
         boolean allowed = uid == Process.myUid() || uid == Process.SYSTEM_UID;
         if (!allowed) allowed = isSystemUi(uid);
         if (!allowed) throw new SecurityException("Settings snapshots are restricted to OneStepLite and SystemUI");
-        if("read_shortcuts".equals(method) || "write_shortcuts".equals(method)) {
+        if(SettingsProtocol.READ_SHORTCUTS.equals(method) || SettingsProtocol.WRITE_SHORTCUTS.equals(method)) {
             if(uid/100000!=Process.myUid()/100000)throw new SecurityException("Different shortcut user");
-            if("write_shortcuts".equals(method) && uid!=Process.myUid())throw new SecurityException("Only module settings can save shortcuts");
+            if(SettingsProtocol.WRITE_SHORTCUTS.equals(method) && uid!=Process.myUid())throw new SecurityException("Only module settings can save shortcuts");
             return ShortcutSettingsStore.call(getContext(),method,arg,extras);
         }
         if (!WorkspaceSettingsStore.READ.equals(method)) throw new UnsupportedOperationException("Read only");

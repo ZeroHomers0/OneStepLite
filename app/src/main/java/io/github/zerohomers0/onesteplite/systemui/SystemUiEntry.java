@@ -21,28 +21,24 @@ final class SystemUiEntry {
 
     static void install(ClassLoader cl) {
         log("=== attached to " + Packages.SYSTEM_UI + " " + HostEntry.RUNTIME_MARKER);
-        try {
-            NativeMultiWindowUnlock.install(cl, false);
-            NativeRecents.install(cl);
-            IslandMonitorInput.install(cl, () -> sContext);
-            StatusBarSampling.install(cl);
-            StatusBar.install(cl);
-            TopNativeCaption.install(cl);
-            PanelInput.install(cl);
-            BiometricWindow.install(cl);
-            MainUiConfiguration.install(cl);
-            NotificationLaunch.install(cl, () -> sContext);
-            installRetainedWorkspaceWakeHooks(cl);
-            NativeFreeformCoordinates.install(cl);
-            NativeFreeformPreview.install(cl);
-            hookApplication(cl);
-            hookShellProviders(cl);
-            hookRecentsWallpaper(cl);
-            hookBackGestureDiagnostics(cl);
-            hookTransitionBounds(cl);
-        } catch (Throwable t) {
-            log("hooks failed: " + t);
-        }
+        HookGuard.run("systemui native multiwindow",HostEntry::log,()->NativeMultiWindowUnlock.install(cl,false));
+        HookGuard.run("systemui recents",HostEntry::log,()->NativeRecents.install(cl));
+        HookGuard.run("systemui island monitor",HostEntry::log,()->IslandMonitorInput.install(cl,()->sContext));
+        HookGuard.run("systemui status sampling",HostEntry::log,()->StatusBarSampling.install(cl));
+        HookGuard.run("systemui status bar",HostEntry::log,()->StatusBar.install(cl));
+        HookGuard.run("systemui top caption",HostEntry::log,()->TopNativeCaption.install(cl));
+        HookGuard.run("systemui panel input",HostEntry::log,()->PanelInput.install(cl));
+        HookGuard.run("systemui biometric window",HostEntry::log,()->BiometricWindow.install(cl));
+        HookGuard.run("systemui configuration",HostEntry::log,()->MainUiConfiguration.install(cl));
+        HookGuard.run("systemui notification launch",HostEntry::log,()->NotificationLaunch.install(cl,()->sContext));
+        HookGuard.run("systemui retained wake",HostEntry::log,()->installRetainedWorkspaceWakeHooks(cl));
+        HookGuard.run("systemui freeform coordinates",HostEntry::log,()->NativeFreeformCoordinates.install(cl));
+        HookGuard.run("systemui freeform preview",HostEntry::log,()->NativeFreeformPreview.install(cl));
+        HookGuard.run("systemui application lifecycle",HostEntry::log,()->hookApplication(cl));
+        HookGuard.run("systemui shell providers",HostEntry::log,()->hookShellProviders(cl));
+        HookGuard.run("systemui recents wallpaper",HostEntry::log,()->hookRecentsWallpaper(cl));
+        HookGuard.run("systemui back diagnostics",HostEntry::log,()->hookBackGestureDiagnostics(cl));
+        HookGuard.run("systemui transition bounds",HostEntry::log,()->hookTransitionBounds(cl));
     }
 
     private static void installMemoryCallbacks(Context context) {

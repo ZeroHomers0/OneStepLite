@@ -9,7 +9,6 @@ import android.graphics.Point;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.os.UserHandle;
 import android.os.UserManager;
 import android.view.WindowManager;
 import java.util.ArrayList;
@@ -20,7 +19,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import de.robv.android.xposed.XposedHelpers;
 
 /** SystemUI boot warmup. No host windows, tasks, magnification, activity or service launches. */
 final class Warmup {
@@ -345,8 +343,7 @@ final class Warmup {
     private static Context userContext(Context base, int user) {
         if (user < 0) throw new IllegalStateException("current user unavailable");
         try {
-            Object handle = XposedHelpers.callStaticMethod(UserHandle.class, "of", user);
-            return (Context) XposedHelpers.callMethod(base, "createContextAsUser", handle, 0);
+            return UserContextCompat.createAsUser(base,user);
         } catch (Throwable unavailable) {
             throw new IllegalStateException("current user context unavailable", unavailable);
         }

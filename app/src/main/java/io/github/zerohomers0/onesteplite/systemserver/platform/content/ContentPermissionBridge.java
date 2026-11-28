@@ -48,7 +48,7 @@ final class ContentPermissionBridge {
     private static IBinder delegate(Context context,Object source,ClipData clip,IBinder owner,boolean active) throws Exception {
         int caller=Binder.getCallingUid();
         int host=context.getPackageManager().getApplicationInfo(Packages.SYSTEM_UI,0).uid;
-        int recipient=context.getPackageManager().getApplicationInfo(ContentInboxProvider.MODULE,0).uid;
+        int recipient=context.getPackageManager().getApplicationInfo(ContentProtocol.MODULE,0).uid;
         int sourceUser=XposedHelpers.getIntField(source,"mSourceUserId");
         boolean read=(XposedHelpers.getIntField(source,"mMode")&Intent.FLAG_GRANT_READ_URI_PERMISSION)!=0;
         boolean unlocked=!context.getSystemService(android.app.KeyguardManager.class).isKeyguardLocked();
@@ -65,7 +65,7 @@ final class ContentPermissionBridge {
                 throw new SecurityException("URI is not part of this drop");
         }
         Object delegated=XposedHelpers.newInstance(source.getClass(),XposedHelpers.getObjectField(source,"mGlobalLock"),
-                clip,XposedHelpers.getIntField(source,"mSourceUid"),ContentInboxProvider.MODULE,
+                clip,XposedHelpers.getIntField(source,"mSourceUid"),ContentProtocol.MODULE,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION,sourceUser,sourceUser);
         try {
             XposedHelpers.callMethod(delegated,"takeTransient");

@@ -93,12 +93,12 @@ final class NativeContentDragCard {
             if(uid!=(Integer)call.args[1] || uid/100000!=0)return;
             WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)XposedHelpers.getObjectField(source,"mAttrs");
             sourcePackage=attrs.packageName;
-            boolean module=ContentInboxProvider.MODULE.equals(attrs.packageName);
+            boolean module=ContentProtocol.MODULE.equals(attrs.packageName);
             context=(Context)XposedHelpers.getObjectField(wm,"mContext");
             if(module){
                 android.os.PersistableBundle data=original.getDescription().getExtras();
                 if(data==null || ContentDragShadow.offset(original.getDescription())<=0)return;
-                try{if(context.getPackageManager().getApplicationInfo(ContentInboxProvider.MODULE,0).uid!=uid)return;}
+                try{if(context.getPackageManager().getApplicationInfo(ContentProtocol.MODULE,0).uid!=uid)return;}
                 catch(Exception unavailable){return;}
                 physicalX=(float)data.getDouble("onesteplite_module_pointer_x",Double.NaN);
                 physicalY=(float)data.getDouble("onesteplite_module_pointer_y",Double.NaN);

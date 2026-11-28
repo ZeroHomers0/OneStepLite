@@ -51,7 +51,7 @@ final class SystemExtractHooks {
             candidates.add(entry);
         }
         if(candidates.isEmpty())return false;
-        Bundle state=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_status",null,null);
+        Bundle state=context.getContentResolver().call(android.net.Uri.parse(ContentProtocol.ROOT_URI),"portal_status",null,null);
         if(state==null){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_SESSION);return false;}
         boolean preferImage=state.getBoolean("prefer_image");
         if(preferImage)candidates.sort(java.util.Comparator.comparing(
@@ -64,14 +64,14 @@ final class SystemExtractHooks {
                 Bundle candidate=new Bundle(state);
                 if(!SystemExtractPayload.append(injector,entry.getValue(),image,candidate)){
                     if(image && SystemExtractPayload.appendRegion(injector,entry.getValue(),candidate))
-                        context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_offer",null,candidate);
+                        context.getContentResolver().call(android.net.Uri.parse(ContentProtocol.ROOT_URI),"portal_offer",null,candidate);
                     continue;
                 }
                 if(!image && unresolvedImage){
                     if("图片".equals(candidate.getString("text").strip()))continue;
                     candidate.putBoolean("await_image",true);
                 }
-                Bundle reply=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_offer",null,candidate);
+                Bundle reply=context.getContentResolver().call(android.net.Uri.parse(ContentProtocol.ROOT_URI),"portal_offer",null,candidate);
                 if(reply!=null && reply.getBoolean("accepted")){
                     ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.ACCEPTED);
                     return image || !unresolvedImage;

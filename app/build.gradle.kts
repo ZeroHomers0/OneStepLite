@@ -85,6 +85,9 @@ android {
         }
     }
 
+    sourceSets.getByName("test").java.srcDir(rootProject.file("tests/junit"))
+    testOptions.unitTests.isReturnDefaultValues = true
+
     packaging {
         // Compress DEX for distribution while keeping the native library mmap-ready.
         dex {
@@ -101,6 +104,7 @@ tasks.named("preBuild") { dependsOn(generateBuildIdentity) }
 dependencies {
     // Provided by the Xposed framework at runtime; never packaged into the APK.
     compileOnly(files("../libs/xposed-api-82.jar"))
+    testImplementation("junit:junit:4.13.2")
 }
 
 // Checks the packaged APK the way the module loader will read it: entry class,

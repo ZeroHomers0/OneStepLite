@@ -1,9 +1,7 @@
 package io.github.zerohomers0.onesteplite;
 
 import android.content.Context;
-import android.provider.Settings;
 import java.util.List;
-import de.robv.android.xposed.XposedHelpers;
 
 /** Shared module-owned pins with a read fallback for existing per-user secure settings. */
 final class QuickAppPins {
@@ -18,8 +16,7 @@ final class QuickAppPins {
             String pins=ShortcutSettingsClient.readForUser(context,ShortcutSettingsClient.APPS,user);
             if(pins!=null)return QuickAppOrder.decode(pins);
         } catch(RuntimeException unavailable) { /* Keep legacy pins until the provider is available. */ }
-        return QuickAppOrder.decode((String) XposedHelpers.callStaticMethod(Settings.Secure.class,
-                "getStringForUser", context.getContentResolver(), KEY, user));
+        return QuickAppOrder.decode(SecureSettingsCompat.legacyStringForUser(context,KEY,user));
     }
 
     static List<QuickApp> arrange(Context context, List<QuickApp> apps) {

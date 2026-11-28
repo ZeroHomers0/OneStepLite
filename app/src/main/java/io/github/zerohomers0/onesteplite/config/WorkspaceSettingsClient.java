@@ -51,8 +51,10 @@ final class WorkspaceSettingsClient {
     private void load() {
         final long request=generation;
         try {
+            android.os.Bundle args = new android.os.Bundle();
+            args.putInt(WorkspaceContract.EXTRA_PROTOCOL_VERSION, ProtocolVersion.CURRENT);
             WorkspaceOptions options = WorkspaceSettingsStore.decode(context.getContentResolver().call(
-                    WorkspaceSettingsStore.URI, WorkspaceSettingsStore.READ, null, null));
+                    WorkspaceSettingsStore.URI, WorkspaceSettingsStore.READ, null, args));
             main.post(() -> {if(request==generation)changed.accept(options);});
             reportedFailure = false;
         } catch (Exception error) {

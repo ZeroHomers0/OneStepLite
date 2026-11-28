@@ -49,7 +49,7 @@ public static Object callMethod(Object o,String n){try{return o.getClass().getMe
 import android.content.*;import android.graphics.Point;import android.view.*;import android.os.*;import java.util.*;
 import de.robv.android.xposed.XC_MethodHook;import de.robv.android.xposed.XposedHelpers;
 class Tags{static final String PROBE="test";}class Packages{static final String SYSTEM_UI="com.android.systemui";}
-class ContentInboxProvider{static final String MODULE="module";}
+class ContentInboxProvider{static final String MODULE="module";}class ContentProtocol{static final String MODULE="module";static final String ROOT_URI="content://module";}
 class HyperOsStyle{static boolean dark(Context c){return false;}}
 class PortalDragInput{static String sourcePackage(CharSequence identity){return identity.toString().split("\\n",2)[0];}}
 class WindowIdentity{static boolean ownsPicker(Object w,Object d){return false;}}

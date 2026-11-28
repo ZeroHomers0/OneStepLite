@@ -1,7 +1,6 @@
 package io.github.zerohomers0.onesteplite;
 
 import java.util.function.Predicate;
-import de.robv.android.xposed.XposedHelpers;
 
 /** The native focus scan skips exact side leases without changing their lifecycle flags. */
 final class WorkspaceFocus {
@@ -31,19 +30,5 @@ final class WorkspaceFocus {
                     && (!ignoreMode || tree.mode(task) != excludedMode) && tree.eligible(task)) return task;
         }
         return null;
-    }
-
-    static Object next(Object area, Object ignored, boolean ignoreMode, int excludedMode,
-            Predicate<Object> side) {
-        return next(new Tree() {
-            public int size(Object a) { return (Integer) XposedHelpers.callMethod(a, "getChildCount"); }
-            public Object child(Object a, int i) { return XposedHelpers.callMethod(a, "getChildAt", i); }
-            public Object area(Object c) { return XposedHelpers.callMethod(c, "asTaskDisplayArea"); }
-            public Object task(Object c) { return XposedHelpers.callMethod(c, "asTask"); }
-            public boolean eligible(Object t) {
-                return Boolean.TRUE.equals(XposedHelpers.callMethod(t, "isFocusableAndVisible"));
-            }
-            public int mode(Object t) { return (Integer) XposedHelpers.callMethod(t, "getWindowingMode"); }
-        }, side, area, ignored, ignoreMode, excludedMode);
     }
 }

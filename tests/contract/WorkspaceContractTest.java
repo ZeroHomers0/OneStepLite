@@ -27,6 +27,22 @@ public final class WorkspaceContractTest {
                 .hasTaskIdentity(),"negative user is rejected");
         check(!new WorkspaceContract.TopTaskSignal(7,10,null,false,false,false,1,false,null,0,0,0)
                 .hasTaskIdentity(),"missing token is rejected");
+        check(ProtocolVersion.compatible(ProtocolVersion.CURRENT),"current protocol is accepted");
+        check(!ProtocolVersion.compatible(0)&&!ProtocolVersion.compatible(ProtocolVersion.CURRENT+1),
+                "unknown protocol versions are rejected");
+        ZoomProtocol.Request zoom=ZoomProtocol.decode(ZoomProtocol.encode("anim .7 600 0 300",1234L));
+        check(zoom!=null&&zoom.issuedAt()==1234L&&zoom.command().startsWith("anim "),
+                "zoom protocol round-trips issued time and command");
+        check("0.7 600 0".equals(ZoomProtocol.steady("anim 0.7 600 0 300")),
+                "animation steady key keeps the zoom tuple");
+        WorkspaceControlRequest control=new WorkspaceControlRequest(WorkspaceControlRequest.TOGGLE,
+                ProtocolVersion.CURRENT,42L,"test");
+        check(control.supported(),"current toggle control request is accepted");
+        check(!new WorkspaceControlRequest("unknown",ProtocolVersion.CURRENT,42L,"test").supported(),
+                "unknown control command is rejected");
+        WorkspaceControlResult result=new WorkspaceControlResult(42L,WorkspaceControlResult.Status.ACCEPTED,"ok");
+        check(result.requestId()==42L&&result.status()==WorkspaceControlResult.Status.ACCEPTED,
+                "control result preserves request identity and status");
         System.out.println("Workspace contract checks="+checks+" passed");
     }
 }

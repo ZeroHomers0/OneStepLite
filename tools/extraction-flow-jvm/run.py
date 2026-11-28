@@ -5,6 +5,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from source_paths import package_dir
 src=package_dir(Path(__file__).resolve().parents[2]);out=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
 files={
+'android/net/Uri.java':'package android.net;public class Uri{public static Uri parse(String value){return new Uri();}}',
 'android/os/Bundle.java':'''package android.os;public class Bundle extends java.util.HashMap<String,Object>{public Bundle(){}public Bundle(Bundle b){super(b);}public void putAll(Bundle b){super.putAll(b);}public void putIntArray(String k,int[] v){put(k,v);}public void putFloatArray(String k,float[] v){put(k,v);}public void putString(String k,String v){put(k,v);}public String getString(String k){return (String)get(k);}public String[] getStringArray(String k){return (String[])get(k);}public void putByteArray(String k,byte[] v){put(k,v);}public void putBoolean(String k,boolean v){put(k,v);}public boolean getBoolean(String k){return Boolean.TRUE.equals(get(k));}}''',
 'android/os/Binder.java':'''package android.os;public class Binder{public static int uid=10100;public static int getCallingUid(){return uid;}public static long clearCallingIdentity(){int old=uid;uid=20200;return old;}public static void restoreCallingIdentity(long old){uid=(int)old;}}''',
 'android/os/SystemClock.java':'package android.os;public class SystemClock{public static long now=100;public static long uptimeMillis(){return now;}}',
@@ -141,7 +142,8 @@ System.out.println("Production extraction and diagnostic checks="+checks+" passe
 paths=[]
 for name,body in files.items():
     p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body,encoding='utf-8');paths.append(str(p))
-paths += [str(src/'SystemExtractHooks.java'),str(src/'SystemExtractPayload.java'),str(src/'PortalHooks.java'),str(src/'ShareDiagnostics.java'),str(src/'ContentSharePolicy.java'),str(src/'ContentCapturePolicy.java')]
+paths += [str(src/'SystemExtractHooks.java'),str(src/'SystemExtractPayload.java'),
+str(src/'ContentProtocol.java'),str(src/'PortalHooks.java'),str(src/'ShareDiagnostics.java'),str(src/'ContentSharePolicy.java'),str(src/'ContentCapturePolicy.java')]
 jdk=Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),*paths],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.ExtractionRegression'],check=True)

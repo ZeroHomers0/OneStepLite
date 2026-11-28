@@ -7,7 +7,7 @@ import java.util.function.Consumer;
 
 /** Immediately dispatches Host-written zoom files from SystemUI and legacy system storage. */
 final class ZoomFileObserverHooks {
-    private static final String NAME="onesteplite-zoom";
+    private static final String NAME=ZoomProtocol.FILE_NAME;
     private ZoomFileObserverHooks() {}
 
     /** Returns whether both file channels have an observer. */

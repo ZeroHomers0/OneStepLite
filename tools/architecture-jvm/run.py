@@ -20,6 +20,16 @@ def category(path):
     parts=path.relative_to(pkg).parts[:-1]
     return '/'.join(parts) if parts else '.'
 
+
+def code_only(text):
+    text=re.sub(r'/\*.*?\*/','',text,flags=re.S)
+    text=re.sub(r'//[^\n]*','',text)
+    text=re.sub(r'"(?:\\.|[^"\\])*"','""',text)
+    text=re.sub(r"'(?:\\.|[^'\\])*'","''",text)
+    return text
+
+def under(value,prefix):
+    return value==prefix or value.startswith(prefix+'/')
 def baseline(name):
     path=here/name
     return set(line.strip() for line in path.read_text(encoding='utf-8').splitlines() if line.strip())
@@ -52,6 +62,18 @@ for path in sorted((pkg/'contract').glob('*.java')):
     check('import android.' not in text,'contract must not import Android: '+rel(path))
     check('import de.robv.android.xposed.' not in text,'contract must not import Xposed: '+rel(path))
 
+# Feature/UI layers may not contain direct Xposed compatibility code.
+for area in ('apps','workspace'):
+    for path in sorted((pkg/area).rglob('*.java')):
+        text=path.read_text(encoding='utf-8')
+        check('XposedHelpers' not in text and 'XposedBridge' not in text
+              and 'de.robv.android.xposed.' not in text,
+              area+' must not own Xposed hooks: '+rel(path))
+
+for name in ('SystemUiEntry.java','SystemServerHooks.java'):
+    text=(sources/name).read_text(encoding='utf-8')
+    check(text.count('HookGuard.run(')+text.count('HookGuard.install(')>=2,
+          name+' must isolate feature hooks with HookGuard')
 # Platform folders are integration boundaries, not generic controller buckets.
 for path in sorted((pkg/'systemui/platform').glob('*.java')):
     check(path.name.endswith('Hooks.java') or path.name.startswith('Native'),
@@ -66,17 +88,36 @@ for path in pkg.rglob('*.java'):
         type_owners.setdefault(name,[]).append(path)
 edges=set()
 for path in pkg.rglob('*.java'):
-    source=category(path);text=path.read_text(encoding='utf-8')
+    raw=path.read_text(encoding='utf-8')
+    source=category(path);text=code_only(raw)
+    external={name for name in re.findall(r'(?m)^import\s+(?:static\s+)?[\w.]+\.(\w+)\s*;',raw)}
     for name,owners in type_owners.items():
-        if len(owners)!=1: continue
+        if len(owners)!=1 or name in external: continue
         target=category(owners[0])
         if source==target: continue
-        if re.search(r'\b'+re.escape(name)+r'\b',text): edges.add(source+' -> '+target)
+        if re.search(r'(?<!\.)\b'+re.escape(name)+r'\b',text):
+            edges.add(source+' -> '+target)
 allowed_contract_targets={'contract','core','policy'}
 for edge in edges:
     source,target=[part.strip() for part in edge.split('->',1)]
     if source=='contract':
         check(target in allowed_contract_targets,'contract may not depend on '+target)
+    check(not (under(source,'systemserver') and under(target,'systemui')),
+          'systemserver may not depend on systemui: '+edge)
+    check(not (under(source,'systemui') and under(target,'launcher')),
+          'systemui may not depend on launcher: '+edge)
+    check(not (source.startswith('systemui/') and under(target,'launcher')),
+          'systemui may not depend on launcher: '+edge)
+    check(not (source=='framework' and under(target,'apps')),
+          'framework may not own app controllers: '+edge)
+    check(not (source=='framework' and under(target,'systemui')),
+          'framework may not own SystemUI controllers: '+edge)
+    check(not (source=='framework' and under(target,'systemserver')),
+          'framework may not own system_server controllers: '+edge)
+    if source=='policy':
+        check(not under(target,'systemserver') and not under(target,'systemui')
+              and not under(target,'framework') and not under(target,'apps'),
+              'policy may not depend on platform/UI layers: '+edge)
 dependency_file='directory-dependencies.baseline'
 if update: save_baseline(dependency_file,edges)
 else:
@@ -145,6 +186,28 @@ else:
     check(not (current_wide-expected),'wide interface needs decomposition: '+', '.join(sorted(current_wide-expected)))
     check(not (expected-current_wide),'wide-interface baseline is stale; run with --update: '+', '.join(sorted(expected-current_wide)))
 
+# Cross-process call directions that still exist are exact exceptions and may only disappear.
+systemui_to_systemserver={edge for edge in edges
+    if under(edge.split(' -> ',1)[0],'systemui') and under(edge.split(' -> ',1)[1],'systemserver')}
+systemserver_to_apps={edge for edge in edges
+    if under(edge.split(' -> ',1)[0],'systemserver') and under(edge.split(' -> ',1)[1],'apps')}
+check(not systemui_to_systemserver,
+      'SystemUI must cross contract/framework instead of calling system_server: '+', '.join(sorted(systemui_to_systemserver)))
+check(not systemserver_to_apps,
+      'system_server content hooks must use contract/framework, not apps: '+', '.join(sorted(systemserver_to_apps)))
+# Controllers migrate to WorkspacePorts monotonically; new controllers may not capture the whole Host.
+host_controllers=set()
+for path in (pkg/'systemui').rglob('*Controller.java'):
+    text=path.read_text(encoding='utf-8')
+    if re.search(r'\(WorkspaceHost host\b|final WorkspaceHost host\b',text):
+        host_controllers.add(rel(path))
+if update: save_baseline('workspace-host-controllers.baseline',host_controllers)
+else:
+    expected=baseline('workspace-host-controllers.baseline')
+    check(not (host_controllers-expected),
+          'new controller must depend on WorkspacePorts, not WorkspaceHost: '+', '.join(sorted(host_controllers-expected)))
+    check(not (expected-host_controllers),
+          'WorkspaceHost controller baseline is stale; run with --update: '+', '.join(sorted(expected-host_controllers)))
 # Pure JVM unit tests must not pull Android or Xposed symbols.
 for path in sorted((root/'tests/unit').glob('*.java')):
     text=path.read_text(encoding='utf-8')

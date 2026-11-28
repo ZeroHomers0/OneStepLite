@@ -22,7 +22,7 @@ final class MiTypeHooks {
                         if (!DeviceProfile.isTablet(context)) return;
                         long now = System.currentTimeMillis();
                         String encoded = android.provider.Settings.Global.getString(
-                                context.getContentResolver(), "onesteplite_zoom");
+                                context.getContentResolver(), ZoomProtocol.SETTINGS_KEY);
                         if (!ImePolicy.suppressAutomaticFloating(encoded,
                                 now - android.os.SystemClock.elapsedRealtime(), now)) return;
                     } catch (Throwable unavailable) {

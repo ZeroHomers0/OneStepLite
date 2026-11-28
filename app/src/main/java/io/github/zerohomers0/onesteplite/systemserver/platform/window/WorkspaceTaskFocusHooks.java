@@ -38,7 +38,7 @@ final class WorkspaceTaskFocusHooks {
                                 ? p.args[0] : null;
                         boolean excludeMode = p.args.length == 4 && Boolean.TRUE.equals(p.args[2]);
                         int mode = excludeMode ? (Integer) p.args[3] : 0;
-                        Object target = WorkspaceFocus.next(
+                        Object target = WorkspaceFocusCompat.next(
                                 p.thisObject, ignored, excludeMode, mode, task -> {
                                     Object binding = DesktopLaunchBridge.recentsLease(task);
                                     return !ImePolicy.isTopAppFocused(task, display)

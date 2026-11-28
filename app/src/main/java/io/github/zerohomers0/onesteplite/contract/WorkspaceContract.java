@@ -36,6 +36,10 @@ final class WorkspaceContract {
     static final String EXTRA_OFFSET_Y = "offsetY";
     static final String EXTRA_OFFSET_X = "offsetX";
     static final String EXTRA_LEASE = "lease";
+    static final String EXTRA_PROTOCOL_VERSION = "protocolVersion";
+    static final String EXTRA_REQUEST_ID = "requestId";
+    static final String EXTRA_CONTROL_STATUS = "controlStatus";
+    static final String EXTRA_CONTROL_DETAIL = "controlDetail";
 
     /** Immutable TOP task direction payload; transports only add Android Intent/Bundle wrappers. */
     record TopTaskSignal(int taskId, int userId, Object token, boolean landscape,

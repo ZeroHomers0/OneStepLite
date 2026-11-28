@@ -71,6 +71,10 @@ public class HookGuardRegression {
    session.hookMethod(String.class.getMethod("length"),new XC_MethodHook(){});
   });
   check(!failed&&XposedBridge.installed==0&&XposedBridge.rolledBack==1,"thrown install error rolls back earlier hooks");
+  boolean ran=HookGuard.run("legacy",log::add,()->{});
+  check(ran,"legacy installer success is reported");
+  boolean isolated=HookGuard.run("legacy failed",log::add,()->{throw new IllegalStateException("missing OEM method");});
+  check(!isolated&&log.stream().anyMatch(line->line.contains("legacy failed unavailable")),"legacy installer failure is isolated and logged");
   System.out.println("HookGuard transaction checks="+checks+" passed");
  }
 }'''

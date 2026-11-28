@@ -48,7 +48,7 @@ final class PortalHooks {
                         if(call.args.length!=1 || !(call.thisObject instanceof Context))return;
                         try {
                             Context context=(Context)call.thisObject;
-                            Bundle state=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_status",null,null);
+                            Bundle state=context.getContentResolver().call(android.net.Uri.parse(ContentProtocol.ROOT_URI),"portal_status",null,null);
                             if(state==null){ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.NO_SESSION);return;}
                             Object injector=XposedHelpers.callMethod(call.args[0],"getInjectorToken");
                             String readySource=state.getString("ready_image_source");
@@ -140,7 +140,7 @@ final class PortalHooks {
     }
 
     private static boolean offer(Context context,Bundle state) {
-        Bundle result=context.getContentResolver().call(ContentInboxProvider.ROOT,"portal_offer",null,state);
+        Bundle result=context.getContentResolver().call(android.net.Uri.parse(ContentProtocol.ROOT_URI),"portal_offer",null,state);
         boolean accepted=result!=null && result.getBoolean("accepted");
         ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,
                 accepted?ShareDiagnostics.Code.ACCEPTED:ShareDiagnostics.Code.REJECTED);

@@ -101,7 +101,7 @@ for name, text in files.items():
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding='utf-8')
     paths.append(str(path))
-paths += [str(src / 'QuickAppPins.java'), str(src / 'QuickAppOrder.java'), str(src / 'QuickAppReconcilePolicy.java')]
+paths += [str(src / 'QuickAppPins.java'), str(src / 'QuickAppOrder.java'), str(src / 'QuickAppReconcilePolicy.java'), str(src / 'SecureSettingsCompat.java')]
 jdk = Path(os.environ['ONESTEPLITE_JAVA_BIN'])
 subprocess.run([str(jdk / 'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(out), *paths], check=True)
 subprocess.run([str(jdk / 'java.exe'), '-cp', str(out), 'io.github.zerohomers0.onesteplite.PreferencesRegression'], check=True)
