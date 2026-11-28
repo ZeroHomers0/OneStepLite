@@ -165,6 +165,10 @@ public class SideParentRegression {
   h.sceneEpoch++;tx=new Transaction();h.appendWorkspaceSurfaces(tx,h.workspaceFinishes.take(finish));check(tx.ops.isEmpty(),"late finish cannot clip or reparent next scene");
   h=fresh();start=new Transaction();finish=new Transaction();h.trackRetainedSurfaces(new Info(1),start,finish);
   check(h.workspaceFinishes.take(start).isEmpty()&&h.workspaceFinishes.take(finish).size()==1,"ordinary open keeps existing final-only behavior");
+  h=fresh();h.promotion=new Object();start=new Transaction();finish=new Transaction();
+  h.trackRetainedSurfaces(new Info(1),start,finish);
+  check(h.workspaceFinishes.take(start).size()==1&&h.workspaceFinishes.take(finish).size()==1,
+    "workspace exchange protects peers even when Shell uses a transition other than CHANGE");
   h=fresh();start=new Transaction();finish=new Transaction();h.trackRetainedSurfaces(new Info(6),start,finish);
   tx=new Transaction();h.workspaceFinishes.merge(tx,start);check(h.workspaceFinishes.take(start).isEmpty(),"merged start identity consumed once");
   h.slots[2].writable=false;h.slots[3].promoting=true;h.appendWorkspaceSurfaces(tx,h.workspaceFinishes.take(tx));tx.apply();

@@ -64,8 +64,10 @@ final class WorkspaceKeyguardController {
     }
 
     void appendUnlockGeometry(Object transaction, java.util.List<Long> epochs) {
+        boolean authenticatedHandoff = host.retainedForLock && host.unlockHandoff != null;
         if (host.root == null || host.layout == null || !epochs.contains(host.sceneEpoch)
-                || !host.screenOn || host.keyguardLocked || host.keyguardWindowHidden || !host.zoomed
+                || !host.screenOn || host.keyguardLocked
+                || (!authenticatedHandoff && (host.keyguardWindowHidden || !host.zoomed))
                 || host.workspaceEntering || host.workspaceAnimator != null || host.mainSideAnimator != null
                 || (host.scene != WorkspaceHost.ACTIVE && host.scene != WorkspaceHost.RESUMING)) return;
         try {

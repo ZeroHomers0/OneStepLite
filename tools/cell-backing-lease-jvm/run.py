@@ -79,6 +79,8 @@ check('cellBackgrounds[i - 1] = peer == ticket.slot ? null : peer.cellBackground
       'live flip must withhold only the moving cell backing and keep peer backings')
 check('cellBackgrounds[i - 1] = peer.cellBackground;' not in swap,
       'live flip still reveals the moving cell placeholder inside the settle transaction')
+check('peer.taskToken, width, height,' in swap,
+      'animated peer rects must be scaled against the native fullscreen buffer, not the cell viewport')
 
 # Live Home promotion: the promoted cell is the moving one.
 home = member('    void startLiveHome(', handoff)

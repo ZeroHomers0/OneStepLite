@@ -161,10 +161,9 @@ final class WorkspaceRetainedSurfaceHooks {
         // task even when that side token is absent from TransitionInfo. Resolve its
         // current canonical binding at the final apply, after native merges.
         host.workspaceFinishes.mark(finish, java.util.Collections.singletonList(host.sceneEpoch));
-        // A CHANGE transition can lift an already-adopted task out of its TaskView
-        // before rotating it. Keep its live hierarchy inside the same viewport
-        // from the start transaction as well; final-only repair allows a fly-out.
-        if (Integer.valueOf(6).equals(XposedHelpers.callMethod(info, "getType")))
+        // Rotation and live task exchanges can briefly lift untouched peers out of their
+        // TaskViews. Preserve those peers in the native start and finish transactions.
+        if (host.promotion != null || Integer.valueOf(6).equals(XposedHelpers.callMethod(info, "getType")))
             host.workspaceFinishes.mark(start, java.util.Collections.singletonList(host.sceneEpoch));
         boolean relevant = host.promotion != null || host.transferBusy;
         for (Slot slot : host.slots) if (slot.launching) relevant = true;

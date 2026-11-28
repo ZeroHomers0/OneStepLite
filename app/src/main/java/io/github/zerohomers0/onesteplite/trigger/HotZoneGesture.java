@@ -85,9 +85,12 @@ public final class HotZoneGesture {
         }
     }
     private void onMotion(MotionEvent e) {
-        if (!enabled || !Integer.valueOf(0).equals(XposedHelpers.callMethod(e, "getDisplayId"))
-                || !e.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)) return;
+        if (!enabled) return;
         int action=e.getActionMasked();
+        boolean tracking = swipe.active() || bottomSwipe.active() || bottomPilfered;
+        if (action != MotionEvent.ACTION_DOWN && !tracking) return;
+        if (!e.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)
+                || !Integer.valueOf(0).equals(XposedHelpers.callMethod(e, "getDisplayId"))) return;
         if(action==MotionEvent.ACTION_DOWN)bottomDownTime=e.getEventTime();
         if(WorkspaceWindowLayout.hostSceneActive()){
             generation++;swipe.reset();bottomSwipe.reset();bottomPilfered=false;restoreBatching();return;
@@ -115,24 +118,31 @@ public final class HotZoneGesture {
     }
     private void beginGesture(MotionEvent e){
         refreshDisplay();reset();
+        float density=context.getResources().getDisplayMetrics().density;
+        int cornerPx=Math.round(72f*density);
+        int bottomPx=Math.round(8f*density);
+        float x=e.getRawX(), y=e.getRawY();
+        boolean corner=y>=0 && y<cornerPx && (x<cornerPx || x>=displaySize.x-cornerPx);
+        boolean bottom=selectedEntryGesture==WorkspaceOptions.BOTTOM_CENTER_OUTWARD
+                && y>=displaySize.y-bottomPx && y<=displaySize.y;
+        if(!corner && !bottom)return;
         if(!EntryGuard.canOpen(context))return;
         admittedEntryGesture=effectiveEntryGesture();
         if(!allowsEntry(displaySize,admittedEntryGesture)){
             log("corner gesture ignored in landscape or native fullscreen");return;
         }
         entryContext=StatusBar.cornerGestureContext();
-        float density=context.getResources().getDisplayMetrics().density;
         if(admittedEntryGesture==WorkspaceOptions.BOTTOM_CENTER_OUTWARD){
             bottomIntentPx=Math.round(2f*density);bottomVerticalPx=Math.round(24f*density);
             bottomSwipe.down(e.getPointerId(0),e.getPointerCount(),e.getRawX(),e.getRawY(),e.getEventTime(),
-                    displaySize.x,displaySize.y,displayRotation,Math.round(8f*density));
+                    displaySize.x,displaySize.y,displayRotation,bottomPx);
             if(bottomSwipe.active()){
                 try{setInputBatching(false);bottomUnbatched=true;}
                 catch(Throwable error){log("bottom immediate input unavailable: "+error);reset();return;}
                 log("bottom entry candidate; immediate input; edge="+Math.round(8f*density));
             }
         }else swipe.down(e.getPointerId(0),e.getPointerCount(),e.getRawX(),e.getRawY(),e.getEventTime(),
-                displaySize.x,displaySize.y,displayRotation,Math.round(72f*density),Math.round(58f*density),
+                displaySize.x,displaySize.y,displayRotation,cornerPx,Math.round(58f*density),
                 Math.round(24f*density));
     }
     private void advanceGesture(MotionEvent e,int action){
@@ -221,6 +231,8 @@ public final class HotZoneGesture {
     }
 
     private int effectiveEntryGesture() {
+        if (selectedEntryGesture == WorkspaceOptions.STATUS_BAR_INWARD)
+            return WorkspaceOptions.STATUS_BAR_INWARD;
         return EntryGesturePolicy.effectiveMode(selectedEntryGesture,
                 EntryGestureSettings.lineHidden(context));
     }

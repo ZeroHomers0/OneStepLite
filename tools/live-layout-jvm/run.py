@@ -86,6 +86,21 @@ public class LiveLayoutRegression {
   }
   }
  }
+ static void phoneSurfaceRects(){
+  for(boolean right:new boolean[]{false,true}){
+   WorkspaceLayout l=WorkspaceLayout.of(1220,2656,right,3.25f);
+   WorkspaceLayout target=WorkspaceLayout.of(1220,2656,!right,3.25f);
+   for(int i=1;i<=l.cellCount;i++){
+    LiveSwapGeometry.Rect start=liveCellRect(l,i),end=liveCellRect(target,i);
+    LiveSwapGeometry.Task peer=new LiveSwapGeometry.Task(i,new Object(),l.width,l.height,start,end);
+    LiveSwapGeometry.frames(new LiveSwapGeometry.Task[]{peer},LiveSwapGeometry.Affine.identity(),
+      new LiveSwapGeometry.Affine[]{LiveSwapGeometry.Affine.identity()},.5);
+    check(Math.abs(start.width/l.width-start.height/l.height)<.00001
+      && Math.abs(end.width/l.width-end.height/l.height)<.00001,
+      "each phone row keeps a uniform fullscreen-buffer transform through a side flip");
+   }
+  }
+ }
  void oneDirection(boolean right){
   Object[] tokens=new Object[SLOT_COUNT],controllers=new Object[SLOT_COUNT];
   for(int i=1;i<SLOT_COUNT;i++){tokens[i]=slots[i].token;controllers[i]=slots[i].controller;}
@@ -115,6 +130,7 @@ public class LiveLayoutRegression {
  }
  public static void main(String[]args){
   tabletSurfaceRects();
+  phoneSurfaceRects();
   new LiveLayoutRegression().oneDirection(true);new LiveLayoutRegression().oneDirection(false);
   new LiveLayoutRegression().tabletDirection(true);new LiveLayoutRegression().tabletDirection(false);
   for(boolean right:new boolean[]{false,true})for(int mode:new int[]{0,1}){

@@ -301,9 +301,8 @@ final class WorkspaceLiveGeometry {
             Object peerInfo = host.slotRegistry.rootInfo(new LiveTask(peer));
             if (!host.slotRegistry.ordinaryRoot(peerInfo, 6))
                 throw new IllegalStateException("peer user or identity changed slot=" + i);
-            int[] cell = geometry.cellBounds(i - 1);
             peers.add(new LiveTaskSwapDriver.Peer(new LiveSwapGeometry.Task(peer.taskId,
-                    peer.taskToken, cell[2]-cell[0], cell[3]-cell[1],
+                    peer.taskToken, width, height,
                     WorkspaceLiveGeometry.liveCellRect(geometry, i), WorkspaceLiveGeometry.liveCellRect(target, i)),
                     peer.controller, XposedHelpers.getIntField(peerInfo, "userId")));
         }

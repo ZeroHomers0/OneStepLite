@@ -51,7 +51,9 @@ final class WorkspaceZoomSession {
             reassertZoom = null;
             if (host.root == null || !WorkspaceHost.isCurrentInstance(host) || host.scene != WorkspaceHost.ACTIVE
                     || !host.screenOn || host.keyguardLocked || host.root.getVisibility() != View.VISIBLE
-                    || host.layout == null) return;
+                    || host.layout == null || !host.zoomed || host.retainedForLock
+                    || host.liveGeometry.holdsLiveFlipZoom()
+                    || SystemClock.uptimeMillis() < host.zoomAnimUntil) return;
             writeZoom(true);
         };
         host.main.postDelayed(reassertZoom, 80L);

@@ -73,6 +73,11 @@ public class UnlockGeometryRegression {
     check(finish.ops.get("task.scale")== (gate==0?.75f:1f),"Host admission gate "+gate+" allowed a stale unlock replay");
    }
   }
+  h.reset();h.keyguardWindowHidden=true;h.zoomed=false;h.retainedForLock=true;h.unlockHandoff=new Object();
+  try(Transaction finish=new Transaction().put("task.scale",1f)){
+   h.apply(finish,List.of(7L));
+   check(finish.ops.get("task.scale")==.75f,"native unlock can finish after geometry confirmation but before Host reveal");
+  }
   h.unlockGeometryReplay.clear();check(Parcel.live==0&&Transaction.live==0,"native replay resources leaked");
   System.out.println("Authenticated native unlock geometry: "+checks+" checks passed (transaction doubles; no device rendering)");
  }
@@ -80,8 +85,8 @@ public class UnlockGeometryRegression {
 'io/github/zerohomers0/onesteplite/WorkspaceHost.java': r'''package io.github.zerohomers0.onesteplite;
 import java.util.*;
 class WorkspaceHost {
- static final int ACTIVE=2,RESUMING=1;Object root,workspaceAnimator,mainSideAnimator;
- boolean screenOn,keyguardLocked,keyguardWindowHidden,zoomed,workspaceEntering;long sceneEpoch;int scene;
+ static final int ACTIVE=2,RESUMING=1;Object root,workspaceAnimator,mainSideAnimator,unlockHandoff;
+ boolean screenOn,keyguardLocked,keyguardWindowHidden,zoomed,workspaceEntering,retainedForLock;long sceneEpoch;int scene;
  static class Geometry {float mainScale=.75f,mainOffsetX=0,mainOffsetY=620;}Geometry layout;
  final UnlockGeometryReplay unlockGeometryReplay=new UnlockGeometryReplay();WorkspaceHost(){reset();}
  void reset(){root=new Object();layout=new Geometry();workspaceAnimator=mainSideAnimator=null;screenOn=zoomed=true;
