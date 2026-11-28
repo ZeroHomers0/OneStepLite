@@ -110,5 +110,5 @@ for name,body in {
  'TaskView': 'public final Object context,transitions;public final TaskViewTaskController controller;public TaskView(Object c,Object t,TaskViewTaskController own){context=c;transitions=t;controller=own;}'
 }.items():
  file=out/('com/android/wm/shell/taskview/'+name+'.java');file.parent.mkdir(parents=True,exist_ok=True);file.write_text('package com.android.wm.shell.taskview;public class '+name+'{'+body+'}',encoding='utf8');additional.append(str(file))
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-cp',str(out),'-d',str(out),str(source),*additional],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-cp',str(out),'-d',str(out),str(source),str(r/'app/src/main/java/io/github/zerohomers0/onesteplite/framework/platform/TransactionCompat.java'),*additional],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.Os3ShellRegression'],check=True)

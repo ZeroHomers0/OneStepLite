@@ -8,17 +8,23 @@ import static android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN;
 final class WorkspaceMemoryController {
     private static final long DORMANT_TRIM_MS = 5L * 60L * 1000L;
     private final WorkspacePorts.ScenePort scenes;
-    private final WorkspacePorts.SurfacePort surfaces;
+    private final WorkspacePorts.FramePort frames;
+    private final WorkspacePorts.BackdropPort backdrops;
+    private final WorkspacePorts.WallpaperPort wallpapers;
+    private final WorkspacePorts.TopPort top;
     private final WorkspacePorts.PresentationPort presentation;
     private final WorkspacePorts.TaskPort tasks;
     private final Runnable dormantTrim = this::trimSuspended;
 
-    WorkspaceMemoryController(WorkspacePorts.ScenePort scenes,
-            WorkspacePorts.SurfacePort surfaces,
-            WorkspacePorts.PresentationPort presentation,
+    WorkspaceMemoryController(WorkspacePorts.ScenePort scenes, WorkspacePorts.FramePort frames,
+            WorkspacePorts.BackdropPort backdrops, WorkspacePorts.WallpaperPort wallpapers,
+            WorkspacePorts.TopPort top, WorkspacePorts.PresentationPort presentation,
             WorkspacePorts.TaskPort tasks) {
         this.scenes=scenes;
-        this.surfaces=surfaces;
+        this.frames=frames;
+        this.backdrops=backdrops;
+        this.wallpapers=wallpapers;
+        this.top=top;
         this.presentation=presentation;
         this.tasks=tasks;
     }
@@ -29,7 +35,7 @@ final class WorkspaceMemoryController {
                 || tasks.promotion() != null || tasks.transferBusy()) return;
         if (scenes.scene() == WorkspaceHost.ACTIVE || scenes.scene() == WorkspaceHost.RESUMING) return;
         if (presentation.wallpaperBackdropRequested() && level < TRIM_MEMORY_RUNNING_CRITICAL) return;
-        if (presentation.topBar() != null) presentation.topBar().trimDormantMemory();
+        if (top.topBar() != null) top.topBar().trimDormantMemory();
         releaseDormantBackdrops();
         Warmup.onTrimMemory(TRIM_MEMORY_UI_HIDDEN);
         WorkspaceHost.log("dormant memory trimmed level=" + level);
@@ -37,11 +43,11 @@ final class WorkspaceMemoryController {
 
     void schedule() {
         cancel();
-        surfaces.main().postDelayed(dormantTrim, DORMANT_TRIM_MS);
+        frames.main().postDelayed(dormantTrim, DORMANT_TRIM_MS);
     }
 
     void cancel() {
-        surfaces.main().removeCallbacks(dormantTrim);
+        frames.main().removeCallbacks(dormantTrim);
     }
 
     private void trimSuspended() {
@@ -58,18 +64,18 @@ final class WorkspaceMemoryController {
     }
 
     void releaseDormantBackdrops() {
-        surfaces.wallpapers().cancelPending();
-        surfaces.windowPresentation().releaseWorkspaceBackdrop();
-        if (surfaces.mainBackdrop() != null && !surfaces.mainBackdrop().isRecycled())
-            surfaces.mainBackdrop().recycle();
-        surfaces.mainBackdrop(null);
-        if (surfaces.wallpaperBackdrop() != null && !surfaces.wallpaperBackdrop().isRecycled())
-            surfaces.wallpaperBackdrop().recycle();
-        surfaces.wallpaperBackdrop(null);
-        if (surfaces.wellWallpaperBackdrop() != null && !surfaces.wellWallpaperBackdrop().isRecycled())
-            surfaces.wellWallpaperBackdrop().recycle();
-        surfaces.wellWallpaperBackdrop(null);
-        surfaces.mainSideBackdrop(null);
+        wallpapers.wallpapers().cancelPending();
+        wallpapers.windowPresentation().releaseWorkspaceBackdrop();
+        if (backdrops.mainBackdrop() != null && !backdrops.mainBackdrop().isRecycled())
+            backdrops.mainBackdrop().recycle();
+        backdrops.mainBackdrop(null);
+        if (backdrops.wallpaperBackdrop() != null && !backdrops.wallpaperBackdrop().isRecycled())
+            backdrops.wallpaperBackdrop().recycle();
+        backdrops.wallpaperBackdrop(null);
+        if (backdrops.wellWallpaperBackdrop() != null && !backdrops.wellWallpaperBackdrop().isRecycled())
+            backdrops.wellWallpaperBackdrop().recycle();
+        backdrops.wellWallpaperBackdrop(null);
+        wallpapers.mainSideBackdrop(null);
         presentation.wallpaperBackdropDirty(true);
         presentation.wallpaperBackdropRequested(false);
     }

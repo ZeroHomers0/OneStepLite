@@ -215,7 +215,7 @@ final class TopTaskTransition {
         Object transaction=null;
         try {
             if(!Boolean.TRUE.equals(XposedHelpers.callMethod(surface,"isValid")))return false;
-            transaction=Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+            transaction=TransactionCompat.newSurfaceTransaction();
             XposedHelpers.callMethod(transaction,"setAlpha",surface,alpha);
             XposedHelpers.callMethod(transaction,"apply");return true;
         } catch(Throwable error) {log.accept("upper fade: "+error);return false;}

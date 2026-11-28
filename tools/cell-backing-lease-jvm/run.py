@@ -89,7 +89,7 @@ check('new Object[]{ticket.slot.cellBackground}, ticket.liveBackdrop);' not in h
 
 # The placeholder itself is intentionally still allocated under a live task.
 ensure = member('    void ensureCellBackground(', cell_text)
-check('HyperOsStyle.page(host.ctx)' in ensure,
+check('HyperOsStyle.page(layers.context())' in ensure,
       'occupied cells still own a page-colour backing so translucent apps cannot reveal wallpaper')
 
 print('actual cell backing lease/handoff source checks=%d passed' % checks)

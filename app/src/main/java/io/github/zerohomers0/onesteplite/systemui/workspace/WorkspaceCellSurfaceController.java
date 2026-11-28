@@ -8,55 +8,67 @@ final class WorkspaceCellSurfaceController {
     private static final int SLOT_MAIN = WorkspaceHost.SLOT_MAIN;
     private static final int SLOT_TOP = WorkspaceHost.SLOT_TOP;
 
-    private final WorkspaceHost host;
+    private final WorkspacePorts.SlotPort slots;
+    private final WorkspacePorts.CellLifecyclePort lifecycle;
+    private final WorkspacePorts.CellLayerPort layers;
 
-    WorkspaceCellSurfaceController(WorkspaceHost host) {
-        this.host = host;
+    WorkspaceCellSurfaceController(WorkspacePorts.SlotPort slots,
+            WorkspacePorts.CellLifecyclePort lifecycle, WorkspacePorts.CellLayerPort layers) {
+        this.slots=slots;
+        this.lifecycle=lifecycle;
+        this.layers=layers;
     }
 
     boolean ownsCellPresentation(Slot slot) {
         // Shell owns the borrowed task parents until the whole handoff finishes.
         // clearSlot/bindTask is only a logical replacement during a native swap;
         // an independent hide here would blank the just-committed real task.
-        return !slot.promoting && !slot.launching && host.cells.motion() == null
-                && !(host.promotion != null && host.promotion.nativeSwap && !host.promotion.cancelled);
+        return !slot.promoting && !slot.launching && lifecycle.cells().motion() == null
+                && !(lifecycle.promotion() != null && lifecycle.promotion().nativeSwap
+                        && !lifecycle.promotion().cancelled);
     }
 
     boolean cellPresentationVisible(Slot slot) {
-        boolean inViewport = host.sideRows.isScrolling() && slot.sideRow >= 0 ? slot.sidePrepared : presentsSlot(slot);
-        return inViewport && !(host.taskCellsCovered && slot.index != SLOT_TOP)
+        boolean inViewport = lifecycle.sideRows().isScrolling() && slot.sideRow >= 0
+                ? slot.sidePrepared : presentsSlot(slot);
+        return inViewport && !(lifecycle.taskCellsCovered() && slot.index != SLOT_TOP)
                 && slot.occupied && !slot.parked && slot.taskToken != null
-                && host.slotRegistry.controllerOwns(slot, slot.taskId, slot.taskToken)
-                && (slot.index!=SLOT_TOP || host.topFace);
+                && lifecycle.slotRegistry().controllerOwns(slot, slot.taskId, slot.taskToken)
+                && (slot.index!=SLOT_TOP || lifecycle.topFace());
     }
 
     void stageCellPresentation(Object tx, Slot slot, boolean visible) {
-        Rect crop = host.windowPresentation.workspaceCellCrop(slot);
-        boolean showing = visible && host.workspaceAlpha() > 0f && (crop == null || !crop.isEmpty());
+        Rect crop = layers.windowPresentation().workspaceCellCrop(slot);
+        boolean showing = visible && lifecycle.workspaceAlpha() > 0f
+                && (crop == null || !crop.isEmpty());
         float alpha = showing ? 1f : 0f;
-        boolean fading = showing && slot.index == SLOT_TOP && host.topTransition != null && host.topTransition.ownsTopOpacity();
+        boolean fading = showing && slot.index == SLOT_TOP
+                && layers.topTransitionOwnsTopOpacity();
         if (slot.view != null) {
             if (crop != null) slot.view.setClipBounds(crop);
             if (!fading) slot.view.setAlpha(alpha);
         }
         Object surface = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl");
         if (surface == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(surface, "isValid"))) return;
-        if (crop != null && !crop.isEmpty()) XposedHelpers.callMethod(tx, "setWindowCrop", surface, crop);
+        if (crop != null && !crop.isEmpty())
+            XposedHelpers.callMethod(tx, "setWindowCrop", surface, crop);
         if (!fading) XposedHelpers.callMethod(tx, "setAlpha", surface, alpha);
         // SurfaceView's RenderThread owns its outer parent and can rewrite that
         // parent's alpha. Also gate our settled task leash, which it cannot reset.
         if (ownsCellPresentation(slot) && slot.occupied && !slot.parked && !slot.frozen
-                && host.scales.mayWriteSideSurface(slot)
-                && host.slotRegistry.controllerOwns(slot, slot.taskId, slot.taskToken)) {
+                && lifecycle.scales().mayWriteSideSurface(slot)
+                && lifecycle.slotRegistry().controllerOwns(slot, slot.taskId, slot.taskToken)) {
             Object leash = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mTaskLeash");
             if (leash != null && leash != surface
                     && Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
                 // The leash carries the task's logical buffer. Side cells now use their
                 // compact pixel bounds while TOP keeps its logical viewport.
-                XposedHelpers.callMethod(tx, "setWindowCrop", leash, host.slotRegistry.logicalBounds(slot));
-                boolean collecting = showing && slot.index == SLOT_TOP && host.topTransition != null
-                        && host.topTransition.ownsTaskOpacity();
-                if (!fading && !collecting) XposedHelpers.callMethod(tx, "setAlpha", leash, alpha);
+                XposedHelpers.callMethod(tx, "setWindowCrop", leash,
+                        lifecycle.slotRegistry().logicalBounds(slot));
+                boolean collecting = showing && slot.index == SLOT_TOP
+                        && layers.topTransitionOwnsTaskOpacity();
+                if (!fading && !collecting)
+                    XposedHelpers.callMethod(tx, "setAlpha", leash, alpha);
             }
         }
     }
@@ -65,33 +77,42 @@ final class WorkspaceCellSurfaceController {
         if (!ownsCellPresentation(slot)) return;
         Object tx = null;
         try {
-            tx = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+            tx = TransactionCompat.newSurfaceTransaction();
             stageCellPresentation(tx, slot, cellPresentationVisible(slot));
             Object surface = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl");
             if (surface != null && Boolean.TRUE.equals(XposedHelpers.callMethod(surface, "isValid")))
-                XposedHelpers.callMethod(tx, cellPresentationVisible(slot) && host.workspaceAlpha() > 0f ? "show" : "hide", surface);
-            XposedHelpers.callMethod(tx, "apply");
-        } catch (Throwable error) { WorkspaceHost.log("cell container visibility: " + error); }
-        finally { host.sideRows.closeSurfaceObject(tx, "close"); }
+                XposedHelpers.callMethod(tx, cellPresentationVisible(slot)
+                        && lifecycle.workspaceAlpha() > 0f ? "show" : "hide", surface);
+            TransactionCompat.apply(tx);
+        } catch (Throwable error) {
+            ModuleLog.info("cell-surface", "cell container visibility: " + error);
+        } finally {
+            lifecycle.sideRows().closeSurfaceObject(tx, "close");
+        }
     }
 
     void prepareCellSurface(Slot slot) {
         Object tx = null;
         try {
-            tx = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+            tx = TransactionCompat.newSurfaceTransaction();
             stageCellPresentation(tx, slot, true);
-            XposedHelpers.callMethod(tx, "apply");
-        } catch (Throwable error) { WorkspaceHost.log("cell destination preparation: " + error); }
-        finally { host.sideRows.closeSurfaceObject(tx, "close"); }
+            TransactionCompat.apply(tx);
+        } catch (Throwable error) {
+            ModuleLog.info("cell-surface", "cell destination preparation: " + error);
+        } finally {
+            lifecycle.sideRows().closeSurfaceObject(tx, "close");
+        }
     }
 
     void ensureCellBackground(Slot slot) {
-        if (slot.index == SLOT_TOP || !slot.occupied || slot.parked || (host.sideRows.isScrolling() && slot.sideRow >= 0)) {
+        if (slot.index == SLOT_TOP || !slot.occupied || slot.parked
+                || (lifecycle.sideRows().isScrolling() && slot.sideRow >= 0)) {
             removeCellBackground(slot);
             return;
         }
-        if (host.wallpaperBackdrop != null) host.wallpapers.applyWallpaperBackdrops();
-        if (host.root == null || slot.index <= SLOT_MAIN || slot.controller == null || slot.rect == null) {
+        if (layers.wallpaperBackdropPresent()) layers.wallpapers().applyWallpaperBackdrops();
+        if (!layers.rootReady() || slot.index <= SLOT_MAIN || slot.controller == null
+                || slot.rect == null) {
             return;
         }
         Object parent = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mSurfaceControl");
@@ -114,9 +135,8 @@ final class WorkspaceCellSurfaceController {
             XposedHelpers.callMethod(builder, "setColorLayer");
             XposedHelpers.callMethod(builder, "setParent", parent);
             background = XposedHelpers.callMethod(builder, "build");
-            transaction = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
-            int page = HyperOsStyle.page(host.ctx);
+            transaction = TransactionCompat.newSurfaceTransaction();
+            int page = HyperOsStyle.page(layers.context());
             XposedHelpers.callMethod(transaction, "setColor", background,
                     new float[]{android.graphics.Color.red(page) / 255f,
                             android.graphics.Color.green(page) / 255f,
@@ -125,21 +145,21 @@ final class WorkspaceCellSurfaceController {
                     new Rect(0, 0, width, height));
             XposedHelpers.callMethod(transaction, "setLayer", background, -1);
             XposedHelpers.callMethod(transaction, "show", background);
-            XposedHelpers.callMethod(transaction, "apply");
+            TransactionCompat.apply(transaction);
             slot.cellBackground = background;
             background = null; // The slot owns only the newly created backing, never the parent.
-            WorkspaceHost.log("cell backing ready slot=" + slot.index);
+            ModuleLog.info("cell-surface", "cell backing ready slot=" + slot.index);
         } catch (Throwable failure) {
-            WorkspaceHost.log("cell backing failed slot=" + slot.index + ": " + failure);
+            ModuleLog.info("cell-surface", "cell backing failed slot=" + slot.index + ": " + failure);
         } finally {
-            host.sideRows.closeSurfaceObject(transaction, "close");
+            lifecycle.sideRows().closeSurfaceObject(transaction, "close");
             if (background != null) destroyCellSurface(background);
         }
     }
 
     boolean presentsSlot(Slot slot) {
         if (slot.index == SLOT_TOP) return true;
-        return slot.sideRow >= 0 ? slot.sideShown : slot.index < host.CELL_SLOT_COUNT;
+        return slot.sideRow >= 0 ? slot.sideShown : slot.index < slots.cellSlotCount();
     }
 
     void removeCellBackground(Slot slot) {
@@ -153,15 +173,14 @@ final class WorkspaceCellSurfaceController {
     private void destroyCellSurface(Object background) {
         Object transaction = null;
         try {
-            transaction = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
+            transaction = TransactionCompat.newSurfaceTransaction();
             XposedHelpers.callMethod(transaction, "remove", background);
-            XposedHelpers.callMethod(transaction, "apply");
+            TransactionCompat.apply(transaction);
         } catch (Throwable failure) {
-            WorkspaceHost.log("cell backing cleanup failed: " + failure);
+            ModuleLog.info("cell-surface", "cell backing cleanup failed: " + failure);
         } finally {
-            host.sideRows.closeSurfaceObject(transaction, "close");
-            host.sideRows.closeSurfaceObject(background, "release");
+            lifecycle.sideRows().closeSurfaceObject(transaction, "close");
+            lifecycle.sideRows().closeSurfaceObject(background, "release");
         }
     }
 }

@@ -307,8 +307,7 @@ final class WorkspaceLiveGeometry {
 
     void commitPromotedHandoff(Promotion ticket,Object organizer,Object transitions,Object controller,
             Object fallback,Object info,HandoffOwner owner,Object area,Object canonical) throws Exception {
-            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
+            Object tx = TransactionCompat.newSurfaceTransaction();
             boolean unregistered = false;
             try {
                 TopTaskTransition bridge=host.topTransition;

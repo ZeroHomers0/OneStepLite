@@ -132,8 +132,7 @@ final class MirrorExperiment {
         Object mirror = XposedHelpers.callStaticMethod(scClass, "mirrorSurface", leash);
         float sx = dest.width() / (float) host.width();
         float sy = dest.height() / (float) host.height();
-        Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                .getDeclaredConstructor().newInstance();
+        Object tx = TransactionCompat.newSurfaceTransaction();
         try {
             hideMirrorSource(tx, leash, hideMode);
             XposedHelpers.callMethod(tx, "reparent", mirror, parent);
@@ -220,8 +219,7 @@ final class MirrorExperiment {
         }
         if (mirror == null) return;
         try {
-            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
+            Object tx = TransactionCompat.newSurfaceTransaction();
             try {
                 if (hideMode != 0 && leash != null
                         && Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {

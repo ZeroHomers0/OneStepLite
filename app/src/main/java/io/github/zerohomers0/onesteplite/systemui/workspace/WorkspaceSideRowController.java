@@ -381,7 +381,7 @@ final class WorkspaceSideRowController {
                 viewportCrop.setEmpty();
             }
             Rect crop = new Rect(workspace.layout.cellX, workspace.layout.topStrip, workspace.layout.cellX + workspace.layout.cellWidth, workspace.screenH);
-            tx = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+            tx = TransactionCompat.newSurfaceTransaction();
             stageSideViewport(tx, host, crop);
             XposedHelpers.callMethod(tx, "apply");
             viewportCrop.set(crop);
@@ -399,7 +399,7 @@ final class WorkspaceSideRowController {
         Object tx = null;
         try {
             if (!Boolean.TRUE.equals(XposedHelpers.callMethod(surface, "isValid"))) return;
-            tx = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+            tx = TransactionCompat.newSurfaceTransaction();
             XposedHelpers.callMethod(tx, "reparent", surface, targetViewport);
             XposedHelpers.callMethod(tx, "apply");
             slot.sideViewportSurface = surface;
@@ -626,8 +626,7 @@ final class WorkspaceSideRowController {
                     final Object token = slot.taskToken;
                     if (token == null || !workspace.slotRegistry.controllerOwns(slot, id, token)
                             || workspace.taskStates.windowModeOf(workspace.taskStates.currentOrganizedTaskInfo(slot, id, token)) != 6) continue;
-                    if (wct == null) wct = Class.forName("android.window.WindowContainerTransaction")
-                            .getDeclaredConstructor().newInstance();
+                    if (wct == null) wct = TransactionCompat.newWindowTransaction();
                     boolean focusable = slot.sideShown;
                     XposedHelpers.callMethod(wct, "setFocusable", token, focusable);
                     if (!focusable) clipped++;

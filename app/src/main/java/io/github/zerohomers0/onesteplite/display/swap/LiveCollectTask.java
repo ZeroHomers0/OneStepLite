@@ -137,7 +137,7 @@ final class LiveCollectTask {
     private void set(Object wct, String name, Object value) { ShellCompat.transaction(organizer, wct, name, token, value); }
     Object windowTransaction(boolean reverse, boolean pending) throws Exception {
         if (reverse && pending) { waitingCancel = true; originalInfoSeen = false; }
-        Object wct = Class.forName("android.window.WindowContainerTransaction").getDeclaredConstructor().newInstance();
+        Object wct = TransactionCompat.newWindowTransaction();
         set(wct, "setWindowingMode", reverse ? 0 : 6);
         set(wct, "setBounds", reverse ? new Rect() : new Rect(logical));
         set(wct, "setDensityDpi", reverse ? 0 : sideDensity);
@@ -186,8 +186,7 @@ final class LiveCollectTask {
                 ShellCompat.call(organizer, "updateTaskListenerIfNeeded", task, canonical(), lease, controller);
             }
             if (owner(task) != controller) throw new IllegalStateException("collect native claim rejected");
-            if (finishWct == null) finishWct = Class.forName("android.window.WindowContainerTransaction")
-                    .getDeclaredConstructor().newInstance();
+            if (finishWct == null) finishWct = TransactionCompat.newWindowTransaction();
             if (!Boolean.TRUE.equals(ShellCompat.call(taskViews, "prepareOpenAnimation", controller,
                     true, start, finish, task, canonical(), finishWct)))
                 throw new IllegalStateException("collect TaskView prepare failed after possible binding");

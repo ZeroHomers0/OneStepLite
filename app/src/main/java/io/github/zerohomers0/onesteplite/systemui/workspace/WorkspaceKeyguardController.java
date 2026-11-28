@@ -106,7 +106,7 @@ final class WorkspaceKeyguardController {
                     ||!EntryGuard.canOpen(host.ctx)){owner[0].finish();return;}
             Object tx=null;
             try{
-                tx=Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+                tx=TransactionCompat.newSurfaceTransaction();
                 XposedHelpers.callMethod(tx,"merge",ack.finishReplay);
                 ((android.view.SurfaceControl.Transaction)tx).addTransactionCommittedListener(action->host.main.post(action),()->{
                     if(host.unlockHandoff==owner[0]&&WorkspaceHost.isCurrentInstance(host)&&host.sceneEpoch==epoch
@@ -249,7 +249,7 @@ final class WorkspaceKeyguardController {
                 || host.root == null || (host.scene != WorkspaceHost.ACTIVE && host.scene != WorkspaceHost.RESUMING)) return;
         Object tx = null;
         try {
-            tx = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+            tx = TransactionCompat.newSurfaceTransaction();
             host.retainedSurfaces.appendWorkspaceSurfaces(tx, java.util.Collections.singletonList(host.sceneEpoch));
             XposedHelpers.callMethod(tx, "apply");
         } catch (Throwable error) { WorkspaceHost.log("retained unlock surface restore failed: " + error); }

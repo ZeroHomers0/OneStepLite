@@ -230,8 +230,7 @@ final class WorkspaceTopAdmissionController {
                 if(!covered.task.matches(fresh) || !host.slotRegistry.ordinaryRoot(fresh,1)
                         || XposedHelpers.getIntField(fresh,"userId")!=covered.key.userId
                         || host.slotRegistry.isSideToken(covered.task.token))return;
-                Object wct=Class.forName("android.window.WindowContainerTransaction")
-                        .getDeclaredConstructor().newInstance();
+                Object wct=TransactionCompat.newWindowTransaction();
                 XposedHelpers.callMethod(wct,"setHidden",covered.task.token,false);
                 XposedHelpers.callMethod(wct,"reorder",covered.task.token,true);
                 if(WorkspaceNativeHooks.applyWct("tablet-top-covered-main",wct))

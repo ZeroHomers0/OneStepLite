@@ -83,7 +83,7 @@ final class NotificationLaunch {
         return false;
     }
 
-    private static void log(String message) { XposedBridge.log("OneStepLiteProbe: " + message); }
+    private static void log(String message) { ModuleLog.info("notification-launch", message); }
 
     private static String targetPackage(Context context, PendingIntent pending, int user) {
         Intent target = (Intent) XposedHelpers.callMethod(pending, "getIntent");

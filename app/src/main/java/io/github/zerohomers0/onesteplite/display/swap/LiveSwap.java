@@ -102,7 +102,7 @@ final class LiveSwap {
             log.accept("live swap refused/failed before submission: " + error);
             if (pair != null) {
                 try {
-                    if (cleanup == null) cleanup = XposedHelpers.newInstance(Class.forName("android.view.SurfaceControl$Transaction"));
+                    if (cleanup == null) cleanup = TransactionCompat.newSurfaceTransaction();
                     pair.recover(cleanup, sideScale); XposedHelpers.callMethod(cleanup, "apply");
                 } catch (Throwable recoveryError) { log.accept("live pair refusal cleanup: " + recoveryError); }
             }

@@ -9,33 +9,33 @@ final class WorkspaceScaleController {
     private static final int SLOT_TOP = WorkspaceHost.SLOT_TOP;
 
     private final WorkspacePorts.SlotPort slots;
-    private final WorkspacePorts.SurfacePort surfaces;
-    private final WorkspacePorts.PresentationPort presentation;
+    private final WorkspacePorts.FramePort frames;
+    private final WorkspacePorts.TopPort top;
     private boolean frameRateHintUnavailableLogged;
 
-    WorkspaceScaleController(WorkspacePorts.SlotPort slots, WorkspacePorts.SurfacePort surfaces,
-            WorkspacePorts.PresentationPort presentation) {
-        this.slots=slots;this.surfaces=surfaces;this.presentation=presentation;
+    WorkspaceScaleController(WorkspacePorts.SlotPort slots, WorkspacePorts.FramePort frames,
+            WorkspacePorts.TopPort top) {
+        this.slots=slots;this.frames=frames;this.top=top;
     }
 
     float mainScale() {
-        return surfaces.layout().mainScale;
+        return frames.layout().mainScale;
     }
 
     float cellScale() {
-        return surfaces.layout().cellScale(0);
+        return frames.layout().cellScale(0);
     }
 
     float scaleFor(Slot slot) {
         if (slot.index != SLOT_TOP && slot.sideRow >= 0 && slot.rect != null) return 1f;
         if (slot.sideRow >= 0 && slot.rect != null)
-            return Math.min((slot.rect[2] - slot.rect[0]) / (float) surfaces.screenWidth(),
-                    (slot.rect[3] - slot.rect[1]) / (float) surfaces.screenHeight());
-        return slot.index == SLOT_TOP ? surfaces.windowLayout().topGeometry().scale : surfaces.layout().cellScale(slot.index - 1);
+            return Math.min((slot.rect[2] - slot.rect[0]) / (float) frames.screenWidth(),
+                    (slot.rect[3] - slot.rect[1]) / (float) frames.screenHeight());
+        return slot.index == SLOT_TOP ? frames.windowLayout().topGeometry().scale : frames.layout().cellScale(slot.index - 1);
     }
 
     void applySlotScale(Slot slot) {
-        if (surfaces.liveGeometry().holdsLiveFlipZoom() || !slots.slotRegistry().canRender(slot) || slot.promoting || !slot.occupied || slot.view == null
+        if (frames.liveGeometry().holdsLiveFlipZoom() || !slots.slotRegistry().canRender(slot) || slot.promoting || !slot.occupied || slot.view == null
                 || !mayWriteSideSurface(slot)) {
             return;
         }
@@ -52,7 +52,7 @@ final class WorkspaceScaleController {
             if (slot.scaleAttempts >= 8) return;
             slot.scaleAttempts++;
             WorkspaceHost.log("applySlotScale slot=" + slot.index + " leash not ready, retry #" + slot.scaleAttempts);
-            surfaces.main().postDelayed(() -> applySlotScale(slot), 200L);
+            frames.main().postDelayed(() -> applySlotScale(slot), 200L);
             return;
         }
         slot.scaleAttempts = 0;
@@ -70,17 +70,17 @@ final class WorkspaceScaleController {
         // TaskView may rewrite bounds while the surface changes. The opening/bounds
         // guards reapply this slot's compact bounds and density.
         // 转场/可见性变化可能覆盖矩阵：在几个延迟点重发。
-        surfaces.main().postDelayed(() -> reapplyScale(slot), 300L);
-        surfaces.main().postDelayed(() -> reapplyScale(slot), 1200L);
+        frames.main().postDelayed(() -> reapplyScale(slot), 300L);
+        frames.main().postDelayed(() -> reapplyScale(slot), 1200L);
     }
 
     void reapplyScale(Slot slot) {
-        if (surfaces.liveGeometry().holdsLiveFlipZoom() || !slots.slotRegistry().canRender(slot) || slot.promoting || !slot.occupied || !mayWriteSideSurface(slot)) {
+        if (frames.liveGeometry().holdsLiveFlipZoom() || !slots.slotRegistry().canRender(slot) || slot.promoting || !slot.occupied || !mayWriteSideSurface(slot)) {
             return;
         }
-        // The cross-fade owns the surfaces.main() surface alpha until it hands off; a delayed
+        // The cross-fade owns the frames.main() surface alpha until it hands off; a delayed
         // reapply would snap the window back to its resting frame mid-animation.
-        if (presentation.topTransition() != null && slot.index == SLOT_MAIN) return;
+        if (top.topTransition() != null && slot.index == SLOT_MAIN) return;
         if (!slots.slotRegistry().controllerOwns(slot, slot.taskId, slot.taskToken)) return;
         Object current = WorkspaceNativeHooks.getSurfaceField(slot.controller, "mTaskLeash");
         if (current == null || current != slot.scaleSurface) {
@@ -97,19 +97,18 @@ final class WorkspaceScaleController {
     }
 
     void applyFullscreenBounds(Slot slot) {
-        if (surfaces.liveGeometry().holdsLiveFlipZoom() || !slots.slotRegistry().canRender(slot) || slot.promoting || slot.taskToken == null
+        if (frames.liveGeometry().holdsLiveFlipZoom() || !slots.slotRegistry().canRender(slot) || slot.promoting || slot.taskToken == null
                 || !mayWriteSideSurface(slot)) {
             return;
         }
         if (!slots.slotRegistry().controllerOwns(slot, slot.taskId, slot.taskToken)
                 || WorkspaceNativeHooks.getSurfaceField(slot.controller, "mTaskLeash") == null) return;
         try {
-            Object wct = Class.forName("android.window.WindowContainerTransaction")
-                    .getDeclaredConstructor().newInstance();
+            Object wct = TransactionCompat.newWindowTransaction();
             XposedHelpers.callMethod(wct, "setForceTranslucent", slot.taskToken, true);
             XposedHelpers.callMethod(wct, "setBounds", slot.taskToken,
                     slots.slotRegistry().logicalBounds(slot));
-            WorkspaceNativeHooks.applyTopConfiguration(slots,surfaces,presentation,wct,slot.taskToken,slot);
+            WorkspaceNativeHooks.applyTopConfiguration(slots,frames,top,wct,slot.taskToken,slot);
             boolean ok = WorkspaceNativeHooks.applyWct("fullscreenBounds(slot=" + slot.index + ")", wct);
             WorkspaceHost.log("fullscreenBounds slot=" + slot.index + " task=" + slot.taskId + " ok=" + ok);
         } catch (Throwable t) {
@@ -118,7 +117,7 @@ final class WorkspaceScaleController {
     }
 
     void appendSlotViewport(Object tx, Slot slot) {
-        if (surfaces.liveGeometry().holdsLiveFlipZoom() || slot == null || slot.index <= SLOT_MAIN
+        if (frames.liveGeometry().holdsLiveFlipZoom() || slot == null || slot.index <= SLOT_MAIN
                 || slot.view == null || !slots.slotRegistry().canRender(slot) || slot.promoting || slot.launching
                 || slot.frozen || !mayWriteSideSurface(slot)
                 || !slots.slotRegistry().controllerOwns(slot, slot.taskId, slot.taskToken)) return;
@@ -135,17 +134,16 @@ final class WorkspaceScaleController {
     }
 
     private boolean applyScaleTransform(Slot slot, Object sc) {
-        if (surfaces.liveGeometry().holdsLiveFlipZoom() || !slots.slotRegistry().canRender(slot) || slot.promoting || !mayWriteSideSurface(slot)) return false;
+        if (frames.liveGeometry().holdsLiveFlipZoom() || !slots.slotRegistry().canRender(slot) || slot.promoting || !mayWriteSideSurface(slot)) return false;
         float k = scaleFor(slot);
         Object tx = null;
         try {
-            tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
+            tx = TransactionCompat.newSurfaceTransaction();
             if (slot.scaleOnLeash) {
                 // A letterboxed portrait app sits centred in the strip instead of at its left edge.
                 float offsetX = 0f;
-                if (slot.index == SLOT_TOP && presentation.topPortrait()) {
-                    TopTaskGeometry upper = surfaces.windowLayout().topGeometry();
+                if (slot.index == SLOT_TOP && top.topPortrait()) {
+                    TopTaskGeometry upper = frames.windowLayout().topGeometry();
                     Rect box = slots.slotRegistry().logicalBounds(slot);
                     offsetX = Math.max(0f, (upper.right - box.width() * k) * .5f);
                 }
@@ -205,8 +203,7 @@ final class WorkspaceScaleController {
         if (leash == null && parent == null) return;
         Object tx = null;
         try {
-            tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
+            tx = TransactionCompat.newSurfaceTransaction();
             boolean clear = ShellCompat.hasMethod(tx.getClass(), "clearFrameRate", 1);
             for (Object surface : new Object[] {leash, parent}) {
                 if (surface == null) continue;
@@ -225,7 +222,7 @@ final class WorkspaceScaleController {
     }
 
     boolean mayWriteSideSurface(Slot slot) {
-        if(slot!=null && slot.index==SLOT_TOP && !presentation.topFace())return false;
+        if(slot!=null && slot.index==SLOT_TOP && !top.topFace())return false;
         if (slot == null || slot.windowMode != 6 || slot.controller == null) return false;
         PendingSidePromotion pending = slot.pendingSidePromotion;
         if (pending != null && pending.desktopLaunch) return false;

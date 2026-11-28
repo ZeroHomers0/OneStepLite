@@ -15,8 +15,24 @@ def method(signature,text=host):
     return text[a:b]
 
 def cell_method(signature):
-    text=method(signature,cell).replace('host.','').replace('slotRegistry.','').replace('sideRows.isScrolling()','sideScrolling').replace('sideRows.','').replace('windowPresentation.','').replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log')
-    return (text.replace('workspaceAlpha()','workspaceAlpha').replace('sideRows.isScrolling()','sideScrolling').replace('scales.',''))
+    text=method(signature,cell)
+    text=text.replace('lifecycle.cells().motion()','cells.motion()')
+    text=text.replace('lifecycle.promotion()','promotion')
+    text=text.replace('lifecycle.scales().mayWriteSideSurface','mayWriteSideSurface')
+    text=text.replace('lifecycle.slotRegistry().controllerOwns','controllerOwns')
+    text=text.replace('lifecycle.slotRegistry().logicalBounds','logicalBounds')
+    text=text.replace('lifecycle.sideRows().isScrolling()','sideScrolling')
+    text=text.replace('lifecycle.sideRows().closeSurfaceObject','closeSurfaceObject')
+    text=text.replace('lifecycle.taskCellsCovered()','taskCellsCovered')
+    text=text.replace('lifecycle.topFace()','topFace')
+    text=text.replace('lifecycle.workspaceAlpha()','workspaceAlpha')
+    text=text.replace('layers.windowPresentation().workspaceCellCrop','workspaceCellCrop')
+    text=text.replace('layers.topTransitionOwnsTopOpacity()','topTransition != null && topTransition.ownsTopOpacity()')
+    text=text.replace('layers.topTransitionOwnsTaskOpacity()','topTransition != null && topTransition.ownsTaskOpacity()')
+    text=text.replace('slots.cellSlotCount()','CELL_SLOT_COUNT')
+    text=text.replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField')
+    text=text.replace('ModuleLog.info("cell-surface", ','log(')
+    return text
 body=r'''
 package io.github.zerohomers0.onesteplite;
 import android.view.SurfaceControl;import android.graphics.Rect;
@@ -131,6 +147,6 @@ assert 'view.setOnClickListener(v -> { if (!taskCellsCovered)' in created
 actions = (package_dir(root)/'WorkspaceMainTaskActions.java').read_text(encoding='utf-8')
 assert 'taskCellsCovered' not in method('    void onSlotTapped(', actions)
 jdk=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','-d',str(out),*[str(out/p) for p in files]],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','-d',str(out),*[str(out/p) for p in files],str(package_dir(root)/'framework/platform/TransactionCompat.java')],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.CellVisibilityRegression'],check=True)
 print('Actual entry/retirement ordering checks=4 passed')

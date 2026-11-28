@@ -68,7 +68,7 @@ final class WorkspaceTaskTransferController {
                             || fallback == null || XposedHelpers.callMethod(organizer, "getTaskListener", info, false) != fallback
                             || canonical == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(canonical, "isValid")))
                         throw new IllegalStateException("canonical identity/fullscreen ownership gate rejected");
-                    Object wct = Class.forName("android.window.WindowContainerTransaction").getDeclaredConstructor().newInstance();
+                    Object wct = TransactionCompat.newWindowTransaction();
                     XposedHelpers.callMethod(wct, "setWindowingMode", task.token, 6);
                     XposedHelpers.callMethod(wct, "setBounds", task.token, host.slotRegistry.logicalBounds(slot));
                     WorkspaceNativeHooks.applyTopConfiguration(host, wct, task.token, slot);
@@ -263,8 +263,7 @@ final class WorkspaceTaskTransferController {
                             Object current = XposedHelpers.getObjectField(slot.controller, "mTaskToken");
                             if (!host.slotRegistry.ordinaryRoot(core, 1) || (current != null && !ticket.token.equals(current)))
                                 throw new IllegalStateException("native return no longer owns this binding");
-                            Object cleanup = Class.forName("android.window.WindowContainerTransaction")
-                                    .getDeclaredConstructor().newInstance();
+                            Object cleanup = TransactionCompat.newWindowTransaction();
                             appendTaskViewExitOverrides(cleanup, ticket);
                             if (host.scene == WorkspaceHost.SUSPENDED && host.retainedOnExit && ticket.token.equals(current)
                                     && !XposedHelpers.getBooleanField(core, "isVisible")) {
@@ -362,8 +361,7 @@ final class WorkspaceTaskTransferController {
     }
 
     Object fullscreenExitTransaction(Promotion ticket) throws Exception {
-        Object wct = Class.forName("android.window.WindowContainerTransaction")
-                .getDeclaredConstructor().newInstance();
+        Object wct = TransactionCompat.newWindowTransaction();
         Object token = ticket.token;
         XposedHelpers.callMethod(wct, "setWindowingMode", token, 0);
         XposedHelpers.callMethod(wct, "setBounds", token, new Rect());
@@ -425,8 +423,7 @@ final class WorkspaceTaskTransferController {
                 Object info=host.slotRegistry.rootInfo(new LiveTask(ticket.taskId,ticket.token,ticket.slot.pkg));
                 if (!host.slotRegistry.ordinaryRoot(info, 1)
                         || (retainedReturn && host.slotRegistry.isSideToken(ticket.token) && !returnTicketCurrent(ticket))) return;
-                Object wct=Class.forName("android.window.WindowContainerTransaction")
-                        .getDeclaredConstructor().newInstance();
+                Object wct=TransactionCompat.newWindowTransaction();
                 XposedHelpers.callMethod(wct,"setForceTranslucent",ticket.token,false);
                 if (WorkspaceNativeHooks.applyWct(operation, wct)) ticket.restoreMainOpacityAfterHandoff = false;
                 else WorkspaceHost.log(operation + " not committed task=" + ticket.taskId);

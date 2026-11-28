@@ -410,8 +410,7 @@ final class WorkspaceTaskStateController {
         slot.modeRepairAttempts++;
         slot.modeGuardUntil = now + 850L;
         try {
-            Object wct = Class.forName("android.window.WindowContainerTransaction")
-                    .getDeclaredConstructor().newInstance();
+            Object wct = TransactionCompat.newWindowTransaction();
             XposedHelpers.callMethod(wct, "setWindowingMode", slot.taskToken, 6);
             XposedHelpers.callMethod(wct, "setBounds", slot.taskToken, host.slotRegistry.logicalBounds(slot));
             WorkspaceNativeHooks.applyTopConfiguration(host, wct, slot.taskToken, slot);

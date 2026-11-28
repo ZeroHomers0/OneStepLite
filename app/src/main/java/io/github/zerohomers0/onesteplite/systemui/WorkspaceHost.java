@@ -13,7 +13,6 @@ import android.view.Display;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
-import android.util.Log;
 import android.widget.FrameLayout;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -22,7 +21,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /** Composes one workspace instance and wires its scene, task, window, and presentation collaborators. */
@@ -44,7 +42,7 @@ public final class WorkspaceHost {
     static WorkspaceHost currentInstance() { return sInstance; }
 
     static boolean isCurrentInstance(WorkspaceHost host) { return sInstance == host; }
-    final WorkspaceDebugController debug = new WorkspaceDebugController(this);
+    final WorkspaceDebugController debug = new WorkspaceDebugController(WorkspacePorts.debug(this));
 
     final Context ctx;
     final Executor executor;
@@ -53,20 +51,21 @@ public final class WorkspaceHost {
     final Handler main = new Handler(Looper.getMainLooper());
 
     volatile Slot[] slots = new Slot[SLOT_COUNT];
+    final WorkspacePorts.Runtime ports = WorkspacePorts.of(this);
     final WorkspaceSideRowController sideRows = new WorkspaceSideRowController(this);
-    final WorkspaceCellSurfaceController cellSurfaces = new WorkspaceCellSurfaceController(this);
+    final WorkspaceCellSurfaceController cellSurfaces = new WorkspaceCellSurfaceController(
+            ports.slots(),WorkspacePorts.cellLifecycle(this),WorkspacePorts.cellLayers(this));
     final WorkspaceChromeController chrome = new WorkspaceChromeController(this);
     final WorkspaceExitController exits = new WorkspaceExitController(this);
     final WorkspaceResumeController resumes = new WorkspaceResumeController(this);
     final WorkspaceLaunchController launches = new WorkspaceLaunchController(this);
     final WorkspaceTaskStateController taskStates = new WorkspaceTaskStateController(this);
     final WorkspaceSideCloseController sideCloses = new WorkspaceSideCloseController(this);
-    final WorkspacePorts.Runtime ports = WorkspacePorts.of(this);
-    final WorkspaceScaleController scales = new WorkspaceScaleController(ports.slots(),ports.surfaces(),ports.presentation());
+    final WorkspaceScaleController scales = new WorkspaceScaleController(ports.slots(),ports.frames(),ports.top());
     final WorkspaceCellMotionController cells = new WorkspaceCellMotionController(this);
     final WorkspaceSlotRegistry slotRegistry = new WorkspaceSlotRegistry(this, WorkspaceHost::log);
     final WorkspaceMemoryController memory = new WorkspaceMemoryController(
-            ports.scenes(),ports.surfaces(),ports.presentation(),ports.tasks());
+            ports.scenes(),ports.frames(),ports.backdrops(),ports.wallpapers(),ports.top(),ports.presentation(),ports.tasks());
     final WorkspaceMainSideController mainSide = new WorkspaceMainSideController(this);
 
     volatile WorkspaceLayout layout;
@@ -160,7 +159,7 @@ public final class WorkspaceHost {
     final WorkspaceMainTaskActions mainTaskActions = new WorkspaceMainTaskActions(this);
     final WorkspaceTransitionWindow transitionWindow = new WorkspaceTransitionWindow(this);
     final WorkspaceLiveGeometry liveGeometry = new WorkspaceLiveGeometry(this);
-    final WorkspaceContentDragController contentDrag = new WorkspaceContentDragController(ports.scenes(),ports.slots(),ports.surfaces(),ports.presentation(),ports.tasks());
+    final WorkspaceContentDragController contentDrag = new WorkspaceContentDragController(ports.scenes(),ports.slots(),ports.frames(),ports.presentation(),ports.top(),ports.tasks());
     final WorkspaceSlotLifecycle slotLifecycle = new WorkspaceSlotLifecycle(this);
     final WorkspaceZoomSession zoomSession;
     final WorkspaceSideInteraction sideInteraction = new WorkspaceSideInteraction(this);
@@ -408,7 +407,7 @@ public final class WorkspaceHost {
                 main.postDelayed(wallpapers::loadWallpaperBackdrop, 250L);
             } catch (Throwable t) {
                 log("startInternal FAILED: " + t);
-                XposedBridge.log(t);
+                ModuleLog.error("workspace", "startInternal failed", t);
             }
         });
     }
@@ -546,15 +545,7 @@ public final class WorkspaceHost {
         return false;
     }
 
-    static void log(String msg) {
-        if (!RoutineLog.allow(msg)) return;
-        Log.i(TAG, msg);
-        try {
-            XposedBridge.log(TAG + ": " + msg);
-        } catch (Throwable ignored) {
-            // 至少保留 logcat
-        }
-    }
+    static void log(String msg) { ModuleLog.info("workspace", msg); }
 
     Object prepareLiveFlip(Promotion ticket, WorkspaceLayout geometry, WorkspaceLayout target,
             int width, int height, java.util.List<LiveTaskSwapDriver.Peer> peers,

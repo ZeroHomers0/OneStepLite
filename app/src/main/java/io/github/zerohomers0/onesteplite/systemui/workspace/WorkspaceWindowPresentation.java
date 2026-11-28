@@ -139,7 +139,7 @@ final class WorkspaceWindowPresentation {
                 if (slot.hint != null && slot.hint.getBackground()!=null)
                     slot.hint.getBackground().setAlpha(255);
                 if (!host.cellSurfaces.ownsCellPresentation(slot)) continue;
-                if (tx == null) tx = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+                if (tx == null) tx = TransactionCompat.newSurfaceTransaction();
                 host.cellSurfaces.stageCellPresentation(tx, slot, host.cellSurfaces.cellPresentationVisible(slot));
             }
             if (tx != null) XposedHelpers.callMethod(tx, "apply");

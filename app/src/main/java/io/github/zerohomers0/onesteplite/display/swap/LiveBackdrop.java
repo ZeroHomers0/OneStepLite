@@ -88,7 +88,7 @@ final class LiveBackdrop implements AutoCloseable {
     }
 
     private static Object transaction() throws Exception {
-        return Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+        return TransactionCompat.newSurfaceTransaction();
     }
 
     private static Rect bufferCrop(Rect side, Bitmap bitmap, int width, int height) {

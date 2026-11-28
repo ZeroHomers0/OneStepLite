@@ -18,7 +18,6 @@ app/src/main/java/io/github/zerohomers0/onesteplite/display/swap/SwapOverlaySele
 app/src/main/java/io/github/zerohomers0/onesteplite/display/swap/SwapTrace.java
 app/src/main/java/io/github/zerohomers0/onesteplite/launcher/recents/Recents.java
 app/src/main/java/io/github/zerohomers0/onesteplite/launcher/recents/RecentsInput.java
-app/src/main/java/io/github/zerohomers0/onesteplite/logging/InputTrace.java
 app/src/main/java/io/github/zerohomers0/onesteplite/multiapp/CurrentUser.java
 app/src/main/java/io/github/zerohomers0/onesteplite/policy/SideRoleChange.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemserver/LauncherRuntime.java
@@ -33,17 +32,16 @@ app/src/main/java/io/github/zerohomers0/onesteplite/systemui/ime/ImeProcessConfi
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/ime/MiTypeHooks.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/input/IslandMonitorInput.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/input/PanelInput.java
-app/src/main/java/io/github/zerohomers0/onesteplite/systemui/input/PassiveInputChannel.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/lock/BiometricWindow.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/lock/KeyguardTransition.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/lock/RetainedWorkspaceHooks.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/statusbar/StatusBar.java
+app/src/main/java/io/github/zerohomers0/onesteplite/systemui/statusbar/StatusBarSampling.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/top/NotificationLaunch.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/top/TopNativeCaption.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/top/TopTaskTransition.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/video/VideoPane.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/wallpaper/RecentsWallpaper.java
-app/src/main/java/io/github/zerohomers0/onesteplite/systemui/wallpaper/WallpaperSnapshot.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/wallpaper/WorkspaceBackdrop.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/workspace/DesktopSideTaskPublisher.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/workspace/MirrorExperiment.java

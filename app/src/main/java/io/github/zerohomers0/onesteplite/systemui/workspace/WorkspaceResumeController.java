@@ -148,8 +148,7 @@ final class WorkspaceResumeController {
                         // Shell's TO_FRONT on SurfaceView recreation can leave the roots below
                         // the current fullscreen task. Re-show the same bound roots after Shell is idle.
                         if (restore) {
-                            Object wct = Class.forName("android.window.WindowContainerTransaction")
-                                    .getDeclaredConstructor().newInstance();
+                            Object wct = TransactionCompat.newWindowTransaction();
                             for (Object token : hiddenRows) {
                                 XposedHelpers.callMethod(wct, "setHidden", token, false);
                                 XposedHelpers.callMethod(wct, "setAlwaysOnTop", token, true);
@@ -202,7 +201,7 @@ final class WorkspaceResumeController {
         Object tx = null;
         try {
             host.windowPresentation.setWorkspaceAlpha(0f);
-            tx = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+            tx = TransactionCompat.newSurfaceTransaction();
             host.retainedSurfaces.appendWorkspaceSurfaces(tx, java.util.Collections.singletonList(epoch));
             ((android.view.SurfaceControl.Transaction) tx).addTransactionCommittedListener(
                     action -> host.main.post(action), () -> {

@@ -162,8 +162,7 @@ final class WorkspaceTopPresentationController {
         Object info=host.slotRegistry.rootInfo(selected.task);
         if(!selected.task.matches(info) || !host.slotRegistry.ordinaryRoot(info,1)
                 || XposedHelpers.getIntField(info,"userId")!=selected.key.userId)return null;
-        Object wct=Class.forName("android.window.WindowContainerTransaction")
-                .getDeclaredConstructor().newInstance();
+        Object wct=TransactionCompat.newWindowTransaction();
         if(translucent) {
             XposedHelpers.callMethod(wct,"reorder",host.slotRegistry.homeForCollection(selected.task),true);
             XposedHelpers.callMethod(wct,"reorder",selected.task.token,true);

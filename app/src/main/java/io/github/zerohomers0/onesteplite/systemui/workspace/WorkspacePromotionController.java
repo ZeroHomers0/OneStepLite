@@ -466,8 +466,7 @@ final class WorkspacePromotionController {
         try {
             Object current = XposedHelpers.getObjectField(slot.controller, "mTaskToken");
             if (ticket.token.equals(current) && host.slotRegistry.isActive(slot)) {
-                Object rollback = Class.forName("android.window.WindowContainerTransaction")
-                        .getDeclaredConstructor().newInstance();
+                Object rollback = TransactionCompat.newWindowTransaction();
                 XposedHelpers.callMethod(rollback, "setWindowingMode", ticket.token, 6);
                 XposedHelpers.callMethod(rollback, "setBounds", ticket.token, host.slotRegistry.logicalBounds(slot));
                 WorkspaceNativeHooks.applyTopConfiguration(host, rollback, ticket.token, slot);

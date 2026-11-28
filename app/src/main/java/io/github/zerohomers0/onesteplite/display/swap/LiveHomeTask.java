@@ -55,7 +55,7 @@ final class LiveHomeTask {
     }
     private void set(Object wct, String method, Object value) { ShellCompat.transaction(organizer, wct, method, request.app.token, value); }
     Object windowTransaction(boolean reverse) throws Exception {
-        Object wct = Class.forName("android.window.WindowContainerTransaction").getDeclaredConstructor().newInstance();
+        Object wct = TransactionCompat.newWindowTransaction();
         set(wct, "setWindowingMode", reverse ? 6 : 0);
         set(wct, "setBounds", reverse ? new Rect(request.sideBounds) : new Rect());
         set(wct, "setDensityDpi", reverse ? request.sideDensity : 0);
@@ -171,7 +171,7 @@ final class LiveHomeTask {
                 }
                 if (owner(b) != controller) throw new IllegalStateException("Home rollback rejected");
                 try {
-                    if (finishWct == null) finishWct = Class.forName("android.window.WindowContainerTransaction").getDeclaredConstructor().newInstance();
+                    if (finishWct == null) finishWct = TransactionCompat.newWindowTransaction();
                 } catch (Exception error) { throw new IllegalStateException(error); }
                 ShellCompat.call(taskViews, "prepareOpenAnimation", controller, true, tx, tx, b, canonical(), finishWct);
                 set(finishWct, "setHidden", false);

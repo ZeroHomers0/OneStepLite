@@ -32,5 +32,5 @@ public class SideCloseRegression {
  }
 }''',encoding='utf8')
 jdk=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-cp',str(out),'-d',str(out),str(src),str(package_dir(root)/'SideClose.java')],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-cp',str(out),'-d',str(out),str(src),str(package_dir(root)/'SideClose.java'),str(package_dir(root)/'framework/platform/TransactionCompat.java')],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.SideCloseRegression'],check=True)

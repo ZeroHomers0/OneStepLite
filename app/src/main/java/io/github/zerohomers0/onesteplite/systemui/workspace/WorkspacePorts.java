@@ -24,7 +24,7 @@ final class WorkspacePorts {
         Map<Object,OwnedTask> ownedTasks();
     }
 
-    interface SurfacePort {
+    interface FramePort {
         Handler main();
         WorkspaceLayout layout();
         WorkspaceLiveGeometry liveGeometry();
@@ -32,22 +32,31 @@ final class WorkspacePorts {
         int screenWidth();
         int screenHeight();
         int displayDensityDpi();
-        WorkspaceWallpaperController wallpapers();
-        WorkspaceWindowPresentation windowPresentation();
+    }
+
+    interface BackdropPort {
         Bitmap mainBackdrop();
         void mainBackdrop(Bitmap value);
         Bitmap wallpaperBackdrop();
         void wallpaperBackdrop(Bitmap value);
         Bitmap wellWallpaperBackdrop();
         void wellWallpaperBackdrop(Bitmap value);
+    }
+
+    interface WallpaperPort {
+        WorkspaceWallpaperController wallpapers();
+        WorkspaceWindowPresentation windowPresentation();
         void mainSideBackdrop(WallpaperCropDrawable value);
     }
 
-    interface PresentationPort {
+    interface TopPort {
         TopBar topBar();
         boolean topFace();
         boolean topPortrait();
         Object topTransition();
+    }
+
+    interface PresentationPort {
         boolean wallpaperBackdropRequested();
         void wallpaperBackdropRequested(boolean value);
         WorkspaceOptions options();
@@ -63,10 +72,71 @@ final class WorkspacePorts {
         WorkspaceScaleController scales();
     }
 
+
+
+    interface CellLifecyclePort {
+        WorkspaceCellMotionController cells();
+        Promotion promotion();
+        WorkspaceScaleController scales();
+        WorkspaceSlotRegistry slotRegistry();
+        WorkspaceSideRowController sideRows();
+        boolean taskCellsCovered();
+        boolean topFace();
+        float workspaceAlpha();
+    }
+
+    interface CellLayerPort {
+        WorkspaceWindowPresentation windowPresentation();
+        boolean topTransitionOwnsTopOpacity();
+        boolean topTransitionOwnsTaskOpacity();
+        boolean wallpaperBackdropPresent();
+        WorkspaceWallpaperController wallpapers();
+        boolean rootReady();
+        android.content.Context context();
+    }
+
+    interface DebugStatePort {
+        Handler main();
+        int scene();
+        boolean screenOn();
+        boolean keyguardLocked();
+        Promotion promotion();
+        boolean transferBusy();
+    }
+
+    interface DebugTaskPort {
+        WorkspaceLaunchController launches();
+        WorkspaceMainTaskActions mainTaskActions();
+        WorkspaceCarrierCoordinator carriers();
+        WorkspaceSlotRegistry slotRegistry();
+        Slot[] slots();
+        boolean executeOnShell(Runnable task);
+    }
+
+    interface DebugSurfacePort {
+        android.content.Context context();
+        WorkspaceLayout layout();
+        WorkspaceSideRowController sideRows();
+        WorkspaceSceneTracker sceneTracker();
+        int screenWidth();
+        int screenHeight();
+        int displayRotation();
+        FrameLayout root();
+    }
+
+    interface DebugPorts {
+        DebugStatePort state();
+        DebugTaskPort tasks();
+        DebugSurfacePort surfaces();
+    }
+
     interface Runtime {
         ScenePort scenes();
         SlotPort slots();
-        SurfacePort surfaces();
+        FramePort frames();
+        BackdropPort backdrops();
+        WallpaperPort wallpapers();
+        TopPort top();
         PresentationPort presentation();
         TaskPort tasks();
     }
@@ -87,7 +157,7 @@ final class WorkspacePorts {
             @Override public WorkspaceSideRowController sideRows() { return host.sideRows; }
             @Override public Map<Object,OwnedTask> ownedTasks() { return host.ownedTasks; }
         };
-        SurfacePort surfaces=new SurfacePort() {
+        FramePort frames=new FramePort() {
             @Override public Handler main() { return host.main; }
             @Override public WorkspaceLayout layout() { return host.layout; }
             @Override public WorkspaceLiveGeometry liveGeometry() { return host.liveGeometry; }
@@ -95,21 +165,27 @@ final class WorkspacePorts {
             @Override public int screenWidth() { return host.screenW; }
             @Override public int screenHeight() { return host.screenH; }
             @Override public int displayDensityDpi() { return host.displayDensityDpi; }
-            @Override public WorkspaceWallpaperController wallpapers() { return host.wallpapers; }
-            @Override public WorkspaceWindowPresentation windowPresentation() { return host.windowPresentation; }
+        };
+        BackdropPort backdrops=new BackdropPort() {
             @Override public Bitmap mainBackdrop() { return host.mainBackdrop; }
             @Override public void mainBackdrop(Bitmap value) { host.mainBackdrop=value; }
             @Override public Bitmap wallpaperBackdrop() { return host.wallpaperBackdrop; }
             @Override public void wallpaperBackdrop(Bitmap value) { host.wallpaperBackdrop=value; }
             @Override public Bitmap wellWallpaperBackdrop() { return host.wellWallpaperBackdrop; }
             @Override public void wellWallpaperBackdrop(Bitmap value) { host.wellWallpaperBackdrop=value; }
+        };
+        WallpaperPort wallpapers=new WallpaperPort() {
+            @Override public WorkspaceWallpaperController wallpapers() { return host.wallpapers; }
+            @Override public WorkspaceWindowPresentation windowPresentation() { return host.windowPresentation; }
             @Override public void mainSideBackdrop(WallpaperCropDrawable value) { host.mainSideBackdrop=value; }
         };
-        PresentationPort presentation=new PresentationPort() {
+        TopPort top=new TopPort() {
             @Override public TopBar topBar() { return host.topBar; }
             @Override public boolean topFace() { return host.topFace; }
             @Override public boolean topPortrait() { return host.topPortrait; }
             @Override public Object topTransition() { return host.topTransition; }
+        };
+        PresentationPort presentation=new PresentationPort() {
             @Override public boolean wallpaperBackdropRequested() { return host.wallpaperBackdropRequested; }
             @Override public void wallpaperBackdropRequested(boolean value) { host.wallpaperBackdropRequested=value; }
             @Override public WorkspaceOptions options() { return host.workspaceOptions; }
@@ -126,9 +202,76 @@ final class WorkspacePorts {
         return new Runtime() {
             @Override public ScenePort scenes() { return scenes; }
             @Override public SlotPort slots() { return slots; }
-            @Override public SurfacePort surfaces() { return surfaces; }
+            @Override public FramePort frames() { return frames; }
+            @Override public BackdropPort backdrops() { return backdrops; }
+            @Override public WallpaperPort wallpapers() { return wallpapers; }
+            @Override public TopPort top() { return top; }
             @Override public PresentationPort presentation() { return presentation; }
             @Override public TaskPort tasks() { return tasks; }
+        };
+    }
+
+
+    static CellLifecyclePort cellLifecycle(WorkspaceHost host) {
+        return new CellLifecyclePort() {
+            @Override public WorkspaceCellMotionController cells() { return host.cells; }
+            @Override public Promotion promotion() { return host.promotion; }
+            @Override public WorkspaceScaleController scales() { return host.scales; }
+            @Override public WorkspaceSlotRegistry slotRegistry() { return host.slotRegistry; }
+            @Override public WorkspaceSideRowController sideRows() { return host.sideRows; }
+            @Override public boolean taskCellsCovered() { return host.taskCellsCovered; }
+            @Override public boolean topFace() { return host.topFace; }
+            @Override public float workspaceAlpha() { return host.workspaceAlpha(); }
+        };
+    }
+
+    static CellLayerPort cellLayers(WorkspaceHost host) {
+        return new CellLayerPort() {
+            @Override public WorkspaceWindowPresentation windowPresentation() { return host.windowPresentation; }
+            @Override public boolean topTransitionOwnsTopOpacity() {
+                return host.topTransition != null && host.topTransition.ownsTopOpacity();
+            }
+            @Override public boolean topTransitionOwnsTaskOpacity() {
+                return host.topTransition != null && host.topTransition.ownsTaskOpacity();
+            }
+            @Override public boolean wallpaperBackdropPresent() { return host.wallpaperBackdrop != null; }
+            @Override public WorkspaceWallpaperController wallpapers() { return host.wallpapers; }
+            @Override public boolean rootReady() { return host.root != null; }
+            @Override public android.content.Context context() { return host.ctx; }
+        };
+    }
+
+    static DebugPorts debug(WorkspaceHost host) {
+        DebugStatePort state=new DebugStatePort() {
+            @Override public Handler main() { return host.main; }
+            @Override public int scene() { return host.scene; }
+            @Override public boolean screenOn() { return host.screenOn; }
+            @Override public boolean keyguardLocked() { return host.keyguardLocked; }
+            @Override public Promotion promotion() { return host.promotion; }
+            @Override public boolean transferBusy() { return host.transferBusy; }
+        };
+        DebugTaskPort tasks=new DebugTaskPort() {
+            @Override public WorkspaceLaunchController launches() { return host.launches; }
+            @Override public WorkspaceMainTaskActions mainTaskActions() { return host.mainTaskActions; }
+            @Override public WorkspaceCarrierCoordinator carriers() { return host.carriers; }
+            @Override public WorkspaceSlotRegistry slotRegistry() { return host.slotRegistry; }
+            @Override public Slot[] slots() { return host.slots; }
+            @Override public boolean executeOnShell(Runnable task) { return host.executeOnShell(task); }
+        };
+        DebugSurfacePort surfaces=new DebugSurfacePort() {
+            @Override public android.content.Context context() { return host.ctx; }
+            @Override public WorkspaceLayout layout() { return host.layout; }
+            @Override public WorkspaceSideRowController sideRows() { return host.sideRows; }
+            @Override public WorkspaceSceneTracker sceneTracker() { return host.sceneTracker; }
+            @Override public int screenWidth() { return host.screenW; }
+            @Override public int screenHeight() { return host.screenH; }
+            @Override public int displayRotation() { return host.displayRotation; }
+            @Override public FrameLayout root() { return host.root; }
+        };
+        return new DebugPorts() {
+            @Override public DebugStatePort state() { return state; }
+            @Override public DebugTaskPort tasks() { return tasks; }
+            @Override public DebugSurfacePort surfaces() { return surfaces; }
         };
     }
     private WorkspacePorts() {}

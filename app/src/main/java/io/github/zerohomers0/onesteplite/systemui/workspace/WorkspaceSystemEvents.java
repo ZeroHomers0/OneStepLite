@@ -87,7 +87,7 @@ final class WorkspaceSystemEvents {
             try {
                 h.unlockGeometryReplay.capture((android.view.SurfaceControl.Transaction) ack.finishReplay,
                         epoch, geometry.mainScale, geometry.mainOffsetX, geometry.mainOffsetY);
-                tx = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+                tx = TransactionCompat.newSurfaceTransaction();
                 XposedHelpers.callMethod(tx, "merge", ack.finishReplay);
                 h.retainedSurfaces.appendWorkspaceSurfaces(tx, java.util.Collections.singletonList(epoch));
                 ((android.view.SurfaceControl.Transaction) tx).addTransactionCommittedListener(

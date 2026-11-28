@@ -96,5 +96,5 @@ for name,code in fixtures.items():
  if not name.startswith('de/'):continue
  p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(code,encoding='utf-8');extra.append(str(p))
 extra.append(str(src/'KeyguardZoom.java'))
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(target),str(src/'NativeLandscapePolicy.java'),*extra],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out),str(target),str(src/'NativeLandscapePolicy.java'),str(src/'framework/platform/TransactionCompat.java'),*extra],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.ZoomEntryRegression'],check=True)

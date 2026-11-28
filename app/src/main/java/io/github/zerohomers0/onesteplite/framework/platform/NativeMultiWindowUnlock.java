@@ -90,6 +90,6 @@ final class NativeMultiWindowUnlock {
     }
 
     private static void log(String site, Throwable e) {
-        XposedBridge.log("OneStepLiteProbe: native multiwindow " + site + ": " + e.getClass().getSimpleName());
+        ModuleLog.error("native-multiwindow", site, e);
     }
 }

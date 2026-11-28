@@ -25,7 +25,23 @@ methods='\n'.join(member(s,presentation) for s in base_signatures)+'\n'+member('
 methods=(methods.replace('sideRows.isEmpty()','sideOrder.isEmpty()').replace('sideRows.layoutAll()','layoutSideViewport(true)')
     .replace('sideRows.gestureActive()','sideArmed || sideCaptured || isSideMotionRunning()')
     .replace('sideRows.finishGesture()','finishSideScroll()').replace('sideRows.isScrolling()','sideScrolling').replace('cellSurfaces.','').replace('chrome.','').replace('exits.','').replace('resumes.','').replace('scales.',''))
-cell_methods='\n'.join(member(s,cell).replace('host.','').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log').replace('workspaceAlpha()','workspaceAlpha').replace('sideRows.isScrolling()','sideScrolling').replace('scales.','') for s in ['    boolean ownsCellPresentation(', '    boolean cellPresentationVisible(', '    void stageCellPresentation(', '    void updateCellSurfaceVisibility('])
+cell_methods='\n'.join(
+    member(s,cell).replace('lifecycle.cells().motion()','cellMotion')
+    .replace('lifecycle.promotion()','promotion')
+    .replace('lifecycle.scales().mayWriteSideSurface','mayWriteSideSurface')
+    .replace('lifecycle.slotRegistry().controllerOwns','controllerOwns')
+    .replace('lifecycle.slotRegistry().logicalBounds','logicalBounds')
+    .replace('lifecycle.sideRows().isScrolling()','sideScrolling')
+    .replace('lifecycle.sideRows().closeSurfaceObject','closeSurfaceObject')
+    .replace('lifecycle.taskCellsCovered()','taskCellsCovered')
+    .replace('lifecycle.topFace()','topFace')
+    .replace('lifecycle.workspaceAlpha()','workspaceAlpha')
+    .replace('layers.windowPresentation().workspaceCellCrop','workspaceCellCrop')
+    .replace('layers.topTransitionOwnsTopOpacity()','topTransition != null && topTransition.ownsTopOpacity()')
+    .replace('layers.topTransitionOwnsTaskOpacity()','topTransition != null && topTransition.ownsTaskOpacity()')
+    .replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField')
+    .replace('ModuleLog.info("cell-surface", ','log(')
+    for s in ['    boolean ownsCellPresentation(', '    boolean cellPresentationVisible(', '    void stageCellPresentation(', '    void updateCellSurfaceVisibility('])
 methods+='\n'+cell_methods
 chrome_methods='\n'.join(member(s,chrome).replace('host.','').replace('WorkspaceHost.log','log').replace('workspaceAlpha()','workspaceAlpha').replace('mainSideAnimator()','mainSideAnimator') for s in ['    void updateChromeClip(', '    private void clipChromeBesideMain(', '    private int[] sideBackingBounds(', '    void updateWorkspaceBacking(', '    int sideSegmentTop(', '    int sideSegmentHeight('])
 methods+='\n'+chrome_methods
@@ -310,6 +326,6 @@ files['io/github/zerohomers0/onesteplite/WorkspaceRegression.java']=files['io/gi
 for name,text in files.items():
  p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8')
 jdk=Path(os.environ["ONESTEPLITE_JAVA_BIN"])
-subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out)]+[str(out/n)for n in files]+[str(package_dir(root)/'WorkspaceCellReveal.java'),str(package_dir(root)/'WorkspaceMotionSpec.java'),str(package_dir(root)/'WorkspaceRevealCurve.java'),str(src/'WorkspaceTransition.java'),str(src/'TransitionSession.java')],check=True)
+subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(out)]+[str(out/n)for n in files]+[str(package_dir(root)/'WorkspaceCellReveal.java'),str(package_dir(root)/'WorkspaceMotionSpec.java'),str(package_dir(root)/'WorkspaceRevealCurve.java'),str(src/'WorkspaceTransition.java'),str(src/'TransitionSession.java'),str(src/'framework/platform/TransactionCompat.java')],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.WorkspaceRegression'],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.TopControlsCreationRegression'],check=True)

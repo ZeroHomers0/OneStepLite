@@ -215,7 +215,7 @@ final class ZoomTransactions {
         if (Looper.myLooper() != target.handler.getLooper() || !Thread.holdsLock(target.globalLock)) return;
         Object tx = null;
         try {
-            tx = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor().newInstance();
+            tx = TransactionCompat.newSurfaceTransaction();
             int count = 0;
             synchronized (sGestureSurfaces) {
                 java.util.Iterator<Object> it = sGestureSurfaces.keySet().iterator();
@@ -292,8 +292,7 @@ final class ZoomTransactions {
         if (!sZoomFrameApply) try {
             Object layer = XposedHelpers.callMethod(dc, "getWindowingLayer");
             if (layer != null && Boolean.TRUE.equals(XposedHelpers.callMethod(layer, "isValid"))) {
-                crop = Class.forName("android.view.SurfaceControl$Transaction")
-                        .getDeclaredConstructor().newInstance();
+                crop = TransactionCompat.newSurfaceTransaction();
                 XposedHelpers.callMethod(crop, "setWindowCrop", layer, (Object) null);
                 XposedHelpers.callMethod(crop, "apply");
             }

@@ -197,6 +197,6 @@ for relative, text in FILES.items():
     paths.append(str(path))
 subprocess.run([str(JDK/'javac.exe'),'-encoding','UTF-8','--release','17','-d',str(OUT),
                 str(SRC/'ShellCompat.java'),str(SRC/'LiveSwapGeometry.java'),str(SRC/'LiveSwapZoom.java'),
-                str(SRC/'LiveTaskSwapDriver.java'),str(SRC/'LiveTaskPair.java'),str(SRC/'LiveHomeTask.java'),*paths],check=True)
+                str(SRC/'LiveTaskSwapDriver.java'),str(SRC/'LiveTaskPair.java'),str(SRC/'LiveHomeTask.java'),str(SRC/'framework/platform/TransactionCompat.java'),*paths],check=True)
 subprocess.run([str(JDK/'java.exe'),'-cp',str(OUT),'io.github.zerohomers0.onesteplite.LivePairRegression'],check=True)
 subprocess.run([str(JDK/'java.exe'),'-cp',str(OUT),'io.github.zerohomers0.onesteplite.LiveHomeRegression'],check=True)

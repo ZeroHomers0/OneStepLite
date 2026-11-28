@@ -12,7 +12,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.Handler;
-import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.animation.PathInterpolator;
@@ -20,7 +19,6 @@ import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.Optional;
 import de.robv.android.xposed.IXposedHookLoadPackage;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
@@ -177,8 +175,7 @@ public class HostEntry implements IXposedHookLoadPackage {
 
     /** Snapshot operations only. Shell merges and applies them with the task handoff. */
     static Object createMagnificationFinishReplay(Object display) throws Exception {
-        Object replay = Class.forName("android.view.SurfaceControl$Transaction")
-                .getDeclaredConstructor().newInstance();
+        Object replay = TransactionCompat.newSurfaceTransaction();
         try {
             reapplyFinalMagnification(display, replay);
             return replay;
@@ -347,15 +344,7 @@ public class HostEntry implements IXposedHookLoadPackage {
         zoomTransactions.startZoomAnimation(target, plan, key);
     }
 
-    static void log(String msg) {
-        if (!RoutineLog.allow(msg)) return;
-        Log.i(TAG, msg);
-        try {
-            XposedBridge.log(TAG + ": " + msg);
-        } catch (Throwable ignored) {
-            // 至少保留 logcat
-        }
-    }
+    static void log(String msg) { ModuleLog.diagnostic("entry", msg); }
 
 
     void beginFixedMainRotationLocked(Object display) {

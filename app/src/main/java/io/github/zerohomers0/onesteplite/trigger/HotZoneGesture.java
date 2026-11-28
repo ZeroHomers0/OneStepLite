@@ -295,9 +295,5 @@ public final class HotZoneGesture {
         }
         XposedHelpers.callMethod(batchingReceiver, "setBatchingEnabled", enabled);
     }
-    private static void log(String message) {
-        android.util.Log.i(Tags.PROBE, message);
-        try { de.robv.android.xposed.XposedBridge.log("OneStepLiteProbe: " + message); }
-        catch (Throwable ignored) { /* best effort: the platform may already have released this */ }
-    }
+    private static void log(String message) { ModuleLog.info("gesture", message); }
 }

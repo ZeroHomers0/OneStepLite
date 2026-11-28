@@ -58,7 +58,7 @@
         <location file="src/main/java/io/github/zerohomers0/onesteplite/trigger/HotZoneGesture.java" line="18" column="13" />
     </issue>
     <issue id="StaticFieldLeak" message="Do not place Android context classes in static fields; this is a memory leak" errorLine1="    private static Context context;" errorLine2="            ~~~~~~">
-        <location file="src/main/java/io/github/zerohomers0/onesteplite/logging/InputTrace.java" line="39" column="13" />
+        <location file="src/main/java/io/github/zerohomers0/onesteplite/logging/platform/InputTrace.java" line="39" column="13" />
     </issue>
     <issue id="StaticFieldLeak" message="Do not place Android context classes in static fields (static reference to `VideoDock` which has field `context` pointing to `Context`); this is a memory leak" errorLine1="    private static VideoDock instance;" errorLine2="            ~~~~~~">
         <location file="src/main/java/io/github/zerohomers0/onesteplite/framework/platform/VideoDock.java" line="40" column="13" />

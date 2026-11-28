@@ -29,7 +29,14 @@ if len(side_crops) != 2:
 a = cell.index('    void ensureCellBackground(')
 b = cell.index('    boolean presentsSlot(', a)
 ensure = (cell[a:b].replace('host.','').replace('slotRegistry.','').replace('sideRows.isScrolling()','sideScrolling').replace('sideRows.','').replace('windowPresentation.','').replace('liveGeometry.','').replace('liveHandoff.','').replace('promotionController.','').replace('topPresentationHost.','').replace('topAdmission.','').replace('taskTransfer.','').replace('keyguard.','').replace('resumes.','').replace('carriers.','').replace('retainedSurfaces.','').replace('chrome.','').replace('mainTaskActions.','').replace('taskStates.','').replace('slotLifecycle.','').replace('sideInteraction.','').replace('displays.','').replace('wallpapers.','').replace('memory.','').replace('debug.','').replace('scales.','').replace('cells.','').replace('exits.','').replace('mainLaunch.','').replace('transitionWindow.','').replace('contentDrag.','').replace('sideCloses.','').replace('WorkspaceNativeHooks.getSurfaceField','getSurfaceField').replace('WorkspaceHost.getSurfaceField','getSurfaceField').replace('WorkspaceHost.log','log')
-    .replace('sideRows.isScrolling()','sideScrolling').replace('wallpapers.applyWallpaperBackdrops()','applyWallpaperBackdrops()'))
+    .replace('sideRows.isScrolling()','sideScrolling').replace('wallpapers.applyWallpaperBackdrops()','applyWallpaperBackdrops()')
+    .replace('lifecycle.sideRows().isScrolling()','sideScrolling')
+    .replace('lifecycle.sideRows().closeSurfaceObject','closeSurfaceObject')
+    .replace('layers.wallpaperBackdropPresent()','wallpaperBackdrop != null')
+    .replace('layers.wallpapers().applyWallpaperBackdrops()','applyWallpaperBackdrops()')
+    .replace('!layers.rootReady()','root == null').replace('layers.rootReady()','root != null')
+    .replace('layers.context()','ctx')
+    .replace('ModuleLog.info("cell-surface", ','log('))
 files = {
 'android/graphics/Color.java': '''package android.graphics;public class Color {public static int red(int c){return 245;}public static int green(int c){return 245;}public static int blue(int c){return 245;}}''',
 'android/graphics/Bitmap.java': '''package android.graphics; public class Bitmap {public boolean recycled;public int getWidth(){return 360;}public int getHeight(){return 820;}public boolean isRecycled(){return recycled;}}''',
@@ -152,5 +159,5 @@ for name, text in files.items():
     paths.append(str(p))
 jdk = Path(os.environ["ONESTEPLITE_JAVA_BIN"])
 subprocess.run([str(jdk/'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-d', str(out),
-                str(src/'LiveBackdrop.java'), str(src/'WorkspaceLayout.java'), *paths], check=True)
+                str(src/'LiveBackdrop.java'), str(src/'WorkspaceLayout.java'), str(src/'framework/platform/TransactionCompat.java'), *paths], check=True)
 subprocess.run([str(jdk/'java.exe'), '-cp', str(out), 'io.github.zerohomers0.onesteplite.BackdropRegression'], check=True)

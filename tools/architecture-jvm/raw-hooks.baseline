@@ -9,9 +9,8 @@ app/src/main/java/io/github/zerohomers0/onesteplite/framework/platform/Wallpaper
 app/src/main/java/io/github/zerohomers0/onesteplite/framework/platform/WindowRootsCompat.java
 app/src/main/java/io/github/zerohomers0/onesteplite/launcher/recents/Recents.java
 app/src/main/java/io/github/zerohomers0/onesteplite/launcher/recents/RecentsInput.java
-app/src/main/java/io/github/zerohomers0/onesteplite/logging/InputTrace.java
 app/src/main/java/io/github/zerohomers0/onesteplite/logging/platform/BackGestureDiagnostics.java
-app/src/main/java/io/github/zerohomers0/onesteplite/monitoring/platform/StatusBarSampling.java
+app/src/main/java/io/github/zerohomers0/onesteplite/logging/platform/InputTrace.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemserver/LauncherRuntime.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemserver/NativeWindowRuntime.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemserver/platform/SystemServerHooks.java
@@ -58,6 +57,7 @@ app/src/main/java/io/github/zerohomers0/onesteplite/systemui/platform/WorkspaceN
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/platform/WorkspaceRetainedSurfaceHooks.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/platform/WorkspaceWindowHooks.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/statusbar/StatusBar.java
+app/src/main/java/io/github/zerohomers0/onesteplite/systemui/statusbar/StatusBarSampling.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/top/NotificationLaunch.java
 app/src/main/java/io/github/zerohomers0/onesteplite/systemui/top/TopNativeCaption.java
 app/src/main/java/io/github/zerohomers0/onesteplite/trigger/BottomReplayInput.java

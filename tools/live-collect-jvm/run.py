@@ -104,5 +104,5 @@ public class LiveCollectRegression {
  }
 }''', encoding='utf8')
 subprocess.run([str(JDK/'javac.exe'), '-encoding', 'UTF-8', '--release', '17', '-cp', str(OUT), '-d', str(OUT),
-                str(package_dir(ROOT)/'ShellCompat.java'),str(package_dir(ROOT)/'LiveCollectTask.java'), str(package_dir(ROOT)/'IdleTaskView.java'), str(source)], check=True)
+                str(package_dir(ROOT)/'ShellCompat.java'),str(package_dir(ROOT)/'LiveCollectTask.java'), str(package_dir(ROOT)/'IdleTaskView.java'), str(package_dir(ROOT)/'framework/platform/TransactionCompat.java'), str(source)], check=True)
 subprocess.run([str(JDK/'java.exe'), '-cp', str(OUT), 'io.github.zerohomers0.onesteplite.LiveCollectRegression'], check=True)

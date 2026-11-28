@@ -318,8 +318,7 @@ final class WorkspaceRetainedSurfaceHooks {
                         foreground = XposedHelpers.getObjectField(info, "token");
                     }
                     if (!slot.visibilityRepair.admit(epoch, foreground)) return;
-                    Object wct = Class.forName("android.window.WindowContainerTransaction")
-                            .getDeclaredConstructor().newInstance();
+                    Object wct = TransactionCompat.newWindowTransaction();
                     int count = 0;
                     for (Slot side : host.slots) {
                         if ((!host.cellSurfaces.presentsSlot(side) && (!warming || side != slot))
@@ -381,8 +380,7 @@ final class WorkspaceRetainedSurfaceHooks {
             if (!frames.isEmpty()) {
                 Object tx = null;
                 try {
-                    tx = Class.forName("android.view.SurfaceControl$Transaction")
-                            .getDeclaredConstructor().newInstance();
+                    tx = TransactionCompat.newSurfaceTransaction();
                     // setTaskViewVisible is a no-op for an already-visible task.
                     // A rotation finish can still have returned its canonical leash
                     // to the display. Restore the owned parent and geometry together.

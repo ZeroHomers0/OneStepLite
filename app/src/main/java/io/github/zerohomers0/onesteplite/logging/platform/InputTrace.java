@@ -185,7 +185,7 @@ final class InputTrace {
     }
 
     private static void hookSystemUi(ClassLoader cl) {
-        hookTopPhases();
+        hookTopPhases(cl);
         hook(cl, "com.android.systemui.navigationbar.gestural.DisplayBackGestureHandlerImpl$inputEventReceiver$1",
                 "onInputEvent", "native-display-back-receiver");
         hook(cl, "com.android.systemui.navigationbar.gestural.BackPanelController",
@@ -200,7 +200,7 @@ final class InputTrace {
                 event("onesteplite-corner-spy", e);
                 if (e.getActionMasked() == MotionEvent.ACTION_DOWN)
                     line("corner-admission enabled="+XposedHelpers.getBooleanField(p.thisObject,"enabled")
-                            +" "+StatusBar.cornerStateForTrace());
+                            +" "+staticCall("StatusBar","cornerStateForTrace"));
             }
         }));
         hook(cl, "com.android.systemui.statusbar.notification.island.DynamicIslandGestureMonitor$listener$1",
@@ -274,11 +274,15 @@ final class InputTrace {
     }
 
     /** Observe existing decisions and live-Surface phases; never consumes or injects input. */
-    private static void hookTopPhases() {
+    private static void hookTopPhases(ClassLoader cl) {
+        Class<?> hostType = XposedHelpers.findClass(
+                "io.github.zerohomers0.onesteplite.WorkspaceHost", cl);
+        Class<?> transitionType = XposedHelpers.findClass(
+                "io.github.zerohomers0.onesteplite.TopTaskTransition", cl);
         for (String method : new String[]{"startTopTaskTransition", "revealTopTaskTransition",
                 "cancelTopTaskTransition", "releaseTopTaskNow", "returnToSystem", "handoffPromotedTask",
                 "checkPromotion", "finishPromotionFocus"}) {
-            retain(XposedBridge.hookAllMethods(WorkspaceHost.class, method, new TraceHook() {
+            retain(XposedBridge.hookAllMethods(hostType, method, new TraceHook() {
                 @Override protected void before(MethodHookParam p) {
                     if (active()) hostPhase(p, method + ":enter");
                 }
@@ -289,7 +293,7 @@ final class InputTrace {
         }
         for (String method : new String[]{"start", "collect", "collectionReady", "handoff", "reveal", "animate", "close",
                 "applyLiveScale", "applyCollectionScale"}) {
-            retain(XposedBridge.hookAllMethods(TopTaskTransition.class, method, new TraceHook() {
+            retain(XposedBridge.hookAllMethods(transitionType, method, new TraceHook() {
                 @Override protected void after(MethodHookParam p) {
                     if (!active()) return;
                     if (method.startsWith("apply")) synchronized (InputTrace.class) {
@@ -312,9 +316,19 @@ final class InputTrace {
         }
     }
 
+
+    private static Object staticCall(String type, String method, Object... args) {
+        try {
+            Class<?> owner = XposedHelpers.findClass(
+                    "io.github.zerohomers0.onesteplite." + type, InputTrace.class.getClassLoader());
+            return XposedHelpers.callStaticMethod(owner, method, args);
+        } catch (Throwable unavailable) {
+            return null;
+        }
+    }
     private static void hostPhase(XC_MethodHook.MethodHookParam p, String phase) {
         Object[] slots = (Object[])XposedHelpers.getObjectField(p.thisObject, "slots");
-        int top = XposedHelpers.getStaticIntField(WorkspaceHost.class, "SLOT_TOP");
+        int top = XposedHelpers.getStaticIntField(p.thisObject.getClass(), "SLOT_TOP");
         Object slot = slots != null && top >= 0 && top < slots.length ? slots[top] : null;
         StringBuilder decisions = new StringBuilder();
         for (int i = 0; i < p.args.length && i < 6; i++)
@@ -345,7 +359,7 @@ final class InputTrace {
         line(label + " eventTime=" + event.getEventTime() + " action=" + event.getActionMasked()
                 + " display=" + XposedHelpers.callMethod(event, "getDisplayId") + " local=" + event.getX() + "," + event.getY()
                 + " raw=" + event.getRawX() + "," + event.getRawY() + " pointers=" + event.getPointerCount());
-        float[] transform = WorkspaceWindowLayout.activeMainTransform();
+        float[] transform = (float[]) staticCall("WorkspaceWindowLayout", "activeMainTransform");
         if (transform != null && event.getActionMasked() == MotionEvent.ACTION_DOWN)
             line("hostExpectedZoom=" + transform[0] + "," + transform[1] + "," + transform[2]);
         } catch (Throwable error) { unavailable(error); }
@@ -501,13 +515,14 @@ try {
             Class<?> util = XposedHelpers.findClass("com.android.wm.shell.shared.TransitionUtil", cl);
             retain(XposedBridge.hookAllMethods(util, "newTarget", new TraceHook() {
                 @Override protected void after(MethodHookParam p) {
-                    int offset = RecentsWallpaper.argumentOffset(p.args);
+                    Integer offsetValue = (Integer) staticCall("RecentsWallpaper", "argumentOffset", (Object) p.args);
+                    int offset = offsetValue == null ? -1 : offsetValue;
                     if (!active() || p.hasThrowable() || offset < 0) return;
                     Object info = p.args[2 + offset];
                     line("nativeTarget args=" + p.args.length + " type="
                             + XposedHelpers.callMethod(info, "getType") + " roots="
                             + XposedHelpers.callMethod(info, "getRootCount")
-                            + " main=" + (WorkspaceWindowLayout.activeMainTransform() != null));
+                            + " main=" + (staticCall("WorkspaceWindowLayout", "activeMainTransform") != null));
                     int count = 0;
                     for (Object change : (List<?>) XposedHelpers.callMethod(info, "getChanges")) {
                         if (++count > 6) break;

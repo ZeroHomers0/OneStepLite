@@ -5,28 +5,32 @@ import android.os.SystemClock;
 
 /** Developer broadcast entrypoints and passive diagnostics for one WorkspaceHost. */
 final class WorkspaceDebugController {
-    private final WorkspaceHost host;
+    private final WorkspacePorts.DebugStatePort state;
+    private final WorkspacePorts.DebugTaskPort tasks;
+    private final WorkspacePorts.DebugSurfacePort surfaces;
     private boolean traceNextSwap;
     private SwapTrace swapTrace;
 
-    WorkspaceDebugController(WorkspaceHost host) {
-        this.host = host;
+    WorkspaceDebugController(WorkspacePorts.DebugPorts ports) {
+        state=ports.state();
+        tasks=ports.tasks();
+        surfaces=ports.surfaces();
     }
 
     void debugLaunch(int slot, String pkg) {
-        host.main.post(() -> host.launches.launchWhenReady(slot, pkg, 0));
+        state.main().post(() -> tasks.launches().launchWhenReady(slot, pkg, 0));
     }
 
     void debugSwap(int slot) {
-        host.main.post(() -> host.mainTaskActions.swapWithMain(slot));
+        state.main().post(() -> tasks.mainTaskActions().swapWithMain(slot));
     }
 
     void debugTraceNextSwap() {
-        host.main.post(() -> {
-            if (host.scene != WorkspaceHost.ACTIVE || !host.screenOn || host.keyguardLocked
-                    || host.promotion != null || host.transferBusy) return;
+        state.main().post(() -> {
+            if (state.scene() != WorkspaceHost.ACTIVE || !state.screenOn() || state.keyguardLocked()
+                    || state.promotion() != null || state.transferBusy()) return;
             traceNextSwap = true;
-            WorkspaceHost.log("passive trace armed for next one swap; 6s/384 events; no transaction mutations");
+            log("passive trace armed for next one swap; 6s/384 events; no transaction mutations");
         });
     }
 
@@ -38,14 +42,14 @@ final class WorkspaceDebugController {
         swapTrace = null;
         try {
             LiveTask previous = ticket.previousMain;
-            swapTrace = new SwapTrace(host.main,
-                    new java.io.File(host.ctx.getFilesDir(), "onesteplite-swap-traces"),
-                    WorkspaceHost::log, previous == null ? -1 : previous.id,
+            swapTrace = new SwapTrace(state.main(),
+                    new java.io.File(surfaces.context().getFilesDir(), "onesteplite-swap-traces"),
+                    WorkspaceDebugController::log, previous == null ? -1 : previous.id,
                     previous == null ? null : previous.token, ticket.taskId, ticket.token,
-                    ticket.slot.controller, host.carriers.shellOrganizer(), host.layout.describe(),
+                    ticket.slot.controller, tasks.carriers().shellOrganizer(), surfaces.layout().describe(),
                     closed -> { if (swapTrace == closed) swapTrace = null; });
         } catch (Throwable error) {
-            WorkspaceHost.log("passive trace unavailable: " + error);
+            log("passive trace unavailable: " + error);
         }
     }
 
@@ -67,26 +71,26 @@ final class WorkspaceDebugController {
 
     void debugMirror(int taskId, int x, int y, int w, int h, int holdMs, int hideMode) {
         if (w <= 0 || h <= 0) {
-            WorkspaceHost.log("debugMirror: bad rect " + w + "x" + h);
+            log("debugMirror: bad rect " + w + "x" + h);
             return;
         }
-        host.main.post(() -> host.carriers.startMirrorPoc(taskId,
+        state.main().post(() -> tasks.carriers().startMirrorPoc(taskId,
                 new Rect(x, y, x + w, y + h), Math.max(1000, holdMs), hideMode));
     }
 
     void debugLeashAnim(int slotIndex, int durationMs, String pkg) {
-        host.main.post(() -> host.carriers.runLeashAnimPoc(slotIndex, Math.max(150, durationMs), pkg));
+        state.main().post(() -> tasks.carriers().runLeashAnimPoc(slotIndex, Math.max(150, durationMs), pkg));
     }
 
     void debugRoots() {
-        if (!host.executeOnShell(() -> host.slotRegistry.dumpRoots("debug")))
-            WorkspaceHost.log("debugRoots skipped: no shell queue");
+        if (!tasks.executeOnShell(() -> tasks.slotRegistry().dumpRoots("debug")))
+            log("debugRoots skipped: no shell queue");
     }
 
     void debugDumpViews() {
-        host.main.post(() -> {
-            int taskViews = 0, occupied = 0, prepared = 0, shown = 0, sideRows = host.sideRows.size();
-            for (Slot slot : host.slots) {
+        state.main().post(() -> {
+            int taskViews = 0, occupied = 0, prepared = 0, shown = 0, sideRows = surfaces.sideRows().size();
+            for (Slot slot : tasks.slots()) {
                 if (slot == null) continue;
                 if (slot.view != null) taskViews++;
                 if (slot.occupied) occupied++;
@@ -95,21 +99,23 @@ final class WorkspaceDebugController {
             }
             Runtime runtime = Runtime.getRuntime();
             long heapUsedKb = (runtime.totalMemory() - runtime.freeMemory()) / 1024L;
-            WorkspaceHost.log("runtime scene=" + host.sceneTracker.snapshot()
-                    + " viewport=" + host.screenW + "x" + host.screenH + "@" + host.displayRotation
-                    + " slots=" + host.slots.length + " taskViews=" + taskViews
+            log("runtime scene=" + surfaces.sceneTracker().snapshot()
+                    + " viewport=" + surfaces.screenWidth() + "x" + surfaces.screenHeight() + "@" + surfaces.displayRotation()
+                    + " slots=" + tasks.slots().length + " taskViews=" + taskViews
                     + " occupied=" + occupied + " sideRows=" + sideRows
                     + " prepared=" + prepared + " shown=" + shown
                     + " heapUsedKb=" + heapUsedKb);
-            WorkspaceHost.log(WorkspaceRuntimeCounters.snapshot());
-            WorkspaceHost.log(BackgroundExecutor.diagnostics());
-            WorkspaceDiagnostics.dumpViewTree(host.root, WorkspaceHost::log);
+            log(WorkspaceRuntimeCounters.snapshot());
+            log(BackgroundExecutor.diagnostics());
+            WorkspaceDiagnostics.dumpViewTree(surfaces.root(), WorkspaceDebugController::log);
         });
     }
 
+    private static void log(String message) { ModuleLog.info("workspace-debug", message); }
+
     String describeTasks() {
         StringBuilder sb = new StringBuilder();
-        for (Slot s : host.slots) {
+        for (Slot s : tasks.slots()) {
             sb.append(" [").append(s.index).append(':')
                     .append(s.taskId).append(s.occupied ? "" : "(empty)")
                     .append(s.taskVisible ? "/vis" : "/hid");

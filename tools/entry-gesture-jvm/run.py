@@ -23,7 +23,8 @@ files = {
  if(fail)throw new IllegalStateException();return hide;}}}''',
 'android/content/res/Resources.java': 'package android.content.res;public class Resources {public android.util.DisplayMetrics getDisplayMetrics(){return new android.util.DisplayMetrics();}}',
 'android/util/DisplayMetrics.java': 'package android.util;public class DisplayMetrics {public static float defaultDensity=1;public float density=defaultDensity;}',
-'android/util/Log.java': 'package android.util;public class Log {public static int i(String t,String m){return 0;}}',
+'android/util/Log.java':'package android.util;public class Log {public static final int INFO=4,WARN=5,ERROR=6;public static int i(String t,String m){return 0;}public static int w(String t,String m,Throwable e){return 0;}public static int e(String t,String m,Throwable e){return 0;}}',
+'de/robv/android/xposed/XposedBridge.java':'package de.robv.android.xposed;public class XposedBridge {public static void log(String s){}}',
 'android/os/Looper.java': 'package android.os;public class Looper {static final Looper main=new Looper();public static Looper myLooper(){return main;}public static Looper getMainLooper(){return main;}}',
 'android/os/SystemClock.java': 'package android.os;public class SystemClock {public static long now;public static long uptimeMillis(){return now;}}',
 'android/os/Handler.java': '''package android.os;import java.util.*;public class Handler {
@@ -338,7 +339,7 @@ paths=[]
 for name, text in files.items():
     p=out/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8');paths.append(str(p))
 paths += [str(src/n) for n in ['CornerSwipe.java','BottomCenterSwipe.java','WorkspaceOptions.java',
-          'EntryGesturePolicy.java','EntryGestureSettings.java','HotZoneGesture.java','Actions.java','Tags.java']]
+          'EntryGesturePolicy.java','EntryGestureSettings.java','HotZoneGesture.java','Actions.java','Tags.java','RoutineLog.java','ModuleLog.java']]
 subprocess.run([str(jdk/'javac.exe'),'-encoding','UTF-8','--release','17','-cp',str(out),'-d',str(out),*paths],check=True)
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'io.github.zerohomers0.onesteplite.EntryGestureRegression'],check=True)
 subprocess.run([str(jdk/'java.exe'),'-Donesteplite.legacyReceiver=true','-cp',str(out),'io.github.zerohomers0.onesteplite.EntryGestureRegression'],check=True)

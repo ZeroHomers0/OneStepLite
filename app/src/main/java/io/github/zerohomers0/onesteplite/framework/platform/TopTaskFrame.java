@@ -73,7 +73,7 @@ final class TopTaskFrame {
                     || !Boolean.TRUE.equals(ShellCompat.call(transitions,"isIdle"))) {
                 retry();return;
             }
-            Object wct=Class.forName("android.window.WindowContainerTransaction").getDeclaredConstructor().newInstance();
+            Object wct=TransactionCompat.newWindowTransaction();
             XposedHelpers.callMethod(wct,"setBounds",target.token,target.bounds);
             SyncPreparation.submit(target.controller,wct,ui::post,this::nativeCommitted,
                     error->fail("top destination draw sync failed: "+error));

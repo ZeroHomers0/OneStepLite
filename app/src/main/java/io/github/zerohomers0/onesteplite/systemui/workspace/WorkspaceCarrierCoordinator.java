@@ -9,7 +9,6 @@ import java.util.function.Consumer;
 final class WorkspaceCarrierCoordinator {
     private final WorkspaceHost host;
     private final Consumer<String> log;
-    private static volatile java.lang.reflect.Constructor<?> surfaceTransactionConstructor;
     private MirrorExperiment mirrorExperiment;
     private LeashExperiment leashExperiment;
     private volatile int leashPocSlot = -1;
@@ -87,8 +86,7 @@ final class WorkspaceCarrierCoordinator {
             final float sy = dest.height() / (ratio * host.screenH);
             final float px = (dest.left - host.layout.mainOffsetX) / ratio;
             final float py = (dest.top - host.layout.mainOffsetY) / ratio;
-            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
+            Object tx = TransactionCompat.newSurfaceTransaction();
             try {
                 XposedHelpers.callMethod(tx, "setPosition", leash, px, py);
                 XposedHelpers.callMethod(tx, "setMatrix", leash, sx, 0f, 0f, sy);
@@ -109,8 +107,7 @@ final class WorkspaceCarrierCoordinator {
 
     void restoreDirectCarrier(Object leash) {
         try {
-            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
+            Object tx = TransactionCompat.newSurfaceTransaction();
             try {
                 XposedHelpers.callMethod(tx, "setPosition", leash, 0f, 0f);
                 XposedHelpers.callMethod(tx, "setMatrix", leash, 1f, 0f, 0f, 1f);
@@ -224,8 +221,7 @@ final class WorkspaceCarrierCoordinator {
             if (leash == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
                 return;
             }
-            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
+            Object tx = TransactionCompat.newSurfaceTransaction();
             try {
                 XposedHelpers.callMethod(tx, "setCrop",
                         new Class<?>[]{Class.forName("android.view.SurfaceControl"),
@@ -357,13 +353,8 @@ final class WorkspaceCarrierCoordinator {
         }
     }
 
-    static Object newSurfaceTransaction() throws Exception {
-        java.lang.reflect.Constructor<?> cached = surfaceTransactionConstructor;
-        if (cached == null) {
-            cached = Class.forName("android.view.SurfaceControl$Transaction").getDeclaredConstructor();
-            surfaceTransactionConstructor = cached;
-        }
-        return cached.newInstance();
+    static Object newSurfaceTransaction() {
+        return TransactionCompat.newSurfaceTransaction();
     }
 
     void applyLeashTransform(Object leash, float x, float y, float sx, float sy) {
@@ -391,8 +382,7 @@ final class WorkspaceCarrierCoordinator {
             if (leash == null || !Boolean.TRUE.equals(XposedHelpers.callMethod(leash, "isValid"))) {
                 return;
             }
-            Object tx = Class.forName("android.view.SurfaceControl$Transaction")
-                    .getDeclaredConstructor().newInstance();
+            Object tx = TransactionCompat.newSurfaceTransaction();
             try {
                 XposedHelpers.callMethod(tx, "setPosition",
                         new Class<?>[]{Class.forName("android.view.SurfaceControl"),

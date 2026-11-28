@@ -18,8 +18,7 @@ final class LiveTaskPair {
 
     private static Object newWindowContainerTransaction() {
         try {
-            return Class.forName("android.window.WindowContainerTransaction")
-                    .getDeclaredConstructor().newInstance();
+            return TransactionCompat.newWindowTransaction();
         } catch (Throwable error) {
             throw new IllegalStateException("WindowContainerTransaction unavailable", error);
         }
@@ -177,7 +176,7 @@ final class LiveTaskPair {
     }
 
     Object windowTransaction(Object[] otherSideTokens) throws Exception {
-        Object wct = Class.forName("android.window.WindowContainerTransaction").getDeclaredConstructor().newInstance();
+        Object wct = TransactionCompat.newWindowTransaction();
         set(wct, "setWindowingMode", secondToken, 0);
         set(wct, "setInterceptBackPressedOnTaskRoot", secondToken, false);
         set(wct, "setTaskForceExcludedFromRecents", secondToken, false);
@@ -233,7 +232,7 @@ final class LiveTaskPair {
     Object reverseWindowTransaction(Object[] otherSideTokens) throws Exception {
         waitingCancel = true;
         originalInfoSeen = false;
-        Object wct = Class.forName("android.window.WindowContainerTransaction").getDeclaredConstructor().newInstance();
+        Object wct = TransactionCompat.newWindowTransaction();
         set(wct, "setWindowingMode", firstToken, 0);
         set(wct, "setBounds", firstToken, new Rect());
         set(wct, "setDensityDpi", firstToken, 0);
@@ -428,7 +427,7 @@ final class LiveTaskPair {
                 if (!transferred) throw new IllegalStateException("A native claim rejected");
             }
             if (finishWct == null)
-                finishWct = Class.forName("android.window.WindowContainerTransaction").getDeclaredConstructor().newInstance();
+                finishWct = TransactionCompat.newWindowTransaction();
             if (!Boolean.TRUE.equals(ShellCompat.call(taskViews, "prepareOpenAnimation", controller,
                     true, start, finish, a, canonical(firstId), finishWct)))
                 throw new IllegalStateException("A task view preparation failed");

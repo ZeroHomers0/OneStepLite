@@ -61,8 +61,7 @@ final class NativeWindowRuntime {
                 // The ROM has just stored mIsForegroundPin, but pin2/3 need not
                 // assign child layers. Clear BOTH live and pending dependencies
                 // synchronously, before the Binder reply permits Shell hideTask.
-                Object transaction = Class.forName("android.view.SurfaceControl$Transaction")
-                        .getDeclaredConstructor().newInstance();
+                Object transaction = TransactionCompat.newSurfaceTransaction();
                 try {
                     layerWorkspaceWithNativeFreeforms(target.display, transaction);
                     XposedHelpers.callMethod(transaction, "apply");
