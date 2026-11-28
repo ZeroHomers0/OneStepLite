@@ -19,8 +19,8 @@ files={
  public Bitmap(int w,int h){this.w=w;this.h=h;}public int getWidth(){return w;}public int getHeight(){return h;}
  public Bitmap copy(Config c,boolean mutable){copied=new Bitmap(w,h);return copied;}public void recycle(){recycled=true;}}''',
 'android/view/SurfaceControl.java':'''package android.view;public class SurfaceControl {}''',
-'de/robv/android/xposed/XposedHelpers.java':'''package de.robv.android.xposed;public class XposedHelpers {
- public static Class<?>findClass(String n,ClassLoader cl){return n.endsWith("SurfaceControl")?android.view.SurfaceControl.class:n.endsWith("$Builder")?io.github.zerohomers0.onesteplite.TopCaptureRegression.Builder.class:n.endsWith("WindowManagerGlobal")?io.github.zerohomers0.onesteplite.TopCaptureRegression.Global.class:io.github.zerohomers0.onesteplite.TopCaptureRegression.Capture.class;}
+'de/robv/android/xposed/XposedHelpers.java':'''package de.robv.android.xposed;import io.github.zerohomers0.onesteplite.TopCaptureRegression;public class XposedHelpers {
+ public static Class<?>findClass(String n,ClassLoader cl){if(n.equals("android.window.ScreenCaptureInternal")&&TopCaptureRegression.legacy)throw new RuntimeException("new capture class missing");if(n.endsWith("$CaptureArgs$Builder"))return io.github.zerohomers0.onesteplite.TopCaptureRegression.Builder.class;if(n.endsWith("WindowManagerGlobal"))return io.github.zerohomers0.onesteplite.TopCaptureRegression.Global.class;if(n.endsWith("SurfaceControl"))return android.view.SurfaceControl.class;return io.github.zerohomers0.onesteplite.TopCaptureRegression.Capture.class;}
  public static Object newInstance(Class<?>c,Object...a){try{return c.getConstructor().newInstance();}catch(Exception e){throw new RuntimeException(e);}}
  public static Object callMethod(Object o,String n,Object...a){return call(o.getClass(),o,n,a);}
  public static Object callStaticMethod(Class<?>c,String n,Object...a){return call(c,null,n,a);}
@@ -38,10 +38,11 @@ public class TopCaptureRegression {
   public Object getHardwareBuffer(){return hardware;}public boolean containsSecureLayers(){return secure;}public Bitmap asBitmap(){return bitmap;}}
  public static class Listener {public Object getBuffer(){return shot;}}
  public static class Capture {public static Listener createSyncCaptureListener(){return new Listener();}}
- public static class Global {public static Global getWindowManagerService(){return new Global();}
+ public static class Global {public static Object getWindowManagerService(){return legacyTwo?new LegacyGlobal():new Global();}
   public void captureDisplay(int display,Builder b,Listener l){check(display==0,"default display only");}}
- static Shot shot;static void prepare(int w,int h){shot=new Shot();shot.bitmap=new Bitmap(w,h);}
-'''+member('    static Bitmap capture(')+member('    static Bitmap captureRegion(')+member('    static Bitmap captureRegion(ClassLoader cl, int width, int height, Rect crop, Object exclude)')+'''
+ public static class LegacyGlobal {public void captureDisplay(Builder b,Listener l){}}
+ static Shot shot;public static boolean legacy,legacyTwo;static void prepare(int w,int h){shot=new Shot();shot.bitmap=new Bitmap(w,h);}
+'''+member('    static Bitmap capture(')+member('    static Bitmap captureRegion(')+member('    static Bitmap captureRegion(ClassLoader cl, int width, int height, Rect crop, Object exclude)')+member('    private static Class<?> captureClass(')+member('    private static void captureDisplay(')+member('    private static void optional(')+member('    private static boolean hasMethod(')+'''
  public static void main(String[]args)throws Throwable {
   prepare(1080,622);Rect crop=new Rect(0,0,1080,622);Bitmap result=captureRegion(TopCaptureRegression.class.getClassLoader(),1080,2460,crop);
   check(result.getHeight()==622&&result.getWidth()==1080,"only available top content copied");
@@ -61,6 +62,8 @@ public class TopCaptureRegression {
   check(rejected&&shot.hardware.closes==1&&Bitmap.copied.recycled,"unexpected geometry rejected and copied buffer recycled");
   shot=null;rejected=false;
   try{captureRegion(TopCaptureRegression.class.getClassLoader(),1080,2460,crop);}catch(IllegalStateException e){rejected=true;}
+  prepare(1080,622);legacy=true;result=captureRegion(TopCaptureRegression.class.getClassLoader(),1080,2460,crop);check(result.getHeight()==622,"legacy ScreenCapture class fallback works");legacy=false;
+  prepare(1080,622);legacyTwo=true;result=captureRegion(TopCaptureRegression.class.getClassLoader(),1080,2460,crop);check(result.getHeight()==622,"two-argument captureDisplay fallback works");legacyTwo=false;
   check(rejected,"missing capture rejected");
   System.out.println("Production top composed capture checks="+checks+" passed (native composition needs device)");
  }

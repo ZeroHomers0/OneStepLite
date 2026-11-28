@@ -8,7 +8,7 @@ import de.robv.android.xposed.XposedHelpers;
 final class ScreenCaptureCompat {
     private ScreenCaptureCompat(){}
 
-    /** Target Android 17 moved capture APIs to *Internal; WMS resolves display 0. */
+    /** Android 14-16 expose ScreenCapture; Android 17 moved the same API to ScreenCaptureInternal. */
     static Bitmap capture(ClassLoader cl, int width, int height) throws Throwable {
         return captureRegion(cl,width,height,null);
     }
@@ -20,24 +20,22 @@ final class ScreenCaptureCompat {
 
     /** Exclude only our transition overlay when capturing the destination task. */
     static Bitmap captureRegion(ClassLoader cl, int width, int height, Rect crop, Object exclude) throws Throwable {
-        Class<?> builder = XposedHelpers.findClass(
-                "android.window.ScreenCaptureInternal$CaptureArgs$Builder", cl);
+        Class<?> capture = captureClass(cl);
+        Class<?> builder = XposedHelpers.findClass(capture.getName() + "$CaptureArgs$Builder", cl);
         Object args = XposedHelpers.newInstance(builder);
-        XposedHelpers.callMethod(args, "setFrameScale", 1f);
-        XposedHelpers.callMethod(args, "setIncludeSystemOverlays", true);
+        optional(args, "setFrameScale", 1f);
+        optional(args, "setIncludeSystemOverlays", true);
         if(crop!=null)XposedHelpers.callMethod(args,"setSourceCrop",new Rect(crop));
         if(exclude!=null) {
             Class<?> surface=XposedHelpers.findClass("android.view.SurfaceControl",cl);
             Object layers=java.lang.reflect.Array.newInstance(surface,1);
             java.lang.reflect.Array.set(layers,0,exclude);
-            XposedHelpers.callMethod(args,"setExcludeLayers",layers);
+            optional(args, "setExcludeLayers", layers);
         }
-        Class<?> capture = XposedHelpers.findClass("android.window.ScreenCaptureInternal", cl);
         Object listener = XposedHelpers.callStaticMethod(capture, "createSyncCaptureListener");
         Class<?> global = XposedHelpers.findClass("android.view.WindowManagerGlobal", cl);
         Object wm = XposedHelpers.callStaticMethod(global, "getWindowManagerService");
-        XposedHelpers.callMethod(wm, "captureDisplay", 0,
-                XposedHelpers.callMethod(args, "build"), listener);
+        captureDisplay(wm, XposedHelpers.callMethod(args, "build"), listener);
         Object result = XposedHelpers.callMethod(listener, "getBuffer");
         if (result == null) throw new IllegalStateException("display capture unavailable");
         Object hardware = XposedHelpers.callMethod(result, "getHardwareBuffer");
@@ -58,5 +56,37 @@ final class ScreenCaptureCompat {
         } finally {
             if (hardware != null) XposedHelpers.callMethod(hardware, "close");
         }
+    }
+
+    private static Class<?> captureClass(ClassLoader cl) {
+        try {
+            return XposedHelpers.findClass("android.window.ScreenCaptureInternal", cl);
+        } catch (Throwable newerOnly) {
+            return XposedHelpers.findClass("android.window.ScreenCapture", cl);
+        }
+    }
+
+    private static void captureDisplay(Object wm, Object args, Object listener) {
+        if (hasMethod(wm.getClass(), "captureDisplay", 3)) {
+            XposedHelpers.callMethod(wm, "captureDisplay", 0, args, listener);
+        } else {
+            XposedHelpers.callMethod(wm, "captureDisplay", args, listener);
+        }
+    }
+
+    private static void optional(Object target, String method, Object... args) {
+        if (hasMethod(target.getClass(), method, args.length)) {
+            XposedHelpers.callMethod(target, method, args);
+        }
+        // Older ROMs legitimately omit newer capture options.
+    }
+
+    private static boolean hasMethod(Class<?> type, String name, int parameters) {
+        for (Class<?> current = type; current != null; current = current.getSuperclass())
+            for (java.lang.reflect.Method method : current.getDeclaredMethods())
+                if (method.getName().equals(name) && method.getParameterCount() == parameters) return true;
+        for (Class<?> implemented : type.getInterfaces())
+            if (hasMethod(implemented, name, parameters)) return true;
+        return false;
     }
 }

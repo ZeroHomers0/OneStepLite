@@ -114,7 +114,12 @@ final class SourceCaptureController implements AutoCloseable {
                 try{showCrop();}catch(RuntimeException unavailable){message("无法打开框选页面");close();}
             });
         } catch(Throwable unavailable) {
-            main.post(()->{if(token==generation){message("此界面无法截取，请使用应用原有分享");close();}});
+            android.util.Log.w(Tags.PROBE,"source capture failed",unavailable);
+            ShareDiagnostics.event(ShareDiagnostics.Stage.EXTRACT,ShareDiagnostics.Code.FAILED);
+            String detail=unavailable instanceof NoSuchMethodError || unavailable instanceof ClassNotFoundException
+                    || unavailable instanceof NoClassDefFoundError ? "当前系统版本暂不支持截取，请使用应用原有分享"
+                    : "此界面无法截取，请使用应用原有分享";
+            main.post(()->{if(token==generation){message(detail);close();}});
         } finally {if(frame!=null)frame.recycle();}
     }
 
