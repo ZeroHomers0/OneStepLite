@@ -48,39 +48,45 @@ public final class HotZoneGesture {
         }
         if (instance != null) return;
         HotZoneGesture g = new HotZoneGesture(context, trigger);
+        instance = g;
+        g.entrySettings = new WorkspaceSettingsClient(context, MAIN,
+                options -> setEntryGesture(options.entryGesture));
+        g.attach();
+    }
+
+    private void attach() {
+        if (receiver != null) return;
         try {
             ClassLoader cl = context.getClassLoader();
             Class<?> compat = XposedHelpers.findClass(
                     "com.android.systemui.shared.system.InputMonitorCompat", cl);
             Class<?> listener = XposedHelpers.findClass(
                     "com.android.systemui.shared.system.InputChannelCompat$InputEventListener", cl);
-            g.monitor = XposedHelpers.newInstance(compat, "OneStepLiteGesture", 0);
+            monitor = XposedHelpers.newInstance(compat, "OneStepLiteGesture", 0);
+            Object attachedMonitor = monitor;
             Object proxy = Proxy.newProxyInstance(listener.getClassLoader(), new Class<?>[]{listener},
                     (self, method, args) -> {
                         // Target receiver ACKs after returning. Never throw out of this callback.
                         try {
                             if ("onInputEvent".equals(method.getName()) && args != null
                                     && args.length == 1 && args[0] instanceof MotionEvent) {
-                                g.onMotion((MotionEvent) args[0]);
+                                if (monitor == attachedMonitor) onMotion((MotionEvent) args[0]);
                             } else if ("toString".equals(method.getName())) return "OneStepLiteGestureListener";
                             else if ("hashCode".equals(method.getName())) return System.identityHashCode(self);
                             else if ("equals".equals(method.getName())) return self == args[0];
                         } catch (Throwable error) {
-                            g.reset();
+                            reset();
                             log("gesture callback stopped: " + error);
                         }
                         return null;
                     });
-            g.receiver = XposedHelpers.callMethod(g.monitor, "getInputReceiver",
+            receiver = XposedHelpers.callMethod(monitor, "getInputReceiver",
                     Looper.getMainLooper(), Choreographer.getInstance(), proxy);
-            if (g.receiver == null) throw new IllegalStateException("no receiver");
-            g.enabled = true;
-            instance = g;
-            g.entrySettings = new WorkspaceSettingsClient(context, MAIN,
-                    options -> setEntryGesture(options.entryGesture));
+            if (receiver == null) throw new IllegalStateException("no receiver");
+            enabled = true;
             log("gesture spy installed; no touch overlay; tap pass-through enabled");
         } catch (Throwable error) {
-            g.dispose();
+            dispose();
             log("gesture spy unavailable: " + error);
         }
     }
@@ -271,10 +277,10 @@ public final class HotZoneGesture {
         return instance != null && instance.enabled && instance.receiver != null;
     }
     public static void raiseAll() {
-        if (instance != null) { instance.reset(); instance.enabled = true; }
+        if (instance != null) instance.attach();
     }
     public static void suspend() {
-        if (instance != null) { instance.enabled = false; instance.reset(); }
+        if (instance != null) instance.dispose();
     }
     private void dispose() {
         enabled = false;
@@ -284,6 +290,7 @@ public final class HotZoneGesture {
             catch (Throwable e) { log("receiver dispose: " + e); }
             finally { receiver = null; }
         }
+        batchingReceiver = null;
         if (monitor != null) {
             try { XposedHelpers.callMethod(monitor, "dispose"); }
             catch (Throwable e) { log("monitor dispose: " + e); }

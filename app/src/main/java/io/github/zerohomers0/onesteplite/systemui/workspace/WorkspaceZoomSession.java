@@ -28,7 +28,8 @@ final class WorkspaceZoomSession {
         if (!on) host.unlockGeometryReplay.clear();
         HostEntry.sHostZoomed=on;
         StatusBarSampling.geometryChanged();
-        HotZoneGesture.raiseAll();
+        if (on) HotZoneGesture.suspend();
+        else HotZoneGesture.raiseAll();
     }
 
     private String zoomOnCommand() {

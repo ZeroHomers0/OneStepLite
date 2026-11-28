@@ -57,8 +57,9 @@ files = {
 'com/android/systemui/shared/system/InputChannelCompat.java': 'package com.android.systemui.shared.system;public class InputChannelCompat {public interface InputEventListener {void onInputEvent(Object e);}}',
 'com/android/systemui/shared/system/InputMonitorCompat.java': '''package com.android.systemui.shared.system;public class InputMonitorCompat {
  public static InputMonitorCompat latest;public InputChannelCompat.InputEventListener listener;public Platform mInputMonitor=new Platform();
- public Receiver receiver=new Receiver();public static class Receiver {public boolean batching=true;public void setBatchingEnabled(boolean b){batching=b;}}
- public static class LegacyReceiver {public Receiver mReceiver;public LegacyReceiver(Receiver r){mReceiver=r;}}
+ public boolean disposed; public void dispose(){disposed=true;}
+ public Receiver receiver=new Receiver();public static class Receiver {public boolean batching=true,disposed;public void setBatchingEnabled(boolean b){batching=b;}public void dispose(){disposed=true;}}
+ public static class LegacyReceiver {public Receiver mReceiver;public LegacyReceiver(Receiver r){mReceiver=r;}public void dispose(){mReceiver.dispose();}}
  public InputMonitorCompat(String name,int display){latest=this;}public Object getInputReceiver(Object l,Object c,InputChannelCompat.InputEventListener p){listener=p;return Boolean.getBoolean("onesteplite.legacyReceiver")?new LegacyReceiver(receiver):receiver;}
  public static class Platform {public int claims;public void pilferPointers(){claims++;}}}''',
 'io/github/zerohomers0/onesteplite/WorkspaceWindowLayout.java': 'package io.github.zerohomers0.onesteplite;final class WorkspaceWindowLayout {static boolean hostSceneActive(){return WorkspaceHost.active;}}',
@@ -105,6 +106,15 @@ public class EntryGestureRegression {
  public static void main(String[]args)throws Exception{
   WorkspaceSettingsClient.initial=WorkspaceOptions.DEFAULT.withEntryGesture(1);android.provider.Settings.Global.hide=1;
   StatusBar.install(EntryGestureRegression.class.getClassLoader());HotZoneGesture.install(ctx,()->opened++);
+  var firstMonitor=InputMonitorCompat.latest;
+  HotZoneGesture.suspend();
+  check(!HotZoneGesture.isAttached()&&firstMonitor.disposed&&firstMonitor.receiver.disposed,
+    "active workspace releases the monitor and receiver");
+  HotZoneGesture.raiseAll();
+  var restoredMonitor=InputMonitorCompat.latest;
+  HotZoneGesture.raiseAll();
+  check(HotZoneGesture.isAttached()&&restoredMonitor!=firstMonitor&&restoredMonitor==InputMonitorCompat.latest,
+    "workspace exit restores exactly one monitor");
   event(0,540,2459);event(1,700,2459);Handler.drain();
   check(opened==1&&InputMonitorCompat.latest.mInputMonitor.claims==1,"saved bottom choice loads before lazy Host creation");
   WorkspaceSettingsClient.changed.accept(WorkspaceOptions.DEFAULT);
