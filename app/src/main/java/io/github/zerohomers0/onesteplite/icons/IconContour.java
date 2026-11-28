@@ -4,7 +4,14 @@ import android.graphics.Path;
 
 /** Cached icon contour: |x|³ + |y|³ = 1, independent of screen density. */
 final class IconContour {
+    static final int RAIL_ICON_DP = 38;
+
     private IconContour(){}
+
+    static float railIconEdge(float iconSize, int railHeight) {
+        return Math.min(iconSize, railHeight / 1.18f);
+    }
+
     static Path create(float size) {
         Path path=new Path();float half=size/2;
         for(int i=0;i<96;i++) {

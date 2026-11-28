@@ -2,6 +2,7 @@ apps -> apps/share/content
 apps -> config
 apps -> core
 apps -> framework/platform
+apps -> icons
 apps -> multiapp
 apps -> policy
 apps -> workspace

@@ -27,6 +27,7 @@ final class IconButton extends View {
     private int foreground;
     private boolean compactGlyph;
     private boolean topControl;
+    private final float contentIconSize;
     private final android.graphics.LinearGradient contentGradient = new android.graphics.LinearGradient(
             0,0,30,38,new int[]{0xff80ceff,0xff4b93f6,0xff3758d7},null,
             android.graphics.Shader.TileMode.CLAMP);
@@ -65,6 +66,7 @@ final class IconButton extends View {
     IconButton(Context context, int icon, String description) {
         super(context);
         this.icon = icon;
+        contentIconSize = IconContour.RAIL_ICON_DP * context.getResources().getDisplayMetrics().density;
         paint.setColor(HyperOsStyle.textPrimary(context));
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeCap(Paint.Cap.ROUND);
@@ -166,7 +168,7 @@ final class IconButton extends View {
 
     private void drawContentIcon(Canvas canvas) {
         int save=canvas.save();
-        float size=Math.min(HyperOsStyle.dp(getContext(),compactGlyph?34:38),Math.min(getWidth(),getHeight()));
+        float size = Math.min(IconContour.railIconEdge(contentIconSize, getHeight()), getWidth());
         canvas.translate((getWidth()-size)/2,(getHeight()-size)/2);canvas.scale(size/38,size/38);
         paint.setStyle(Paint.Style.FILL);
         paint.setShader(contentGradient);

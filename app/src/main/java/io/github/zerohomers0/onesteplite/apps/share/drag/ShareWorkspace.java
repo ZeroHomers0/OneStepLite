@@ -114,7 +114,6 @@ final class ShareWorkspace extends FrameLayout {
         panel = new ContentPanel(this, bounds,history,()->capture.open());
         portal=shareOnly?null:new PortalSource(this,()->ready.getAsBoolean() && !dragging,bounds,panel::showExtractedImage);
         content = new IconButton(context, IconButton.CONTENT, "内容：近期图片、文件和剪贴板");
-        content.setCompactGlyph();
         content.setTooltipText("近期图片、文件和剪贴板");
         content.setOnClickListener(v -> {
             if (!ready.getAsBoolean() || dragging) return;

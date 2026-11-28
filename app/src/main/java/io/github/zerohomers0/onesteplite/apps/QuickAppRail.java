@@ -33,7 +33,7 @@ final class QuickAppRail extends View {
     private int activeIndex;
     private List<QuickApp> apps;
     static final String APP_DRAG_MIME="application/vnd.onesteplite.quick-app";
-    static final int CELL_WIDTH_DP = 50, ICON_SIZE_DP = 38;
+    static final int CELL_WIDTH_DP = 50, ICON_SIZE_DP = IconContour.RAIL_ICON_DP;
     private final Runnable pressDrag=this::startAppDrag;
     private boolean down;
     private float downX;
@@ -256,7 +256,7 @@ final class QuickAppRail extends View {
         QuickApp app = apps.get(index);
         if (app == null || app.icon == null || alpha <= 0) return;
         if (workspaceMain != null) {
-            float half = Math.min(iconSize, getHeight() / 1.18f) * .5f * scale;
+            float half = IconContour.railIconEdge(iconSize, getHeight()) * .5f * scale;
             float x = getLeft() + centerX - scrollOffset, y = getTop() + centerY;
             alpha = Math.round(alpha * WorkspaceChromeReveal.alpha(x - half, y - half,
                     x + half, y + half, workspaceMain.left, workspaceMain.top,
@@ -267,7 +267,7 @@ final class QuickAppRail extends View {
         int save = canvas.save();
         canvas.translate(centerX, centerY);
         canvas.scale(scale, scale);
-        int half = Math.round(Math.min(iconSize, getHeight() / 1.18f) * 0.5f);
+        int half = Math.round(IconContour.railIconEdge(iconSize, getHeight()) * 0.5f);
         app.icon.setBounds(-half, -half, half, half);
         app.icon.setAlpha(alpha);
         app.icon.draw(canvas);

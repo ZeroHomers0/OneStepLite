@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher mark: a blue main window with a header and a content pane, plus three orange side cells. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp" android:height="28dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#0157E6"
+        android:pathData="M9.00,7.30H25.86A5.00,5.00 0 0 1 30.86,12.30V35.81A5.00,5.00 0 0 1 25.86,40.81H9.00A5.00,5.00 0 0 1 4.00,35.81V12.30A5.00,5.00 0 0 1 9.00,7.30Z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M9.80,12.56H25.06A1.65,1.65 0 0 1 26.71,14.21V14.21A1.65,1.65 0 0 1 25.06,15.86H9.80A1.65,1.65 0 0 1 8.15,14.21V14.21A1.65,1.65 0 0 1 9.80,12.56Z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M9.80,19.16H25.22A2.02,2.02 0 0 1 27.24,21.18V34.43A2.02,2.02 0 0 1 25.22,36.45H9.80A2.02,2.02 0 0 1 7.78,34.43V21.18A2.02,2.02 0 0 1 9.80,19.16Z" />
+    <path android:fillColor="#FE7302"
+        android:pathData="M34.59,7.19H41.61A2.39,2.39 0 0 1 44.00,9.59V14.85A2.39,2.39 0 0 1 41.61,17.24H34.59A2.39,2.39 0 0 1 32.19,14.85V9.59A2.39,2.39 0 0 1 34.59,7.19Z" />
+    <path android:fillColor="#FE7302"
+        android:pathData="M34.59,18.79H41.61A2.39,2.39 0 0 1 44.00,21.18V26.45A2.39,2.39 0 0 1 41.61,28.84H34.59A2.39,2.39 0 0 1 32.19,26.45V21.18A2.39,2.39 0 0 1 34.59,18.79Z" />
+    <path android:fillColor="#FE7302"
+        android:pathData="M34.59,30.33H41.61A2.39,2.39 0 0 1 44.00,32.72V38.41A2.39,2.39 0 0 1 41.61,40.81H34.59A2.39,2.39 0 0 1 32.19,38.41V32.72A2.39,2.39 0 0 1 34.59,30.33Z" />
+</vector>

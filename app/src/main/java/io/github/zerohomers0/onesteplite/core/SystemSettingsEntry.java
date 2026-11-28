@@ -39,9 +39,6 @@ final class SystemSettingsEntry {
                         XposedHelpers.setObjectField(entry, "title", "OneStepLite");
                         XposedHelpers.setObjectField(entry, "summary", "窗口、视频与操作设置");
                         XposedHelpers.setObjectField(entry, "intent", intent());
-                        int icon = activity.getResources().getIdentifier(
-                                "ic_my_device", "drawable", Packages.SETTINGS);
-                        XposedHelpers.setIntField(entry, "iconRes", icon);
                         // A separate native card immediately after the device card.
                         XposedHelpers.setIntField(entry, "groupId", (int) ID);
                         int device = activity.getResources().getIdentifier("my_device", "id", Packages.SETTINGS);
@@ -95,11 +92,13 @@ final class SystemSettingsEntry {
                         if (iconState == null) {
                             Resources resources = view.getContext().getPackageManager()
                                     .getResourcesForApplication("io.github.zerohomers0.onesteplite");
-                            int id = resources.getIdentifier("ic_settings_onesteplite", "drawable", "io.github.zerohomers0.onesteplite");
+                            int id = resources.getIdentifier("ic_settings_onesteplite", "drawable",
+                                    "io.github.zerohomers0.onesteplite");
+                            if (id == 0) return;
                             iconState = resources.getDrawable(id, null).getConstantState();
                         }
                         if (iconState != null) {
-                            view.setImageDrawable(iconState.newDrawable(view.getResources()));
+                            view.setImageDrawable(iconState.newDrawable());
                             view.setVisibility(View.VISIBLE);
                         }
                     } catch (Throwable error) {
