@@ -106,10 +106,10 @@ public class TopConfigRegression {
   var wide=new TopTaskGeometry(1080,2460,622,false,2.75f);
   check(wide.logicalWidth==2964&&wide.logicalHeight==1707,"noncompact viewport keeps the existing tablet metrics");
   slot.index=1;h.applyFullscreenBounds(slot);w=(android.window.WindowContainerTransaction)h.applied;
-  check(w.calls.stream().noneMatch(s->s.startsWith("setDensityDpi")),"other side density unchanged");
+  check(w.calls.contains("setDensityDpi:upper:0"),"ordinary side clears any previous compact density");
   check(w.calls.stream().noneMatch(s->s.startsWith("setAppBounds")||s.startsWith("setScreenSizeDp")||s.startsWith("setSmallestScreenWidthDp")),"ordinary side tasks acquire no top resource overrides");
   slot.rect=new int[]{0,0,270,600};h.applyFullscreenBounds(slot);w=(android.window.WindowContainerTransaction)h.applied;
-  check(w.calls.contains("setDensityDpi:upper:107"),"ordinary side task uses compact slot density");
+  check(w.calls.contains("setDensityDpi:upper:0"),"ordinary side uses native density even with a valid cell");
   var p=new Promotion();w=(android.window.WindowContainerTransaction)h.fullscreenExitTransaction(p);
   check(w.calls.contains("setDensityDpi:upper:0"),"top native return clears density override");
   check(w.calls.contains("setAppBounds:upper:null")&&w.calls.contains("setScreenSizeDp:upper:0:0")&&w.calls.contains("setSmallestScreenWidthDp:upper:0"),"return clears all top metrics in the same native transaction");

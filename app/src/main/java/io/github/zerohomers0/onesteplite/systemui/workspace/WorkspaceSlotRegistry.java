@@ -35,12 +35,8 @@ final class WorkspaceSlotRegistry {
     }
 
     Rect logicalBounds(Slot slot, boolean portrait) {
-        if (slot == null || slot.index <= WorkspaceHost.SLOT_MAIN) return logicalBounds();
-        if (slot.index != WorkspaceHost.SLOT_TOP) {
-            if (slot.rect == null || slot.rect[2] <= slot.rect[0] || slot.rect[3] <= slot.rect[1])
-                return logicalBounds();
-            return new Rect(0, 0, slot.rect[2] - slot.rect[0], slot.rect[3] - slot.rect[1]);
-        }
+        // OEM minimum activity bounds can exceed a cell even when the task accepts it.
+        if (slot == null || slot.index != WorkspaceHost.SLOT_TOP) return logicalBounds();
         TopTaskGeometry upper = host.windowLayout.topGeometry();
         if (!portrait) return new Rect(0, 0, upper.logicalWidth, upper.logicalHeight);
         int width = Math.max(1, Math.min(upper.logicalWidth,

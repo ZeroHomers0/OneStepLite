@@ -300,14 +300,7 @@ final class WorkspaceNativeHooks {
             Object wct, Object token, Slot slot) {
         if (slot == null || slot.index <= WorkspaceHost.SLOT_MAIN) return;
         if (slot.index != WorkspaceHost.SLOT_TOP) {
-            if(slot.rect!=null && slot.rect[2]>slot.rect[0] && slot.rect[3]>slot.rect[1]
-                    && frames.screenWidth()>0 && frames.screenHeight()>0
-                    && frames.displayDensityDpi()>0) {
-                float scale=Math.min((slot.rect[2]-slot.rect[0])/(float)frames.screenWidth(),
-                        (slot.rect[3]-slot.rect[1])/(float)frames.screenHeight());
-                int density=Math.max(72,Math.round(frames.displayDensityDpi()*scale));
-                XposedHelpers.callMethod(wct,"setDensityDpi",token,density);
-            }
+            XposedHelpers.callMethod(wct, "setDensityDpi", token, 0);
             return;
         }
         TopTaskGeometry geometry = frames.windowLayout().topGeometry();

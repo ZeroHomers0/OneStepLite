@@ -389,8 +389,9 @@ final class WorkspaceLiveGeometry {
 
     static LiveSwapGeometry.Rect liveCellRect(WorkspaceLayout geometry, int index) {
         int[] bounds = geometry.cellBounds(index - 1);
+        float scale = geometry.cellScale(index - 1);
         return new LiveSwapGeometry.Rect(bounds[0], bounds[1],
-                bounds[2] - bounds[0], bounds[3] - bounds[1]);
+                geometry.width * scale, geometry.height * scale);
     }
 
     static Rect liveSideStrip(WorkspaceLayout geometry) {

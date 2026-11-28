@@ -16,8 +16,6 @@ final class WorkspaceLiveHandoffController {
         final WorkspaceLayout geometry = host.layout;
         final int width = host.screenW, height = host.screenH;
         final Rect sideBounds = host.slotRegistry.logicalBounds(slot);
-        final float sideScale = Math.min(sideBounds.width()/(float)width, sideBounds.height()/(float)height);
-        final int sideDensity = Math.max(72, Math.round(host.displayDensityDpi*sideScale));
         final Object hostSurface;
         try { hostSurface = host.liveGeometry.liveHostRootSurface(); }
         catch (Throwable error) {
@@ -91,7 +89,7 @@ final class WorkspaceLiveHandoffController {
                         // task once the bind completes.
                         accepted = LiveCollect.start(host.ctx.getClassLoader(), host.transitions,
                                 slot.controller, app, ticket.collectionHome.token, candidate.userId, ticket.liveMainUserId,
-                                sideBounds, sideDensity, hostSurface, null,
+                                sideBounds, 0, hostSurface, null,
                                 () -> host.promotionController.externalPromotionCurrent(ticket) && host.layout == geometry,
                                 settled -> host.main.post(() -> host.mainTaskActions.prepareCollectHandoff(ticket, settled)),
                                 result -> host.liveGeometry.finishLiveResult(ticket, result), WorkspaceHost::log);
@@ -162,8 +160,6 @@ final class WorkspaceLiveHandoffController {
         WorkspaceHost.log("live swap mode=" + options.swapMode + " mainRight=" + geometry.mainOnRight + " -> " + target.mainOnRight);
         final int width = host.screenW, height = host.screenH;
         final Rect sideBounds = host.slotRegistry.logicalBounds(ticket.slot);
-        final float sideScale = Math.min(sideBounds.width()/(float)width, sideBounds.height()/(float)height);
-        final int sideDensity = Math.max(72, Math.round(host.displayDensityDpi*sideScale));
         final LiveTask first = ticket.previousMain;
         LiveSwapGeometry.Task a = new LiveSwapGeometry.Task(first.id, first.token, width, height,
                 WorkspaceLiveGeometry.liveMainRect(geometry), WorkspaceLiveGeometry.liveCellRect(target, ticket.slot.index));
@@ -224,7 +220,7 @@ final class WorkspaceLiveHandoffController {
                         ticket.liveMainUserId = sideUser;
                         host.debug.traceSwapEvent("before-single-native-transition");
                         LiveTaskSwapDriver.Flip request = new LiveTaskSwapDriver.Flip(a, b, user, sideUser,
-                                new Rect(0, 0, width, height), sideBounds, sideDensity,
+                                new Rect(0, 0, width, height), sideBounds, 0,
                                 hostSurface, oldZoom, targetZoom,
                                 (zoom, done) -> host.applyLiveZoom(ticket, zoom, done),
                                 (zoom, restoring, done) -> host.applyLiveMainLayout(ticket, zoom, restoring, done),
@@ -256,8 +252,6 @@ final class WorkspaceLiveHandoffController {
         final WorkspaceLayout geometry = host.layout;
         final int width = host.screenW, height = host.screenH;
         final Rect sideBounds = host.slotRegistry.logicalBounds(ticket.slot);
-        final float sideScale = Math.min(sideBounds.width()/(float)width, sideBounds.height()/(float)height);
-        final int sideDensity = Math.max(72, Math.round(host.displayDensityDpi*sideScale));
         final Object hostSurface;
         try {
             hostSurface = host.liveGeometry.liveHostRootSurface();
@@ -329,7 +323,7 @@ final class WorkspaceLiveHandoffController {
                         // updateHint()/cellSurfaces.ensureCellBackground() once the task is bound.
                         LiveTaskSwapDriver.Home request = new LiveTaskSwapDriver.Home(app,
                                 ticket.homeBeforeCover.id, ticket.homeBeforeCover.token, user, homeUser,
-                                new Rect(0, 0, width, height), sideBounds, sideDensity, hostSurface, zoom,
+                                new Rect(0, 0, width, height), sideBounds, 0, hostSurface, zoom,
                                 sideRoots.toArray(new LiveTaskSwapDriver.SideRoot[0]),
                                 new Object[]{null}, ticket.liveBackdrop);
                         accepted = LiveTaskSwapDriver.startHome(host.ctx.getClassLoader(), host.transitions,
